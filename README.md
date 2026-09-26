@@ -28,6 +28,9 @@ The internal ERP is organised as one directory per module under
 - `Reach` (`modules/reach`) — evangelism logging and outreach follow-up.
 - `Embrace` (`modules/embrace`) — new-converts follow-up: 1st-timer capture,
   visitation preferences, prayer requests, invitation source tracking.
+- `Assimilation` (`modules/assimilation`) — bringing people who have drifted
+  back home: attendance watchlists, volunteer call lists, returned-home
+  detection, and the public volunteer page at `/assimilation.php`.
 - `announcements`, `testimonies` — publish live ministry notices and public
   testimony wall.
 
@@ -133,7 +136,13 @@ GitHub Secrets / Variables), and rollback instructions live in
 ```
 * * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >/dev/null 2>&1
 0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/reach_lost_souls.php >/dev/null 2>&1
+15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/assimilation_watchlists.php >/dev/null 2>&1
 ```
+
+`assimilation_watchlists.php` re-runs every active Assimilation watchlist,
+sends managers one in-app digest per watchlist naming only the people who
+are newly drifted, and detects anyone who has come back to church. It is
+safe to run more than once a day — nobody is announced twice.
 
 **Runtime files preserved across deploys (via `.deployignore`):**
 `.env`, `.htaccess`, `.user.ini`, `php.ini`, `uploads/`,
@@ -181,7 +190,8 @@ the untracked `.env` file.
 api/            JSON endpoints, one file per module (auth_api.php, ...).
 assets/         Static CSS / JS / images shipped to the browser.
 auth/           Login, logout, first-time password setup.
-cron/           CLI jobs (sms_queue_worker.php, reach_lost_souls.php daily at 07:00).
+cron/           CLI jobs (sms_queue_worker.php, reach_lost_souls.php 07:00,
+                assimilation_watchlists.php 07:15).
 includes/       Shared PHP: db.php, header.php, functions.php, PDF helpers,
                 sms_functions.php, sms_vault_key.php.
 modules/        One folder per ERP module; each has index.php as the view.
@@ -192,7 +202,8 @@ vendor/         Composer dependencies (git-ignored).
 
 Top-level PHP files (`index.php`, `connect.php`, `register.php`,
 `sermons.php`, `testimonies.php`, `verify.php`, `parent_portal.php`,
-`live_radio.php`, `checkin.php`, `idi_mobilization.php`) are the public
+`live_radio.php`, `checkin.php`, `idi_mobilization.php`, `reach.php`,
+`assimilation.php`) are the public
 entry points.
 
 ## Contributing
