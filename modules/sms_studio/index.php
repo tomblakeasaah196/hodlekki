@@ -691,6 +691,11 @@ function sendCampaign(){
       } else {
         failed += batch.length;
         toast(res.message,'error');
+        if(/not configured/i.test(res.message||'')){
+          // Every batch would fail the same way; stop instead of repeating it.
+          $('#sendProgress').addClass('hidden').removeClass('flex');
+          return;
+        }
       }
       idx += batch.length;
       next();
