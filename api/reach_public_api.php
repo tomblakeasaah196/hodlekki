@@ -5,6 +5,7 @@
 // mirroring the pattern established by /api/embrace_public_api.php.
 
 require_once '../includes/db.php';
+require_once '../includes/reach_helpers.php';
 header('Content-Type: application/json');
 
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
@@ -162,7 +163,7 @@ try {
                 exit;
             }
 
-            $campStmt = $pdo->prepare("SELECT id, payload_tier FROM reach_campaigns WHERE id = ? LIMIT 1");
+            $campStmt = $pdo->prepare("SELECT id, title, payload_tier FROM reach_campaigns WHERE id = ? LIMIT 1");
             $campStmt->execute([$campaign_id]);
             $campaign = $campStmt->fetch(PDO::FETCH_ASSOC);
             if (!$campaign) {
@@ -197,7 +198,8 @@ try {
                 }
             }
 
-            $volunteer_user_id     = (int) reach_require_volunteer($pdo)['id'];
+            $volunteer             = reach_require_volunteer($pdo);
+            $volunteer_user_id     = (int) $volunteer['id'];
             $volunteer_guest_name  = null;
             $volunteer_guest_phone = null;
 
@@ -266,6 +268,16 @@ try {
             $insCap->execute([$lead_id, $volunteer_user_id, $volunteer_guest_name, $volunteer_guest_phone]);
 
             $pdo->commit();
+
+            if (!$merged) {
+                try {
+                    reach_notify($pdo, reach_manager_ids($pdo), 'New soul captured',
+                        reach_short_name($volunteer['first_name'], $volunteer['last_name'])
+                        . " captured " . trim("{$first_name} {$last_name}") . " at {$campaign['title']}.");
+                } catch (PDOException $e) {
+                    error_log('Reach capture notification failed: ' . $e->getMessage());
+                }
+            }
 
             echo json_encode([
                 'status'  => 'success',

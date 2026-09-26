@@ -2,6 +2,7 @@
 // /api/reach_api.php
 
 require_once '../includes/db.php';
+require_once '../includes/reach_helpers.php';
 header('Content-Type: application/json');
 
 // ==========================================================================
@@ -117,6 +118,70 @@ function reach_absolute_url(string $path): string {
 function reach_qr_data_url(string $target): string {
     return 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=' . urlencode($target);
 }
+
+const REACH_CATEGORIES = ['New_Convert', 'Unsaved', 'Saved', 'Broken', 'Dechurched', 'Other'];
+const REACH_CHANNELS   = ['Call', 'WhatsApp', 'SMS', 'In_Person_Visit', 'Church_Service'];
+const REACH_OUTCOMES   = ['Reached', 'No_Answer', 'Wrong_Number', 'Rescheduled', 'Requested_No_Contact', 'Declined'];
+
+function reach_user_name(PDO $pdo, ?int $id): string {
+    if (!$id) {
+        return '';
+    }
+    $stmt = $pdo->prepare("SELECT TRIM(CONCAT_WS(' ', first_name, last_name)) FROM users WHERE id = ?");
+    $stmt->execute([$id]);
+    return (string) $stmt->fetchColumn();
+}
+
+function reach_first_capture(PDO $pdo, int $lead_id): array {
+    $stmt = $pdo->prepare("
+        SELECT lc.captured_by_user_id,
+               COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''), lc.captured_by_guest_name) AS name
+          FROM reach_lead_captures lc
+          LEFT JOIN users u ON u.id = lc.captured_by_user_id
+         WHERE lc.lead_id = ?
+         ORDER BY lc.id ASC LIMIT 1
+    ");
+    $stmt->execute([$lead_id]);
+    return $stmt->fetch(PDO::FETCH_ASSOC) ?: ['captured_by_user_id' => null, 'name' => null];
+}
+
+// Status is derived, never set by hand. One unanswered attempt is not yet
+// "Cold" — it takes a second attempt with no contact.
+function reach_recompute_status(PDO $pdo, int $lead_id): string {
+    $stmt = $pdo->prepare("
+        SELECT COUNT(f.id) AS total,
+               COALESCE(SUM(f.outcome = 'Reached'), 0) AS reached,
+               COALESCE(SUM(f.outcome = 'Requested_No_Contact'), 0) AS no_contact,
+               l.pushed_to_embrace_at
+          FROM reach_leads l
+          LEFT JOIN reach_follow_ups f ON f.lead_id = l.id
+         WHERE l.id = ?
+         GROUP BY l.id, l.pushed_to_embrace_at
+    ");
+    $stmt->execute([$lead_id]);
+    $s = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!empty($s['pushed_to_embrace_at'])) {
+        $status = 'Converted';
+    } elseif ((int) $s['no_contact'] > 0) {
+        $status = 'Declined';
+    } elseif ((int) $s['reached'] > 0) {
+        $status = 'Spoken_To';
+    } elseif ((int) $s['total'] >= 2) {
+        $status = 'Cold';
+    } else {
+        $status = 'Not_Spoken_To';
+    }
+    $pdo->prepare("UPDATE reach_leads SET status = ? WHERE id = ?")->execute([$status, $lead_id]);
+    return $status;
+}
+
+function reach_deny(string $message = 'Only Reach HODs, Directors and pastors can do this.'): void {
+    echo json_encode(['status' => 'error', 'message' => $message]);
+    exit;
+}
+
+$is_manager = reach_is_manager($pdo, $user_id, $active_role);
 
 // ==========================================================================
 // ACTIONS
@@ -332,11 +397,398 @@ try {
             ]);
             break;
 
+        // ------------------------------------------------------------------
+        // list_leads — Tab 2 list, sub-tab counts and overdue widget
+        // ------------------------------------------------------------------
+        case 'list_leads':
+            $where  = [];
+            $params = [];
+
+            $campaign_id = (int) ($_POST['campaign_id'] ?? 0);
+            if ($campaign_id > 0) {
+                $where[]  = 'l.campaign_id = ?';
+                $params[] = $campaign_id;
+            }
+            $category = $_POST['category'] ?? '';
+            if (in_array($category, REACH_CATEGORIES, true)) {
+                $where[]  = 'l.category = ?';
+                $params[] = $category;
+            }
+            $area = trim($_POST['area'] ?? '');
+            if ($area !== '') {
+                $where[]  = 'l.address LIKE ?';
+                $params[] = '%' . $area . '%';
+            }
+            $assignee = $_POST['assignee'] ?? '';
+            if ($assignee === 'unassigned') {
+                $where[] = 'l.assigned_to IS NULL';
+            } elseif ($assignee === 'me') {
+                $where[]  = 'l.assigned_to = ?';
+                $params[] = $user_id;
+            } elseif ((int) $assignee > 0) {
+                $where[]  = 'l.assigned_to = ?';
+                $params[] = (int) $assignee;
+            }
+            if (!empty($_POST['willing_only'])) {
+                $where[] = 'l.willing_for_visit = 1';
+            }
+            $search = trim($_POST['search'] ?? '');
+            if ($search !== '') {
+                $where[]  = "(CONCAT_WS(' ', l.first_name, l.last_name) LIKE ? OR l.phone LIKE ?)";
+                $params[] = '%' . $search . '%';
+                $params[] = '%' . $search . '%';
+            }
+            // Members see their own overdue leads; managers see everyone's.
+            $overdue_scope = reach_overdue_sql() . ($is_manager ? '' : ' AND l.assigned_to = ' . $user_id);
+            if (!empty($_POST['overdue_only'])) {
+                $where[] = $overdue_scope;
+            }
+
+            $sub_map = [
+                'not_spoken' => "l.status = 'Not_Spoken_To'",
+                'spoken'     => "l.status = 'Spoken_To'",
+                'cold'       => "l.status = 'Cold'",
+                'converted'  => 'l.pushed_to_embrace_at IS NOT NULL',
+            ];
+            $base_where = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+            $countStmt = $pdo->prepare("
+                SELECT COUNT(*) AS `all`,
+                       COALESCE(SUM({$sub_map['not_spoken']}), 0) AS not_spoken,
+                       COALESCE(SUM({$sub_map['spoken']}), 0)     AS spoken,
+                       COALESCE(SUM({$sub_map['cold']}), 0)       AS cold,
+                       COALESCE(SUM({$sub_map['converted']}), 0)  AS converted
+                  FROM reach_leads l {$base_where}
+            ");
+            $countStmt->execute($params);
+            $counts = array_map('intval', $countStmt->fetch(PDO::FETCH_ASSOC));
+
+            $overdue = (int) $pdo->query("SELECT COUNT(*) FROM reach_leads l WHERE {$overdue_scope}")->fetchColumn();
+
+            $sub = $_POST['sub_tab'] ?? 'all';
+            if (isset($sub_map[$sub])) {
+                $where[] = $sub_map[$sub];
+            }
+            $list_where = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+            $per_page = 24;
+            $page     = max(1, (int) ($_POST['page'] ?? 1));
+            $offset   = ($page - 1) * $per_page;
+
+            $listStmt = $pdo->prepare("
+                SELECT l.id, l.first_name, l.last_name, l.phone, l.category, l.willing_for_visit,
+                       l.address, l.status, l.assigned_to, l.assigned_at, l.pushed_to_embrace_at,
+                       l.created_at, l.last_follow_up_at,
+                       c.title AS campaign_title,
+                       TRIM(CONCAT_WS(' ', au.first_name, au.last_name)) AS assignee_name,
+                       fc.captured_by_user_id AS capturer_user_id,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', fcu.first_name, fcu.last_name)), ''), fc.captured_by_guest_name) AS capturer_name,
+                       fc.captured_at,
+                       lf.outcome AS last_outcome, lf.created_at AS last_follow_up_date,
+                       TRIM(CONCAT_WS(' ', lfu.first_name, lfu.last_name)) AS last_follower_name
+                  FROM reach_leads l
+                  LEFT JOIN reach_campaigns c ON c.id = l.campaign_id
+                  LEFT JOIN users au ON au.id = l.assigned_to
+                  LEFT JOIN reach_lead_captures fc ON fc.id = (SELECT MIN(x.id) FROM reach_lead_captures x WHERE x.lead_id = l.id)
+                  LEFT JOIN users fcu ON fcu.id = fc.captured_by_user_id
+                  LEFT JOIN reach_follow_ups lf ON lf.id = (SELECT MAX(y.id) FROM reach_follow_ups y WHERE y.lead_id = l.id)
+                  LEFT JOIN users lfu ON lfu.id = lf.followed_up_by
+                  {$list_where}
+                 ORDER BY l.created_at DESC, l.id DESC
+                 LIMIT {$per_page} OFFSET {$offset}
+            ");
+            $listStmt->execute($params);
+            $leads = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $total = $sub === 'all' || !isset($counts[$sub]) ? $counts['all'] : $counts[$sub];
+            echo json_encode([
+                'status' => 'success',
+                'data'   => [
+                    'leads'    => $leads,
+                    'counts'   => $counts,
+                    'overdue'  => $overdue,
+                    'has_more' => ($offset + count($leads)) < $total,
+                ]
+            ]);
+            break;
+
+        // ------------------------------------------------------------------
+        // fetch_lead_detail — drawer
+        // ------------------------------------------------------------------
+        case 'fetch_lead_detail':
+            $lead_id = (int) ($_POST['lead_id'] ?? 0);
+            $stmt = $pdo->prepare("
+                SELECT l.*, c.title AS campaign_title,
+                       TRIM(CONCAT_WS(' ', au.first_name, au.last_name)) AS assignee_name
+                  FROM reach_leads l
+                  LEFT JOIN reach_campaigns c ON c.id = l.campaign_id
+                  LEFT JOIN users au ON au.id = l.assigned_to
+                 WHERE l.id = ?
+            ");
+            $stmt->execute([$lead_id]);
+            $lead = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$lead) {
+                echo json_encode(['status' => 'error', 'message' => 'Lead not found.']);
+                exit;
+            }
+
+            $capStmt = $pdo->prepare("
+                SELECT lc.captured_at, lc.captured_by_user_id,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''), lc.captured_by_guest_name) AS name
+                  FROM reach_lead_captures lc
+                  LEFT JOIN users u ON u.id = lc.captured_by_user_id
+                 WHERE lc.lead_id = ?
+                 ORDER BY lc.id ASC
+            ");
+            $capStmt->execute([$lead_id]);
+
+            $fuStmt = $pdo->prepare("
+                SELECT f.id, f.channel, f.outcome, f.notes, f.next_touch_date, f.created_at,
+                       TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) AS follower_name
+                  FROM reach_follow_ups f
+                  LEFT JOIN users u ON u.id = f.followed_up_by
+                 WHERE f.lead_id = ?
+                 ORDER BY f.id DESC
+            ");
+            $fuStmt->execute([$lead_id]);
+
+            $asStmt = $pdo->prepare("
+                SELECT a.action, a.created_at,
+                       TRIM(CONCAT_WS(' ', tu.first_name, tu.last_name)) AS to_name,
+                       TRIM(CONCAT_WS(' ', bu.first_name, bu.last_name)) AS by_name
+                  FROM reach_lead_assignments a
+                  LEFT JOIN users tu ON tu.id = a.to_user_id
+                  LEFT JOIN users bu ON bu.id = a.assigned_by
+                 WHERE a.lead_id = ?
+                 ORDER BY a.id DESC
+            ");
+            $asStmt->execute([$lead_id]);
+
+            echo json_encode([
+                'status' => 'success',
+                'data'   => [
+                    'lead'        => $lead,
+                    'captures'    => $capStmt->fetchAll(PDO::FETCH_ASSOC),
+                    'follow_ups'  => $fuStmt->fetchAll(PDO::FETCH_ASSOC),
+                    'assignments' => $asStmt->fetchAll(PDO::FETCH_ASSOC),
+                    'can_assign'  => $is_manager,
+                    'can_push'    => $is_manager || (int) $lead['assigned_to'] === $user_id,
+                ]
+            ]);
+            break;
+
+        // ------------------------------------------------------------------
+        // log_follow_up
+        // ------------------------------------------------------------------
+        case 'log_follow_up':
+            $lead_id = (int) ($_POST['lead_id'] ?? 0);
+            $channel = $_POST['channel'] ?? '';
+            $outcome = $_POST['outcome'] ?? '';
+            if (!in_array($channel, REACH_CHANNELS, true) || !in_array($outcome, REACH_OUTCOMES, true)) {
+                echo json_encode(['status' => 'error', 'message' => 'Pick a channel and an outcome.']);
+                exit;
+            }
+            $exists = $pdo->prepare("SELECT id FROM reach_leads WHERE id = ?");
+            $exists->execute([$lead_id]);
+            if (!$exists->fetch()) {
+                echo json_encode(['status' => 'error', 'message' => 'Lead not found.']);
+                exit;
+            }
+            $next = trim($_POST['next_touch_date'] ?? '');
+            $nextDate = DateTime::createFromFormat('Y-m-d', $next);
+            $next = ($nextDate && $nextDate->format('Y-m-d') === $next) ? $next : null;
+            $notes = trim($_POST['notes'] ?? '');
+
+            $pdo->prepare("
+                INSERT INTO reach_follow_ups (lead_id, followed_up_by, channel, outcome, notes, next_touch_date)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ")->execute([$lead_id, $user_id, $channel, $outcome, $notes !== '' ? $notes : null, $next]);
+            $pdo->prepare("UPDATE reach_leads SET last_follow_up_at = NOW() WHERE id = ?")->execute([$lead_id]);
+            $status = reach_recompute_status($pdo, $lead_id);
+
+            echo json_encode(['status' => 'success', 'message' => 'Follow-up logged.', 'data' => ['lead_status' => $status]]);
+            break;
+
+        // ------------------------------------------------------------------
+        // assign_lead / reassign — managers only
+        // ------------------------------------------------------------------
+        case 'assign_lead':
+        case 'reassign':
+            if (!$is_manager) {
+                reach_deny();
+            }
+            $lead_id = (int) ($_POST['lead_id'] ?? 0);
+            $to      = (int) ($_POST['to_user_id'] ?? 0);
+            $stmt = $pdo->prepare("SELECT id, first_name, last_name, assigned_to FROM reach_leads WHERE id = ?");
+            $stmt->execute([$lead_id]);
+            $lead = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$lead) {
+                echo json_encode(['status' => 'error', 'message' => 'Lead not found.']);
+                exit;
+            }
+            if (!reach_is_member($pdo, $to)) {
+                echo json_encode(['status' => 'error', 'message' => 'Pick a member of the Reach department.']);
+                exit;
+            }
+            $from = $lead['assigned_to'] !== null ? (int) $lead['assigned_to'] : null;
+            if ($from === $to) {
+                echo json_encode(['status' => 'success', 'message' => 'Already assigned to them.', 'data' => ['noop' => true]]);
+                break;
+            }
+            $assign_action = $from ? 'reassign' : 'assign';
+
+            $pdo->beginTransaction();
+            $pdo->prepare("UPDATE reach_leads SET assigned_to = ?, assigned_at = NOW(), assigned_by = ? WHERE id = ?")
+                ->execute([$to, $user_id, $lead_id]);
+            $pdo->prepare("
+                INSERT INTO reach_lead_assignments (lead_id, from_user_id, to_user_id, assigned_by, action, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ")->execute([$lead_id, $from, $to, $user_id, $assign_action, trim($_POST['notes'] ?? '') ?: null]);
+            $pdo->commit();
+
+            $lead_name = trim($lead['first_name'] . ' ' . $lead['last_name']);
+            $by_name   = reach_user_name($pdo, $user_id);
+            $to_name   = reach_user_name($pdo, $to);
+            reach_notify($pdo, [$to], 'New Reach lead assigned', "{$by_name} assigned {$lead_name} to you for follow-up.");
+            if ($from) {
+                reach_notify($pdo, [$from], 'Reach lead reassigned', "{$lead_name} has been reassigned to {$to_name}.");
+            }
+            $capturer = (int) (reach_first_capture($pdo, $lead_id)['captured_by_user_id'] ?? 0);
+            if ($capturer && !in_array($capturer, [$to, $from, $user_id], true)) {
+                reach_notify($pdo, [$capturer], 'Your Reach capture is being followed up', "{$lead_name}, whom you captured, is now assigned to {$to_name}.");
+            }
+
+            echo json_encode(['status' => 'success', 'message' => "Assigned to {$to_name}."]);
+            break;
+
+        // ------------------------------------------------------------------
+        // self_claim — any Reach member, unassigned leads only
+        // ------------------------------------------------------------------
+        case 'self_claim':
+            $lead_id = (int) ($_POST['lead_id'] ?? 0);
+            $pdo->beginTransaction();
+            $upd = $pdo->prepare("UPDATE reach_leads SET assigned_to = ?, assigned_at = NOW(), assigned_by = ? WHERE id = ? AND assigned_to IS NULL");
+            $upd->execute([$user_id, $user_id, $lead_id]);
+            if ($upd->rowCount() === 0) {
+                $pdo->rollBack();
+                echo json_encode(['status' => 'error', 'message' => 'This lead has already been claimed.']);
+                exit;
+            }
+            $pdo->prepare("
+                INSERT INTO reach_lead_assignments (lead_id, from_user_id, to_user_id, assigned_by, action)
+                VALUES (?, NULL, ?, ?, 'self_claim')
+            ")->execute([$lead_id, $user_id, $user_id]);
+            $pdo->commit();
+            echo json_encode(['status' => 'success', 'message' => 'Lead claimed — it is yours to follow up.']);
+            break;
+
+        // ------------------------------------------------------------------
+        // push_to_embrace — create (or link) a 1st_Timer user. Idempotent.
+        // ------------------------------------------------------------------
+        case 'push_to_embrace':
+            $lead_id = (int) ($_POST['lead_id'] ?? 0);
+            $stmt = $pdo->prepare("
+                SELECT l.*, c.title AS campaign_title
+                  FROM reach_leads l LEFT JOIN reach_campaigns c ON c.id = l.campaign_id
+                 WHERE l.id = ?
+            ");
+            $stmt->execute([$lead_id]);
+            $lead = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$lead) {
+                echo json_encode(['status' => 'error', 'message' => 'Lead not found.']);
+                exit;
+            }
+            if (!$is_manager && (int) $lead['assigned_to'] !== $user_id) {
+                reach_deny('Only the assignee or a Reach HOD/Director can push this lead.');
+            }
+            if (!empty($lead['pushed_to_embrace_at'])) {
+                echo json_encode(['status' => 'success', 'message' => 'Already pushed to Embrace.', 'data' => ['noop' => true, 'user_id' => (int) $lead['converted_to_user_id']]]);
+                break;
+            }
+
+            $digits = preg_replace('/[^0-9]/', '', (string) $lead['phone']);
+            if (strlen($digits) < 9) {
+                echo json_encode(['status' => 'error', 'message' => 'Add a full phone number before pushing — Embrace follows up by phone.']);
+                exit;
+            }
+            // Same phone-matching rule as Embrace's own intake, so we link
+            // instead of creating a duplicate profile.
+            $dupStmt = $pdo->prepare("SELECT id FROM users WHERE phone LIKE ? LIMIT 1");
+            $dupStmt->execute(['%' . substr($digits, -9) . '%']);
+            $existing_id = $dupStmt->fetchColumn();
+
+            $capturer   = reach_first_capture($pdo, $lead_id)['name'] ?: 'a volunteer';
+            $invited_by = 'Reach: ' . $capturer . ' — ' . ($lead['campaign_title'] ?: 'Reach');
+            $lead_name  = trim($lead['first_name'] . ' ' . $lead['last_name']);
+
+            $pdo->beginTransaction();
+            if ($existing_id) {
+                $new_user_id = (int) $existing_id;
+            } else {
+                $marital = in_array($lead['marital_status'], ['Single', 'Married', 'Widowed', 'Divorced'], true) ? $lead['marital_status'] : 'Single';
+                $pdo->prepare("
+                    INSERT INTO users (first_name, last_name, phone, marital_status, physical_address,
+                                       spiritual_status, invited_by, prayer_requests, qr_code_hash)
+                    VALUES (?, ?, ?, ?, ?, '1st_Timer', ?, ?, ?)
+                ")->execute([
+                    $lead['first_name'], $lead['last_name'] ?? '', $lead['phone'], $marital,
+                    $lead['address'] ?: 'To be updated', $invited_by, $lead['prayer_request'],
+                    hash('sha256', bin2hex(random_bytes(16)) . $digits)
+                ]);
+                $new_user_id = (int) $pdo->lastInsertId();
+            }
+            $upd = $pdo->prepare("
+                UPDATE reach_leads
+                   SET converted_to_user_id = ?, pushed_to_embrace_at = NOW(), status = 'Converted',
+                       existing_member_user_id = COALESCE(existing_member_user_id, ?)
+                 WHERE id = ? AND pushed_to_embrace_at IS NULL
+            ");
+            $upd->execute([$new_user_id, $existing_id ? $new_user_id : null, $lead_id]);
+            if ($upd->rowCount() === 0) {
+                $pdo->rollBack();
+                echo json_encode(['status' => 'success', 'message' => 'Already pushed to Embrace.', 'data' => ['noop' => true]]);
+                break;
+            }
+            $pdo->commit();
+
+            $embrace_leaders = $pdo->query("
+                SELECT ud.user_id FROM user_departments ud
+                JOIN departments d ON ud.department_id = d.id
+                WHERE d.name LIKE '%Embrace%' AND ud.role_in_dept IN ('Director', 'HOD') AND ud.is_active = 1
+            ")->fetchAll(PDO::FETCH_COLUMN);
+            reach_notify($pdo, $embrace_leaders, 'New 1st Timer from Reach',
+                "{$lead_name} was met through Reach ({$lead['campaign_title']}) and is waiting in the Embrace queue.",
+                '/modules/embrace/index.php');
+            if (!$existing_id) {
+                $idi_users = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 1 AND is_active = 1")->fetchAll(PDO::FETCH_COLUMN);
+                reach_notify($pdo, $idi_users, 'New Reach Profile',
+                    "A profile for {$lead_name} was created from Reach. Please review the entry.",
+                    '/modules/congregation/index.php');
+            }
+
+            echo json_encode([
+                'status'  => 'success',
+                'message' => $existing_id ? 'Already in the family database — linked, not duplicated.' : 'Pushed to Embrace as a 1st Timer.',
+                'data'    => ['user_id' => $new_user_id, 'linked_existing' => (bool) $existing_id]
+            ]);
+            break;
+
+        case 'list_reach_members':
+            echo json_encode(['status' => 'success', 'data' => reach_members($pdo)]);
+            break;
+
+        case 'fetch_sidebar_counts':
+            echo json_encode(['status' => 'success', 'data' => reach_sidebar_counts($pdo, $user_id)]);
+            break;
+
         default:
             echo json_encode(['status' => 'error', 'message' => 'Invalid API action requested.']);
             break;
     }
 } catch (PDOException $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     error_log('Reach API Error: ' . $e->getMessage());
     echo json_encode(['status' => 'error', 'message' => 'A database error occurred.']);
 }
