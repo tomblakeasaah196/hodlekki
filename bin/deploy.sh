@@ -64,7 +64,7 @@ if [ ! -f "$REPO/.deployignore" ]; then
     echo "[deploy] $REPO/.deployignore missing — aborting" >&2
     exit 1
 fi
-/bin/rsync -a --delete --exclude-from="$REPO/.deployignore" "$REPO/" "$DEPLOYPATH/"
+rsync -a --delete --exclude-from="$REPO/.deployignore" "$REPO/" "$DEPLOYPATH/"
 echo "[deploy] rsync -> $DEPLOYPATH done"
 
 # 3. Refresh Composer dependencies. -d allow_url_fopen=On because this host's
