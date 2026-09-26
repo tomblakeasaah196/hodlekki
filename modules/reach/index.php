@@ -6,6 +6,14 @@ if (!isset($_SESSION['user_id'])) {
     echo "<script>window.location.href = '/auth/login.php';</script>";
     exit;
 }
+
+require_once __DIR__ . '/../../includes/reach_helpers.php';
+$reach_can_assign = false;
+try {
+    $reach_can_assign = reach_is_manager($pdo, (int) $_SESSION['user_id'], $_SESSION['active_role'] ?? '');
+} catch (PDOException $e) {
+    error_log('Reach manager check: ' . $e->getMessage());
+}
 ?>
 
 <div class="max-w-7xl mx-auto space-y-6 pb-10">
@@ -47,14 +55,38 @@ if (!isset($_SESSION['user_id'])) {
         </div>
     </div>
 
-    <div id="view-followup" class="hidden animate-fade-in-up" style="animation-delay: 0.2s;">
-        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-10 text-center">
-            <div class="w-16 h-16 rounded-2xl bg-emerald-50 mx-auto mb-4 flex items-center justify-center text-emerald-600">
-                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+    <div id="view-followup" class="hidden animate-fade-in-up space-y-5" style="animation-delay: 0.2s;">
+        <button type="button" id="overdueWidget" onclick="toggleOverdue()" class="hidden w-full text-left bg-red-50 border border-red-200 rounded-2xl px-5 py-4 flex items-center gap-4 hover:bg-red-100 transition-all">
+            <span class="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </span>
+            <span class="min-w-0">
+                <span class="block font-bold text-red-800"><span id="overdueCount">0</span> leads assigned &gt;5 days ago with no follow-up.</span>
+                <span id="overdueHint" class="block text-xs text-red-600 mt-0.5">Tap to show only these.</span>
+            </span>
+        </button>
+
+        <div id="fuSubTabs" class="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Follow-up status"></div>
+
+        <div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <input id="fuSearch" type="search" placeholder="Search name or phone" aria-label="Search name or phone" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium focus:border-emerald-500 outline-none">
+                <select id="fuCampaign" aria-label="Campaign" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium focus:border-emerald-500 outline-none bg-white"><option value="">All campaigns</option></select>
+                <select id="fuAssignee" aria-label="Assignee" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium focus:border-emerald-500 outline-none bg-white">
+                    <option value="">Anyone</option><option value="unassigned">Unassigned</option><option value="me">Assigned to me</option>
+                </select>
+                <input id="fuArea" type="text" placeholder="Area, e.g. Ajah" aria-label="Area" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium focus:border-emerald-500 outline-none">
             </div>
-            <h3 class="text-lg font-bold text-gray-900">Follow-Up dashboard is coming in PR 2</h3>
-            <p class="text-sm text-gray-500 mt-2 max-w-md mx-auto">Lead assignment, call queues, and pastor visitation tools land in the next release.</p>
+            <div class="flex flex-wrap items-center gap-2">
+                <div id="fuCategoryChips" class="flex flex-wrap gap-2"></div>
+                <label class="sm:ml-auto inline-flex items-center gap-2 text-xs font-bold text-gray-600 cursor-pointer select-none">
+                    <input type="checkbox" id="fuWilling" class="w-4 h-4 accent-red-600"> Willing to visit only
+                </label>
+            </div>
         </div>
+
+        <div id="fuList" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 min-h-[200px]"></div>
+        <div class="text-center"><button type="button" id="fuMore" onclick="loadLeads(false)" class="hidden bg-white border border-gray-200 hover:border-emerald-300 text-gray-700 px-6 py-2.5 rounded-xl font-bold text-sm">Load more</button></div>
     </div>
 
     <div id="view-analytics" class="hidden animate-fade-in-up" style="animation-delay: 0.2s;">
@@ -246,6 +278,22 @@ if (!isset($_SESSION['user_id'])) {
     </div>
 </div>
 
+<div id="leadDrawer" class="fixed inset-0 z-[9998] hidden" role="dialog" aria-modal="true" aria-labelledby="drawerName">
+    <div data-drawer-backdrop onclick="closeDrawer()" class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
+    <aside data-drawer-panel class="absolute bg-white shadow-2xl flex flex-col transition-transform duration-300 inset-x-0 bottom-0 max-h-[92vh] rounded-t-3xl translate-y-full md:inset-y-0 md:left-auto md:right-0 md:w-[500px] md:max-h-none md:rounded-none md:rounded-l-3xl md:translate-y-0 md:translate-x-full">
+        <div class="flex items-start justify-between gap-3 p-6 border-b border-gray-100">
+            <div class="min-w-0">
+                <h3 id="drawerName" class="text-xl font-display font-bold text-gray-900 truncate">—</h3>
+                <p id="drawerSub" class="text-sm text-gray-500 mt-0.5"></p>
+            </div>
+            <button type="button" onclick="closeDrawer()" aria-label="Close" class="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div id="drawerBody" class="flex-1 overflow-y-auto p-6 space-y-6"></div>
+    </aside>
+</div>
+
 <div id="globalActionBlocker" class="fixed inset-0 w-screen h-screen z-[10000] hidden items-center justify-center bg-gray-900/40 backdrop-blur-sm cursor-not-allowed transition-opacity duration-300 opacity-0">
     <div class="bg-white p-4 rounded-2xl shadow-2xl flex items-center gap-3">
         <svg class="animate-spin h-6 w-6 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
@@ -265,6 +313,7 @@ if (!isset($_SESSION['user_id'])) {
         $(`#tabBtn-${tabId}`)
             .removeClass('text-gray-500 hover:text-gray-900')
             .addClass('bg-white text-emerald-700 shadow-sm');
+        if (tabId === 'followup') initFollowUp();
     }
 
     function lockScreenAction() {
@@ -490,6 +539,255 @@ if (!isset($_SESSION['user_id'])) {
             }
         }, 'json').fail(() => { unlockScreenAction(); showToast('Server error', 'error'); });
     });
+
+    /* ============================ FOLLOW-UP TAB ============================ */
+    const REACH_CAN_ASSIGN = <?= $reach_can_assign ? 'true' : 'false' ?>;
+    const FU_TABS = [['not_spoken', 'Not Spoken To'], ['spoken', 'Spoken To'], ['cold', 'Cold'], ['converted', 'Converted'], ['all', 'All']];
+    const FU_CATEGORIES = ['New_Convert', 'Unsaved', 'Saved', 'Broken', 'Dechurched', 'Other'];
+    const CATEGORY_STYLE = {
+        New_Convert: 'bg-emerald-100 text-emerald-800', Unsaved: 'bg-red-100 text-red-700', Saved: 'bg-blue-100 text-blue-800',
+        Broken: 'bg-purple-100 text-purple-800', Dechurched: 'bg-amber-100 text-amber-800', Other: 'bg-gray-100 text-gray-700'
+    };
+    const OUTCOME_STYLE = {
+        Reached: 'bg-emerald-100 text-emerald-800', No_Answer: 'bg-gray-100 text-gray-700', Wrong_Number: 'bg-amber-100 text-amber-800',
+        Rescheduled: 'bg-blue-100 text-blue-800', Requested_No_Contact: 'bg-red-100 text-red-700', Declined: 'bg-red-100 text-red-700'
+    };
+    const CHANNEL_ICON = {
+        Call: 'M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z',
+        WhatsApp: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
+        SMS: 'M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z',
+        In_Person_Visit: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
+        Church_Service: 'M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z'
+    };
+    const fu = { ready: false, sub: 'not_spoken', category: '', overdue: false, page: 1, members: [], leadId: null };
+
+    const label = s => String(s || '').replace(/_/g, ' ');
+    const pill = (text, cls) => `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${cls}">${escapeHtml(text)}</span>`;
+    const icon = (d, cls = 'w-4 h-4') => `<svg class="${cls}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${d}"/></svg>`;
+
+    function parseDate(s) { return s ? new Date(String(s).replace(' ', 'T')) : null; }
+    function relTime(s) {
+        const d = parseDate(s);
+        if (!d || isNaN(d)) return '';
+        const mins = Math.round((Date.now() - d.getTime()) / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins}m ago`;
+        if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
+        if (mins < 10080) return `${Math.round(mins / 1440)}d ago`;
+        return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    function initFollowUp() {
+        if (fu.ready) return;
+        fu.ready = true;
+        $('#fuCategoryChips').html(['', ...FU_CATEGORIES].map(c =>
+            `<button type="button" data-cat="${c}" onclick="pickFuCategory('${c}')" class="fu-cat px-3 py-1.5 rounded-full border text-xs font-bold transition-all">${c ? label(c) : 'All categories'}</button>`
+        ).join(''));
+        pickFuCategory('', false);
+        $.post(API_URL, { action: 'fetch_campaigns' }, res => {
+            if (res.status !== 'success') return;
+            $('#fuCampaign').append(res.data.map(c => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join(''));
+        }, 'json');
+        $.post(API_URL, { action: 'list_reach_members' }, res => {
+            if (res.status !== 'success') return;
+            fu.members = res.data;
+            $('#fuAssignee').append(res.data.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join(''));
+        }, 'json');
+        let t;
+        $('#fuSearch, #fuArea').on('input', () => { clearTimeout(t); t = setTimeout(() => loadLeads(), 350); });
+        $('#fuCampaign, #fuAssignee, #fuWilling').on('change', () => loadLeads());
+        loadLeads();
+    }
+
+    function pickFuCategory(c, reload = true) {
+        fu.category = c;
+        $('.fu-cat').removeClass('bg-emerald-600 text-white border-emerald-600').addClass('bg-white text-gray-600 border-gray-200').attr('aria-pressed', 'false');
+        $(`.fu-cat[data-cat="${c}"]`).removeClass('bg-white text-gray-600 border-gray-200').addClass('bg-emerald-600 text-white border-emerald-600').attr('aria-pressed', 'true');
+        if (reload) loadLeads();
+    }
+    function pickSubTab(s) { fu.sub = s; loadLeads(); }
+    function toggleOverdue() { fu.overdue = !fu.overdue; loadLeads(); }
+
+    function renderSubTabs(counts) {
+        $('#fuSubTabs').html(FU_TABS.map(([k, name]) => {
+            const on = fu.sub === k;
+            return `<button type="button" role="tab" aria-selected="${on}" onclick="pickSubTab('${k}')" class="shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${on ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/20' : 'bg-white text-gray-600 border border-gray-200 hover:border-emerald-300'}">${name} <span class="ml-1 ${on ? 'text-emerald-100' : 'text-gray-400'}">${counts[k] ?? 0}</span></button>`;
+        }).join(''));
+    }
+
+    function fuSkeleton() {
+        return Array.from({ length: 3 }, () => `<div class="bg-white rounded-3xl border border-gray-100 p-5 space-y-3 animate-pulse"><div class="h-4 bg-gray-100 rounded w-2/3"></div><div class="h-3 bg-gray-100 rounded w-full"></div><div class="h-3 bg-gray-100 rounded w-1/2"></div></div>`).join('');
+    }
+
+    function loadLeads(reset = true) {
+        fu.page = reset ? 1 : fu.page + 1;
+        if (reset) $('#fuList').html(fuSkeleton());
+        $.post(API_URL, {
+            action: 'list_leads', sub_tab: fu.sub, page: fu.page, category: fu.category,
+            campaign_id: $('#fuCampaign').val(), assignee: $('#fuAssignee').val(),
+            area: $('#fuArea').val().trim(), search: $('#fuSearch').val().trim(),
+            willing_only: $('#fuWilling').is(':checked') ? 1 : 0, overdue_only: fu.overdue ? 1 : 0
+        }, res => {
+            if (res.status !== 'success') { showToast(res.message, 'error'); return; }
+            const d = res.data;
+            renderSubTabs(d.counts);
+            $('#overdueCount').text(d.overdue);
+            $('#overdueHint').text(fu.overdue ? 'Showing only overdue leads — tap to show all.' : 'Tap to show only these.');
+            $('#overdueWidget').toggleClass('hidden', d.overdue === 0 && !fu.overdue).toggleClass('ring-2 ring-red-400', fu.overdue);
+            const html = d.leads.map(leadCard).join('');
+            if (reset) {
+                $('#fuList').html(html || `<div class="col-span-full bg-white rounded-3xl border border-gray-100 p-10 text-center"><div class="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto mb-3 flex items-center justify-center">${icon('M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z', 'w-7 h-7')}</div><p class="font-bold text-gray-900">No leads here</p><p class="text-sm text-gray-500 mt-1">Try another tab or clear the filters.</p></div>`);
+            } else {
+                $('#fuList').append(html);
+            }
+            $('#fuMore').toggleClass('hidden', !d.has_more);
+        }, 'json').fail(() => showToast('Server error', 'error'));
+    }
+
+    function leadCard(l) {
+        const name = `${l.first_name} ${l.last_name || ''}`.trim();
+        const member = !!l.capturer_user_id;
+        const added = `Added by ${l.capturer_name || 'unknown'} · ${l.campaign_title || 'No campaign'} · ${relTime(l.captured_at || l.created_at)}`;
+        const last = l.last_outcome ? `Last: ${label(l.last_outcome)} · ${l.last_follower_name || '—'} · ${relTime(l.last_follow_up_date)}` : '';
+        const assign = l.assigned_to
+            ? `<span class="inline-flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-gray-100 px-3 py-1.5 rounded-full">${icon('M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z', 'w-3.5 h-3.5')}${escapeHtml(l.assignee_name)}</span>`
+            : `<span class="text-xs font-bold text-gray-400">Unassigned</span>${l.pushed_to_embrace_at ? '' : `<button type="button" onclick="event.stopPropagation(); claimLead(${l.id})" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-full text-xs font-bold">Claim</button>`}`;
+        return `<div role="button" tabindex="0" onclick="openLead(${l.id})" onkeydown="if(event.key==='Enter')openLead(${l.id})" class="relative overflow-hidden bg-white rounded-3xl border border-gray-100 shadow-sm p-5 space-y-3 cursor-pointer hover:shadow-md hover:border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all">
+            ${l.willing_for_visit == 1 ? '<span class="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-bl-xl">Willing to visit</span>' : ''}
+            <div class="flex items-start justify-between gap-2 pr-16">
+                <div class="min-w-0"><p class="font-bold text-gray-900 truncate">${escapeHtml(name)}</p><p class="text-sm text-gray-500">${escapeHtml(l.phone || 'No phone')}</p></div>
+            </div>
+            <div class="flex flex-wrap gap-1.5">${pill(label(l.category), CATEGORY_STYLE[l.category] || CATEGORY_STYLE.Other)}</div>
+            <p class="text-[11px] font-semibold px-3 py-1.5 rounded-xl border ${member ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-yellow-50 text-yellow-800 border-yellow-200'}">${escapeHtml(added)}</p>
+            ${last ? `<p class="text-[11px] font-semibold px-3 py-1.5 rounded-xl bg-gray-50 text-gray-600 border border-gray-200">${escapeHtml(last)}</p>` : ''}
+            <div class="flex items-center justify-between gap-2 pt-1">${assign}</div>
+        </div>`;
+    }
+
+    function claimLead(id) {
+        $.post(API_URL, { action: 'self_claim', lead_id: id }, res => {
+            showToast(res.message, res.status);
+            if (res.status === 'success') { loadLeads(); if (fu.leadId === id) openLead(id); }
+        }, 'json').fail(() => showToast('Server error', 'error'));
+    }
+
+    function openLead(id) {
+        fu.leadId = id;
+        const dr = document.getElementById('leadDrawer');
+        document.body.appendChild(dr);
+        dr.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        $('#drawerName').text('Loading…'); $('#drawerSub').text('');
+        $('#drawerBody').html(fuSkeleton());
+        requestAnimationFrame(() => {
+            dr.querySelector('[data-drawer-backdrop]').classList.remove('opacity-0');
+            dr.querySelector('[data-drawer-panel]').classList.remove('translate-y-full', 'md:translate-x-full');
+        });
+        $.post(API_URL, { action: 'fetch_lead_detail', lead_id: id }, res => {
+            if (res.status !== 'success') { showToast(res.message, 'error'); closeDrawer(); return; }
+            renderDrawer(res.data);
+        }, 'json').fail(() => showToast('Server error', 'error'));
+    }
+
+    function closeDrawer() {
+        const dr = document.getElementById('leadDrawer');
+        if (dr.classList.contains('hidden')) return;
+        dr.querySelector('[data-drawer-backdrop]').classList.add('opacity-0');
+        dr.querySelector('[data-drawer-panel]').classList.add('translate-y-full', 'md:translate-x-full');
+        setTimeout(() => { dr.classList.add('hidden'); document.body.style.overflow = ''; }, 300);
+        fu.leadId = null;
+    }
+
+    function renderDrawer(d) {
+        const l = d.lead;
+        $('#drawerName').text(`${l.first_name} ${l.last_name || ''}`.trim());
+        $('#drawerSub').text([l.campaign_title, label(l.status)].filter(Boolean).join(' · '));
+        const field = (k, v) => v ? `<div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">${k}</p><p class="text-sm font-medium text-gray-800 whitespace-pre-line">${escapeHtml(v)}</p></div>` : '';
+        const wa = (l.phone || '').replace(/\D/g, '').replace(/^0/, '234');
+        const section = (title, body) => `<section class="space-y-3"><h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest">${title}</h4>${body}</section>`;
+
+        const profile = `<div class="flex flex-wrap gap-1.5">${pill(label(l.category), CATEGORY_STYLE[l.category] || CATEGORY_STYLE.Other)}${l.willing_for_visit == 1 ? pill('Willing to visit', 'bg-red-600 text-white') : ''}</div>
+            ${l.phone ? `<div class="flex gap-2"><a href="tel:${escapeHtml(l.phone)}" class="flex-1 text-center bg-gray-100 hover:bg-gray-200 text-gray-800 py-2.5 rounded-xl text-sm font-bold">Call ${escapeHtml(l.phone)}</a><a href="https://wa.me/${wa}" target="_blank" rel="noopener" class="bg-[#25D366] hover:bg-[#128C7E] text-white px-4 py-2.5 rounded-xl text-sm font-bold">WhatsApp</a></div>` : ''}
+            <div class="grid grid-cols-2 gap-4">${field('Address', l.address)}${field('Age band', l.age_band)}${field('Marital status', l.marital_status)}${field('Language', l.language)}${field('Best time to call', l.best_time_to_call)}${field('Assigned to', l.assignee_name || 'Unassigned')}</div>
+            ${field('Prayer request', l.prayer_request)}${field('Notes', l.notes)}`;
+
+        let actions = '';
+        if (!l.assigned_to && !l.pushed_to_embrace_at) {
+            actions += `<button type="button" onclick="claimLead(${l.id})" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold text-sm">Claim this lead</button>`;
+        }
+        if (d.can_assign) {
+            const opts = fu.members.map(m => `<option value="${m.id}" ${+m.id === +l.assigned_to ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('');
+            actions += `<div class="space-y-2"><input type="search" placeholder="Search Reach members…" aria-label="Search Reach members" oninput="filterAssignees(this.value)" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-emerald-500 outline-none">
+                <div class="flex gap-2"><select id="assignSelect" aria-label="Assign to" class="flex-1 min-w-0 px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:border-emerald-500 outline-none"><option value="">Choose a member…</option>${opts}</select>
+                <button type="button" onclick="assignLead(${l.id}, ${l.assigned_to ? 'true' : 'false'})" class="shrink-0 bg-gray-900 hover:bg-black text-white px-4 rounded-xl text-sm font-bold">${l.assigned_to ? 'Reassign' : 'Assign'}</button></div></div>`;
+        }
+        if (l.pushed_to_embrace_at) {
+            actions += `<button type="button" disabled class="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 py-3 rounded-xl font-bold text-sm cursor-not-allowed">Pushed to Embrace · ${escapeHtml(relTime(l.pushed_to_embrace_at))}</button>`;
+        } else if (d.can_push) {
+            actions += `<button type="button" onclick="pushToEmbrace(${l.id})" class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-red-900/20">Push to Embrace as 1st Timer</button>`;
+        }
+
+        const channelOpts = Object.keys(CHANNEL_ICON).map(c => `<option value="${c}">${label(c)}</option>`).join('');
+        const outcomeOpts = Object.keys(OUTCOME_STYLE).map(o => `<option value="${o}">${label(o)}</option>`).join('');
+        const logForm = `<form id="fuLogForm" class="space-y-3 bg-gray-50 border border-gray-100 rounded-2xl p-4">
+            <div class="grid grid-cols-2 gap-2">
+                <select name="channel" required aria-label="Channel" class="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:border-emerald-500 outline-none">${channelOpts}</select>
+                <select name="outcome" required aria-label="Outcome" class="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:border-emerald-500 outline-none">${outcomeOpts}</select>
+            </div>
+            <textarea name="notes" rows="2" placeholder="What happened? e.g. Coming Sunday" aria-label="Notes" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white resize-none focus:border-emerald-500 outline-none"></textarea>
+            <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider">Next touch (optional)<input type="date" name="next_touch_date" class="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:border-emerald-500 outline-none"></label>
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold text-sm">Save follow-up</button>
+            <input type="hidden" name="action" value="log_follow_up"><input type="hidden" name="lead_id" value="${l.id}">
+        </form>`;
+
+        const timeline = d.follow_ups.length ? `<ol class="relative border-l-2 border-gray-100 ml-3 space-y-5">${d.follow_ups.map(f => `
+            <li class="ml-5"><span class="absolute -left-[15px] w-7 h-7 rounded-full bg-white border-2 border-emerald-200 text-emerald-600 flex items-center justify-center">${icon(CHANNEL_ICON[f.channel] || CHANNEL_ICON.Call, 'w-3.5 h-3.5')}</span>
+                <div class="flex flex-wrap items-center gap-2">${pill(label(f.outcome), OUTCOME_STYLE[f.outcome] || '')}<span class="text-xs font-bold text-gray-700">${label(f.channel)}</span><span class="text-xs text-gray-400">${escapeHtml(f.follower_name || '—')} · ${escapeHtml(relTime(f.created_at))}</span></div>
+                ${f.notes ? `<p class="text-sm text-gray-700 mt-1 whitespace-pre-line">${escapeHtml(f.notes)}</p>` : ''}
+                ${f.next_touch_date ? `<p class="text-xs font-bold text-blue-700 mt-1">Next touch: ${escapeHtml(parseDate(f.next_touch_date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }))}</p>` : ''}
+            </li>`).join('')}</ol>` : '<p class="text-sm text-gray-400 italic">No follow-ups yet — be the first to reach out.</p>';
+
+        const captures = `<ul class="space-y-2">${d.captures.map((c, i) => `<li class="flex items-center justify-between gap-2 text-sm"><span class="font-medium text-gray-800">${i === 0 ? 'Captured' : 'Re-captured'} by ${escapeHtml(c.name || 'unknown')} ${c.captured_by_user_id ? '' : pill('Guest', 'bg-yellow-100 text-yellow-800')}</span><span class="text-xs text-gray-400 shrink-0">${escapeHtml(relTime(c.captured_at))}</span></li>`).join('') || '<li class="text-sm text-gray-400 italic">No capture record.</li>'}</ul>`;
+        const history = d.assignments.length ? section('Assignment history', `<ul class="space-y-1.5">${d.assignments.map(a => `<li class="text-xs text-gray-500"><span class="font-bold text-gray-700">${label(a.action)}</span> → ${escapeHtml(a.to_name || '—')} by ${escapeHtml(a.by_name || '—')} · ${escapeHtml(relTime(a.created_at))}</li>`).join('')}</ul>`) : '';
+
+        $('#drawerBody').html(section('Profile', profile) + (actions ? section('Actions', `<div class="space-y-3">${actions}</div>`) : '')
+            + section('Log follow-up', logForm) + section('Timeline', timeline) + section('Capture chain', captures) + history);
+
+        $('#fuLogForm').on('submit', function(e) {
+            e.preventDefault();
+            const $btn = $(this).find('button[type=submit]').prop('disabled', true);
+            $.post(API_URL, $(this).serialize(), res => {
+                showToast(res.status === 'success' ? `Logged — lead is now ${label(res.data.lead_status)}` : res.message, res.status);
+                if (res.status === 'success') { openLead(l.id); loadLeads(); }
+            }, 'json').fail(() => showToast('Server error', 'error')).always(() => $btn.prop('disabled', false));
+        });
+    }
+
+    function filterAssignees(q) {
+        q = q.toLowerCase();
+        $('#assignSelect option').each(function() { if (this.value) $(this).toggle(this.text.toLowerCase().includes(q)); });
+    }
+
+    function assignLead(id, isReassign) {
+        const to = $('#assignSelect').val();
+        if (!to) { showToast('Choose a member first', 'error'); return; }
+        $.post(API_URL, { action: isReassign ? 'reassign' : 'assign_lead', lead_id: id, to_user_id: to }, res => {
+            showToast(res.message, res.status);
+            if (res.status === 'success') { openLead(id); loadLeads(); }
+        }, 'json').fail(() => showToast('Server error', 'error'));
+    }
+
+    function pushToEmbrace(id) {
+        if (!confirm('Create a 1st Timer profile for this person and hand them to Embrace?')) return;
+        lockScreenAction();
+        $.post(API_URL, { action: 'push_to_embrace', lead_id: id }, res => {
+            unlockScreenAction();
+            showToast(res.message, res.status);
+            if (res.status === 'success') { openLead(id); loadLeads(); }
+        }, 'json').fail(() => { unlockScreenAction(); showToast('Server error', 'error'); });
+    }
+
+    $(document).on('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
 
     $(document).ready(function() {
         loadCampaigns();
