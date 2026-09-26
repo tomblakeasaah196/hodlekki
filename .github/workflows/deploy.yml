@@ -16,6 +16,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reach changes must update the How to Use guide
+        if: github.event_name == 'pull_request'
+        run: |
+          set -eu
+          CHANGED=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          if grep -qE '(^modules/reach/|^api/reach_|^reach\.php$)' <<< "$CHANGED" && \
+             ! grep -qx 'modules/reach/how_to_use.md' <<< "$CHANGED"; then
+            echo "::error::Reach module touched without updating modules/reach/how_to_use.md"
+            exit 1
+          fi
 
       - name: Set up PHP 8.3
         uses: shivammathur/setup-php@v2
