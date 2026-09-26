@@ -1,0 +1,50 @@
+# ============================================================================
+# Household of David Lekki Centre — repository ignore rules
+# ============================================================================
+
+# Environment variables (secrets, DB creds, API keys, vault keys)
+.env
+.env.local
+.env.*.local
+
+# System logs & cPanel remnants
+error_log
+*.log
+.htaccess
+.user.ini
+cgi-bin/
+
+# PHP dependencies (managed via composer.json / composer.lock)
+vendor/
+composer.phar
+
+# Front-end tooling / node
+node_modules/
+tailwindcss-linux-x64
+tailwindcss-macos-*
+tailwindcss-windows-*
+
+# IDE / OS junk
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Runtime / user uploads (member media, sermon audio, event banners, etc.)
+uploads/
+assets/uploads/
+
+# Ad-hoc / staging folders
+gk/
+
+# Database dumps and structural backups
+*.sql
+*.sql.gz
+*.dump
+
+# Ad-hoc scratch scripts — never commit
+_scratch/
+scratch_*.php
