@@ -183,6 +183,25 @@ function reach_deny(string $message = 'Only Reach HODs, Directors and pastors ca
 
 $is_manager = reach_is_manager($pdo, $user_id, $active_role);
 
+// Defaults to the current month; swaps the ends if they arrive reversed.
+function reach_date_range(): array {
+    $valid = function ($d) {
+        $x = DateTime::createFromFormat('Y-m-d', (string) $d);
+        return $x && $x->format('Y-m-d') === $d;
+    };
+    $from = $_POST['from_date'] ?? $_GET['from_date'] ?? '';
+    $to   = $_POST['to_date'] ?? $_GET['to_date'] ?? '';
+    $from = $valid($from) ? $from : date('Y-m-01');
+    $to   = $valid($to) ? $to : date('Y-m-t');
+    return $from <= $to ? [$from, $to] : [$to, $from];
+}
+
+// Spreadsheet apps execute cells starting with these as formulas.
+function reach_csv_safe($v): string {
+    $v = (string) $v;
+    return ($v !== '' && strpbrk($v[0], '=+-@') !== false) ? "'" . $v : $v;
+}
+
 // ==========================================================================
 // ACTIONS
 // ==========================================================================
@@ -771,6 +790,75 @@ try {
                 'message' => $existing_id ? 'Already in the family database — linked, not duplicated.' : 'Pushed to Embrace as a 1st Timer.',
                 'data'    => ['user_id' => $new_user_id, 'linked_existing' => (bool) $existing_id]
             ]);
+            break;
+
+        // ------------------------------------------------------------------
+        // Analytics (Tab 3), PDF report and CSV export
+        // ------------------------------------------------------------------
+        case 'fetch_analytics':
+            [$from, $to] = reach_date_range();
+            echo json_encode(['status' => 'success', 'data' => reach_analytics($pdo, $from, $to)]);
+            break;
+
+        case 'generate_pdf':
+            [$from, $to] = reach_date_range();
+            try {
+                require_once '../includes/reach_report_pdf.php';
+                $pdf = reach_build_report_pdf($pdo, reach_analytics($pdo, $from, $to), reach_user_name($pdo, $user_id) ?: 'Reach');
+                $dir = __DIR__ . '/../uploads/reach_reports';
+                if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+                    throw new RuntimeException('cannot create ' . $dir);
+                }
+                // Random suffix: the report carries prayer requests and uploads/ is web-served.
+                $filename = date('Ymd_His') . "_reach_{$from}_{$to}_" . bin2hex(random_bytes(6)) . '.pdf';
+                if (file_put_contents($dir . '/' . $filename, $pdf) === false) {
+                    throw new RuntimeException('cannot write ' . $filename);
+                }
+            } catch (Throwable $e) {
+                error_log('Reach PDF error: ' . $e->getMessage());
+                echo json_encode(['status' => 'error', 'message' => 'Could not generate the PDF. Please try again.']);
+                exit;
+            }
+            echo json_encode(['status' => 'success', 'data' => ['url' => '/uploads/reach_reports/' . $filename, 'filename' => $filename]]);
+            break;
+
+        case 'export_csv':
+            [$from, $to] = reach_date_range();
+            $stmt = $pdo->prepare("
+                SELECT l.created_at, l.first_name, l.last_name, l.phone, l.category, l.status,
+                       l.willing_for_visit, l.address, c.title AS campaign,
+                       (SELECT COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''), lc.captured_by_guest_name)
+                          FROM reach_lead_captures lc LEFT JOIN users u ON u.id = lc.captured_by_user_id
+                         WHERE lc.lead_id = l.id ORDER BY lc.id LIMIT 1) AS captured_by,
+                       TRIM(CONCAT_WS(' ', au.first_name, au.last_name)) AS assigned_to,
+                       (SELECT COUNT(*) FROM reach_follow_ups f WHERE f.lead_id = l.id) AS follow_ups,
+                       l.pushed_to_embrace_at
+                  FROM reach_leads l
+                  LEFT JOIN reach_campaigns c ON c.id = l.campaign_id
+                  LEFT JOIN users au ON au.id = l.assigned_to
+                 WHERE l.created_at >= ? AND l.created_at < ?
+                 ORDER BY l.created_at
+            ");
+            $stmt->execute([$from . ' 00:00:00', (new DateTime($to))->modify('+1 day')->format('Y-m-d') . ' 00:00:00']);
+            header('Content-Type: text/csv; charset=utf-8');
+            header('Content-Disposition: attachment; filename="reach_leads_' . $from . '_' . $to . '.csv"');
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, ['Captured', 'First name', 'Last name', 'Phone', 'Category', 'Status', 'Willing to visit', 'Area', 'Campaign', 'Captured by', 'Assigned to', 'Follow-ups', 'Pushed to Embrace'], ',', '"', '');
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $r['willing_for_visit'] = $r['willing_for_visit'] ? 'Yes' : 'No';
+                fputcsv($out, array_map('reach_csv_safe', array_values($r)), ',', '"', '');
+            }
+            fclose($out);
+            exit;
+
+        case 'set_testimony_flag':
+            if (!$is_manager) {
+                reach_deny();
+            }
+            $pdo->prepare("UPDATE reach_leads SET share_testimony_in_report = ? WHERE id = ?")
+                ->execute([!empty($_POST['share']) ? 1 : 0, (int) ($_POST['lead_id'] ?? 0)]);
+            echo json_encode(['status' => 'success', 'message' => !empty($_POST['share']) ? 'Testimony will appear in the monthly report.' : 'Testimony removed from reports.']);
             break;
 
         case 'list_reach_members':
