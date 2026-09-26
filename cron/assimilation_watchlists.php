@@ -1,0 +1,112 @@
+<?php
+// /cron/assimilation_watchlists.php
+// Daily: re-runs every active Assimilation watchlist, records who now falls
+// into it, and sends the managers ONE in-app digest per watchlist naming only
+// the people who are newly drifted. Also runs the returned-home sweep so a
+// Sunday check-in is noticed even if nobody opens the module.
+//
+// Nobody is announced twice: assimilation_watchlist_hits.first_seen_at is set
+// the first time a person appears in a watchlist and announced_at the first
+// time they are named in a digest. Running this file twice in a day is safe
+// and produces nothing the second time. Someone who starts attending again
+// drops out of the list, so if they drift a second time they are announced
+// again — which is what we want.
+//
+// Crontab: 15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/assimilation_watchlists.php >/dev/null 2>&1
+
+if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only.\n"); }
+
+// db.php loads .env from DOCUMENT_ROOT, which is empty under CLI.
+$_SERVER['DOCUMENT_ROOT'] = $_SERVER['DOCUMENT_ROOT'] ?? '' ?: dirname(__DIR__);
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/assimilation_helpers.php';
+
+$managers = assim_manager_ids($pdo);
+
+// ---------------------------------------------------------------------------
+// 1. Anyone who has come home since we last looked
+// ---------------------------------------------------------------------------
+try {
+    $back = assim_detect_returned_home($pdo);
+    assim_announce_returned_home($pdo, $back);
+    echo '[assimilation] returned home: ' . count($back) . "\n";
+} catch (PDOException $e) {
+    error_log('Assimilation cron returned-home sweep: ' . $e->getMessage());
+    echo "[assimilation] returned-home sweep failed (logged)\n";
+}
+
+// ---------------------------------------------------------------------------
+// 2. Each active watchlist
+// ---------------------------------------------------------------------------
+$watchlists = $pdo->query("SELECT id, name, rule_json, notify FROM assimilation_watchlists WHERE is_active = 1 ORDER BY id")
+    ->fetchAll(PDO::FETCH_ASSOC);
+
+if (!$watchlists) {
+    echo "[assimilation] no active watchlists\n";
+    exit(0);
+}
+
+$selectHit = $pdo->prepare("
+    SELECT h.user_id, TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) AS name
+      FROM assimilation_watchlist_hits h JOIN users u ON u.id = h.user_id
+     WHERE h.watchlist_id = ? AND h.announced_at IS NULL
+     ORDER BY u.first_name, u.last_name
+");
+$insertHit = $pdo->prepare("
+    INSERT INTO assimilation_watchlist_hits (watchlist_id, user_id) VALUES (?, ?)
+    ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)
+");
+$deleteHit = $pdo->prepare("DELETE FROM assimilation_watchlist_hits WHERE watchlist_id = ? AND user_id = ?");
+$markHit   = $pdo->prepare("UPDATE assimilation_watchlist_hits SET announced_at = NOW() WHERE watchlist_id = ? AND user_id = ?");
+
+foreach ($watchlists as $w) {
+    $id   = (int) $w['id'];
+    $rule = assim_normalize_rule($w['rule_json']);
+
+    try {
+        $matching = assim_rule_user_ids($pdo, $rule);
+    } catch (PDOException $e) {
+        error_log("Assimilation cron watchlist {$id}: " . $e->getMessage());
+        echo "[assimilation] {$w['name']}: query failed (logged)\n";
+        continue;
+    }
+
+    $existing = $pdo->prepare("SELECT user_id FROM assimilation_watchlist_hits WHERE watchlist_id = ?");
+    $existing->execute([$id]);
+    $before = array_map('intval', $existing->fetchAll(PDO::FETCH_COLUMN));
+
+    foreach (array_diff($matching, $before) as $uid) {
+        $insertHit->execute([$id, $uid]);
+    }
+    // Back in the house often enough — stop watching them.
+    foreach (array_diff($before, $matching) as $uid) {
+        $deleteHit->execute([$id, $uid]);
+    }
+
+    // Only the ones nobody has been told about yet.
+    $selectHit->execute([$id]);
+    $fresh = $selectHit->fetchAll(PDO::FETCH_ASSOC);
+    if (!$fresh) {
+        echo "[assimilation] {$w['name']}: " . count($matching) . " in list, nothing new\n";
+        continue;
+    }
+
+    if ((int) $w['notify'] === 1) {
+        $names = array_column($fresh, 'name');
+        $list  = implode(', ', array_slice($names, 0, 5))
+            . (count($names) > 5 ? ' and ' . (count($names) - 5) . ' more' : '');
+        $count = count($names);
+        assim_notify($pdo, $managers,
+            $count === 1 ? '1 person newly drifted' : "{$count} people newly drifted",
+            "\"{$w['name']}\" — " . assim_rule_summary($rule) . ": {$list}. "
+            . 'Open Assimilation to assign someone to reach out to them.');
+    }
+
+    foreach ($fresh as $hit) {
+        $markHit->execute([$id, (int) $hit['user_id']]);
+    }
+    echo "[assimilation] {$w['name']}: " . count($matching) . ' in list, ' . count($fresh)
+        . ' newly announced' . ((int) $w['notify'] === 1 ? ' to ' . count($managers) . ' manager(s)' : ' (digest off)') . "\n";
+}
+
+echo "[assimilation] done\n";

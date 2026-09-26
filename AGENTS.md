@@ -120,9 +120,20 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   in the same PR. Any diff touching `modules/reach/*.php`,
   `api/reach_*.php`, or `reach.php` without a diff to `how_to_use.md`
   fails CI (the first step of the lint job in `.github/workflows/deploy.yml`).
+- **Assimilation module changes MUST update
+  `modules/assimilation/how_to_use.md`** in the same PR, enforced by the
+  same lint job. Any diff touching `modules/assimilation/*`,
+  `api/assimilation_*.php` or `assimilation.php` without a diff to
+  `how_to_use.md` fails CI.
 - **New Reach / Embrace features:** extend `modules/reach/` and
   `modules/embrace/` respectively; both already have their own
   department-based clearance checks in the matching API file.
+- **Anything that asks "was this person in church that day?"** must go
+  through `assim_attendance_union_sql()` in
+  `includes/assimilation_helpers.php` — the de-duplicated union of
+  `checkins` and `attendance`, one row per person per calendar day. Do not
+  query either table directly for attendance history; the two disagree on
+  their own.
 - **New cron job:** `cron/<name>.php`, CLI-only guard, and document the
   crontab line in the README.
 

@@ -30,6 +30,17 @@ jobs:
             exit 1
           fi
 
+      - name: Assimilation changes must update the How to Use guide
+        if: github.event_name == 'pull_request'
+        run: |
+          set -eu
+          CHANGED=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          if grep -qE '(^modules/assimilation/|^api/assimilation_|^assimilation\.php$)' <<< "$CHANGED" && \
+             ! grep -qx 'modules/assimilation/how_to_use.md' <<< "$CHANGED"; then
+            echo "::error::Assimilation module touched without updating modules/assimilation/how_to_use.md"
+            exit 1
+          fi
+
       - name: Set up PHP 8.3
         uses: shivammathur/setup-php@v2
         with:

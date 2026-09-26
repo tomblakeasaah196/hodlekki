@@ -216,6 +216,36 @@ $pastors_directors = ['Resident_Pastor', 'Assoc_Pastor', 'Director'];
     </a>
     <?php endif; ?>
 
+    <?php
+    // Assimilation is not department-scoped: Super Admins, pastors, every
+    // active Director/HOD, and anyone on the Assimilation team. The module
+    // and its API gate on exactly the same rule — this only hides the link.
+    $assim_nav = false;
+    $assim_badge = 0;
+    try {
+        require_once __DIR__ . '/assimilation_helpers.php';
+        $assim_uid     = (int) ($_SESSION['user_id'] ?? 0);
+        $assim_manager = assim_is_manager($pdo, $assim_uid, $_SESSION['active_role'] ?? '');
+        $assim_nav     = $assim_manager || assim_is_team_member($pdo, $assim_uid);
+        if ($assim_nav) {
+            $assim_counts = assim_sidebar_counts($pdo, $assim_uid);
+            $assim_badge  = $assim_counts['my_overdue']
+                + ($assim_manager ? $assim_counts['pool'] + $assim_counts['watchlist_untouched'] : 0);
+        }
+    } catch (Throwable $e) {
+        error_log('Assimilation sidebar badge: ' . $e->getMessage());
+    }
+    ?>
+    <?php if ($assim_nav): ?>
+    <a href="/modules/assimilation/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'assimilation') ?>">
+        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+        <span class="font-medium text-sm">Assimilation</span>
+        <?php if ($assim_badge > 0): ?>
+            <span class="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center" title="Your overdue follow-ups<?= $assim_manager ? ' + unclaimed people' : '' ?>"><?= $assim_badge > 99 ? '99+' : (int) $assim_badge ?></span>
+        <?php endif; ?>
+    </a>
+    <?php endif; ?>
+
     <?php if (userHasNavAccess($pastors, [1, 10])): // IDI and Charis ?>
     <a href="/modules/charis/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'charis') ?>">
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
