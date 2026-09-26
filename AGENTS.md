@@ -116,6 +116,10 @@ follow-up on a plain PHP 8.3 + MySQL stack.
     applied in production — it's tracked by filename in the
     `schema_migrations` table.
   - See `db/migrations/README.md` for examples.
+- **Reach module changes MUST update `modules/reach/how_to_use.md`**
+  in the same PR. Any diff touching `modules/reach/*.php`,
+  `api/reach_*.php`, or `reach.php` without a diff to `how_to_use.md`
+  fails CI (the first step of the lint job in `.github/workflows/deploy.yml`).
 - **New Reach / Embrace features:** extend `modules/reach/` and
   `modules/embrace/` respectively; both already have their own
   department-based clearance checks in the matching API file.
