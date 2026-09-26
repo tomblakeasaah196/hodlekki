@@ -36,47 +36,19 @@ function reach_pdf_funnel_svg(array $funnel): string {
     return reach_pdf_svg($s . '</svg>', $w, $h);
 }
 
-function reach_pdf_donut_svg(array $cats): string {
-    $size = 170; $c = $size / 2; $ro = 78; $ri = 48;
-    $total = array_sum(array_column($cats, 'count'));
-    $s = "<svg xmlns='http://www.w3.org/2000/svg' width='{$size}' height='{$size}' viewBox='0 0 {$size} {$size}'>";
-    if ($total === 0) {
-        $s .= "<circle cx='{$c}' cy='{$c}' r='" . (($ro + $ri) / 2) . "' fill='none' stroke='#e1e0d9' stroke-width='" . ($ro - $ri) . "'/>";
-    } else {
-        $a0 = -M_PI / 2;
-        foreach ($cats as $i => $cat) {
-            if ($cat['count'] === 0) {
-                continue;
-            }
-            $sweep = 2 * M_PI * $cat['count'] / $total;
-            // A single full-circle arc doesn't render; split it in two.
-            $parts = $sweep >= 2 * M_PI - 1e-6 ? [[$a0, $a0 + M_PI], [$a0 + M_PI, $a0 + 2 * M_PI]] : [[$a0, $a0 + $sweep]];
-            foreach ($parts as [$from, $to]) {
-                $large = ($to - $from) > M_PI ? 1 : 0;
-                $p = fn($r, $a) => round($c + $r * cos($a), 2) . ' ' . round($c + $r * sin($a), 2);
-                $s .= "<path d='M " . $p($ro, $from) . " A {$ro} {$ro} 0 {$large} 1 " . $p($ro, $to)
-                    . " L " . $p($ri, $to) . " A {$ri} {$ri} 0 {$large} 0 " . $p($ri, $from) . " Z'"
-                    . " fill='" . REACH_PDF_CATEGORY_COLORS[$i] . "' stroke='#ffffff' stroke-width='2'/>";
-            }
-            $a0 += $sweep;
-        }
-    }
-    $s .= "<text x='{$c}' y='" . ($c + 2) . "' font-family='DejaVu Sans' font-size='20' font-weight='bold' fill='#0b0b0b' text-anchor='middle'>{$total}</text>";
-    $s .= "<text x='{$c}' y='" . ($c + 17) . "' font-family='DejaVu Sans' font-size='9' fill='#52514e' text-anchor='middle'>souls</text>";
-    return reach_pdf_svg($s . '</svg>', $size, $size);
-}
-
-function reach_pdf_area_svg(array $areas): string {
-    $row = 18; $w = 480; $label = 150; $h = max(1, count($areas)) * $row + 6;
-    $max = max(1, ...(array_column($areas, 'count') ?: [1]));
+// Horizontal bars; $colors is one colour for all rows or one per row.
+function reach_pdf_hbar_svg(array $rows, $colors): string {
+    $row = 18; $w = 480; $label = 150; $h = max(1, count($rows)) * $row + 6;
+    $max = max(1, ...(array_column($rows, 'count') ?: [1]));
     $s = "<svg xmlns='http://www.w3.org/2000/svg' width='{$w}' height='{$h}' viewBox='0 0 {$w} {$h}'>";
-    foreach ($areas as $i => $a) {
+    foreach ($rows as $i => $r) {
         $y = $i * $row + 3;
-        $bw = max(2, round(($w - $label - 40) * $a['count'] / $max));
-        $name = mb_strimwidth((string) $a['area'], 0, 24, '…');
+        $bw = max(2, round(($w - $label - 40) * $r['count'] / $max));
+        $fill = is_array($colors) ? $colors[$i] : $colors;
+        $name = mb_strimwidth((string) $r['label'], 0, 24, '…');
         $s .= "<text x='" . ($label - 8) . "' y='" . ($y + 11) . "' font-family='DejaVu Sans' font-size='9' fill='#52514e' text-anchor='end'>" . reach_pdf_esc($name) . "</text>";
-        $s .= "<rect x='{$label}' y='{$y}' width='{$bw}' height='" . ($row - 5) . "' rx='3' fill='#047857'/>";
-        $s .= "<text x='" . ($label + $bw + 5) . "' y='" . ($y + 11) . "' font-family='DejaVu Sans' font-size='9' font-weight='bold' fill='#0b0b0b'>{$a['count']}</text>";
+        $s .= "<rect x='{$label}' y='{$y}' width='{$bw}' height='" . ($row - 5) . "' rx='3' fill='{$fill}'/>";
+        $s .= "<text x='" . ($label + $bw + 5) . "' y='" . ($y + 11) . "' font-family='DejaVu Sans' font-size='9' font-weight='bold' fill='#0b0b0b'>{$r['count']}</text>";
     }
     return reach_pdf_svg($s . '</svg>', $w, $h);
 }
@@ -151,9 +123,10 @@ function reach_build_report_pdf(PDO $pdo, array $a, string $generated_by): strin
     }
     $top5 = $top5 ?: '<tr><td colspan="3" class="muted">No captures in this period.</td></tr>';
 
+    $cat_rows = array_map(fn($c) => ['label' => str_replace('_', ' ', $c['category']), 'count' => $c['count']], $a['category_breakdown']);
     $legend = '';
-    foreach ($a['category_breakdown'] as $i => $cat) {
-        $legend .= '<tr><td><span class="sw" style="background:' . REACH_PDF_CATEGORY_COLORS[$i] . '"></span>' . $e(str_replace('_', ' ', $cat['category'])) . '</td><td class="n">' . $cat['count'] . '</td></tr>';
+    foreach ($cat_rows as $i => $cat) {
+        $legend .= '<tr><td><span class="sw" style="background:' . REACH_PDF_CATEGORY_COLORS[$i] . '"></span>' . $e($cat['label']) . '</td><td class="n">' . $cat['count'] . '</td><td class="n muted">' . reach_pct($cat['count'], $k['souls']) . '%</td></tr>';
     }
 
     $vol_rows = '';
@@ -166,7 +139,9 @@ function reach_build_report_pdf(PDO $pdo, array $a, string $generated_by): strin
     $testimony_rows = implode('', array_map(fn($t) => '<div class="quote"><p>“' . $e($t['story'] ?: 'Welcomed into the family.') . '”</p><div class="muted">— ' . $e($t['first_name']) . ', met at ' . $e($t['campaign'] ?: 'Reach') . '</div></div>', $testimonies))
         ?: '<p class="muted">No testimonies shared for this period. Tick “Share testimony in report” on a converted lead to include it.</p>';
 
-    $areas = $a['area_breakdown'] ? reach_pdf_area_svg($a['area_breakdown']) : '<p class="muted">No addresses recorded in this period.</p>';
+    $areas = $a['area_breakdown']
+        ? reach_pdf_hbar_svg(array_map(fn($r) => ['label' => $r['area'], 'count' => $r['count']], $a['area_breakdown']), '#047857')
+        : '<p class="muted">No addresses recorded in this period.</p>';
 
     $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
         @page { margin: 34px 38px 46px; }
@@ -200,7 +175,8 @@ function reach_build_report_pdf(PDO $pdo, array $a, string $generated_by): strin
 
     <div style="page-break-before: always"></div>
     <h2 style="margin-top:0">Category breakdown</h2>
-    <table><tr><td style="width:180px">' . reach_pdf_donut_svg($a['category_breakdown']) . '</td><td style="vertical-align:middle"><table class="grid">' . $legend . '</table></td></tr></table>
+    <p class="muted" style="margin:-4px 0 8px">A person can be in more than one category; % is of all souls captured.</p>
+    <table><tr><td style="width:62%">' . reach_pdf_hbar_svg($cat_rows, REACH_PDF_CATEGORY_COLORS) . '</td><td style="vertical-align:middle"><table class="grid">' . $legend . '</table></td></tr></table>
     <h2>Top areas</h2>' . $areas . '
     <h2>Volunteer activity</h2><table class="grid"><tr><th class="n" style="width:24px">#</th><th>Volunteer</th><th>Type</th><th class="n">Souls</th></tr>' . $vol_rows . '</table>
     <h2>The story of the month</h2><div class="story">' . $narrative . '</div>

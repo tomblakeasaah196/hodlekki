@@ -179,10 +179,7 @@ try {
             $last_name = trim($_POST['last_name'] ?? '');
             $phone     = trim($_POST['phone'] ?? '');
 
-            $category_raw = $_POST['category'] ?? 'Other';
-            $category = in_array($category_raw, ['New_Convert', 'Unsaved', 'Saved', 'Broken', 'Dechurched', 'Other'], true)
-                ? $category_raw
-                : 'Other';
+            $category = reach_parse_categories($_POST['category'] ?? 'Other');
 
             $willing_for_visit = !empty($_POST['willing_for_visit']) ? 1 : 0;
 
