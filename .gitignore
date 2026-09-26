@@ -45,6 +45,9 @@ gk/
 *.sql
 *.sql.gz
 *.dump
+# ...but forward migrations under db/migrations/ ARE tracked; they run on
+# every deploy via db/migrate.php.
+!db/migrations/*.sql
 
 # Ad-hoc scratch scripts — never commit
 _scratch/
