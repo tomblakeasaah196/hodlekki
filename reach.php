@@ -6,6 +6,7 @@
 // volunteer identity check in Step 1.
 
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/reach_helpers.php';
 
 $slug = trim($_GET['c'] ?? '');
 $campaign = null;
@@ -15,7 +16,7 @@ if ($slug !== '') {
     try {
         $stmt = $pdo->prepare("
             SELECT id, slug, title, campaign_type, campaign_date, start_time, end_time,
-                   location, meta_description, share_scripture, payload_tier, status
+                   location, meta_description, share_scripture, flyer_path, payload_tier, status
               FROM reach_campaigns
              WHERE slug = ? LIMIT 1
         ");
@@ -41,6 +42,7 @@ $e = fn($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 // OG defaults survive even when the slug is bad; social scrapers still
 // get a usable card. WhatsApp ignores SVG previews, hence the PNG.
 $host     = $_SERVER['HTTP_HOST'] ?? 'hodlc.lpc.cm';
+$bg_image = reach_default_campaign_image($pdo);
 $og_title = 'Reach — Household of David Lekki Centre';
 $og_desc  = 'Every soul counts. Meet people, log the encounter, watch heaven celebrate.';
 $og_image = 'https://' . $host . '/assets/images/logo_hod.png';
@@ -50,6 +52,8 @@ $date_label = '';
 $time_label = '';
 if ($campaign) {
     $og_title = $campaign['title'] . ' — HOD Lekki';
+    $bg_image = $campaign['flyer_path'] ?: $bg_image;
+    $og_image = 'https://' . $host . $bg_image;
     if (!empty($campaign['meta_description'])) {
         $og_desc = $campaign['meta_description'];
     }
@@ -77,7 +81,7 @@ if ($campaign) {
     <meta property="og:description" content="<?= $e($og_desc) ?>">
     <meta property="og:image" content="<?= $e($og_image) ?>">
     <meta property="og:url" content="<?= $e($og_url) ?>">
-    <meta name="twitter:card" content="summary">
+    <meta name="twitter:card" content="<?= $campaign ? 'summary_large_image' : 'summary' ?>">
     <meta name="twitter:title" content="<?= $e($og_title) ?>">
     <meta name="twitter:description" content="<?= $e($og_desc) ?>">
     <meta name="twitter:image" content="<?= $e($og_image) ?>">
@@ -135,7 +139,7 @@ if ($campaign) {
 <body class="bg-hodInk font-sans antialiased text-gray-800 overflow-x-hidden">
 
     <div class="fixed inset-0 z-0" aria-hidden="true">
-        <img src="/assets/images/hod_lekki.jpeg" alt="" class="w-full h-full object-cover object-[center_30%] opacity-60">
+        <img src="<?= $e($bg_image) ?>" alt="" class="w-full h-full object-cover object-[center_30%] opacity-60">
         <div class="absolute inset-0 bg-hodBlue/50 mix-blend-multiply"></div>
         <div class="absolute inset-0 bg-gradient-to-b from-black/60 via-hodBlue/60 to-hodInk/95"></div>
     </div>
@@ -174,6 +178,9 @@ if ($campaign) {
         </header>
 
         <section class="glass rounded-3xl p-6 text-white animate-slide-up">
+            <?php if (!empty($campaign['flyer_path'])): ?>
+                <img src="<?= $e($campaign['flyer_path']) ?>" alt="Campaign flyer" class="w-full max-h-96 object-cover object-top rounded-2xl mb-5 border border-white/20 shadow-lg">
+            <?php endif; ?>
             <div class="flex items-center gap-3 mb-3">
                 <div class="h-px w-8 bg-hodRed"></div>
                 <p class="text-[11px] font-semibold tracking-widest text-blue-200 uppercase"><?= $e(str_replace('_', ' ', $campaign['campaign_type'])) ?></p>
@@ -333,9 +340,9 @@ if ($campaign) {
                             <div class="grid grid-cols-2 gap-3">
                                 <?php if ($show_field('age_band')): ?>
                                     <div>
-                                        <label for="fldAge" class="field-label">Age band</label>
+                                        <label for="fldAge" class="field-label">Age group</label>
                                         <select name="age_band" id="fldAge" class="field">
-                                            <option value="">—</option>
+                                            <option value="">Prefer not to say</option>
                                             <option>Under 18</option><option>18-25</option><option>26-35</option>
                                             <option>36-50</option><option>51-65</option><option>65+</option>
                                         </select>
@@ -345,7 +352,7 @@ if ($campaign) {
                                     <div>
                                         <label for="fldMarital" class="field-label">Marital status</label>
                                         <select name="marital_status" id="fldMarital" class="field">
-                                            <option value="">—</option>
+                                            <option value="">Prefer not to say</option>
                                             <option>Single</option><option>Married</option><option>Widowed</option><option>Divorced</option>
                                         </select>
                                     </div>

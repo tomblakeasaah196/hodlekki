@@ -65,6 +65,15 @@ function reach_markdown(string $md): string {
     $flushPara(); $flushList();
     return $html;
 }
+$reach_types = [];
+$reach_default_image = REACH_FALLBACK_CAMPAIGN_IMAGE;
+try {
+    $reach_types = array_map(fn($t) => ['code' => $t['code'], 'label' => $t['label']], reach_campaign_types($pdo));
+    $reach_default_image = reach_default_campaign_image($pdo);
+} catch (PDOException $e) {
+    error_log('Reach campaign settings: ' . $e->getMessage());
+}
+$reach_types = $reach_types ?: [['code' => 'Other', 'label' => 'Other']];
 $reach_guide_html = reach_markdown((string) @file_get_contents(__DIR__ . '/how_to_use.md'));
 preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_guide_toc, PREG_SET_ORDER);
 ?>
@@ -85,6 +94,11 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
         </div>
 
         <div class="relative z-10 flex gap-3 w-full md:w-auto">
+            <?php if ($reach_can_assign): ?>
+            <button type="button" onclick="openSettingsModal()" aria-label="Campaign settings" title="Campaign settings" class="shrink-0 w-11 h-11 rounded-xl bg-white border border-gray-200 hover:border-emerald-300 text-gray-600 hover:text-emerald-700 flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </button>
+            <?php endif; ?>
             <button onclick="openCampaignModal()" class="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-800 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-emerald-900/20 flex justify-center items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                 New Campaign
@@ -200,13 +214,7 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Event Type</label>
-                        <select name="campaign_type" id="fldType" class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none bg-white cursor-pointer">
-                            <option value="Saturday_Evangelism">Saturday Evangelism</option>
-                            <option value="Crusade">Crusade</option>
-                            <option value="Welfare_Outreach">Welfare Outreach</option>
-                            <option value="Workshop">Workshop</option>
-                            <option value="Other">Other</option>
-                        </select>
+                        <select name="campaign_type" id="fldType" class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none bg-white cursor-pointer"></select>
                     </div>
                     <div>
                         <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Date</label>
@@ -231,20 +239,34 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
                            class="w-full px-4 py-3 border border-gray-200 rounded-xl font-medium focus:border-emerald-500 outline-none bg-white">
                 </div>
 
+                <div>
+                    <label for="fldFlyer" class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Flyer
+                        <span class="text-gray-400 font-medium normal-case tracking-normal">(optional — used as the link preview and page background)</span>
+                    </label>
+                    <div class="flex items-center gap-3 bg-white p-3 rounded-2xl border border-gray-100">
+                        <img id="flyerPreview" src="" alt="Flyer preview" class="w-20 h-20 shrink-0 rounded-xl object-cover object-top border border-gray-200 bg-gray-50">
+                        <div class="flex-1 min-w-0 space-y-1.5">
+                            <input type="file" name="flyer" id="fldFlyer" accept="image/jpeg,image/png,image/webp" onchange="previewFlyer(this)" class="block w-full text-xs text-gray-500 file:mr-3 file:px-3 file:py-2 file:rounded-xl file:border-0 file:bg-emerald-50 file:text-emerald-700 file:font-bold hover:file:bg-emerald-100">
+                            <label id="removeFlyerRow" class="hidden items-center gap-2 text-xs font-bold text-red-600 cursor-pointer"><input type="checkbox" name="remove_flyer" value="1" id="fldRemoveFlyer" onchange="onRemoveFlyer()" class="w-4 h-4 accent-red-600"> Remove current flyer</label>
+                            <p id="flyerHint" class="text-[10px] text-gray-400">No flyer? The default campaign image is used. JPG, PNG or WebP, up to 5 MB.</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="bg-white p-4 rounded-2xl border border-gray-100">
                     <div class="flex justify-between items-center mb-3">
-                        <label class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Payload Tier</label>
-                        <button type="button" onclick="toggleTierHelp()" class="w-6 h-6 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs flex items-center justify-center hover:bg-emerald-100" title="Which fields are shown in each tier?">i</button>
+                        <label class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Form length <span class="text-gray-400 font-medium normal-case tracking-normal">— how much volunteers ask each person</span></label>
+                        <button type="button" onclick="toggleTierHelp()" aria-label="What does each form length ask?" class="w-6 h-6 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs flex items-center justify-center hover:bg-emerald-100" title="What does each form length ask?">i</button>
                     </div>
                     <div id="tierHelp" class="hidden mb-3 text-xs bg-emerald-50/70 border border-emerald-100 rounded-xl p-3 text-emerald-800 space-y-1">
-                        <p><strong>Rapid:</strong> first name, phone, category, willing-for-visit — 10-second capture.</p>
-                        <p><strong>Standard:</strong> adds address and prayer request.</p>
-                        <p><strong>Rich:</strong> adds age band, marital status, language, best time to call, notes.</p>
+                        <p><strong>Quick:</strong> name, phone, where they are spiritually, open to a visit — about 10 seconds.</p>
+                        <p><strong>Standard:</strong> adds area and prayer request.</p>
+                        <p><strong>Detailed:</strong> adds age group, marital status, language, best time to call and notes. Every extra question is optional.</p>
                     </div>
                     <div class="grid grid-cols-3 gap-2">
                         <label class="cursor-pointer">
                             <input type="radio" name="payload_tier" value="Rapid" class="sr-only peer">
-                            <div class="rounded-xl border border-gray-200 py-3 text-center text-xs font-bold text-gray-700 peer-checked:bg-emerald-600 peer-checked:text-white peer-checked:border-emerald-600 transition-all">Rapid</div>
+                            <div class="rounded-xl border border-gray-200 py-3 text-center text-xs font-bold text-gray-700 peer-checked:bg-emerald-600 peer-checked:text-white peer-checked:border-emerald-600 transition-all">Quick</div>
                         </label>
                         <label class="cursor-pointer">
                             <input type="radio" name="payload_tier" value="Standard" class="sr-only peer">
@@ -252,8 +274,19 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
                         </label>
                         <label class="cursor-pointer">
                             <input type="radio" name="payload_tier" value="Rich" checked class="sr-only peer">
-                            <div class="rounded-xl border border-gray-200 py-3 text-center text-xs font-bold text-gray-700 peer-checked:bg-emerald-600 peer-checked:text-white peer-checked:border-emerald-600 transition-all">Rich</div>
+                            <div class="rounded-xl border border-gray-200 py-3 text-center text-xs font-bold text-gray-700 peer-checked:bg-emerald-600 peer-checked:text-white peer-checked:border-emerald-600 transition-all">Detailed</div>
                         </label>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50/70 border border-emerald-100 rounded-2xl px-4 py-3">
+                    <p class="text-xs text-emerald-900 font-medium">Just enter the title and location — AI can write the description and scripture for you.</p>
+                    <div class="flex gap-2 shrink-0">
+                        <button type="button" id="aiNextBtn" onclick="aiNext()" class="hidden bg-white border border-emerald-200 hover:border-emerald-400 text-emerald-800 px-3 py-2 rounded-xl font-bold text-xs">Another option <span id="aiPos">1/3</span></button>
+                        <button type="button" id="aiWriteBtn" onclick="aiWrite()" class="bg-emerald-600 hover:bg-emerald-800 text-white px-3 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                            <span id="aiWriteLabel">Write with AI</span>
+                        </button>
                     </div>
                 </div>
 
@@ -342,6 +375,43 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
         </div>
     </div>
 </div>
+
+<?php if ($reach_can_assign): ?>
+<div id="settingsModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden transform scale-95 transition-transform duration-300">
+        <div class="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
+            <h3 id="settingsTitle" class="text-lg font-display font-bold text-gray-900">Campaign settings</h3>
+            <button type="button" onclick="closeModal('settingsModal')" aria-label="Close" class="text-gray-400 hover:text-red-500 bg-gray-50 hover:bg-red-50 p-1.5 rounded-full transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="overflow-y-auto p-6 space-y-8">
+            <section class="space-y-3">
+                <div>
+                    <h4 class="font-bold text-gray-900">Event types</h4>
+                    <p class="text-xs text-gray-500 mt-0.5">The choices in the Event Type list. Removing one keeps it on campaigns that already use it.</p>
+                </div>
+                <div id="typeList" class="flex flex-wrap gap-2"></div>
+                <form id="typeForm" class="flex gap-2">
+                    <input id="newTypeLabel" type="text" maxlength="60" placeholder="e.g., Market Storm" aria-label="New event type" class="flex-1 min-w-0 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium focus:border-emerald-500 outline-none">
+                    <button type="submit" class="shrink-0 bg-emerald-600 hover:bg-emerald-800 text-white px-4 rounded-xl font-bold text-sm">Add</button>
+                </form>
+            </section>
+            <section class="space-y-3">
+                <div>
+                    <h4 class="font-bold text-gray-900">Default campaign image</h4>
+                    <p class="text-xs text-gray-500 mt-0.5">Used as the link preview and capture-page background for campaigns without a flyer. Best at 1200 × 630.</p>
+                </div>
+                <img id="defaultImagePreview" src="" alt="Default campaign image" class="w-full aspect-[1200/630] object-cover rounded-2xl border border-gray-100 bg-gray-50">
+                <div class="flex flex-wrap gap-2">
+                    <label class="bg-emerald-600 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl font-bold text-sm cursor-pointer focus-within:ring-2 focus-within:ring-emerald-500">Upload new image<input type="file" accept="image/jpeg,image/png,image/webp" onchange="uploadDefaultImage(this)" class="sr-only"></label>
+                    <button type="button" onclick="resetDefaultImage()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl font-bold text-sm">Use the church photo</button>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <div id="leadDrawer" class="fixed inset-0 z-[9998] hidden" role="dialog" aria-modal="true" aria-labelledby="drawerName">
     <div data-drawer-backdrop onclick="closeDrawer()" class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
@@ -461,6 +531,75 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
         }
     }
 
+    let REACH_TYPES = <?= json_encode($reach_types, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    let REACH_DEFAULT_IMAGE = <?= json_encode($reach_default_image, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const TIER_LABEL = { Rapid: 'Quick', Standard: 'Standard', Rich: 'Detailed' };
+    const ai = { options: [], i: 0 };
+    let editingFlyer = null;
+
+    function typeLabel(code) {
+        const t = REACH_TYPES.find(t => t.code === code);
+        return t ? t.label : String(code || '').replace(/_/g, ' ');
+    }
+    function renderTypeOptions(selected) {
+        const opts = REACH_TYPES.map(t => `<option value="${escapeHtml(t.code)}">${escapeHtml(t.label)}</option>`);
+        if (selected && !REACH_TYPES.some(t => t.code === selected)) {
+            opts.push(`<option value="${escapeHtml(selected)}">${escapeHtml(typeLabel(selected))}</option>`);
+        }
+        $('#fldType').html(opts.join(''));
+        $('#fldType').val(selected || REACH_TYPES[0].code);
+    }
+    function previewFlyer(input) {
+        const f = input.files && input.files[0];
+        if (f) {
+            $('#flyerPreview').attr('src', URL.createObjectURL(f));
+            $('#fldRemoveFlyer').prop('checked', false);
+        } else {
+            $('#flyerPreview').attr('src', editingFlyer || REACH_DEFAULT_IMAGE);
+        }
+    }
+    function onRemoveFlyer() {
+        if ($('#fldRemoveFlyer').is(':checked')) {
+            $('#fldFlyer').val('');
+            $('#flyerPreview').attr('src', REACH_DEFAULT_IMAGE);
+        } else {
+            $('#flyerPreview').attr('src', editingFlyer || REACH_DEFAULT_IMAGE);
+        }
+    }
+    function aiReset() {
+        ai.options = []; ai.i = 0;
+        $('#aiNextBtn').addClass('hidden');
+    }
+    function aiApply() {
+        const o = ai.options[ai.i];
+        $('#fldMeta').val(o.meta_description);
+        updateMetaCount();
+        $('#fldScripture').val(o.share_scripture);
+        $('#scriptureSelect').val('');
+        $('#aiPos').text(`${ai.i + 1}/${ai.options.length}`);
+        $('#aiNextBtn').toggleClass('hidden', ai.options.length < 2);
+    }
+    function aiWrite() {
+        const title = $('#fldTitle').val().trim();
+        if (!title) { showToast('Enter the campaign title first', 'error'); $('#fldTitle').trigger('focus'); return; }
+        const $b = $('#aiWriteBtn').prop('disabled', true).addClass('opacity-60');
+        $('#aiWriteLabel').text('Writing…');
+        $.post(API_URL, {
+            action: 'suggest_share_copy', title: title, location: $('#fldLocation').val(),
+            campaign_type: $('#fldType').val(), campaign_date: $('#fldDate').val()
+        }, res => {
+            if (res.status !== 'success') { showToast(res.message, 'error'); return; }
+            ai.options = res.data; ai.i = 0;
+            aiApply();
+        }, 'json').fail(() => showToast('Server error', 'error'))
+          .always(() => { $b.prop('disabled', false).removeClass('opacity-60'); $('#aiWriteLabel').text(ai.options.length ? 'Write new options' : 'Write with AI'); });
+    }
+    function aiNext() {
+        if (!ai.options.length) return;
+        ai.i = (ai.i + 1) % ai.options.length;
+        aiApply();
+    }
+
     function openCampaignModal() {
         $('#campaignModalTitle').text('New Reach Campaign');
         $('#campaignActionField').val('create_campaign');
@@ -470,6 +609,12 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
         $('#statusRow').addClass('hidden');
         $('#fldScripture').val('');
         $('#scriptureSelect').val('');
+        renderTypeOptions();
+        editingFlyer = null;
+        $('#flyerPreview').attr('src', REACH_DEFAULT_IMAGE);
+        $('#removeFlyerRow').addClass('hidden').removeClass('flex');
+        aiReset();
+        $('#aiWriteLabel').text('Write with AI');
         updateMetaCount();
         openModal('campaignModal');
     }
@@ -479,7 +624,14 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
         $('#campaignActionField').val('edit_campaign');
         $('#campaignIdField').val(c.id);
         $('#fldTitle').val(c.title || '');
-        $('#fldType').val(c.campaign_type || 'Saturday_Evangelism');
+        renderTypeOptions(c.campaign_type);
+        $('#fldFlyer').val('');
+        $('#fldRemoveFlyer').prop('checked', false);
+        editingFlyer = c.flyer_path || null;
+        $('#flyerPreview').attr('src', c.image_url || REACH_DEFAULT_IMAGE);
+        $('#removeFlyerRow').toggleClass('hidden', !editingFlyer).toggleClass('flex', !!editingFlyer);
+        aiReset();
+        $('#aiWriteLabel').text('Write with AI');
         $('#fldDate').val(c.campaign_date || '');
         $('#fldStart').val(c.start_time || '');
         $('#fldEnd').val(c.end_time || '');
@@ -522,10 +674,15 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
             return;
         }
         const html = list.map(c => `
-            <div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 flex flex-col gap-4 hover:shadow-md transition-shadow">
+            <div class="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+                <div class="relative h-36 bg-gray-100">
+                    <img src="${escapeHtml(c.image_url || REACH_DEFAULT_IMAGE)}" alt="" loading="lazy" class="w-full h-full object-cover ${c.flyer_path ? 'object-top' : ''}">
+                    ${c.flyer_path ? '' : '<span class="absolute bottom-2 left-2 bg-black/55 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Default image</span>'}
+                </div>
+                <div class="p-6 flex flex-col gap-4 flex-1">
                 <div class="flex justify-between items-start gap-3">
                     <div class="min-w-0">
-                        <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">${escapeHtml((c.campaign_type||'').replace(/_/g,' '))}</p>
+                        <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">${escapeHtml(typeLabel(c.campaign_type))}</p>
                         <h4 class="font-display text-lg font-bold text-gray-900 truncate">${escapeHtml(c.title)}</h4>
                         <p class="text-xs text-gray-500 font-medium mt-0.5 truncate">/reach.php?c=${escapeHtml(c.slug)}</p>
                     </div>
@@ -541,8 +698,8 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
                         <p class="text-sm font-black text-emerald-800 mt-0.5">${escapeHtml(c.souls_count)}</p>
                     </div>
                     <div class="bg-blue-50 rounded-xl py-2">
-                        <p class="text-[9px] font-bold text-blue-500 uppercase">Tier</p>
-                        <p class="text-xs font-bold text-blue-800 mt-0.5">${escapeHtml(c.payload_tier)}</p>
+                        <p class="text-[9px] font-bold text-blue-500 uppercase">Form</p>
+                        <p class="text-xs font-bold text-blue-800 mt-0.5">${escapeHtml(TIER_LABEL[c.payload_tier] || c.payload_tier)}</p>
                     </div>
                 </div>
                 <div class="flex gap-2 pt-1">
@@ -552,6 +709,7 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
                     </button>
                     <button onclick='openEditCampaignModal(${JSON.stringify(c).replace(/'/g, "&#39;")})' class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-xl font-bold text-xs transition-all">Edit</button>
                     <button onclick="deleteCampaign(${c.id}, '${escapeHtml((c.title||'').replace(/'/g,'\\\'')) }')" class="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded-xl font-bold text-xs transition-all">Delete</button>
+                </div>
                 </div>
             </div>`).join('');
         $('#campaignsGrid').html(html);
@@ -611,14 +769,15 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
     $('#campaignForm').on('submit', function(e) {
         e.preventDefault();
         lockScreenAction();
-        $.post(API_URL, $(this).serialize(), function(res) {
-            unlockScreenAction();
-            showToast(res.message, res.status);
-            if (res.status === 'success') {
-                closeModal('campaignModal');
-                loadCampaigns();
-            }
-        }, 'json').fail(() => { unlockScreenAction(); showToast('Server error', 'error'); });
+        $.ajax({ url: API_URL, type: 'POST', data: new FormData(this), processData: false, contentType: false, dataType: 'json' })
+            .done(function(res) {
+                unlockScreenAction();
+                showToast(res.message, res.status);
+                if (res.status === 'success') {
+                    closeModal('campaignModal');
+                    loadCampaigns();
+                }
+            }).fail(() => { unlockScreenAction(); showToast('Server error', 'error'); });
     });
 
     /* ============================ FOLLOW-UP TAB ============================ */
@@ -789,7 +948,7 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
 
         const profile = `<div class="flex flex-wrap gap-1.5">${pill(label(l.category), CATEGORY_STYLE[l.category] || CATEGORY_STYLE.Other)}${l.willing_for_visit == 1 ? pill('Willing to visit', 'bg-red-600 text-white') : ''}</div>
             ${l.phone ? `<div class="flex gap-2"><a href="tel:${escapeHtml(l.phone)}" class="flex-1 text-center bg-gray-100 hover:bg-gray-200 text-gray-800 py-2.5 rounded-xl text-sm font-bold">Call ${escapeHtml(l.phone)}</a><a href="https://wa.me/${wa}" target="_blank" rel="noopener" class="bg-[#25D366] hover:bg-[#128C7E] text-white px-4 py-2.5 rounded-xl text-sm font-bold">WhatsApp</a></div>` : ''}
-            <div class="grid grid-cols-2 gap-4">${field('Address', l.address)}${field('Age band', l.age_band)}${field('Marital status', l.marital_status)}${field('Language', l.language)}${field('Best time to call', l.best_time_to_call)}${field('Assigned to', l.assignee_name || 'Unassigned')}</div>
+            <div class="grid grid-cols-2 gap-4">${field('Address', l.address)}${field('Age group', l.age_band)}${field('Marital status', l.marital_status)}${field('Language', l.language)}${field('Best time to call', l.best_time_to_call)}${field('Assigned to', l.assignee_name || 'Unassigned')}</div>
             ${field('Prayer request', l.prayer_request)}${field('Notes', l.notes)}`;
 
         let actions = '';
@@ -874,6 +1033,54 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
     function setTestimony(id, on) {
         $.post(API_URL, { action: 'set_testimony_flag', lead_id: id, share: on ? 1 : 0 }, res => showToast(res.message, res.status), 'json')
             .fail(() => showToast('Server error', 'error'));
+    }
+
+    /* ============================ CAMPAIGN SETTINGS ============================ */
+    function openSettingsModal() {
+        renderTypeChips();
+        $('#defaultImagePreview').attr('src', REACH_DEFAULT_IMAGE);
+        openModal('settingsModal');
+    }
+    function renderTypeChips() {
+        $('#typeList').html(REACH_TYPES.map(t => `<span class="inline-flex items-center gap-1 bg-gray-100 text-gray-700 pl-3 ${t.code === 'Other' ? 'pr-3' : 'pr-1'} py-1.5 rounded-full text-xs font-bold">${escapeHtml(t.label)}${t.code === 'Other' ? '' : `<button type="button" onclick="removeType('${escapeHtml(t.code)}')" aria-label="Remove ${escapeHtml(t.label)}" class="w-6 h-6 rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600 flex items-center justify-center">&times;</button>`}</span>`).join(''));
+    }
+    $('#typeForm').on('submit', function(e) {
+        e.preventDefault();
+        const label = $('#newTypeLabel').val().trim();
+        if (!label) return;
+        $.post(API_URL, { action: 'add_campaign_type', label: label }, res => {
+            showToast(res.message, res.status);
+            if (res.status === 'success') { REACH_TYPES = res.data; renderTypeChips(); $('#newTypeLabel').val(''); }
+        }, 'json').fail(() => showToast('Server error', 'error'));
+    });
+    function removeType(code) {
+        if (!confirm('Remove this event type? Campaigns that already use it keep it.')) return;
+        $.post(API_URL, { action: 'remove_campaign_type', code: code }, res => {
+            showToast(res.message, res.status);
+            if (res.status === 'success') { REACH_TYPES = res.data; renderTypeChips(); }
+        }, 'json').fail(() => showToast('Server error', 'error'));
+    }
+    function applyDefaultImage(res) {
+        showToast(res.message, res.status);
+        if (res.status !== 'success') return;
+        REACH_DEFAULT_IMAGE = res.data.default_image;
+        $('#defaultImagePreview').attr('src', REACH_DEFAULT_IMAGE);
+        loadCampaigns();
+    }
+    function uploadDefaultImage(input) {
+        const f = input.files && input.files[0];
+        if (!f) return;
+        const fd = new FormData();
+        fd.append('action', 'upload_default_image');
+        fd.append('image', f);
+        lockScreenAction();
+        $.ajax({ url: API_URL, type: 'POST', data: fd, processData: false, contentType: false, dataType: 'json' })
+            .done(applyDefaultImage).fail(() => showToast('Server error', 'error'))
+            .always(() => { unlockScreenAction(); input.value = ''; });
+    }
+    function resetDefaultImage() {
+        if (!confirm('Go back to the church photo as the default image?')) return;
+        $.post(API_URL, { action: 'reset_default_image' }, applyDefaultImage, 'json').fail(() => showToast('Server error', 'error'));
     }
 
     /* ============================ ANALYTICS TAB ============================ */
