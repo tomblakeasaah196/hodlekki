@@ -90,10 +90,6 @@ function reach_report_narrative(array $a): string {
             ? "{$k['overdue']} assigned lead(s) have waited more than five days for a first call — let us close that gap so no one we met is forgotten."
             : "Every assigned lead has been followed up on time. Thank you for your faithfulness — let us keep going.");
 
-    $key = $_ENV['GEMINI_API_KEY'] ?? '';
-    if ($key === '' || !function_exists('curl_init')) {
-        return $fallback;
-    }
     // Aggregates only: no names or phone numbers leave the server.
     $metrics = [
         'kpis' => $k, 'funnel' => $a['funnel'], 'categories' => $a['category_breakdown'],
@@ -103,26 +99,7 @@ function reach_report_narrative(array $a): string {
     $prompt = "Given these Reach ministry metrics for {$range}, write 2 short paragraphs summarising the story of the month, the wins, and the gaps. "
         . "Warm pastoral tone, ~150 words. Plain text only, no headings or markdown.\n\n" . json_encode($metrics);
 
-    $ch = curl_init('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $key);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST           => true,
-        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-        CURLOPT_TIMEOUT        => 25,
-        CURLOPT_POSTFIELDS     => json_encode([
-            'contents'         => [['parts' => [['text' => $prompt]]]],
-            'generationConfig' => ['temperature' => 0.4],
-        ]),
-    ]);
-    $response = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if ($code !== 200 || $response === false) {
-        error_log('Reach report narrative: Gemini HTTP ' . $code);
-        return $fallback;
-    }
-    $text = trim(json_decode($response, true)['candidates'][0]['content']['parts'][0]['text'] ?? '');
-    return $text !== '' ? $text : $fallback;
+    return reach_gemini($prompt, 0.4) ?? $fallback;
 }
 
 // Returns the PDF bytes.

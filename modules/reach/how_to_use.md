@@ -14,21 +14,27 @@ Anyone in the Reach department can capture, claim and follow up leads. **HODs, D
 ## 2. Creating a campaign
 
 1. On **Campaigns**, click **New Campaign**.
-2. Give it a clear title (for example *Ikate Street Evangelism*), a date, start and end times and a location.
-3. Choose a **tier** — it decides how much the volunteer form asks for:
-   - **Rapid** — name, phone, category and "willing to visit" only. Best for busy streets.
-   - **Standard** — adds address and prayer request.
-   - **Rich** — adds age band, marital status, language, best time to call and notes.
-4. Add a short description and a scripture; both appear when the link is shared on WhatsApp.
+2. Enter a clear **title** (for example *Ikate Street Evangelism*) and the **location**. Add the event type, date and times if you know them.
+3. Optionally upload the campaign **flyer** (JPG, PNG or WebP, up to 5 MB). It becomes the WhatsApp link preview and the background of the capture page. No flyer? The **default campaign image** is used instead.
+4. Click **Write with AI** — it writes the WhatsApp description and picks a fitting scripture from the title and location. Not quite right? Click **Another option** to cycle through up to three versions, or edit the text yourself.
+5. Choose the **form length** — how much volunteers ask each person:
+   - **Quick** — name, phone, where they are spiritually and "open to a visit". About 10 seconds. Best for busy streets.
+   - **Standard** — adds area and prayer request.
+   - **Detailed** — adds age group, marital status, language, best time to call and notes. Every extra question is optional.
 
 Renaming a campaign changes its link, so share the new one. A campaign with captures cannot be deleted — it is marked *Cancelled* instead so the record stays intact.
+
+**Campaign settings** (the gear button next to New Campaign, for HODs, Directors and pastors):
+
+- **Event types** — add your own (for example *Market Storm*) or remove ones you don't use. Removing a type keeps it on campaigns that already use it.
+- **Default campaign image** — upload the picture used when a campaign has no flyer (best at 1200 × 630), or go back to the church photo.
 
 ## 3. Sharing the public link
 
 Click **Share** on a campaign card. You get:
 
 - the **public link** (`/reach.php?c=…`) — no login needed;
-- a ready-made **WhatsApp message** with the description, scripture and link — tap **Send via WhatsApp**;
+- a ready-made **WhatsApp message** with the description, scripture and link — tap **Send via WhatsApp**. The preview shows the flyer (or the default image);
 - a **QR code** you can print or show on a phone at the meeting point.
 
 Volunteers open the link, enter the phone number they are registered with, confirm their name, and start logging people. Only numbers already in our family database can capture. Voice capture fills the form from one spoken sentence — always check it before saving.

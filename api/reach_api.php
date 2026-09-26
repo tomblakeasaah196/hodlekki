@@ -176,6 +176,25 @@ function reach_recompute_status(PDO $pdo, int $lead_id): string {
     return $status;
 }
 
+function reach_valid_type(PDO $pdo, string $code): string {
+    $stmt = $pdo->prepare("SELECT code FROM reach_campaign_types WHERE code = ?");
+    $stmt->execute([$code]);
+    return $stmt->fetchColumn() ?: 'Other';
+}
+
+// Optional flyer from the campaign form; exits with a JSON error if it is invalid.
+function reach_flyer_from_request(): ?string {
+    if (empty($_FILES['flyer']['name'])) {
+        return null;
+    }
+    try {
+        return reach_store_image($_FILES['flyer'], 'flyer');
+    } catch (RuntimeException $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        exit;
+    }
+}
+
 function reach_deny(string $message = 'Only Reach HODs, Directors and pastors can do this.'): void {
     echo json_encode(['status' => 'error', 'message' => $message]);
     exit;
@@ -217,7 +236,7 @@ try {
                 SELECT
                     c.id, c.slug, c.title, c.campaign_type, c.campaign_date,
                     c.start_time, c.end_time, c.location, c.meta_description,
-                    c.share_scripture, c.payload_tier, c.status, c.created_by,
+                    c.share_scripture, c.flyer_path, c.payload_tier, c.status, c.created_by,
                     c.created_at, c.updated_at,
                     DATE_FORMAT(c.campaign_date, '%M %D, %Y') AS nice_date,
                     (SELECT COUNT(*) FROM reach_leads l WHERE l.campaign_id = c.id) AS souls_count
@@ -225,6 +244,11 @@ try {
                 ORDER BY (c.campaign_date IS NULL), c.campaign_date DESC, c.id DESC
             ");
             $campaigns = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $default_image = reach_default_campaign_image($pdo);
+            foreach ($campaigns as &$c) {
+                $c['image_url'] = $c['flyer_path'] ?: $default_image;
+            }
+            unset($c);
             echo json_encode(['status' => 'success', 'data' => $campaigns]);
             break;
 
@@ -238,7 +262,7 @@ try {
                 exit;
             }
 
-            $type            = trim($_POST['campaign_type'] ?? 'Saturday_Evangelism');
+            $type            = reach_valid_type($pdo, trim($_POST['campaign_type'] ?? 'Saturday_Evangelism'));
             $date            = !empty($_POST['campaign_date']) ? $_POST['campaign_date'] : null;
             $start_time      = !empty($_POST['start_time']) ? $_POST['start_time'] : null;
             $end_time        = !empty($_POST['end_time']) ? $_POST['end_time'] : null;
@@ -247,6 +271,7 @@ try {
             $scripture       = trim($_POST['share_scripture'] ?? '');
             $tier_raw        = $_POST['payload_tier'] ?? 'Rich';
             $tier            = in_array($tier_raw, ['Rapid', 'Standard', 'Rich'], true) ? $tier_raw : 'Rich';
+            $flyer           = reach_flyer_from_request();
 
             $base_slug = reach_slugify($title . ($date ? ' ' . $date : ''));
             $slug      = reach_unique_slug($pdo, $base_slug);
@@ -254,12 +279,12 @@ try {
             $stmt = $pdo->prepare("
                 INSERT INTO reach_campaigns
                     (slug, title, campaign_type, campaign_date, start_time, end_time,
-                     location, meta_description, share_scripture, payload_tier, status, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?)
+                     location, meta_description, share_scripture, flyer_path, payload_tier, status, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?)
             ");
             $stmt->execute([
                 $slug, $title, $type, $date, $start_time, $end_time,
-                $location, $meta, $scripture, $tier, $user_id
+                $location, $meta, $scripture, $flyer, $tier, $user_id
             ]);
             $campaign_id = (int) $pdo->lastInsertId();
 
@@ -282,7 +307,7 @@ try {
                 exit;
             }
 
-            $existingStmt = $pdo->prepare("SELECT slug, title FROM reach_campaigns WHERE id = ?");
+            $existingStmt = $pdo->prepare("SELECT slug, title, flyer_path FROM reach_campaigns WHERE id = ?");
             $existingStmt->execute([$id]);
             $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
             if (!$existing) {
@@ -295,7 +320,7 @@ try {
                 echo json_encode(['status' => 'error', 'message' => 'Campaign title is required.']);
                 exit;
             }
-            $type            = trim($_POST['campaign_type'] ?? 'Saturday_Evangelism');
+            $type            = reach_valid_type($pdo, trim($_POST['campaign_type'] ?? 'Saturday_Evangelism'));
             $date            = !empty($_POST['campaign_date']) ? $_POST['campaign_date'] : null;
             $start_time      = !empty($_POST['start_time']) ? $_POST['start_time'] : null;
             $end_time        = !empty($_POST['end_time']) ? $_POST['end_time'] : null;
@@ -306,6 +331,12 @@ try {
             $status          = in_array($status_raw, ['Active', 'Completed', 'Cancelled'], true) ? $status_raw : 'Active';
             $tier_raw        = $_POST['payload_tier'] ?? 'Rich';
             $tier            = in_array($tier_raw, ['Rapid', 'Standard', 'Rich'], true) ? $tier_raw : 'Rich';
+            $flyer           = $existing['flyer_path'];
+            $new_flyer       = reach_flyer_from_request();
+            if ($new_flyer || !empty($_POST['remove_flyer'])) {
+                reach_delete_upload($flyer);
+                $flyer = $new_flyer;
+            }
 
             // Only regenerate the slug when the title actually changed —
             // existing share links stay valid on light edits.
@@ -318,13 +349,13 @@ try {
                 UPDATE reach_campaigns
                    SET slug = ?, title = ?, campaign_type = ?, campaign_date = ?,
                        start_time = ?, end_time = ?, location = ?,
-                       meta_description = ?, share_scripture = ?,
+                       meta_description = ?, share_scripture = ?, flyer_path = ?,
                        payload_tier = ?, status = ?
                  WHERE id = ?
             ");
             $upd->execute([
                 $slug, $title, $type, $date, $start_time, $end_time, $location,
-                $meta, $scripture, $tier, $status, $id
+                $meta, $scripture, $flyer, $tier, $status, $id
             ]);
 
             reach_sync_campaign_fields($pdo, $id, $tier);
@@ -377,7 +408,7 @@ try {
             }
 
             $stmt = $pdo->prepare("
-                SELECT id, slug, title, meta_description, share_scripture, campaign_date, location
+                SELECT id, slug, title, meta_description, share_scripture, campaign_date, location, flyer_path
                   FROM reach_campaigns
                  WHERE id = ? LIMIT 1
             ");
@@ -412,6 +443,7 @@ try {
                     'whatsapp_text'  => $whatsapp_text,
                     'whatsapp_link'  => 'https://wa.me/?text=' . rawurlencode($whatsapp_text),
                     'qr_data_url'    => reach_qr_data_url($public_url),
+                    'image_url'      => $campaign['flyer_path'] ?: reach_default_campaign_image($pdo),
                 ]
             ]);
             break;
@@ -859,6 +891,113 @@ try {
             $pdo->prepare("UPDATE reach_leads SET share_testimony_in_report = ? WHERE id = ?")
                 ->execute([!empty($_POST['share']) ? 1 : 0, (int) ($_POST['lead_id'] ?? 0)]);
             echo json_encode(['status' => 'success', 'message' => !empty($_POST['share']) ? 'Testimony will appear in the monthly report.' : 'Testimony removed from reports.']);
+            break;
+
+        // ------------------------------------------------------------------
+        // Campaign settings: event types and the default campaign image
+        // ------------------------------------------------------------------
+        case 'fetch_campaign_settings':
+            echo json_encode(['status' => 'success', 'data' => [
+                'types'         => reach_campaign_types($pdo),
+                'default_image' => reach_default_campaign_image($pdo),
+                'is_custom'     => reach_setting($pdo, 'default_campaign_image') !== null,
+            ]]);
+            break;
+
+        case 'add_campaign_type':
+            if (!$is_manager) {
+                reach_deny();
+            }
+            $label = trim(preg_replace('/\s+/', ' ', $_POST['label'] ?? ''));
+            $code  = trim(preg_replace('/[^A-Za-z0-9]+/', '_', $label), '_');
+            if ($label === '' || $code === '' || mb_strlen($label) > 60) {
+                echo json_encode(['status' => 'error', 'message' => 'Give the event type a name (up to 60 characters).']);
+                exit;
+            }
+            $code = substr($code, 0, 60);
+            $next_sort = (int) $pdo->query("SELECT COALESCE(MAX(sort_order), 0) + 10 FROM reach_campaign_types WHERE code <> 'Other'")->fetchColumn();
+            $pdo->prepare("
+                INSERT INTO reach_campaign_types (code, label, sort_order) VALUES (?, ?, ?)
+                ON DUPLICATE KEY UPDATE is_active = 1, label = VALUES(label)
+            ")->execute([$code, $label, $next_sort]);
+            echo json_encode(['status' => 'success', 'message' => 'Event type added.', 'data' => reach_campaign_types($pdo)]);
+            break;
+
+        case 'remove_campaign_type':
+            if (!$is_manager) {
+                reach_deny();
+            }
+            $code = $_POST['code'] ?? '';
+            if ($code === 'Other') {
+                echo json_encode(['status' => 'error', 'message' => '“Other” is always available.']);
+                exit;
+            }
+            $pdo->prepare("UPDATE reach_campaign_types SET is_active = 0 WHERE code = ?")->execute([$code]);
+            echo json_encode(['status' => 'success', 'message' => 'Event type removed. Existing campaigns keep it.', 'data' => reach_campaign_types($pdo)]);
+            break;
+
+        case 'upload_default_image':
+            if (!$is_manager) {
+                reach_deny();
+            }
+            try {
+                $path = reach_store_image($_FILES['image'] ?? [], 'default');
+            } catch (RuntimeException $e) {
+                echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+                exit;
+            }
+            reach_delete_upload(reach_setting($pdo, 'default_campaign_image'));
+            $pdo->prepare("
+                INSERT INTO reach_settings (setting_key, setting_value) VALUES ('default_campaign_image', ?)
+                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+            ")->execute([$path]);
+            echo json_encode(['status' => 'success', 'message' => 'Default image updated.', 'data' => ['default_image' => $path]]);
+            break;
+
+        case 'reset_default_image':
+            if (!$is_manager) {
+                reach_deny();
+            }
+            reach_delete_upload(reach_setting($pdo, 'default_campaign_image'));
+            $pdo->prepare("DELETE FROM reach_settings WHERE setting_key = 'default_campaign_image'")->execute();
+            echo json_encode(['status' => 'success', 'message' => 'Back to the church photo.', 'data' => ['default_image' => REACH_FALLBACK_CAMPAIGN_IMAGE]]);
+            break;
+
+        // ------------------------------------------------------------------
+        // suggest_share_copy — 3 meta description + scripture pairs
+        // ------------------------------------------------------------------
+        case 'suggest_share_copy':
+            $title = trim($_POST['title'] ?? '');
+            if ($title === '') {
+                echo json_encode(['status' => 'error', 'message' => 'Enter the campaign title first.']);
+                exit;
+            }
+            $facts = array_filter([
+                'Title'    => $title,
+                'Type'     => str_replace('_', ' ', trim($_POST['campaign_type'] ?? '')),
+                'Location' => trim($_POST['location'] ?? ''),
+                'Date'     => trim($_POST['campaign_date'] ?? ''),
+            ]);
+            $prompt = "You write WhatsApp invitation copy for outreach campaigns of Household of David Lekki Centre, a church in Lagos, Nigeria.\n"
+                . "Campaign details:\n" . implode("\n", array_map(fn($k, $v) => "- {$k}: {$v}", array_keys($facts), $facts)) . "\n\n"
+                . "Return ONLY JSON: {\"options\":[{\"meta_description\":\"...\",\"share_scripture\":\"...\"}]} with exactly 3 options.\n"
+                . "meta_description: a warm, welcoming one- or two-sentence invitation that mentions the place, at most 150 characters, no hashtags or emojis.\n"
+                . "share_scripture: a real Bible verse that fits the outreach, formatted \"Book chapter:verse — verse text\" (NKJV wording), at most 170 characters. Use a different verse in each option.";
+            $raw  = reach_gemini($prompt, 0.9, true);
+            $data = $raw ? json_decode($raw, true) : null;
+            $options = [];
+            foreach (($data['options'] ?? []) as $o) {
+                $meta = trim((string) ($o['meta_description'] ?? ''));
+                $verse = trim((string) ($o['share_scripture'] ?? ''));
+                if ($meta !== '' && $verse !== '') {
+                    $options[] = ['meta_description' => mb_substr($meta, 0, 300), 'share_scripture' => mb_substr($verse, 0, 300)];
+                }
+            }
+            if (!$options) {
+                echo json_encode(['status' => 'error', 'message' => 'The AI writer is unavailable right now. Please write it yourself or try again.']);
+                exit;
+            }
+            echo json_encode(['status' => 'success', 'data' => array_slice($options, 0, 3)]);
             break;
 
         case 'list_reach_members':

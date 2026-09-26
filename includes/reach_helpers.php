@@ -198,3 +198,88 @@ function reach_analytics(PDO $pdo, string $from, string $to): array {
         'campaigns_table'       => $campaigns,
     ];
 }
+
+const REACH_FALLBACK_CAMPAIGN_IMAGE = '/assets/images/hod_lekki.jpeg';
+
+// Returns the model's text, or null on any failure (no key, network, non-200).
+function reach_gemini(string $prompt, float $temperature, bool $json = false): ?string {
+    $key = $_ENV['GEMINI_API_KEY'] ?? '';
+    if ($key === '' || !function_exists('curl_init')) {
+        return null;
+    }
+    $config = ['temperature' => $temperature];
+    if ($json) {
+        $config['responseMimeType'] = 'application/json';
+    }
+    $ch = curl_init('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $key);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_TIMEOUT        => 25,
+        CURLOPT_POSTFIELDS     => json_encode(['contents' => [['parts' => [['text' => $prompt]]]], 'generationConfig' => $config]),
+    ]);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($code !== 200 || $response === false) {
+        error_log('Reach Gemini: HTTP ' . $code);
+        return null;
+    }
+    $text = trim(json_decode($response, true)['candidates'][0]['content']['parts'][0]['text'] ?? '');
+    return $text !== '' ? $text : null;
+}
+
+function reach_setting(PDO $pdo, string $key): ?string {
+    $stmt = $pdo->prepare("SELECT setting_value FROM reach_settings WHERE setting_key = ?");
+    $stmt->execute([$key]);
+    $v = $stmt->fetchColumn();
+    return ($v === false || $v === null || $v === '') ? null : (string) $v;
+}
+
+function reach_default_campaign_image(PDO $pdo): string {
+    try {
+        return reach_setting($pdo, 'default_campaign_image') ?? REACH_FALLBACK_CAMPAIGN_IMAGE;
+    } catch (PDOException $e) {
+        return REACH_FALLBACK_CAMPAIGN_IMAGE;
+    }
+}
+
+function reach_campaign_types(PDO $pdo, bool $active_only = true): array {
+    return $pdo->query("
+        SELECT code, label, is_active FROM reach_campaign_types
+        " . ($active_only ? 'WHERE is_active = 1' : '') . "
+        ORDER BY sort_order, label
+    ")->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Validates by decoding the image itself (this host has no ext-fileinfo)
+// and picks the extension from the detected type, never the client's name.
+function reach_store_image(array $file, string $prefix): string {
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file($file['tmp_name'])) {
+        throw new RuntimeException('The image did not upload. Please try again.');
+    }
+    if ($file['size'] > 5 * 1024 * 1024) {
+        throw new RuntimeException('Images must be 5 MB or smaller.');
+    }
+    $info = @getimagesize($file['tmp_name']);
+    $ext  = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'][$info[2] ?? 0] ?? null;
+    if (!$info || !$ext) {
+        throw new RuntimeException('Please use a JPG, PNG or WebP image.');
+    }
+    $dir = __DIR__ . '/../uploads/reach_campaigns';
+    if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+        throw new RuntimeException('Could not create the upload folder.');
+    }
+    $name = $prefix . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], $dir . '/' . $name)) {
+        throw new RuntimeException('Could not save the image.');
+    }
+    return '/uploads/reach_campaigns/' . $name;
+}
+
+function reach_delete_upload(?string $path): void {
+    if ($path && str_starts_with($path, '/uploads/reach_campaigns/') && !str_contains($path, '..')) {
+        @unlink(__DIR__ . '/..' . $path);
+    }
+}
