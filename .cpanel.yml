@@ -1,0 +1,21 @@
+---
+# cPanel Git Version Control deployment recipe.
+# Runs when GitHub Actions calls VersionControlDeployment/create (or when you
+# click "Deploy HEAD Commit" in cPanel → Git Version Control → Manage).
+#
+# Layout:
+#   Repo checkout:   /home/smartqaq/repositories/hodlekki  (this file's dir)
+#   Docroot:         /home/smartqaq/public_html/hodlc.lpc.cm
+#   Composer binary: /home/smartqaq/composer.phar          (one-time install)
+#   PHP CLI:         /usr/local/bin/ea-php83
+#
+# Runtime files that live in the docroot but are NOT in git (.env, .htaccess,
+# .user.ini, uploads/, error_log) are preserved via .deployignore.
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/smartqaq/public_html/hodlc.lpc.cm
+    - export REPO=/home/smartqaq/repositories/hodlekki
+    - /bin/rsync -a --delete --exclude-from=$REPO/.deployignore $REPO/ $DEPLOYPATH/
+    - cd $DEPLOYPATH && /usr/local/bin/ea-php83 /home/smartqaq/composer.phar install --no-dev --optimize-autoloader --no-interaction 2>&1 | tail -40
+    - cd $DEPLOYPATH && /usr/local/bin/ea-php83 db/migrate.php

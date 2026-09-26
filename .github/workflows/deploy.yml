@@ -1,0 +1,179 @@
+name: CI + Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lint:
+    name: PHP lint + secret sweep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: PHP syntax check (php -l over the tree)
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r -d '' f; do
+            if ! out=$(php -l "$f" 2>&1); then
+              echo "::error file=$f::${out}"
+              fail=1
+            fi
+          done < <(find . -type f -name '*.php' \
+                    ! -path './vendor/*' \
+                    ! -path './node_modules/*' \
+                    -print0)
+          exit $fail
+
+      - name: Secret sweep (block obvious leaks)
+        run: |
+          set -euo pipefail
+          fail=0
+
+          # SMS_VAULT_KEY must be loaded from $_ENV, never defined inline.
+          if grep -rnE "define\(\s*['\"]SMS_VAULT_KEY['\"]\s*,\s*['\"][0-9a-fA-F]{16,}" \
+                --include='*.php' \
+                --exclude-dir=vendor --exclude-dir=node_modules . ; then
+            echo "::error::Hardcoded SMS_VAULT_KEY define() found in tree"
+            fail=1
+          fi
+
+          # DB creds must come from .env, not literal PHP.
+          if grep -rnE "(DB_PASS|DB_USER|DB_NAME)\s*=\s*['\"][A-Za-z0-9@_-]{3,}" \
+                --include='*.php' \
+                --exclude-dir=vendor --exclude-dir=node_modules \
+                --exclude='.env.example' . ; then
+            echo "::error::Hardcoded DB_* credential found in tree"
+            fail=1
+          fi
+
+          # .env should never appear in commits.
+          if git ls-files | grep -E '^\.env$' ; then
+            echo "::error::.env is tracked in git"
+            fail=1
+          fi
+
+          exit $fail
+
+  deploy:
+    name: Deploy to cPanel
+    needs: lint
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check secrets are configured
+        id: check
+        env:
+          CPANEL_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+        run: |
+          if [ -z "${CPANEL_TOKEN:-}" ]; then
+            echo "::warning::CPANEL_API_TOKEN secret is not set; skipping deploy."
+            echo "::warning::See DEPLOY.md for the one-time cPanel wiring steps."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify required inputs
+        if: steps.check.outputs.skip == 'false'
+        env:
+          CPANEL_HOST: ${{ vars.CPANEL_HOST }}
+          CPANEL_USER: ${{ vars.CPANEL_USER }}
+          CPANEL_REPO_ROOT: ${{ vars.CPANEL_REPO_ROOT }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -z "${CPANEL_HOST:-}" ]      && missing+=(CPANEL_HOST)
+          [ -z "${CPANEL_USER:-}" ]      && missing+=(CPANEL_USER)
+          [ -z "${CPANEL_REPO_ROOT:-}" ] && missing+=(CPANEL_REPO_ROOT)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing repository variables: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Pull latest into cPanel git checkout
+        if: steps.check.outputs.skip == 'false'
+        env:
+          CPANEL_HOST:      ${{ vars.CPANEL_HOST }}
+          CPANEL_USER:      ${{ vars.CPANEL_USER }}
+          CPANEL_REPO_ROOT: ${{ vars.CPANEL_REPO_ROOT }}
+          CPANEL_TOKEN:     ${{ secrets.CPANEL_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          resp=$(curl -sS --fail-with-body \
+            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
+            --data-urlencode "repository_root=${CPANEL_REPO_ROOT}" \
+            "https://${CPANEL_HOST}:2083/execute/VersionControl/update")
+          echo "$resp" | jq .
+          status=$(echo "$resp" | jq -r '.status')
+          if [ "$status" != "1" ]; then
+            echo "::error::VersionControl/update failed"
+            echo "$resp" | jq -r '.errors[]?'
+            exit 1
+          fi
+
+      - name: Queue deployment (runs .cpanel.yml on server)
+        if: steps.check.outputs.skip == 'false'
+        id: queue
+        env:
+          CPANEL_HOST:      ${{ vars.CPANEL_HOST }}
+          CPANEL_USER:      ${{ vars.CPANEL_USER }}
+          CPANEL_REPO_ROOT: ${{ vars.CPANEL_REPO_ROOT }}
+          CPANEL_TOKEN:     ${{ secrets.CPANEL_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          resp=$(curl -sS --fail-with-body \
+            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
+            --data-urlencode "repository_root=${CPANEL_REPO_ROOT}" \
+            "https://${CPANEL_HOST}:2083/execute/VersionControlDeployment/create")
+          echo "$resp" | jq .
+          status=$(echo "$resp" | jq -r '.status')
+          if [ "$status" != "1" ]; then
+            echo "::error::VersionControlDeployment/create failed"
+            echo "$resp" | jq -r '.errors[]?'
+            exit 1
+          fi
+          deploy_id=$(echo "$resp" | jq -r '.data.deploy_id // .data.id // empty')
+          echo "deploy_id=${deploy_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Poll until deployment queue drains
+        if: steps.check.outputs.skip == 'false'
+        env:
+          CPANEL_HOST:      ${{ vars.CPANEL_HOST }}
+          CPANEL_USER:      ${{ vars.CPANEL_USER }}
+          CPANEL_REPO_ROOT: ${{ vars.CPANEL_REPO_ROOT }}
+          CPANEL_TOKEN:     ${{ secrets.CPANEL_API_TOKEN }}
+          DEPLOY_ID:        ${{ steps.queue.outputs.deploy_id }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 90); do   # 90 * 10s = 15 minutes max
+            resp=$(curl -sS \
+              -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
+              --data-urlencode "repository_root=${CPANEL_REPO_ROOT}" \
+              "https://${CPANEL_HOST}:2083/execute/VersionControlDeployment/retrieve")
+            count=$(echo "$resp" | jq '.data | length // 0')
+            if [ "$count" = "0" ]; then
+              echo "Deploy queue empty — deployment finished."
+              exit 0
+            fi
+            still_ours=$(echo "$resp" | jq --arg id "$DEPLOY_ID" \
+              '[.data[]? | select(.deploy_id == ($id|tonumber) or .id == ($id|tonumber))] | length' 2>/dev/null || echo 1)
+            echo "Poll #${i}: ${count} queued (ours still present: ${still_ours})"
+            sleep 10
+          done
+          echo "::error::Deploy did not finish within 15 minutes"
+          exit 1

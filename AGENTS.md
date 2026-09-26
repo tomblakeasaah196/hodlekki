@@ -102,14 +102,51 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   `../../includes/header.php` on line 3.
 - **New JSON endpoint:** `api/<name>_api.php`, following the auth gate
   pattern from `api/reach_api.php`.
-- **New DB tables / columns:** add a migration file under
-  `db/migrations/YYYY-MM-DD_<slug>.sql` (create the folder if absent);
-  keep the SQL runnable top-to-bottom against the current schema.
+- **New DB tables / columns:** add a file to `db/migrations/` named
+  `YYYYMMDDhhmmss_<slug>.sql`. It runs automatically on the next deploy
+  via `db/migrate.php`. Rules:
+  - Forward-only. To reverse a change, ship another forward migration.
+  - Plain `;`-terminated SQL. No `DELIMITER` blocks (PDO::exec can't
+    parse them — split stored procedures across files if needed).
+  - Each file runs inside a single transaction. If anything fails the
+    whole file rolls back and the deploy stops.
+  - Prefer idempotent DDL (`CREATE TABLE IF NOT EXISTS`,
+    `INSERT ... ON DUPLICATE KEY UPDATE`).
+  - Do NOT edit or delete a migration file that has already been
+    applied in production — it's tracked by filename in the
+    `schema_migrations` table.
+  - See `db/migrations/README.md` for examples.
 - **New Reach / Embrace features:** extend `modules/reach/` and
   `modules/embrace/` respectively; both already have their own
   department-based clearance checks in the matching API file.
 - **New cron job:** `cron/<name>.php`, CLI-only guard, and document the
   crontab line in the README.
+
+## Deployment (agents: know this before you push)
+
+- Every push to `main` triggers `.github/workflows/deploy.yml`:
+  1. PHP lint over the whole tree (`php -l`).
+  2. Secret sweep (`define('SMS_VAULT_KEY', ...)`, hardcoded `DB_PASS=`,
+     or a tracked `.env` all fail the run).
+  3. cPanel UAPI call over HTTPS:2083 → `VersionControl/update` (git
+     pull on the server) → `VersionControlDeployment/create` (runs
+     `.cpanel.yml`).
+  4. Poll the deployment queue until it drains.
+- `.cpanel.yml` on the server:
+  1. `rsync -a --delete` from `/home/smartqaq/repositories/hodlekki/`
+     to `/home/smartqaq/public_html/hodlc.lpc.cm/`, applying
+     `.deployignore` so `.env`, `.htaccess`, `.user.ini`, `uploads/`,
+     `assets/uploads/`, and `error_log` files survive.
+  2. `composer install --no-dev --optimize-autoloader` using
+     `/home/smartqaq/composer.phar`.
+  3. `php db/migrate.php` — applies pending SQL migrations.
+- **Don't edit `.cpanel.yml` casually.** It runs unattended in prod.
+  Test any change by clicking "Deploy HEAD Commit" manually in cPanel
+  → Git Version Control → Manage first.
+- **Emergency manual deploy path:** cPanel → Git Version Control →
+  Manage → Pull or Deploy tab. `Update from Remote` then
+  `Deploy HEAD Commit`. Same recipe, no GitHub involvement.
+- Full pipeline docs, secrets/vars list, rollback: `DEPLOY.md`.
 
 ## PR conventions
 
