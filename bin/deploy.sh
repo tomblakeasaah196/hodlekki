@@ -16,6 +16,20 @@
 # Full log always mirrored to /home/smartqaq/deploy.log so you can review
 # the last run from cPanel Terminal even if the caller disconnected.
 
+LOGFILE=/home/smartqaq/deploy.log
+
+# Re-exec ourselves through a plain pipe to tee so everything we print is
+# BOTH shown to the caller AND appended to LOGFILE. This host does not
+# expose /dev/fd, so `exec > >(tee ...)` (process substitution) fails
+# with "/dev/fd/63: No such file or directory". A plain pipe works
+# everywhere. PIPESTATUS preserves the script's real exit code.
+if [ -z "${DEPLOY_LOG_WRAPPED:-}" ]; then
+    export DEPLOY_LOG_WRAPPED=1
+    set -o pipefail
+    bash "$0" "$@" 2>&1 | tee -a "$LOGFILE"
+    exit "${PIPESTATUS[0]}"
+fi
+
 set -euo pipefail
 
 REPO=/home/smartqaq/repositories/hodlekki
@@ -23,7 +37,6 @@ DEPLOYPATH=/home/smartqaq/public_html/hodlc.lpc.cm
 PHP=/usr/local/bin/ea-php83
 COMPOSER=/home/smartqaq/composer.phar
 LOCKFILE=/home/smartqaq/.deploy.lock
-LOGFILE=/home/smartqaq/deploy.log
 
 # Serialise deploys. If another deploy is in flight, refuse rather than wait.
 exec 9>"$LOCKFILE"
@@ -31,9 +44,6 @@ if ! flock -n 9; then
     echo "[deploy] another deploy is already running; refusing to start a second one" >&2
     exit 75   # EX_TEMPFAIL
 fi
-
-# Mirror stdout+stderr to LOGFILE.
-exec > >(tee -a "$LOGFILE") 2>&1
 
 echo ""
 echo "============================================================"
