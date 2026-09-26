@@ -28,6 +28,33 @@ if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
     }
 }
 
+/**
+ * Does $table have $column? Cached per request.
+ *
+ * The junior_church_* tables predate db/migrations/, so a column added by a
+ * migration may not exist yet on a host where the deploy's rsync landed but
+ * `php db/migrate.php` did not. Used to degrade the Celebrants Overview
+ * gracefully instead of 500-ing the whole grid for everyone.
+ */
+function charis_column_exists(PDO $pdo, string $table, string $column): bool
+{
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (array_key_exists($key, $cache)) return $cache[$key];
+
+    try {
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+        ");
+        $stmt->execute([$table, $column]);
+        $cache[$key] = ((int) $stmt->fetchColumn() > 0);
+    } catch (Throwable $e) {
+        $cache[$key] = false;
+    }
+    return $cache[$key];
+}
+
 try {
     switch ($action) {
 
@@ -243,28 +270,61 @@ try {
         case 'get_envision_recap':
             if (!$is_charis_admin) exit(json_encode(['status' => 'error', 'message' => 'Unauthorized.']));
             $month = filter_var($_POST['month'] ?? date('m'), FILTER_VALIDATE_INT);
-            
+            if (!$month || $month < 1 || $month > 12) $month = (int) date('m');
+
+            // Junior Church children are NOT rows in `users` -- they live in
+            // `junior_church_roster` (child_first_name / child_last_name / dob /
+            // picture_path, keyed to a guardian by parent_id). So a recap built
+            // only from `users` can never show them. Third branch below pulls
+            // them in, matching the 'jc_' convention already used by
+            // fetch_dashboard and assign_celebration.
+            //
+            // `source` + `ref` tell the front-end which table each card came
+            // from, so the portrait editor writes back to the right row instead
+            // of colliding on a numeric id that means two different people.
+            $jcCelebCol = charis_column_exists($pdo, 'junior_church_roster', 'celebration_picture')
+                ? "COALESCE(NULLIF(jc.celebration_picture, ''), NULLIF(jc.picture_path, ''))"
+                : "NULLIF(jc.picture_path, '')";
+
             // Fallback Logic: Celebration Pic -> Wedding Pic (if anniversary) -> Profile Pic
             $stmt = $pdo->prepare("
-                SELECT u.id, u.first_name, u.last_name, 
+                SELECT u.id, 'user' as source, CONCAT('user_', u.id) as ref,
+                       u.first_name, u.last_name, 
                        COALESCE(NULLIF(u.celebration_picture, ''), NULLIF(u.picture_path, '')) as display_picture,
                        'Birthday' as event_type, DATE_FORMAT(u.dob, '%D %b') as event_date,
+                       DAY(u.dob) as sort_day,
                        ca.celebratory_message
                 FROM users u
-                LEFT JOIN charis_assignments ca ON u.id = ca.target_user_id AND ca.event_type = 'Birthday'
+                LEFT JOIN charis_assignments ca ON u.id = ca.target_user_id AND ca.event_type = 'Birthday' AND ca.assignment_year = YEAR(CURDATE())
                 WHERE MONTH(u.dob) = ? AND u.spiritual_status IN ('Member', 'Worker', 'Pastor')
                 
                 UNION ALL
                 
-                SELECT u.id, u.first_name, u.last_name, 
+                SELECT u.id, 'user' as source, CONCAT('user_', u.id) as ref,
+                       u.first_name, u.last_name, 
                        COALESCE(NULLIF(u.celebration_picture, ''), NULLIF(u.wedding_picture_path, ''), NULLIF(u.picture_path, '')) as display_picture,
                        'Anniversary' as event_type, DATE_FORMAT(u.wedding_anniversary, '%D %b') as event_date,
+                       DAY(u.wedding_anniversary) as sort_day,
                        ca.celebratory_message
                 FROM users u
-                LEFT JOIN charis_assignments ca ON u.id = ca.target_user_id AND ca.event_type = 'Wedding_Anniversary'
+                LEFT JOIN charis_assignments ca ON u.id = ca.target_user_id AND ca.event_type = 'Wedding_Anniversary' AND ca.assignment_year = YEAR(CURDATE())
                 WHERE MONTH(u.wedding_anniversary) = ? AND u.spiritual_status IN ('Member', 'Worker', 'Pastor')
+
+                UNION ALL
+
+                SELECT jc.id, 'jc' as source, CONCAT('jc_', jc.id) as ref,
+                       jc.child_first_name as first_name, jc.child_last_name as last_name,
+                       {$jcCelebCol} as display_picture,
+                       'JC_Birthday' as event_type, DATE_FORMAT(jc.dob, '%D %b') as event_date,
+                       DAY(jc.dob) as sort_day,
+                       ca.celebratory_message
+                FROM junior_church_roster jc
+                LEFT JOIN charis_assignments ca ON jc.id = ca.target_user_id AND ca.event_type = 'JC_Birthday' AND ca.assignment_year = YEAR(CURDATE())
+                WHERE MONTH(jc.dob) = ?
+
+                ORDER BY sort_day ASC, first_name ASC
             ");
-            $stmt->execute([$month, $month]);
+            $stmt->execute([$month, $month, $month]);
             echo json_encode(['status' => 'success', 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
             break;
 
@@ -273,21 +333,46 @@ try {
         // ==========================================
         case 'update_celebration_picture':
             if (!$is_charis_admin) exit(json_encode(['status' => 'error', 'message' => 'Unauthorized.']));
-            
-            $target_user_id = filter_var($_POST['user_id'] ?? '', FILTER_VALIDATE_INT);
+
+            // `ref` is 'user_<id>' or 'jc_<id>' -- a Junior Church child is a row
+            // in junior_church_roster, not in users, so the id alone is ambiguous.
+            // `user_id` is still accepted for any older caller.
+            $ref = trim($_POST['ref'] ?? '');
+            if ($ref === '' && !empty($_POST['user_id'])) $ref = 'user_' . $_POST['user_id'];
+
+            if (preg_match('/^(user|jc)_(\d+)$/', $ref, $m)) {
+                $target_source = $m[1];
+                $target_id     = (int) $m[2];
+            } else {
+                $target_source = null;
+                $target_id     = 0;
+            }
+
             $image_base64 = $_POST['image_base64'] ?? '';
             
-            if (!$target_user_id || empty($image_base64)) {
+            if (!$target_id || !$target_source || empty($image_base64)) {
                 exit(json_encode(['status' => 'error', 'message' => 'Invalid data provided.']));
+            }
+
+            if ($target_source === 'jc' && !charis_column_exists($pdo, 'junior_church_roster', 'celebration_picture')) {
+                exit(json_encode(['status' => 'error', 'message' => 'Junior Church portraits need a pending database update. Ask an admin to run the migrations.']));
             }
 
             // Extract the base64 data
             $image_parts = explode(";base64,", $image_base64);
+            if (count($image_parts) !== 2) {
+                exit(json_encode(['status' => 'error', 'message' => 'Unreadable image data.']));
+            }
             $image_type_aux = explode("image/", $image_parts[0]);
-            $image_type = $image_type_aux[1] ?? 'jpeg';
+            $image_type = strtolower($image_type_aux[1] ?? 'jpeg');
+            // Whitelist the extension -- never let the data URI pick the filename suffix.
+            $allowed_types = ['jpeg' => 'jpg', 'jpg' => 'jpg', 'png' => 'png', 'webp' => 'webp'];
+            if (!isset($allowed_types[$image_type])) {
+                exit(json_encode(['status' => 'error', 'message' => 'Only JPEG, PNG or WebP portraits are supported.']));
+            }
             $image_base64_decoded = base64_decode($image_parts[1]);
             
-            $filename = uniqid('celeb_', true) . '.' . $image_type;
+            $filename = uniqid('celeb_', true) . '.' . $allowed_types[$image_type];
             $upload_dir = '../uploads/celebrations/';
             if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
             
@@ -295,8 +380,11 @@ try {
             
             if (file_put_contents($file_path, $image_base64_decoded)) {
                 $db_path = '/uploads/celebrations/' . $filename;
-                $stmt = $pdo->prepare("UPDATE users SET celebration_picture = ? WHERE id = ?");
-                $stmt->execute([$db_path, $target_user_id]);
+                $sql = ($target_source === 'jc')
+                    ? "UPDATE junior_church_roster SET celebration_picture = ? WHERE id = ?"
+                    : "UPDATE users SET celebration_picture = ? WHERE id = ?";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([$db_path, $target_id]);
                 
                 echo json_encode(['status' => 'success', 'message' => 'Celebration picture perfectly cropped and applied!', 'new_path' => $db_path]);
             } else {
