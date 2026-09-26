@@ -30,7 +30,7 @@ function assim_find_volunteer(PDO $pdo, string $phone): ?array {
         return null;
     }
     $stmt = $pdo->prepare("
-        SELECT u.id, u.first_name, u.last_name
+        SELECT u.id, u.first_name, u.last_name, u.picture_path
           FROM users u
           JOIN assimilation_team t ON t.user_id = u.id AND t.is_active = 1
          WHERE u.phone LIKE ?
@@ -120,7 +120,11 @@ function assim_pub_card(PDO $pdo, array $row, array $sparklines, array $notes): 
     $id = (int) $row['id'];
     return [
         'case_id'        => $id,
-        'name'           => assim_short_name($row['first_name'], $row['last_name']),
+        // Full name only for people assigned to this volunteer, so they are
+        // sure who they are calling; the unassigned pool stays "First L.".
+        'name'           => $row['assigned_to'] !== null
+            ? trim($row['first_name'] . ' ' . $row['last_name'])
+            : assim_short_name($row['first_name'], $row['last_name']),
         'first_name'     => trim((string) $row['first_name']),
         'phone'          => $row['phone'],
         'whatsapp'       => preg_replace('/^0/', '234', preg_replace('/[^0-9]/', '', (string) $row['phone']) ?? ''),
@@ -228,7 +232,10 @@ try {
 
             $prior = assim_prior_contacts($pdo, array_merge(array_column($mine, 'user_id'), array_column($pool, 'user_id')));
             echo json_encode(['status' => 'success', 'data' => [
-                'volunteer'    => ['name' => assim_short_name($volunteer['first_name'], $volunteer['last_name'])],
+                'volunteer'    => [
+                    'name'  => assim_short_name($volunteer['first_name'], $volunteer['last_name']),
+                    'photo' => $volunteer['picture_path'] ?: null,
+                ],
                 'mine'         => array_map(fn($r) => assim_pub_card($pdo, $r + ['prior' => $prior[(int) $r['user_id']] ?? null], $sparklines, $notes), $mine),
                 'pool'         => array_map(fn($r) => assim_pub_card($pdo, $r + ['prior' => $prior[(int) $r['user_id']] ?? null], $sparklines, $notes), $pool),
                 'allow_claim'  => $self,
