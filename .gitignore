@@ -7,11 +7,12 @@
 .env.local
 .env.*.local
 
-# System logs & cPanel remnants
+# System logs & cPanel remnants (anchored so nested webhook/.htaccess etc.
+# CAN be tracked — only the docroot's cPanel-generated files are ignored)
 error_log
 *.log
-.htaccess
-.user.ini
+/.htaccess
+/.user.ini
 cgi-bin/
 
 # PHP dependencies (managed via composer.json / composer.lock)

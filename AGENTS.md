@@ -128,24 +128,39 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   1. PHP lint over the whole tree (`php -l`).
   2. Secret sweep (`define('SMS_VAULT_KEY', ...)`, hardcoded `DB_PASS=`,
      or a tracked `.env` all fail the run).
-  3. cPanel UAPI call over HTTPS:2083 → `VersionControl/update` (git
-     pull on the server) → `VersionControlDeployment/create` (runs
-     `.cpanel.yml`).
-  4. Poll the deployment queue until it drains.
-- `.cpanel.yml` on the server:
-  1. `rsync -a --delete` from `/home/smartqaq/repositories/hodlekki/`
-     to `/home/smartqaq/public_html/hodlc.lpc.cm/`, applying
-     `.deployignore` so `.env`, `.htaccess`, `.user.ini`, `uploads/`,
-     `assets/uploads/`, and `error_log` files survive.
-  2. `composer install --no-dev --optimize-autoloader` using
-     `/home/smartqaq/composer.phar`.
-  3. `php db/migrate.php` — applies pending SQL migrations.
-- **Don't edit `.cpanel.yml` casually.** It runs unattended in prod.
-  Test any change by clicking "Deploy HEAD Commit" manually in cPanel
-  → Git Version Control → Manage first.
-- **Emergency manual deploy path:** cPanel → Git Version Control →
-  Manage → Pull or Deploy tab. `Update from Remote` then
-  `Deploy HEAD Commit`. Same recipe, no GitHub involvement.
+  3. POST to the deploy webhook at
+     `https://hodlc.lpc.cm/webhook/deploy.php` with header
+     `X-Deploy-Token: <DEPLOY_WEBHOOK_SECRET>`. Output streams back
+     into the Actions log.
+- **Single source of truth: [bin/deploy.sh](bin/deploy.sh).** Both the
+  webhook and cPanel's manual "Deploy HEAD Commit" invoke it. The
+  script:
+  1. `git fetch origin main && git reset --hard origin/main` in
+     `/home/smartqaq/repositories/hodlekki`.
+  2. `rsync -a --delete` from repo → `/home/smartqaq/public_html/hodlc.lpc.cm/`,
+     applying `.deployignore` so `.env`, root `.htaccess`, `.user.ini`,
+     `uploads/`, `assets/uploads/`, and `error_log` files survive.
+     Nested `.htaccess` files (e.g. `webhook/.htaccess`) DO sync,
+     because the docroot pattern is anchored with `/`.
+  3. `composer install --no-dev --optimize-autoloader` using
+     `/home/smartqaq/composer.phar` (needs `-d allow_url_fopen=On`
+     because CLI php.ini disables it on this host).
+  4. `php db/migrate.php` — applies pending SQL migrations.
+- **Concurrency:** `bin/deploy.sh` holds `/home/smartqaq/.deploy.lock`
+  via `flock -n`, so overlapping deploys refuse rather than collide.
+- **Full log** of every deploy is appended to
+  `/home/smartqaq/deploy.log`. Useful when Actions times out or the
+  caller disconnected mid-run.
+- **Webhook security:** POST-only, `X-Deploy-Token` compared with
+  `hash_equals()`, rejected requests logged to PHP's `error_log`.
+  `webhook/.htaccess` allows only `deploy.php` in that directory.
+- **Don't edit `bin/deploy.sh` or `webhook/deploy.php` casually.** They
+  run unattended in prod. Test any change by triggering a manual deploy
+  from cPanel first (Git Version Control → Manage → Deploy HEAD Commit).
+- **Emergency manual deploy:** cPanel → Git Version Control → Manage
+  → Pull or Deploy → `Update from Remote`, then `Deploy HEAD Commit`.
+  Or from cPanel → Terminal:
+  `bash /home/smartqaq/repositories/hodlekki/bin/deploy.sh`.
 - Full pipeline docs, secrets/vars list, rollback: `DEPLOY.md`.
 
 ## PR conventions

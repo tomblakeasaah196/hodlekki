@@ -115,13 +115,18 @@ instead, run:
 Production runs on a cPanel shared host with MultiPHP set to `ea-php83`
 and LiteSpeed. Deploys are automated: every push to `main` triggers a
 GitHub Actions workflow (`.github/workflows/deploy.yml`) that lints the
-tree, then calls the cPanel HTTPS API on port 2083 to `git pull` and run
-`.cpanel.yml`, which rsyncs the repo into the docroot, runs
-`composer install --no-dev`, and applies any pending migrations from
-`db/migrations/`.
+tree, then POSTs (with an `X-Deploy-Token` header) to a webhook on the
+live site (`https://hodlc.lpc.cm/webhook/deploy.php`). The webhook runs
+[`bin/deploy.sh`](bin/deploy.sh), which does the `git pull`, rsyncs the
+repo into the docroot, runs `composer install --no-dev`, and applies
+any pending migrations from `db/migrations/`.
 
-Full pipeline description, first-time wiring steps (API token, GitHub
-Secrets / Variables), and rollback instructions live in
+The same `bin/deploy.sh` is what cPanel's `.cpanel.yml` runs when you
+click **Deploy HEAD Commit** manually, so both automatic and manual
+deploys share one code path.
+
+Full pipeline description, first-time wiring steps (webhook secret,
+GitHub Secrets / Variables), and rollback instructions live in
 [DEPLOY.md](DEPLOY.md).
 
 **Cron (once, in cPanel → Cron Jobs):**

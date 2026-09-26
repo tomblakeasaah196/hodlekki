@@ -69,7 +69,7 @@ jobs:
           exit $fail
 
   deploy:
-    name: Deploy to cPanel
+    name: Deploy via webhook
     needs: lint
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -78,102 +78,45 @@ jobs:
       - name: Check secrets are configured
         id: check
         env:
-          CPANEL_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          DEPLOY_WEBHOOK_SECRET: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}
+          DEPLOY_WEBHOOK_URL:    ${{ vars.DEPLOY_WEBHOOK_URL }}
         run: |
-          if [ -z "${CPANEL_TOKEN:-}" ]; then
-            echo "::warning::CPANEL_API_TOKEN secret is not set; skipping deploy."
-            echo "::warning::See DEPLOY.md for the one-time cPanel wiring steps."
+          if [ -z "${DEPLOY_WEBHOOK_SECRET:-}" ] || [ -z "${DEPLOY_WEBHOOK_URL:-}" ]; then
+            echo "::warning::DEPLOY_WEBHOOK_SECRET or DEPLOY_WEBHOOK_URL not set; skipping deploy."
+            echo "::warning::See DEPLOY.md for the one-time setup steps."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Verify required inputs
+      - name: POST to deploy webhook (streams server output back)
         if: steps.check.outputs.skip == 'false'
         env:
-          CPANEL_HOST: ${{ vars.CPANEL_HOST }}
-          CPANEL_USER: ${{ vars.CPANEL_USER }}
-          CPANEL_REPO_ROOT: ${{ vars.CPANEL_REPO_ROOT }}
+          DEPLOY_WEBHOOK_URL:    ${{ vars.DEPLOY_WEBHOOK_URL }}
+          DEPLOY_WEBHOOK_SECRET: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}
         run: |
           set -euo pipefail
-          missing=()
-          [ -z "${CPANEL_HOST:-}" ]      && missing+=(CPANEL_HOST)
-          [ -z "${CPANEL_USER:-}" ]      && missing+=(CPANEL_USER)
-          [ -z "${CPANEL_REPO_ROOT:-}" ] && missing+=(CPANEL_REPO_ROOT)
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::Missing repository variables: ${missing[*]}"
+
+          # curl exit code and body handling:
+          #   -sS       silent but still show errors
+          #   -f        fail on 4xx/5xx (so we exit nonzero on server rejection)
+          #   -X POST   explicit method (webhook only accepts POST)
+          #   -N        no output buffering — let progress lines stream through
+          #   --max-time 900   webhooks over 15 min are almost certainly stuck
+          #
+          # The secret is passed only in the request header, never in the URL
+          # or query string, so it can't leak into web-server access logs.
+          http_status=$(curl -sS -X POST -N \
+            --max-time 900 \
+            -o >(cat) \
+            -w "%{http_code}" \
+            -H "X-Deploy-Token: ${DEPLOY_WEBHOOK_SECRET}" \
+            -H "User-Agent: github-actions-hodlekki/1.0" \
+            "${DEPLOY_WEBHOOK_URL}")
+
+          echo ""
+          echo "----- webhook returned HTTP ${http_status} -----"
+          if [ "${http_status}" != "200" ]; then
+            echo "::error::Deploy webhook returned ${http_status}"
             exit 1
           fi
-
-      - name: Pull latest into cPanel git checkout
-        if: steps.check.outputs.skip == 'false'
-        env:
-          CPANEL_HOST:      ${{ vars.CPANEL_HOST }}
-          CPANEL_USER:      ${{ vars.CPANEL_USER }}
-          CPANEL_REPO_ROOT: ${{ vars.CPANEL_REPO_ROOT }}
-          CPANEL_TOKEN:     ${{ secrets.CPANEL_API_TOKEN }}
-        run: |
-          set -euo pipefail
-          resp=$(curl -sS --fail-with-body \
-            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
-            --data-urlencode "repository_root=${CPANEL_REPO_ROOT}" \
-            "https://${CPANEL_HOST}:2083/execute/VersionControl/update")
-          echo "$resp" | jq .
-          status=$(echo "$resp" | jq -r '.status')
-          if [ "$status" != "1" ]; then
-            echo "::error::VersionControl/update failed"
-            echo "$resp" | jq -r '.errors[]?'
-            exit 1
-          fi
-
-      - name: Queue deployment (runs .cpanel.yml on server)
-        if: steps.check.outputs.skip == 'false'
-        id: queue
-        env:
-          CPANEL_HOST:      ${{ vars.CPANEL_HOST }}
-          CPANEL_USER:      ${{ vars.CPANEL_USER }}
-          CPANEL_REPO_ROOT: ${{ vars.CPANEL_REPO_ROOT }}
-          CPANEL_TOKEN:     ${{ secrets.CPANEL_API_TOKEN }}
-        run: |
-          set -euo pipefail
-          resp=$(curl -sS --fail-with-body \
-            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
-            --data-urlencode "repository_root=${CPANEL_REPO_ROOT}" \
-            "https://${CPANEL_HOST}:2083/execute/VersionControlDeployment/create")
-          echo "$resp" | jq .
-          status=$(echo "$resp" | jq -r '.status')
-          if [ "$status" != "1" ]; then
-            echo "::error::VersionControlDeployment/create failed"
-            echo "$resp" | jq -r '.errors[]?'
-            exit 1
-          fi
-          deploy_id=$(echo "$resp" | jq -r '.data.deploy_id // .data.id // empty')
-          echo "deploy_id=${deploy_id}" >> "$GITHUB_OUTPUT"
-
-      - name: Poll until deployment queue drains
-        if: steps.check.outputs.skip == 'false'
-        env:
-          CPANEL_HOST:      ${{ vars.CPANEL_HOST }}
-          CPANEL_USER:      ${{ vars.CPANEL_USER }}
-          CPANEL_REPO_ROOT: ${{ vars.CPANEL_REPO_ROOT }}
-          CPANEL_TOKEN:     ${{ secrets.CPANEL_API_TOKEN }}
-          DEPLOY_ID:        ${{ steps.queue.outputs.deploy_id }}
-        run: |
-          set -euo pipefail
-          for i in $(seq 1 90); do   # 90 * 10s = 15 minutes max
-            resp=$(curl -sS \
-              -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
-              --data-urlencode "repository_root=${CPANEL_REPO_ROOT}" \
-              "https://${CPANEL_HOST}:2083/execute/VersionControlDeployment/retrieve")
-            count=$(echo "$resp" | jq '.data | length // 0')
-            if [ "$count" = "0" ]; then
-              echo "Deploy queue empty — deployment finished."
-              exit 0
-            fi
-            still_ours=$(echo "$resp" | jq --arg id "$DEPLOY_ID" \
-              '[.data[]? | select(.deploy_id == ($id|tonumber) or .id == ($id|tonumber))] | length' 2>/dev/null || echo 1)
-            echo "Poll #${i}: ${count} queued (ours still present: ${still_ours})"
-            sleep 10
-          done
-          echo "::error::Deploy did not finish within 15 minutes"
-          exit 1

@@ -1,24 +1,40 @@
 # Deployment
 
-Every push to `main` triggers a GitHub Actions workflow (`.github/workflows/deploy.yml`)
-that:
+Every push to `main` triggers `.github/workflows/deploy.yml`, which:
 
-1. Runs `php -l` across the tree and a small secret sweep (fails on `.env`,
+1. Runs `php -l` across the tree and a secret sweep (fails on `.env`,
    hardcoded DB creds, or a hardcoded `SMS_VAULT_KEY`).
-2. Calls the cPanel UAPI over HTTPS on port 2083 to:
-   a. `git pull` the repo at `/home/smartqaq/repositories/hodlekki`.
-   b. Queue a deployment, which runs `.cpanel.yml`.
-3. `.cpanel.yml` on the server:
-   a. `rsync`s the repo → `/home/smartqaq/public_html/hodlc.lpc.cm/`,
-      preserving `.env`, `.htaccess`, `.user.ini`, `uploads/`, and
-      `error_log` via `.deployignore`.
-   b. `composer install --no-dev --optimize-autoloader`.
-   c. `php db/migrate.php` — applies any new files in `db/migrations/`.
-4. Actions polls the deployment queue until it drains, then marks the run
-   green (or red).
+2. POSTs to a webhook on the live site: `https://hodlc.lpc.cm/webhook/deploy.php`,
+   with header `X-Deploy-Token: <DEPLOY_WEBHOOK_SECRET>`.
+3. The webhook verifies the token (constant-time compare), then exec's
+   [`bin/deploy.sh`](bin/deploy.sh) on the server.
+4. `bin/deploy.sh` (held under a `flock` so two deploys can't collide):
+   a. `git fetch origin main && git reset --hard origin/main` on
+      `/home/smartqaq/repositories/hodlekki`.
+   b. `rsync -a --delete` the repo → `/home/smartqaq/public_html/hodlc.lpc.cm/`,
+      applying `.deployignore` so `.env`, root `.htaccess`, `.user.ini`,
+      `uploads/`, `assets/uploads/`, and every `error_log` file survive.
+   c. `composer install --no-dev --optimize-autoloader`.
+   d. `php db/migrate.php` — applies any new files in `db/migrations/`.
+5. Output is streamed line-by-line back to the Actions log AND mirrored
+   to `/home/smartqaq/deploy.log` on the server. If the caller
+   disconnects, the deploy still finishes and the full log is available
+   in cPanel → Terminal.
 
-No incoming SSH is used — everything runs over the cPanel HTTPS API from
-GitHub's runners.
+## Why a webhook and not cPanel's UAPI
+
+I first wired this against cPanel's `VersionControl::update` UAPI. That
+endpoint returns success, but only updates repo metadata — it does NOT
+run `git pull`. cPanel Git Version Control is designed around the
+assumption that a human clicks "Update from Remote" before every
+deploy, which is fine for occasional manual pushes but useless for CI.
+The webhook approach owns the `git pull` step itself, so the automation
+works end-to-end.
+
+The cPanel Git integration is still wired up as a **manual fallback**:
+clicking "Deploy HEAD Commit" in cPanel → Git Version Control → Manage
+runs `.cpanel.yml`, which just calls the same `bin/deploy.sh`. Same
+recipe, different trigger.
 
 ## One-time setup
 
@@ -26,19 +42,33 @@ GitHub's runners.
 
 - **Confirm the repo is registered** in cPanel → Git Version Control at
   `/home/smartqaq/repositories/hodlekki` pointing at
-  `https://github.com/tomblakeasaah196/hodlekki.git`. It's already there
-  from the manual clone test.
-- **Install Composer once** into the home directory (outside the docroot):
+  `https://github.com/tomblakeasaah196/hodlekki.git`. Already done.
+- **Install Composer once** if not already at `/home/smartqaq/composer.phar`:
   ```bash
-  # In cPanel → Terminal:
-  cd ~
-  curl -sS https://getcomposer.org/installer | /usr/local/bin/ea-php83 -- --install-dir=/home/smartqaq --filename=composer.phar
+  cd ~ && curl -sS https://getcomposer.org/installer | \
+    /usr/local/bin/ea-php83 -d allow_url_fopen=On -- \
+    --install-dir=/home/smartqaq --filename=composer.phar
   ```
-  The `.cpanel.yml` recipe expects `/home/smartqaq/composer.phar`.
-- **Create a cPanel API token** at cPanel → Manage API Tokens. Give it a
-  memorable name (`github-actions-deploy`) and no expiry (or 1 year, then
-  set a reminder to rotate). Copy the token value once — cPanel does not
-  show it again.
+- **Generate the webhook secret**:
+  ```bash
+  /usr/local/bin/ea-php83 -r "echo bin2hex(random_bytes(32)) . PHP_EOL;"
+  ```
+  Copy the 64-char hex string.
+- **Add the secret to `.env`** on the server. In cPanel → File Manager
+  navigate to `public_html/hodlc.lpc.cm/`, edit `.env`, and append:
+  ```
+  DEPLOY_WEBHOOK_SECRET="paste-the-64-char-string-here"
+  ```
+- **Do the first manual deploy** so `bin/deploy.sh`, `webhook/deploy.php`,
+  and everything else lands in the docroot:
+  1. cPanel → Git Version Control → Manage on `hodlekki` → Pull or
+     Deploy tab.
+  2. Click **Update from Remote** (fast-forwards the checkout to the
+     latest `main`).
+  3. Click **Deploy HEAD Commit** (runs `.cpanel.yml`, which invokes
+     `bin/deploy.sh`).
+  From this point on the webhook is live at
+  `https://hodlc.lpc.cm/webhook/deploy.php`.
 
 ### 2. In GitHub
 
@@ -46,54 +76,79 @@ Go to https://github.com/tomblakeasaah196/hodlekki → Settings.
 
 **Secrets and variables → Actions → Secrets tab:**
 
-| Name                | Value                                           |
-| ------------------- | ----------------------------------------------- |
-| `CPANEL_API_TOKEN`  | The token from step 1.                          |
+| Name                    | Value                                          |
+| ----------------------- | ---------------------------------------------- |
+| `DEPLOY_WEBHOOK_SECRET` | The same 64-char hex you just put into `.env`. |
 
 **Secrets and variables → Actions → Variables tab:**
 
-| Name                | Value                                              |
-| ------------------- | -------------------------------------------------- |
-| `CPANEL_HOST`       | `srv-web-ns9.newtoncorp.fr`                        |
-| `CPANEL_USER`       | `smartqaq`                                         |
-| `CPANEL_REPO_ROOT`  | `/home/smartqaq/repositories/hodlekki`             |
+| Name                 | Value                                                     |
+| -------------------- | --------------------------------------------------------- |
+| `DEPLOY_WEBHOOK_URL` | `https://hodlc.lpc.cm/webhook/deploy.php`                 |
 
-**Environments → New environment → `production`** (optional but
-recommended): add yourself as a required reviewer if you want deploys to
-pause for a click-through. The workflow references `environment: production`.
+The old `CPANEL_*` variables and the `CPANEL_API_TOKEN` secret are no
+longer used and can be deleted (or left — the workflow ignores them).
+You can also revoke the `github-actions-deploy` API token in cPanel →
+Manage API Tokens; it isn't needed any more.
 
-### 3. First deploy sanity check
+**Environments tab (optional):** the workflow references
+`environment: production`. Create it and add yourself as a required
+reviewer if you want every deploy to pause for a click-through approval.
 
-After the secrets/vars are in place, push any small change to `main` and
-watch the run at Actions → CI + Deploy. If everything is wired correctly
-you should see:
+### 3. Verify
 
-```
-Deploy queue empty — deployment finished.
-```
+Push any small change to `main` (or in GitHub → Actions → the last run
+→ Re-run all jobs). Watch:
 
-Then verify on the site itself.
+- Actions → CI + Deploy — the `Deploy via webhook` job should stream
+  `[deploy] pre-pull HEAD: ...`, rsync output, composer output, and
+  finish with `[webhook] DEPLOY OK` + HTTP 200.
+- The live site — new commit should be reflected.
+- cPanel → Terminal:
+  ```bash
+  tail -n 200 /home/smartqaq/deploy.log
+  ```
+  Same log as Actions saw, plus every previous deploy's output.
 
 ## Rollback
 
-Git Version Control keeps every deployed HEAD in cPanel's history. To
-roll back:
+`bin/deploy.sh` uses `git reset --hard origin/main`, so rollbacks are:
 
-1. cPanel → Git Version Control → **Manage** on `hodlekki` → **Pull or
-   Deploy** tab.
-2. Find the previous commit in the history, click **Deploy HEAD Commit**
-   against the earlier SHA (or `git reset --hard <sha>` in cPanel
-   Terminal, then click Deploy).
-3. DB rollbacks are **not automatic**. If a migration needs undoing,
-   write a new forward migration that reverses it.
+1. In your GitHub repo: `git revert <bad-commit-sha>` and push.
+2. Actions will deploy the revert automatically.
 
-## Emergency: skip the pipeline
+DB rollbacks are **not automatic**. If a migration needs undoing, write
+a new forward migration that reverses it (see
+[db/migrations/README.md](db/migrations/README.md)).
 
-If GitHub is down or the workflow is broken, you can deploy manually:
+## Manual deploy (if Actions or the webhook is down)
+
+Same recipe, different trigger:
 
 1. cPanel → Git Version Control → Manage on `hodlekki` → **Pull or
    Deploy** tab.
-2. Click **Update from Remote** (does the `git pull`).
-3. Click **Deploy HEAD Commit** (runs `.cpanel.yml`).
+2. **Update from Remote** — brings the checkout to latest `main`.
+3. **Deploy HEAD Commit** — runs `.cpanel.yml`, which runs
+   `bin/deploy.sh`.
 
-Same recipe, no GitHub involvement.
+Or from cPanel → Terminal directly:
+```bash
+bash /home/smartqaq/repositories/hodlekki/bin/deploy.sh
+```
+
+## Security notes on the webhook
+
+- POST-only; GET/HEAD/OPTIONS return 405.
+- The `X-Deploy-Token` header is compared to the value in `.env` using
+  `hash_equals()` (constant-time), so timing attacks can't leak the
+  secret one byte at a time.
+- The secret lives only in `.env` (untracked) and GitHub Secrets. It is
+  never written to any log. curl passes it as an HTTP header, so it
+  does not appear in Apache access logs.
+- Rejected requests are recorded to PHP's `error_log` with the client
+  IP and truncated user-agent so probes are visible.
+- `webhook/.htaccess` denies every file under `webhook/` except
+  `deploy.php` and disables directory listing.
+- Rotate the secret by generating a new 64-char string, updating both
+  `.env` on the server and the GitHub Secret, and pushing again. No
+  downtime.

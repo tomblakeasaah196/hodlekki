@@ -1,10 +1,13 @@
-# rsync --exclude-from patterns used by .cpanel.yml when copying
+# rsync --exclude-from patterns used by bin/deploy.sh when copying
 # /home/smartqaq/repositories/hodlekki/  →  /home/smartqaq/public_html/hodlc.lpc.cm/
 #
 # Anything listed here is skipped during the copy AND, because of how
 # rsync --delete interacts with --exclude, is NOT deleted from the docroot
 # if it already exists there. That is how we preserve runtime files like
 # .env, .htaccess, and uploads/ across deploys.
+#
+# Patterns that START with '/' are anchored to the repo root — so `/.htaccess`
+# only matches the ROOT .htaccess, leaving webhook/.htaccess alone.
 
 # Git internals & CI files (never belong in the docroot)
 .git/
@@ -17,10 +20,11 @@
 .env.local
 .env.*.local
 
-# cPanel-generated PHP config (docroot copy is authoritative)
-.htaccess
-.user.ini
-php.ini
+# cPanel-generated PHP config at the root (docroot copy is authoritative)
+# Anchored so nested config files like webhook/.htaccess still sync.
+/.htaccess
+/.user.ini
+/php.ini
 
 # Runtime member/media uploads (docroot copy is authoritative)
 uploads/
@@ -39,6 +43,10 @@ tailwindcss-linux-x64
 node_modules/
 input.css
 tailwind.config.js
+
+# Repo-only docs and helper directories (safe to include, but no value in docroot)
+/DEPLOY.md
+/AGENTS.md
 
 # IDE / OS junk
 .vscode/
