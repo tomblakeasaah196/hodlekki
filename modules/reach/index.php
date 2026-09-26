@@ -846,6 +846,8 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
     const fu = { ready: false, sub: 'not_spoken', category: '', overdue: false, page: 1, members: [], leadId: null };
 
     const label = s => String(s || '').replace(/_/g, ' ');
+    const catPills = cats => String(cats || 'Other').split(',').filter(Boolean)
+        .map(c => pill(label(c), CATEGORY_STYLE[c] || CATEGORY_STYLE.Other)).join('');
     const pill = (text, cls) => `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${cls}">${escapeHtml(text)}</span>`;
     const icon = (d, cls = 'w-4 h-4') => `<svg class="${cls}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${d}"/></svg>`;
 
@@ -941,7 +943,7 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
             <div class="flex items-start justify-between gap-2 pr-16">
                 <div class="min-w-0"><p class="font-bold text-gray-900 truncate">${escapeHtml(name)}</p><p class="text-sm text-gray-500">${escapeHtml(l.phone || 'No phone')}</p></div>
             </div>
-            <div class="flex flex-wrap gap-1.5">${pill(label(l.category), CATEGORY_STYLE[l.category] || CATEGORY_STYLE.Other)}</div>
+            <div class="flex flex-wrap gap-1.5">${catPills(l.category)}</div>
             <p class="text-[11px] font-semibold px-3 py-1.5 rounded-xl border ${member ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-yellow-50 text-yellow-800 border-yellow-200'}">${escapeHtml(added)}</p>
             ${last ? `<p class="text-[11px] font-semibold px-3 py-1.5 rounded-xl bg-gray-50 text-gray-600 border border-gray-200">${escapeHtml(last)}</p>` : ''}
             <div class="flex items-center justify-between gap-2 pt-1">${assign}</div>
@@ -990,7 +992,7 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
         const wa = (l.phone || '').replace(/\D/g, '').replace(/^0/, '234');
         const section = (title, body) => `<section class="space-y-3"><h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest">${title}</h4>${body}</section>`;
 
-        const profile = `<div class="flex flex-wrap gap-1.5">${pill(label(l.category), CATEGORY_STYLE[l.category] || CATEGORY_STYLE.Other)}${l.willing_for_visit == 1 ? pill('Willing to visit', 'bg-red-600 text-white') : ''}</div>
+        const profile = `<div class="flex flex-wrap gap-1.5">${catPills(l.category)}${l.willing_for_visit == 1 ? pill('Willing to visit', 'bg-red-600 text-white') : ''}</div>
             ${l.phone ? `<div class="flex gap-2"><a href="tel:${escapeHtml(l.phone)}" class="flex-1 text-center bg-gray-100 hover:bg-gray-200 text-gray-800 py-2.5 rounded-xl text-sm font-bold">Call ${escapeHtml(l.phone)}</a><a href="https://wa.me/${wa}" target="_blank" rel="noopener" class="bg-[#25D366] hover:bg-[#128C7E] text-white px-4 py-2.5 rounded-xl text-sm font-bold">WhatsApp</a></div>` : ''}
             <div class="grid grid-cols-2 gap-4">${field('Address', l.address)}${field('Age group', l.age_band)}${field('Marital status', l.marital_status)}${field('Language', l.language)}${field('Best time to call', l.best_time_to_call)}${field('Assigned to', l.assignee_name || 'Unassigned')}</div>
             ${field('Prayer request', l.prayer_request)}${field('Notes', l.notes)}`;
@@ -1192,8 +1194,7 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
             return;
         }
         const tile = (l, v) => `<div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-5"><p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">${l}</p><p class="text-3xl font-display font-bold text-gray-900 mt-1">${v}</p></div>`;
-        const totalCat = d.category_breakdown.reduce((a, c) => a + c.count, 0);
-        const legend = `<table class="w-full text-sm">${d.category_breakdown.map((c, i) => `<tr class="border-b border-gray-50 last:border-0"><td class="py-1.5"><span class="inline-block w-2.5 h-2.5 rounded-sm mr-2 align-middle" style="background:${CAT_COLORS[i]}"></span>${label(c.category)}</td><td class="py-1.5 text-right font-bold text-gray-900">${c.count}</td><td class="py-1.5 text-right text-gray-400 w-14">${totalCat ? Math.round(c.count * 100 / totalCat) : 0}%</td></tr>`).join('')}</table>`;
+        const legend = `<table class="w-full text-sm">${d.category_breakdown.map((c, i) => `<tr class="border-b border-gray-50 last:border-0"><td class="py-1.5"><span class="inline-block w-2.5 h-2.5 rounded-sm mr-2 align-middle" style="background:${CAT_COLORS[i]}"></span>${label(c.category)}</td><td class="py-1.5 text-right font-bold text-gray-900">${c.count}</td><td class="py-1.5 text-right text-gray-400 w-14">${k.souls ? Math.round(c.count * 100 / k.souls) : 0}%</td></tr>`).join('')}</table>`;
         const th = t => `<th class="py-2 px-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-left">${t}</th>`;
         const thn = t => `<th class="py-2 px-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">${t}</th>`;
         const leaders = d.volunteer_leaderboard.length
@@ -1209,7 +1210,7 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
             ${k.overdue ? `<button type="button" onclick="switchTab('followup'); fu.overdue = true; loadLeads();" class="mt-4 w-full text-left flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-[#d03b3b] hover:bg-red-100">${icon('M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z')}${k.overdue} assigned lead(s) overdue for a first follow-up — view them</button>` : ''}
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
                 ${anCard('Follow-up funnel', '<div class="h-64"><canvas id="chFunnel" role="img" aria-label="Follow-up funnel: ' + d.funnel.map(f => f.stage + ' ' + f.count).join(', ') + '"></canvas></div>')}
-                ${anCard('By category', `<div class="grid grid-cols-1 sm:grid-cols-[170px_1fr] gap-4 items-center"><div class="h-44"><canvas id="chCat" role="img" aria-label="Souls by category"></canvas></div>${legend}</div>`)}
+                ${anCard('By category', `<p class="text-xs text-gray-400 -mt-2 mb-3">A person can be in more than one · % of souls captured</p><div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center"><div class="h-52"><canvas id="chCat" role="img" aria-label="Souls by category"></canvas></div>${legend}</div>`)}
             </div>
             ${anCard('Top areas', d.area_breakdown.length ? `<div style="height:${Math.max(140, d.area_breakdown.length * 28 + 30)}px"><canvas id="chArea" role="img" aria-label="Top areas by souls captured"></canvas></div>` : '<p class="text-sm text-gray-400 italic">No addresses recorded in this period.</p>', 'mt-5')}
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">${anCard('Volunteer leaderboard', leaders)}${anCard('Campaigns', camps)}</div>`);
@@ -1222,9 +1223,9 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
             options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 }, grid, border: { display: false } }, x: { grid: { display: false } } } }
         });
         an.charts.cat = new Chart(document.getElementById('chCat'), {
-            type: 'doughnut',
-            data: { labels: d.category_breakdown.map(c => label(c.category)), datasets: [{ data: d.category_breakdown.map(c => c.count), backgroundColor: CAT_COLORS, borderColor: '#ffffff', borderWidth: 2, hoverOffset: 4 }] },
-            options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { display: false } } }
+            type: 'bar',
+            data: { labels: d.category_breakdown.map(c => label(c.category)), datasets: [{ data: d.category_breakdown.map(c => c.count), backgroundColor: CAT_COLORS, borderRadius: 4, borderSkipped: 'start', maxBarThickness: 18 }] },
+            options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 }, grid, border: { display: false } }, y: { grid: { display: false } } } }
         });
         if (d.area_breakdown.length) {
             an.charts.area = new Chart(document.getElementById('chArea'), {

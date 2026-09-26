@@ -462,7 +462,7 @@ try {
             }
             $category = $_POST['category'] ?? '';
             if (in_array($category, REACH_CATEGORIES, true)) {
-                $where[]  = 'l.category = ?';
+                $where[]  = 'FIND_IN_SET(?, l.category) > 0';
                 $params[] = $category;
             }
             $area = trim($_POST['area'] ?? '');
@@ -879,6 +879,7 @@ try {
             fputcsv($out, ['Captured', 'First name', 'Last name', 'Phone', 'Category', 'Status', 'Willing to visit', 'Area', 'Campaign', 'Captured by', 'Assigned to', 'Follow-ups', 'Pushed to Embrace'], ',', '"', '');
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $r['willing_for_visit'] = $r['willing_for_visit'] ? 'Yes' : 'No';
+                $r['category'] = str_replace(['_', ','], [' ', ', '], $r['category']);
                 fputcsv($out, array_map('reach_csv_safe', array_values($r)), ',', '"', '');
             }
             fclose($out);

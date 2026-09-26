@@ -302,14 +302,14 @@ if ($campaign) {
                 </div>
 
                 <div>
-                    <p class="field-label">Where are they spiritually?</p>
+                    <p class="field-label">Where are they spiritually? <span class="normal-case tracking-normal font-medium text-gray-400">· tap all that apply</span></p>
                     <div id="categoryChips" class="grid grid-cols-2 min-[400px]:grid-cols-3 gap-2"></div>
                 </div>
 
                 <label for="fldVisit" class="flex items-center justify-between gap-4 rounded-2xl border border-hodRed/20 bg-hodRed/5 px-4 py-4 cursor-pointer">
                     <span>
                         <span class="block font-semibold text-hodRed">Open to a home visit?</span>
-                        <span class="block text-xs text-gray-600 mt-0.5">Hot leads get a pastor visit within 7 days.</span>
+                        <span class="block text-xs text-gray-600 mt-0.5">Someone from our church family will visit within 7 days.</span>
                     </span>
                     <span class="relative shrink-0">
                         <input type="checkbox" id="fldVisit" name="willing_for_visit" value="1" class="peer sr-only">
@@ -465,16 +465,37 @@ function escapeHtml(s) {
         .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
+let selectedCats = new Set();
+
 function renderCategoryChips() {
     $('#categoryChips').html(CATEGORIES.map(c =>
-        `<button type="button" data-v="${c.v}" onclick="pickCategory('${c.v}')" class="chip">${c.label}</button>`
+        `<button type="button" data-v="${c.v}" onclick="pickCategory('${c.v}')" aria-pressed="false" class="chip">${c.label}</button>`
     ).join(''));
-    pickCategory('Other');
+    setCategories([]);
 }
+// Multi-select with the obvious contradictions removed: "Other" stands
+// alone, and "Unsaved" can't sit with "Saved" or "New Convert".
 function pickCategory(v) {
-    $('#fldCategory').val(v);
-    $('#categoryChips button').removeClass('active').attr('aria-pressed', 'false');
-    $(`#categoryChips button[data-v="${v}"]`).addClass('active').attr('aria-pressed', 'true');
+    if (selectedCats.has(v)) {
+        selectedCats.delete(v);
+    } else if (v === 'Other') {
+        selectedCats = new Set(['Other']);
+    } else {
+        selectedCats.delete('Other');
+        if (v === 'Unsaved') { selectedCats.delete('Saved'); selectedCats.delete('New_Convert'); }
+        if (v === 'Saved' || v === 'New_Convert') selectedCats.delete('Unsaved');
+        selectedCats.add(v);
+    }
+    setCategories([...selectedCats]);
+}
+function setCategories(list) {
+    selectedCats = new Set(list);
+    const vals = CATEGORIES.map(c => c.v).filter(v => selectedCats.has(v));
+    $('#fldCategory').val(vals.join(',') || 'Other');
+    $('#categoryChips button').each(function() {
+        const on = selectedCats.has(this.dataset.v);
+        $(this).toggleClass('active', on).attr('aria-pressed', on ? 'true' : 'false');
+    });
 }
 
 function saveVolunteerLocal(v) {
@@ -567,7 +588,7 @@ function rememberRecent(name, category) {
     $('#recentChips').html(recentSaves.map(r => `
         <span class="inline-flex items-center gap-1.5 bg-hodBlue/5 border border-hodBlue/15 text-hodBlue px-3 py-1.5 rounded-full text-xs font-semibold">
             ${escapeHtml(r.name)}
-            <span class="text-[9px] text-hodRed uppercase tracking-widest">${escapeHtml(r.category.replace(/_/g, ' '))}</span>
+            <span class="text-[9px] text-hodRed uppercase tracking-widest">${escapeHtml(r.category.replace(/_/g, ' ').replace(/,/g, ' · '))}</span>
         </span>`).join(''));
 }
 
@@ -596,7 +617,7 @@ $('#leadForm').on('submit', function(e) {
             toast(res.data.merged ? 'Saved — merged with an earlier capture' : `Soul #${personCount} saved`);
             form.reset();
             $('#dupWarning').addClass('hidden');
-            pickCategory('Other');
+            setCategories([]);
             $('#fldFirstName').trigger('focus');
         } else {
             toast(res.message || 'Could not save', 'error');
@@ -691,7 +712,7 @@ function applyVoice() {
         if (d.first_name) $('#fldFirstName').val(d.first_name);
         if (d.last_name)  $('#fldLastName').val(d.last_name);
         if (d.phone)      $('#fldPhone').val(d.phone);
-        if (d.category)   pickCategory(d.category);
+        if (d.category && d.category !== 'Other') setCategories([d.category]);
         $('#fldVisit').prop('checked', !!d.willing_for_visit);
         if (d.notes && $('#fldNotes').length) $('#fldNotes').val(d.notes);
         closeVoice();

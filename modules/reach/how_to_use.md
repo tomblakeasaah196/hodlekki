@@ -37,7 +37,7 @@ Click **Share** on a campaign card. You get:
 - a ready-made **WhatsApp message** with the description, scripture and link — tap **Send via WhatsApp**. The preview shows the flyer (or the default image);
 - a **QR code** you can print or show on a phone at the meeting point.
 
-Volunteers open the link, enter the phone number they are registered with, confirm their name, and start logging people. Only numbers already in our family database can capture. Voice capture fills the form from one spoken sentence — always check it before saving.
+Volunteers open the link, enter the phone number they are registered with, confirm their name, and start logging people. For **"Where are they spiritually?"** tap every category that applies — someone can be both *Broken* and a *New Convert*. Leaving it empty saves them as *Other*. Only numbers already in our family database can capture. Voice capture fills the form from one spoken sentence — always check it before saving.
 
 ## 4. Working the follow-up queue
 
@@ -80,7 +80,7 @@ Pick a period with the chips (**This Month**, **Last Month**, **Last 3 Months**,
 - **Follow-up Rate** — share of those people with at least one follow-up.
 - **Conversion Rate** — share pushed to Embrace.
 
-The funnel shows *Captured → Spoken To → Visited / Converted*. The donut splits people by spiritual category, the area chart shows the top 15 neighbourhoods, and the tables rank volunteers (guests included) and compare campaigns. **Export CSV** downloads every lead in the period for a spreadsheet.
+The funnel shows *Captured → Spoken To → Visited / Converted*. The category bars show how many people carry each spiritual category (one person can count in several), the area chart shows the top 15 neighbourhoods, and the tables rank volunteers (guests included) and compare campaigns. **Export CSV** downloads every lead in the period for a spreadsheet.
 
 ## 7. Generating the monthly PDF
 

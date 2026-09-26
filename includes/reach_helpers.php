@@ -85,6 +85,17 @@ function reach_sidebar_counts(PDO $pdo, int $user_id): array {
 
 const REACH_CATEGORY_ORDER = ['New_Convert', 'Unsaved', 'Saved', 'Broken', 'Dechurched', 'Other'];
 
+// Accepts "Broken,New_Convert" or an array; returns the SET value in a
+// fixed order. "Other" only stands alone, and nothing becomes "Other".
+function reach_parse_categories($raw): string {
+    $given = is_array($raw) ? $raw : explode(',', (string) $raw);
+    $picked = array_values(array_intersect(REACH_CATEGORY_ORDER, array_map('trim', $given)));
+    if (count($picked) > 1) {
+        $picked = array_values(array_diff($picked, ['Other']));
+    }
+    return $picked ? implode(',', $picked) : 'Other';
+}
+
 function reach_pct(int $part, int $whole): float {
     return $whole > 0 ? round($part * 100 / $whole, 1) : 0.0;
 }
@@ -118,9 +129,11 @@ function reach_analytics(PDO $pdo, string $from, string $to): array {
     $stmt->execute([$from, $to]);
     $campaigns_run = (int) $stmt->fetchColumn();
 
-    $stmt = $pdo->prepare("SELECT l.category, COUNT(*) AS n FROM reach_leads l WHERE l.created_at >= ? AND l.created_at < ? GROUP BY l.category");
+    // Per-tag counts: a lead tagged "Broken,New_Convert" counts in both.
+    $sums = implode(', ', array_map(fn($c) => "COALESCE(SUM(FIND_IN_SET('{$c}', l.category) > 0), 0) AS `{$c}`", REACH_CATEGORY_ORDER));
+    $stmt = $pdo->prepare("SELECT {$sums} FROM reach_leads l WHERE l.created_at >= ? AND l.created_at < ?");
     $stmt->execute([$lo, $hi]);
-    $by_cat = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+    $by_cat = $stmt->fetch(PDO::FETCH_ASSOC);
     $categories = [];
     foreach (REACH_CATEGORY_ORDER as $c) {
         $categories[] = ['category' => $c, 'count' => (int) ($by_cat[$c] ?? 0)];
