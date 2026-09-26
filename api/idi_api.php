@@ -35,7 +35,14 @@ if (!$has_access) {
 }
 
 $action = $_POST['action'] ?? $_GET['action'] ?? 'fetch_all_insights';
-        
+
+// Date range from the global filter form (defaults match modules/idi/index.php)
+$start_date = $_POST['start_date'] ?? $_GET['start_date'] ?? date('Y-01-01');
+$end_date   = $_POST['end_date']   ?? $_GET['end_date']   ?? date('Y-m-d');
+
+try {
+    if ($action === 'fetch_all_insights') {
+
         $insights = [
             'status' => 'success',
             'date_range' => ['start' => $start_date, 'end' => $end_date],
