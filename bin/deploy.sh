@@ -59,13 +59,21 @@ git reset --hard origin/main
 echo "[deploy] post-pull HEAD: $(git rev-parse HEAD)"
 git log -1 --pretty='[deploy] commit: %h %s (%an)'
 
-# 2. Sync the repo tree into the live docroot, preserving runtime files.
+# 2. Copy the repo tree into the live docroot, honouring .deployignore.
+#    rsync is not installed on this cPanel host, so we stream through tar.
+#    tar's --exclude-from uses the same simple pattern format .deployignore
+#    already uses. NOTE: this does NOT do rsync's --delete — files removed
+#    from the repo will linger in the docroot. Runtime files (.env,
+#    .htaccess, uploads/, error_log, ...) are still protected because
+#    they're never copied over in the first place.
 if [ ! -f "$REPO/.deployignore" ]; then
     echo "[deploy] $REPO/.deployignore missing — aborting" >&2
     exit 1
 fi
-rsync -a --delete --exclude-from="$REPO/.deployignore" "$REPO/" "$DEPLOYPATH/"
-echo "[deploy] rsync -> $DEPLOYPATH done"
+mkdir -p "$DEPLOYPATH"
+tar cf - --exclude-from="$REPO/.deployignore" -C "$REPO" . \
+  | ( cd "$DEPLOYPATH" && tar xpf - )
+echo "[deploy] tar -> $DEPLOYPATH done"
 
 # 3. Refresh Composer dependencies. -d allow_url_fopen=On because this host's
 #    CLI php.ini disables it and Composer needs it to reach packagist.
