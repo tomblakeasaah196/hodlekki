@@ -375,6 +375,15 @@ function personCard(c, inPool) {
             </div>
             ${due ? `<span class="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${due[1]}">${due[0]}</span>` : ''}
         </div>
+        <div class="flex flex-wrap gap-1.5">
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-hodBlue/5 border border-hodBlue/15 text-hodBlue px-2.5 py-1 text-[11px] font-semibold">
+                ${icon('M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', 'w-3.5 h-3.5')}
+                ${c.last_attended ? 'Last in church ' + escapeHtml(niceDate(c.last_attended)) : 'No attendance on record'}
+            </span>
+            ${c.prior && c.prior.total
+                ? `<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 text-[11px] font-semibold">${icon(ICON_PHONE, 'w-3.5 h-3.5')}Reached out ${c.prior.total}&times; &middot; last ${escapeHtml(c.prior.when || '')} by ${escapeHtml(c.prior.by || 'a volunteer')} (${escapeHtml(c.prior.outcome || '')})</span>`
+                : `<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-1 text-[11px] font-semibold">${icon(ICON_PHONE, 'w-3.5 h-3.5')}Nobody has reached out yet</span>`}
+        </div>
         <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">
                 <p class="text-[10px] font-bold uppercase tracking-wider text-gray-400">Last in church</p>

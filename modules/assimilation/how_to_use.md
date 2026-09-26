@@ -235,3 +235,14 @@ prayer points from the calls, and a short pastoral summary of the month.
 - Nightly job: `cron/assimilation_watchlists.php` (crontab line in the README).
 - Any change under `modules/assimilation/`, `api/assimilation_*` or
   `assimilation.php` must update this file in the same PR — CI enforces it.
+
+## Context pills on the volunteer page
+
+Every person on a volunteer's call list carries two small pills so the
+volunteer knows who they are calling before they dial:
+
+- **Last in church** — the date of their most recent attendance (or "No
+  attendance on record").
+- **Reached out N×** — how many times anyone has contacted them across every
+  follow-up round, when the last contact was, who made it and the outcome.
+  If nobody has called before, the pill says **Nobody has reached out yet**.

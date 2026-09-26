@@ -71,6 +71,50 @@ function assim_pub_case(PDO $pdo, int $case_id, int $volunteer_id, bool $write):
     return $case;
 }
 
+// Every past reach-out to these people, across all their cases (not just
+// the open one), so a volunteer knows whether anyone has called before.
+function assim_prior_contacts(PDO $pdo, array $user_ids): array {
+    $user_ids = array_values(array_unique(array_map('intval', $user_ids)));
+    if (!$user_ids) {
+        return [];
+    }
+    $in = implode(',', array_fill(0, count($user_ids), '?'));
+    $stmt = $pdo->prepare("
+        SELECT c.user_id, COUNT(f.id) AS total, MAX(f.id) AS last_id
+          FROM assimilation_follow_ups f JOIN assimilation_cases c ON c.id = f.case_id
+         WHERE c.user_id IN ($in)
+         GROUP BY c.user_id
+    ");
+    $stmt->execute($user_ids);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!$rows) {
+        return [];
+    }
+    $last_ids = array_map(fn($r) => (int) $r['last_id'], $rows);
+    $in2 = implode(',', array_fill(0, count($last_ids), '?'));
+    $lstmt = $pdo->prepare("
+        SELECT f.id, f.outcome, f.created_at, u.first_name, u.last_name
+          FROM assimilation_follow_ups f LEFT JOIN users u ON u.id = f.logged_by
+         WHERE f.id IN ($in2)
+    ");
+    $lstmt->execute($last_ids);
+    $last = [];
+    foreach ($lstmt->fetchAll(PDO::FETCH_ASSOC) as $l) {
+        $last[(int) $l['id']] = $l;
+    }
+    $out = [];
+    foreach ($rows as $r) {
+        $l = $last[(int) $r['last_id']] ?? null;
+        $out[(int) $r['user_id']] = [
+            'total'   => (int) $r['total'],
+            'when'    => $l ? assim_since_words(substr((string) $l['created_at'], 0, 10)) : null,
+            'by'      => $l ? assim_short_name($l['first_name'], $l['last_name']) : null,
+            'outcome' => $l ? str_replace('_', ' ', (string) $l['outcome']) : null,
+        ];
+    }
+    return $out;
+}
+
 // Exactly the fields the call needs, and nothing else.
 function assim_pub_card(PDO $pdo, array $row, array $sparklines, array $notes): array {
     $id = (int) $row['id'];
@@ -91,6 +135,7 @@ function assim_pub_card(PDO $pdo, array $row, array $sparklines, array $notes): 
         'is_overdue'     => (int) $row['is_overdue'] === 1,
         'is_mine'        => $row['assigned_to'] !== null,
         'last_note'      => $notes[$id] ?? null,
+        'prior'          => $row['prior'] ?? null,
         'trend'          => array_map(fn($m) => $m['count'], assim_months_frame($sparklines[(int) $row['user_id']] ?? [], 12)),
     ];
 }
@@ -181,10 +226,11 @@ try {
             $brought_home = $pdo->prepare("SELECT COUNT(*) FROM assimilation_cases WHERE assigned_to = ? AND returned_home_at IS NOT NULL");
             $brought_home->execute([$vid]);
 
+            $prior = assim_prior_contacts($pdo, array_merge(array_column($mine, 'user_id'), array_column($pool, 'user_id')));
             echo json_encode(['status' => 'success', 'data' => [
                 'volunteer'    => ['name' => assim_short_name($volunteer['first_name'], $volunteer['last_name'])],
-                'mine'         => array_map(fn($r) => assim_pub_card($pdo, $r, $sparklines, $notes), $mine),
-                'pool'         => array_map(fn($r) => assim_pub_card($pdo, $r, $sparklines, $notes), $pool),
+                'mine'         => array_map(fn($r) => assim_pub_card($pdo, $r + ['prior' => $prior[(int) $r['user_id']] ?? null], $sparklines, $notes), $mine),
+                'pool'         => array_map(fn($r) => assim_pub_card($pdo, $r + ['prior' => $prior[(int) $r['user_id']] ?? null], $sparklines, $notes), $pool),
                 'allow_claim'  => $self,
                 'channels'     => ASSIM_CHANNELS,
                 'outcomes'     => ASSIM_OUTCOMES,
