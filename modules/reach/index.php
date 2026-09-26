@@ -14,6 +14,59 @@ try {
 } catch (PDOException $e) {
     error_log('Reach manager check: ' . $e->getMessage());
 }
+
+// Minimal Markdown for how_to_use.md: headings, bold, italic, code,
+// links, lists, blockquotes, paragraphs. Text is escaped before any tag
+// is added, and links only allow http(s), relative and #anchors.
+function reach_markdown(string $md): string {
+    $inline = function (string $t): string {
+        $t = htmlspecialchars($t, ENT_QUOTES, 'UTF-8');
+        $t = preg_replace('/`([^`]+)`/', '<code class="px-1.5 py-0.5 rounded bg-gray-100 text-[0.85em] text-gray-800">$1</code>', $t);
+        $t = preg_replace('/\*\*(.+?)\*\*/', '<strong class="font-bold text-gray-900">$1</strong>', $t);
+        $t = preg_replace('/(?<![\*\w])\*(?!\s)(.+?)(?<!\s)\*(?![\*\w])/', '<em>$1</em>', $t);
+        return preg_replace_callback('/\[([^\]]+)\]\(([^)\s]+)\)/', function ($m) {
+            $safe = preg_match('#^(https?://|/|\#)#', html_entity_decode($m[2]));
+            return $safe ? '<a href="' . $m[2] . '" class="text-emerald-700 font-semibold underline underline-offset-2">' . $m[1] . '</a>' : $m[1];
+        }, $t);
+    };
+    $html = ''; $para = []; $list = null; $items = []; $start = 1;
+    $flushPara = function () use (&$html, &$para) {
+        if ($para) { $html .= '<p class="text-gray-600 leading-relaxed">' . implode(' ', $para) . '</p>'; $para = []; }
+    };
+    $flushList = function () use (&$html, &$list, &$items, &$start) {
+        if ($list) {
+            $cls = $list === 'ol' ? 'list-decimal' : 'list-disc';
+            $html .= "<{$list}" . ($list === 'ol' && $start > 1 ? " start=\"{$start}\"" : '') . " class=\"{$cls} pl-6 space-y-1.5 text-gray-600 leading-relaxed marker:text-emerald-600\">" . implode('', array_map(fn($i) => "<li>{$i}</li>", $items)) . "</{$list}>";
+            $list = null; $items = [];
+        }
+    };
+    foreach (preg_split('/\R/', $md) as $line) {
+        if (preg_match('/^(#{1,3})\s+(.+)$/', $line, $m)) {
+            $flushPara(); $flushList();
+            $n = strlen($m[1]);
+            $cls = [1 => 'text-2xl font-display font-bold text-gray-900', 2 => 'text-lg font-display font-bold text-gray-900 pt-4 border-t border-gray-100 scroll-mt-24', 3 => 'text-base font-bold text-gray-900'][$n];
+            $id = $n === 2 ? ' id="guide-' . trim(preg_replace('/[^a-z0-9]+/', '-', strtolower($m[2])), '-') . '"' : '';
+            $html .= "<h{$n}{$id} class=\"{$cls}\">" . $inline($m[2]) . "</h{$n}>";
+        } elseif (preg_match('/^\s*(?:([-*])|(\d+)\.)\s+(.+)$/', $line, $m)) {
+            $flushPara();
+            $type = $m[1] !== '' ? 'ul' : 'ol';
+            if ($list !== $type) { $flushList(); $list = $type; $start = (int) ($m[2] ?: 1); }
+            $items[] = $inline($m[3]);
+        } elseif (preg_match('/^>\s?(.*)$/', $line, $m)) {
+            $flushPara(); $flushList();
+            $html .= '<blockquote class="border-l-4 border-emerald-500 bg-emerald-50/60 rounded-r-xl px-4 py-3 text-emerald-900 text-sm">' . $inline($m[1]) . '</blockquote>';
+        } elseif (trim($line) === '') {
+            $flushPara(); $flushList();
+        } else {
+            $flushList();
+            $para[] = $inline(trim($line));
+        }
+    }
+    $flushPara(); $flushList();
+    return $html;
+}
+$reach_guide_html = reach_markdown((string) @file_get_contents(__DIR__ . '/how_to_use.md'));
+preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_guide_toc, PREG_SET_ORDER);
 ?>
 
 <div class="max-w-7xl mx-auto space-y-6 pb-10">
@@ -39,23 +92,26 @@ try {
         </div>
     </div>
 
-    <div class="flex bg-gray-100 p-1.5 rounded-2xl w-full md:max-w-2xl animate-fade-in-up overflow-x-auto" style="animation-delay: 0.1s;">
-        <button onclick="switchTab('campaigns')" id="tabBtn-campaigns" class="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold transition-all bg-white text-emerald-700 shadow-sm">Campaigns</button>
-        <button onclick="switchTab('followup')" id="tabBtn-followup" class="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Follow-Up</button>
-        <button onclick="switchTab('analytics')" id="tabBtn-analytics" class="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Analytics</button>
-        <button onclick="switchTab('howto')" id="tabBtn-howto" class="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">How to Use</button>
+    <div role="tablist" aria-label="Reach sections" id="reachTabs" class="flex bg-gray-100 p-1.5 rounded-2xl w-full md:max-w-2xl animate-fade-in-up overflow-x-auto" style="animation-delay: 0.1s;">
+        <button type="button" role="tab" id="tabBtn-campaigns" aria-controls="view-campaigns" aria-selected="true" tabindex="0" onclick="switchTab('campaigns')" class="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 bg-white text-emerald-700 shadow-sm">Campaigns</button>
+        <button type="button" role="tab" id="tabBtn-followup" aria-controls="view-followup" aria-selected="false" tabindex="-1" onclick="switchTab('followup')" class="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 text-gray-500 hover:text-gray-900">Follow-Up</button>
+        <button type="button" role="tab" id="tabBtn-analytics" aria-controls="view-analytics" aria-selected="false" tabindex="-1" onclick="switchTab('analytics')" class="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 text-gray-500 hover:text-gray-900">Analytics</button>
+        <button type="button" role="tab" id="tabBtn-howto" aria-controls="view-howto" aria-selected="false" tabindex="-1" onclick="switchTab('howto')" class="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 text-gray-500 hover:text-gray-900">How to Use</button>
     </div>
 
-    <div id="view-campaigns" class="animate-fade-in-up" style="animation-delay: 0.2s;">
+    <div id="view-campaigns" role="tabpanel" aria-labelledby="tabBtn-campaigns" tabindex="0" class="focus:outline-none animate-fade-in-up" style="animation-delay: 0.2s;">
         <div id="campaignsGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 min-h-[240px]">
-            <div class="col-span-full text-center text-gray-400 font-medium py-12">
-                <svg class="animate-spin h-8 w-8 text-emerald-500 mx-auto mb-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                Loading campaigns...
-            </div>
+            <?php for ($i = 0; $i < 3; $i++): ?>
+                <div class="bg-white rounded-3xl border border-gray-100 p-6 space-y-4 animate-pulse" aria-hidden="true">
+                    <div class="h-3 bg-gray-100 rounded w-1/3"></div><div class="h-5 bg-gray-100 rounded w-2/3"></div>
+                    <div class="grid grid-cols-3 gap-2"><div class="h-10 bg-gray-100 rounded-xl"></div><div class="h-10 bg-gray-100 rounded-xl"></div><div class="h-10 bg-gray-100 rounded-xl"></div></div>
+                    <div class="h-8 bg-gray-100 rounded-xl"></div>
+                </div>
+            <?php endfor; ?>
         </div>
     </div>
 
-    <div id="view-followup" class="hidden animate-fade-in-up space-y-5" style="animation-delay: 0.2s;">
+    <div id="view-followup" role="tabpanel" aria-labelledby="tabBtn-followup" tabindex="0" class="focus:outline-none hidden animate-fade-in-up space-y-5" style="animation-delay: 0.2s;">
         <button type="button" id="overdueWidget" onclick="toggleOverdue()" class="hidden w-full text-left bg-red-50 border border-red-200 rounded-2xl px-5 py-4 flex items-center gap-4 hover:bg-red-100 transition-all">
             <span class="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -89,23 +145,32 @@ try {
         <div class="text-center"><button type="button" id="fuMore" onclick="loadLeads(false)" class="hidden bg-white border border-gray-200 hover:border-emerald-300 text-gray-700 px-6 py-2.5 rounded-xl font-bold text-sm">Load more</button></div>
     </div>
 
-    <div id="view-analytics" class="hidden animate-fade-in-up" style="animation-delay: 0.2s;">
-        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-10 text-center">
-            <div class="w-16 h-16 rounded-2xl bg-emerald-50 mx-auto mb-4 flex items-center justify-center text-emerald-600">
-                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+    <div id="view-analytics" role="tabpanel" aria-labelledby="tabBtn-analytics" tabindex="0" class="focus:outline-none hidden animate-fade-in-up space-y-5" style="animation-delay: 0.2s;">
+        <div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 flex flex-col lg:flex-row lg:items-center gap-3">
+            <div id="anPresets" class="flex flex-wrap gap-2" role="group" aria-label="Date range"></div>
+            <div id="anCustom" class="hidden flex items-center gap-2">
+                <input type="date" id="anFrom" aria-label="From date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-emerald-500 outline-none">
+                <span class="text-gray-400 text-sm">to</span>
+                <input type="date" id="anTo" aria-label="To date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-emerald-500 outline-none">
             </div>
-            <h3 class="text-lg font-bold text-gray-900">Analytics is coming in PR 3</h3>
-            <p class="text-sm text-gray-500 mt-2 max-w-md mx-auto">Conversion funnels, capture heatmaps and top-volunteer boards will live here.</p>
+            <div class="flex gap-2 lg:ml-auto">
+                <button type="button" onclick="exportCsv()" class="flex-1 lg:flex-none bg-white border border-gray-200 hover:border-emerald-300 text-gray-700 px-4 py-2.5 rounded-xl font-bold text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">Export CSV</button>
+                <button type="button" id="anPdfBtn" onclick="generatePdf()" class="flex-1 lg:flex-none bg-emerald-600 hover:bg-emerald-800 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-emerald-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2">Generate PDF</button>
+            </div>
         </div>
+        <div id="anBody"></div>
     </div>
 
-    <div id="view-howto" class="hidden animate-fade-in-up" style="animation-delay: 0.2s;">
-        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-10 text-center">
-            <div class="w-16 h-16 rounded-2xl bg-emerald-50 mx-auto mb-4 flex items-center justify-center text-emerald-600">
-                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            </div>
-            <h3 class="text-lg font-bold text-gray-900">Field guide is coming in PR 3</h3>
-            <p class="text-sm text-gray-500 mt-2 max-w-md mx-auto">A step-by-step playbook for volunteers, HODs and pastors will land alongside analytics.</p>
+    <div id="view-howto" role="tabpanel" aria-labelledby="tabBtn-howto" tabindex="0" class="focus:outline-none hidden animate-fade-in-up" style="animation-delay: 0.2s;">
+        <div class="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-5 items-start">
+            <nav aria-label="Guide sections" class="hidden lg:block sticky top-24 bg-white rounded-3xl border border-gray-100 shadow-sm p-4 space-y-1">
+                <?php foreach ($reach_guide_toc as $h): ?>
+                    <a href="#<?= htmlspecialchars($h[1]) ?>" class="block px-3 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"><?= strip_tags($h[2]) ?></a>
+                <?php endforeach; ?>
+            </nav>
+            <article class="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 md:p-10 space-y-4 max-w-3xl">
+                <?= $reach_guide_html ?: '<p class="text-gray-500">The guide could not be loaded.</p>' ?>
+            </article>
         </div>
     </div>
 </div>
@@ -301,20 +366,34 @@ try {
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
     const API_URL = '/api/reach_api.php';
 
     function switchTab(tabId) {
         $('#view-campaigns, #view-followup, #view-analytics, #view-howto').addClass('hidden');
-        $('#tabBtn-campaigns, #tabBtn-followup, #tabBtn-analytics, #tabBtn-howto')
+        $('#reachTabs [role="tab"]')
             .removeClass('bg-white text-emerald-700 shadow-sm')
-            .addClass('text-gray-500 hover:text-gray-900');
+            .addClass('text-gray-500 hover:text-gray-900')
+            .attr({ 'aria-selected': 'false', tabindex: '-1' });
         $(`#view-${tabId}`).removeClass('hidden');
         $(`#tabBtn-${tabId}`)
             .removeClass('text-gray-500 hover:text-gray-900')
-            .addClass('bg-white text-emerald-700 shadow-sm');
+            .addClass('bg-white text-emerald-700 shadow-sm')
+            .attr({ 'aria-selected': 'true', tabindex: '0' });
+        document.getElementById(`tabBtn-${tabId}`).scrollIntoView({ block: 'nearest', inline: 'nearest' });
         if (tabId === 'followup') initFollowUp();
+        if (tabId === 'analytics') initAnalytics();
     }
+
+    $(document).on('keydown', '#reachTabs [role="tab"]', function(e) {
+        const tabs = $('#reachTabs [role="tab"]');
+        const i = tabs.index(this);
+        const next = { ArrowRight: (i + 1) % tabs.length, ArrowLeft: (i - 1 + tabs.length) % tabs.length, Home: 0, End: tabs.length - 1 }[e.key];
+        if (next === undefined) return;
+        e.preventDefault();
+        tabs.eq(next).trigger('focus').trigger('click');
+    });
 
     function lockScreenAction() {
         const b = document.getElementById('globalActionBlocker');
@@ -435,8 +514,10 @@ try {
         if (!list.length) {
             $('#campaignsGrid').html(`
                 <div class="col-span-full bg-white rounded-3xl border border-dashed border-gray-200 p-10 text-center">
+                    <div class="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto mb-3 flex items-center justify-center"><svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
                     <h3 class="text-lg font-bold text-gray-900">No campaigns yet</h3>
-                    <p class="text-sm text-gray-500 mt-1">Click <strong>New Campaign</strong> to schedule your first outreach.</p>
+                    <p class="text-sm text-gray-500 mt-1">Schedule your first outreach and share its capture link.</p>
+                    <button type="button" onclick="openCampaignModal()" class="mt-5 bg-emerald-600 hover:bg-emerald-800 text-white px-5 py-2.5 rounded-xl font-bold text-sm">New Campaign</button>
                 </div>`);
             return;
         }
@@ -723,6 +804,9 @@ try {
         }
         if (l.pushed_to_embrace_at) {
             actions += `<button type="button" disabled class="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 py-3 rounded-xl font-bold text-sm cursor-not-allowed">Pushed to Embrace · ${escapeHtml(relTime(l.pushed_to_embrace_at))}</button>`;
+            if (d.can_assign) {
+                actions += `<label class="flex items-center justify-between gap-3 text-sm font-semibold text-gray-700 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 cursor-pointer">Share testimony in monthly report<input type="checkbox" ${+l.share_testimony_in_report ? 'checked' : ''} onchange="setTestimony(${l.id}, this.checked)" class="w-5 h-5 accent-emerald-600"></label>`;
+            }
         } else if (d.can_push) {
             actions += `<button type="button" onclick="pushToEmbrace(${l.id})" class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-red-900/20">Push to Embrace as 1st Timer</button>`;
         }
@@ -785,6 +869,134 @@ try {
             showToast(res.message, res.status);
             if (res.status === 'success') { openLead(id); loadLeads(); }
         }, 'json').fail(() => { unlockScreenAction(); showToast('Server error', 'error'); });
+    }
+
+    function setTestimony(id, on) {
+        $.post(API_URL, { action: 'set_testimony_flag', lead_id: id, share: on ? 1 : 0 }, res => showToast(res.message, res.status), 'json')
+            .fail(() => showToast('Server error', 'error'));
+    }
+
+    /* ============================ ANALYTICS TAB ============================ */
+    // Validated with the dataviz palette checker (light surface #ffffff).
+    const CAT_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300'];
+    const FUNNEL_COLORS = ['#10b981', '#047857', '#064e3b'];
+    const AREA_COLOR = '#047857';
+    const an = { ready: false, preset: 'this_month', charts: {} };
+    const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    function presetRange(p) {
+        const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+        switch (p) {
+            case 'last_month': return [ymd(new Date(y, m - 1, 1)), ymd(new Date(y, m, 0))];
+            case 'last_3':     return [ymd(new Date(y, m - 2, 1)), ymd(new Date(y, m + 1, 0))];
+            case 'ytd':        return [`${y}-01-01`, ymd(now)];
+            case 'custom':     return [$('#anFrom').val(), $('#anTo').val()];
+            default:           return [ymd(new Date(y, m, 1)), ymd(new Date(y, m + 1, 0))];
+        }
+    }
+
+    function initAnalytics() {
+        if (an.ready) return;
+        an.ready = true;
+        const presets = [['this_month', 'This Month'], ['last_month', 'Last Month'], ['last_3', 'Last 3 Months'], ['ytd', 'Year to Date'], ['custom', 'Custom']];
+        $('#anPresets').html(presets.map(([k, l]) => `<button type="button" data-p="${k}" onclick="pickPreset('${k}')" class="an-preset px-3 py-2 rounded-xl border text-xs font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">${l}</button>`).join(''));
+        const [f, t] = presetRange('this_month');
+        $('#anFrom').val(f); $('#anTo').val(t);
+        $('#anFrom, #anTo').on('change', loadAnalytics);
+        if (window.Chart) {
+            Chart.defaults.font.family = 'Inter, sans-serif';
+            Chart.defaults.color = '#52514e';
+        }
+        pickPreset('this_month');
+    }
+
+    function pickPreset(p) {
+        an.preset = p;
+        $('.an-preset').removeClass('bg-emerald-600 text-white border-emerald-600').addClass('bg-white text-gray-600 border-gray-200').attr('aria-pressed', 'false');
+        $(`.an-preset[data-p="${p}"]`).removeClass('bg-white text-gray-600 border-gray-200').addClass('bg-emerald-600 text-white border-emerald-600').attr('aria-pressed', 'true');
+        $('#anCustom').toggleClass('hidden', p !== 'custom');
+        loadAnalytics();
+    }
+
+    function anCard(title, body, extra = '') {
+        return `<section class="bg-white rounded-3xl border border-gray-100 shadow-sm p-5 ${extra}"><h3 class="text-sm font-bold text-gray-900 mb-4">${title}</h3>${body}</section>`;
+    }
+
+    function loadAnalytics() {
+        const [from, to] = presetRange(an.preset);
+        if (!from || !to) return;
+        Object.values(an.charts).forEach(c => c.destroy());
+        an.charts = {};
+        $('#anBody').html(`<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-pulse" aria-hidden="true">${'<div class="h-24 bg-white border border-gray-100 rounded-3xl"></div>'.repeat(4)}</div><div class="grid lg:grid-cols-2 gap-5 mt-5 animate-pulse" aria-hidden="true">${'<div class="h-72 bg-white border border-gray-100 rounded-3xl"></div>'.repeat(2)}</div>`);
+        $.post(API_URL, { action: 'fetch_analytics', from_date: from, to_date: to }, res => {
+            if (res.status !== 'success') { showToast(res.message, 'error'); return; }
+            renderAnalytics(res.data);
+        }, 'json').fail(() => showToast('Server error', 'error'));
+    }
+
+    function renderAnalytics(d) {
+        const k = d.kpis;
+        if (k.souls === 0 && !d.campaigns_table.length) {
+            $('#anBody').html(`<div class="bg-white rounded-3xl border border-dashed border-gray-200 p-10 text-center"><div class="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto mb-3 flex items-center justify-center">${icon('M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', 'w-7 h-7')}</div><p class="font-bold text-gray-900">No outreach in this period</p><p class="text-sm text-gray-500 mt-1">Pick another range, or plan a campaign to get started.</p><button type="button" onclick="switchTab('campaigns')" class="mt-5 bg-emerald-600 hover:bg-emerald-800 text-white px-5 py-2.5 rounded-xl font-bold text-sm">Go to Campaigns</button></div>`);
+            return;
+        }
+        const tile = (l, v) => `<div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-5"><p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">${l}</p><p class="text-3xl font-display font-bold text-gray-900 mt-1">${v}</p></div>`;
+        const totalCat = d.category_breakdown.reduce((a, c) => a + c.count, 0);
+        const legend = `<table class="w-full text-sm">${d.category_breakdown.map((c, i) => `<tr class="border-b border-gray-50 last:border-0"><td class="py-1.5"><span class="inline-block w-2.5 h-2.5 rounded-sm mr-2 align-middle" style="background:${CAT_COLORS[i]}"></span>${label(c.category)}</td><td class="py-1.5 text-right font-bold text-gray-900">${c.count}</td><td class="py-1.5 text-right text-gray-400 w-14">${totalCat ? Math.round(c.count * 100 / totalCat) : 0}%</td></tr>`).join('')}</table>`;
+        const th = t => `<th class="py-2 px-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-left">${t}</th>`;
+        const thn = t => `<th class="py-2 px-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">${t}</th>`;
+        const leaders = d.volunteer_leaderboard.length
+            ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-50"><tr>${th('#')}${th('Volunteer')}${thn('Souls')}</tr></thead><tbody>${d.volunteer_leaderboard.map((v, i) => `<tr class="border-b border-gray-50"><td class="py-2 px-2 text-gray-400">${i + 1}</td><td class="py-2 px-2 font-semibold text-gray-800">${escapeHtml(v.name)} ${v.is_member ? pill('Member', 'bg-emerald-100 text-emerald-800') : pill('Guest', 'bg-yellow-100 text-yellow-800')}</td><td class="py-2 px-2 text-right font-bold">${v.souls}</td></tr>`).join('')}</tbody></table></div>`
+            : '<p class="text-sm text-gray-400 italic">No captures in this period.</p>';
+        const camps = d.campaigns_table.length
+            ? `<div class="overflow-x-auto"><table class="w-full text-sm min-w-[520px]"><thead class="bg-gray-50"><tr>${th('Campaign')}${th('Date')}${thn('Souls')}${thn('Follow-up')}${thn('Conversion')}${th('Last activity')}</tr></thead><tbody>${d.campaigns_table.map(c => `<tr class="border-b border-gray-50"><td class="py-2 px-2 font-semibold text-gray-800">${escapeHtml(c.title)}</td><td class="py-2 px-2 text-gray-500">${c.date ? escapeHtml(parseDate(c.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })) : '—'}</td><td class="py-2 px-2 text-right font-bold">${c.souls}</td><td class="py-2 px-2 text-right">${c.follow_up_rate}%</td><td class="py-2 px-2 text-right">${c.conversion_rate}%</td><td class="py-2 px-2 text-gray-500">${escapeHtml(relTime(c.last_activity) || '—')}</td></tr>`).join('')}</tbody></table></div>`
+            : '<p class="text-sm text-gray-400 italic">No campaigns in this period.</p>';
+
+        $('#anBody').html(`
+            <div id="anPdfReady"></div>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">${tile('Souls Captured', k.souls)}${tile('Campaigns Run', k.campaigns)}${tile('Follow-up Rate', k.follow_up_rate + '%')}${tile('Conversion Rate', k.conversion_rate + '%')}</div>
+            ${k.overdue ? `<button type="button" onclick="switchTab('followup'); fu.overdue = true; loadLeads();" class="mt-4 w-full text-left flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-[#d03b3b] hover:bg-red-100">${icon('M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z')}${k.overdue} assigned lead(s) overdue for a first follow-up — view them</button>` : ''}
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
+                ${anCard('Follow-up funnel', '<div class="h-64"><canvas id="chFunnel" role="img" aria-label="Follow-up funnel: ' + d.funnel.map(f => f.stage + ' ' + f.count).join(', ') + '"></canvas></div>')}
+                ${anCard('By category', `<div class="grid grid-cols-1 sm:grid-cols-[170px_1fr] gap-4 items-center"><div class="h-44"><canvas id="chCat" role="img" aria-label="Souls by category"></canvas></div>${legend}</div>`)}
+            </div>
+            ${anCard('Top areas', d.area_breakdown.length ? `<div style="height:${Math.max(140, d.area_breakdown.length * 28 + 30)}px"><canvas id="chArea" role="img" aria-label="Top areas by souls captured"></canvas></div>` : '<p class="text-sm text-gray-400 italic">No addresses recorded in this period.</p>', 'mt-5')}
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">${anCard('Volunteer leaderboard', leaders)}${anCard('Campaigns', camps)}</div>`);
+
+        if (!window.Chart) return;
+        const grid = { color: '#eeeeea' };
+        an.charts.funnel = new Chart(document.getElementById('chFunnel'), {
+            type: 'bar',
+            data: { labels: d.funnel.map(f => `${f.stage} (${f.count})`), datasets: [{ data: d.funnel.map(f => f.count), backgroundColor: FUNNEL_COLORS, borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 72 }] },
+            options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 }, grid, border: { display: false } }, x: { grid: { display: false } } } }
+        });
+        an.charts.cat = new Chart(document.getElementById('chCat'), {
+            type: 'doughnut',
+            data: { labels: d.category_breakdown.map(c => label(c.category)), datasets: [{ data: d.category_breakdown.map(c => c.count), backgroundColor: CAT_COLORS, borderColor: '#ffffff', borderWidth: 2, hoverOffset: 4 }] },
+            options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { display: false } } }
+        });
+        if (d.area_breakdown.length) {
+            an.charts.area = new Chart(document.getElementById('chArea'), {
+                type: 'bar',
+                data: { labels: d.area_breakdown.map(a => a.area), datasets: [{ data: d.area_breakdown.map(a => a.count), backgroundColor: AREA_COLOR, borderRadius: 4, borderSkipped: 'start', maxBarThickness: 18 }] },
+                options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 }, grid, border: { display: false } }, y: { grid: { display: false } } } }
+            });
+        }
+    }
+
+    function exportCsv() {
+        const [from, to] = presetRange(an.preset);
+        window.location.href = `${API_URL}?action=export_csv&from_date=${encodeURIComponent(from)}&to_date=${encodeURIComponent(to)}`;
+    }
+
+    function generatePdf() {
+        const [from, to] = presetRange(an.preset);
+        const $btn = $('#anPdfBtn').prop('disabled', true).text('Generating…');
+        $.post(API_URL, { action: 'generate_pdf', from_date: from, to_date: to }, res => {
+            if (res.status !== 'success') { showToast(res.message, 'error'); return; }
+            showToast('Report ready');
+            $('#anPdfReady').html(`<div class="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3"><span class="text-sm font-bold text-emerald-800">Your Reach report is ready.</span><a href="${escapeHtml(res.data.url)}" target="_blank" rel="noopener" class="shrink-0 bg-emerald-600 hover:bg-emerald-800 text-white px-4 py-2 rounded-xl text-sm font-bold">Open PDF</a></div>`);
+        }, 'json').fail(() => showToast('Server error', 'error')).always(() => $btn.prop('disabled', false).text('Generate PDF'));
     }
 
     $(document).on('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
