@@ -16,14 +16,31 @@
 # Full log always mirrored to /home/smartqaq/deploy.log so you can review
 # the last run from cPanel Terminal even if the caller disconnected.
 
+LOGFILE=/home/smartqaq/deploy.log
+
+# Re-exec ourselves through a plain pipe to tee so everything we print is
+# BOTH shown to the caller AND appended to LOGFILE. This host does not
+# expose /dev/fd, so `exec > >(tee ...)` (process substitution) fails
+# with "/dev/fd/63: No such file or directory". A plain pipe works
+# everywhere. PIPESTATUS preserves the script's real exit code.
+if [ -z "${DEPLOY_LOG_WRAPPED:-}" ]; then
+    export DEPLOY_LOG_WRAPPED=1
+    set -o pipefail
+    bash "$0" "$@" 2>&1 | tee -a "$LOGFILE"
+    exit "${PIPESTATUS[0]}"
+fi
+
 set -euo pipefail
+
+# The webhook runs us from LiteSpeed's PHP, which doesn't set HOME, and
+# Composer refuses to start without HOME or COMPOSER_HOME.
+export HOME="${HOME:-/home/smartqaq}"
 
 REPO=/home/smartqaq/repositories/hodlekki
 DEPLOYPATH=/home/smartqaq/public_html/hodlc.lpc.cm
 PHP=/usr/local/bin/ea-php83
 COMPOSER=/home/smartqaq/composer.phar
 LOCKFILE=/home/smartqaq/.deploy.lock
-LOGFILE=/home/smartqaq/deploy.log
 
 # Serialise deploys. If another deploy is in flight, refuse rather than wait.
 exec 9>"$LOCKFILE"
@@ -31,9 +48,6 @@ if ! flock -n 9; then
     echo "[deploy] another deploy is already running; refusing to start a second one" >&2
     exit 75   # EX_TEMPFAIL
 fi
-
-# Mirror stdout+stderr to LOGFILE.
-exec > >(tee -a "$LOGFILE") 2>&1
 
 echo ""
 echo "============================================================"
@@ -49,19 +63,31 @@ git reset --hard origin/main
 echo "[deploy] post-pull HEAD: $(git rev-parse HEAD)"
 git log -1 --pretty='[deploy] commit: %h %s (%an)'
 
-# 2. Sync the repo tree into the live docroot, preserving runtime files.
+# 2. Copy the repo tree into the live docroot, honouring .deployignore.
+#    rsync is not installed on this cPanel host, so we stream through tar.
+#    tar's --exclude-from uses the same simple pattern format .deployignore
+#    already uses. NOTE: this does NOT do rsync's --delete — files removed
+#    from the repo will linger in the docroot. Runtime files (.env,
+#    .htaccess, uploads/, error_log, ...) are still protected because
+#    they're never copied over in the first place.
 if [ ! -f "$REPO/.deployignore" ]; then
     echo "[deploy] $REPO/.deployignore missing — aborting" >&2
     exit 1
 fi
-/bin/rsync -a --delete --exclude-from="$REPO/.deployignore" "$REPO/" "$DEPLOYPATH/"
-echo "[deploy] rsync -> $DEPLOYPATH done"
+mkdir -p "$DEPLOYPATH"
+# --no-overwrite-dir: without it, the archive's "." entry copies the repo
+# root's 700 mode onto the docroot, LiteSpeed (group nobody) can no longer
+# enter it, and the whole site returns 403/404.
+tar cf - --exclude-from="$REPO/.deployignore" -C "$REPO" . \
+  | ( cd "$DEPLOYPATH" && tar xpf - --no-overwrite-dir )
+echo "[deploy] tar -> $DEPLOYPATH done"
 
 # 3. Refresh Composer dependencies. -d allow_url_fopen=On because this host's
 #    CLI php.ini disables it and Composer needs it to reach packagist.
 cd "$DEPLOYPATH"
 "$PHP" -d allow_url_fopen=On "$COMPOSER" install \
-    --no-dev --optimize-autoloader --no-interaction 2>&1 | tail -40
+    --no-dev --optimize-autoloader --no-interaction \
+    --ignore-platform-req=ext-fileinfo 2>&1 | tail -40
 echo "[deploy] composer install done"
 
 # 4. Apply any pending SQL migrations.
