@@ -149,6 +149,10 @@ try {
                 $qr_hash 
             ]);
 
+            // Reach: if this first timer was met through Reach, mark that lead "Visited Church".
+            require_once __DIR__ . '/../includes/reach_helpers.php';
+            reach_mark_visited_church($pdo, $phone, (int) $pdo->lastInsertId());
+
             // NOTIFICATION TRIGGER
             $embStmt = $pdo->query("SELECT ud.user_id FROM user_departments ud JOIN departments d ON ud.department_id = d.id WHERE d.name LIKE '%Embrace%' AND ud.role_in_dept IN ('Director', 'HOD') AND ud.is_active = 1");
             $embrace_leaders = $embStmt->fetchAll(PDO::FETCH_COLUMN);

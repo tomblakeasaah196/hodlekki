@@ -121,7 +121,7 @@ function reach_qr_data_url(string $target): string {
 
 const REACH_CATEGORIES = ['New_Convert', 'Unsaved', 'Saved', 'Broken', 'Dechurched', 'Other'];
 const REACH_CHANNELS   = ['Call', 'WhatsApp', 'SMS', 'In_Person_Visit', 'Church_Service'];
-const REACH_OUTCOMES   = ['Reached', 'No_Answer', 'Wrong_Number', 'Rescheduled', 'Requested_No_Contact', 'Declined'];
+const REACH_OUTCOMES   = ['Reached', 'Promised_Church', 'No_Answer', 'Wrong_Number', 'Rescheduled', 'Requested_No_Contact', 'Declined'];
 
 function reach_user_name(PDO $pdo, ?int $id): string {
     if (!$id) {
@@ -152,11 +152,12 @@ function reach_recompute_status(PDO $pdo, int $lead_id): string {
         SELECT COUNT(f.id) AS total,
                COALESCE(SUM(f.outcome = 'Reached'), 0) AS reached,
                COALESCE(SUM(f.outcome = 'Requested_No_Contact'), 0) AS no_contact,
-               l.pushed_to_embrace_at
+               COALESCE(SUM(f.outcome = 'Promised_Church'), 0) AS promised,
+               l.pushed_to_embrace_at, l.will_attend_church
           FROM reach_leads l
           LEFT JOIN reach_follow_ups f ON f.lead_id = l.id
          WHERE l.id = ?
-         GROUP BY l.id, l.pushed_to_embrace_at
+         GROUP BY l.id, l.pushed_to_embrace_at, l.will_attend_church
     ");
     $stmt->execute([$lead_id]);
     $s = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -165,6 +166,8 @@ function reach_recompute_status(PDO $pdo, int $lead_id): string {
         $status = 'Converted';
     } elseif ((int) $s['no_contact'] > 0) {
         $status = 'Declined';
+    } elseif ((int) $s['promised'] > 0 || (int) $s['will_attend_church'] === 1) {
+        $status = 'Will_Attend';
     } elseif ((int) $s['reached'] > 0) {
         $status = 'Spoken_To';
     } elseif ((int) $s['total'] >= 2) {
@@ -490,13 +493,14 @@ try {
                 $params[] = '%' . $search . '%';
             }
             // Members see their own overdue leads; managers see everyone's.
-            $overdue_scope = reach_overdue_sql() . ($is_manager ? '' : ' AND l.assigned_to = ' . $user_id);
+            $overdue_scope = reach_overdue_sql(reach_overdue_days($pdo)) . ($is_manager ? '' : ' AND l.assigned_to = ' . $user_id);
             if (!empty($_POST['overdue_only'])) {
                 $where[] = $overdue_scope;
             }
 
             $sub_map = [
                 'not_spoken' => "l.status = 'Not_Spoken_To'",
+                'will_come'  => "l.status = 'Will_Attend'",
                 'spoken'     => "l.status = 'Spoken_To'",
                 'cold'       => "l.status = 'Cold'",
                 'converted'  => 'l.pushed_to_embrace_at IS NOT NULL',
@@ -506,6 +510,7 @@ try {
             $countStmt = $pdo->prepare("
                 SELECT COUNT(*) AS `all`,
                        COALESCE(SUM({$sub_map['not_spoken']}), 0) AS not_spoken,
+                       COALESCE(SUM({$sub_map['will_come']}), 0)  AS will_come,
                        COALESCE(SUM({$sub_map['spoken']}), 0)     AS spoken,
                        COALESCE(SUM({$sub_map['cold']}), 0)       AS cold,
                        COALESCE(SUM({$sub_map['converted']}), 0)  AS converted
@@ -527,7 +532,7 @@ try {
             $offset   = ($page - 1) * $per_page;
 
             $listStmt = $pdo->prepare("
-                SELECT l.id, l.first_name, l.last_name, l.phone, l.category, l.willing_for_visit,
+                SELECT l.id, l.first_name, l.last_name, l.phone, l.category, l.willing_for_visit, l.will_attend_church,
                        l.address, l.status, l.assigned_to, l.assigned_at, l.pushed_to_embrace_at,
                        l.created_at, l.last_follow_up_at,
                        c.title AS campaign_title,
@@ -819,7 +824,7 @@ try {
 
             echo json_encode([
                 'status'  => 'success',
-                'message' => $existing_id ? 'Already in the family database — linked, not duplicated.' : 'Pushed to Embrace as a 1st Timer.',
+                'message' => $existing_id ? 'Already in the family database — linked, not duplicated.' : 'Marked as visited church and sent to Embrace.',
                 'data'    => ['user_id' => $new_user_id, 'linked_existing' => (bool) $existing_id]
             ]);
             break;
@@ -902,6 +907,8 @@ try {
                 'types'         => reach_campaign_types($pdo),
                 'default_image' => reach_default_campaign_image($pdo),
                 'is_custom'     => reach_setting($pdo, 'default_campaign_image') !== null,
+                'overdue_days'  => reach_overdue_days($pdo),
+                'guide'         => reach_evangelism_guide($pdo),
             ]]);
             break;
 
@@ -953,6 +960,30 @@ try {
                 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
             ")->execute([$path]);
             echo json_encode(['status' => 'success', 'message' => 'Default image updated.', 'data' => ['default_image' => $path]]);
+            break;
+
+        case 'save_reach_settings':
+            if (!$is_manager) {
+                reach_deny();
+            }
+            $days  = (int) ($_POST['overdue_days'] ?? 0);
+            $guide = trim((string) ($_POST['guide'] ?? ''));
+            if ($days < 1 || $days > 60) {
+                echo json_encode(['status' => 'error', 'message' => 'Overdue days must be between 1 and 60.']);
+                exit;
+            }
+            $set = $pdo->prepare("
+                INSERT INTO reach_settings (setting_key, setting_value) VALUES (?, ?)
+                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+            ");
+            $set->execute(['overdue_days', (string) $days]);
+            // An empty guide or one identical to the built-in text means "use the default".
+            if ($guide === '' || $guide === trim((string) @file_get_contents(REACH_DEFAULT_GUIDE_FILE))) {
+                $pdo->prepare("DELETE FROM reach_settings WHERE setting_key = 'evangelism_guide'")->execute();
+            } else {
+                $set->execute(['evangelism_guide', mb_substr($guide, 0, 20000)]);
+            }
+            echo json_encode(['status' => 'success', 'message' => 'Settings saved.']);
             break;
 
         case 'reset_default_image':
