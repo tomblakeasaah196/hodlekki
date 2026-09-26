@@ -3,7 +3,7 @@
 require_once '../../includes/header.php';
 if (!isset($_SESSION['user_id'])) { echo "<script>window.location.href='/auth/login.php';</script>"; exit; }
 ?>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
+<script src="/assets/js/celebrants_export.js"></script>
 <link  href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -518,6 +518,34 @@ function htmlEscape(s) {
 }
 function fmtMoney(v) { return '₦' + parseFloat(v||0).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
+// ── Celebrant card helpers ────────────────────────────────
+// Three kinds of celebrant share one grid: adult birthdays, wedding
+// anniversaries, and Junior Church children (event_type 'JC_Birthday').
+function celebLabel(t) {
+    if (t === 'JC_Birthday') return 'Junior Church';
+    return String(t || '').replace(/_/g, ' ');
+}
+function celebBadgeClass(t) {
+    if (t === 'Birthday') return 'bg-amber-500';
+    if (t === 'JC_Birthday') return 'bg-emerald-600';
+    return 'bg-sky-600';
+}
+// Local initials placeholder. Children are often registered without a photo,
+// and a remote placeholder host both breaks the grid and taints the export
+// canvas, so the fallback is an inline SVG data URI instead.
+function initialsAvatar(first, last) {
+    const initials = htmlEscape(`${(first||'?').charAt(0)}${(last||'').charAt(0)}`.toUpperCase());
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="460" height="820" viewBox="0 0 460 820">`
+        + `<rect width="460" height="820" fill="#111827"/>`
+        + `<text x="230" y="410" text-anchor="middle" dominant-baseline="central" fill="#ffffff" `
+        + `fill-opacity="0.35" font-family="Arial, Helvetica, sans-serif" font-size="200" font-weight="bold">${initials}</text>`
+        + `</svg>`;
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+function celebPortrait(v) {
+    return v.display_picture || initialsAvatar(v.first_name, v.last_name);
+}
+
 // ── Screen lock ───────────────────────────────────────────
 function lockScreenAction() {
     const b = document.getElementById('globalActionBlocker');
@@ -663,7 +691,7 @@ function generateActionBlock(item, type) {
         if (item.assignment_status === 'Flyer_Posted') return `<button onclick="updateAssignmentStatus(${item.assignment_id},'Completed',this)" class="text-[10px] border px-2 py-1 rounded-lg font-bold ${sc}">Mark Done</button>`;
         return `<button onclick="updateAssignmentStatus(${item.assignment_id},'Flyer_Posted',this)" class="text-[10px] border px-2 py-1 rounded-lg font-bold ${sc}">Flyer Posted</button>`;
     }
-    return `<button onclick="triggerAssignModal(${item.target_user_id},'${jsEscape(type)}','${jsEscape(item.event_date)}','${jsEscape(item.first_name)} ${jsEscape(item.last_name)}')" class="text-[10px] bg-gray-50 border border-gray-200 hover:border-hodBlue hover:text-hodBlue px-3 py-1.5 rounded-lg font-bold transition-all">Assign</button>`;
+    return `<button onclick="triggerAssignModal('${jsEscape(item.target_user_id)}','${jsEscape(type)}','${jsEscape(item.event_date)}','${jsEscape(item.first_name)} ${jsEscape(item.last_name)}')" class="text-[10px] bg-gray-50 border border-gray-200 hover:border-hodBlue hover:text-hodBlue px-3 py-1.5 rounded-lg font-bold transition-all">Assign</button>`;
 }
 
 function triggerAssignModal(tid, type, date, name) {
@@ -1146,17 +1174,17 @@ function renderEnvisionRecap(data) {
     if(!data.length){ grid.html('<div class="col-span-full text-center py-10 text-gray-400">No celebrations found.</div>'); return; }
     let html='';
     data.forEach(v=>{
-        const img = v.display_picture||'https://via.placeholder.com/400x700/111827/ffffff?text=No+Photo';
-        const badgeColor = v.event_type==='Birthday'?'bg-hodRed':'bg-hodBlue';
+        const img = celebPortrait(v);
+        const badgeColor = celebBadgeClass(v.event_type);
         html+=`<div class="relative group rounded-3xl overflow-hidden shadow-lg bg-gray-900 border border-gray-100/10 aspect-[9/16] transition-transform duration-300 hover:-translate-y-2">
             <img src="${htmlEscape(img)}" alt="${htmlEscape(v.first_name)}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105">
-            <button onclick="prepImageEditor(${v.id})" class="absolute top-4 right-4 z-20 bg-black/50 hover:bg-hodRed text-white p-2.5 rounded-full shadow-lg border border-white/20 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
+            <button onclick="prepImageEditor('${jsEscape(v.ref)}')" class="absolute top-4 right-4 z-20 bg-black/50 hover:bg-hodRed text-white p-2.5 rounded-full shadow-lg border border-white/20 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 13.5v3.75zM20.71 7.04a1.003 1.003 0 000-1.42l-2.34-2.34a1.003 1.003 0 00-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"></path></svg>
             </button>
             <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none"></div>
             <div class="absolute inset-x-0 bottom-0 p-5 z-10 flex flex-col justify-end">
                 <div class="flex items-center gap-2 mb-2">
-                    <span class="${badgeColor} text-white text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded shadow-md">${htmlEscape(v.event_type.replace('_',' '))}</span>
+                    <span class="${badgeColor} text-white text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded shadow-md">${htmlEscape(celebLabel(v.event_type))}</span>
                     <span class="bg-white/20 border border-white/30 text-white text-[9px] font-bold px-2 py-1 rounded shadow-md">${htmlEscape(v.event_date)}</span>
                 </div>
                 <h4 class="text-white font-black text-lg leading-tight drop-shadow-md">${htmlEscape(v.first_name)}<br>${htmlEscape(v.last_name)}</h4>
@@ -1170,9 +1198,9 @@ function renderEnvisionRecap(data) {
 // IMAGE EDITOR (Celebration portrait)
 // ═══════════════════════════════════════════════════════════
 let cropperInstance = null;
-function prepImageEditor(userId) {
-    $('#editorTargetUserId').val(userId);
-    const member = (window.recapData||[]).find(m=>m.id==userId);
+function prepImageEditor(ref) {
+    $('#editorTargetUserId').val(ref);
+    const member = (window.recapData||[]).find(m=>m.ref===ref);
     const img = document.getElementById('cropperImage');
     img.src = (member && member.display_picture) || '';
     if(cropperInstance){ cropperInstance.destroy(); cropperInstance=null; }
@@ -1197,10 +1225,10 @@ function applyCanvasFilter(f) {
 function saveCelebrationImage() {
     if (!cropperInstance) return;
     const canvas = cropperInstance.getCroppedCanvas({width:800,height:1422});
-    const userId = $('#editorTargetUserId').val();
+    const ref = $('#editorTargetUserId').val();
     const base64 = canvas.toDataURL('image/jpeg',0.88);
     lockScreenAction();
-    $.post(API_URL,{action:'update_celebration_picture',user_id:userId,image_base64:base64},function(res){
+    $.post(API_URL,{action:'update_celebration_picture',ref:ref,image_base64:base64},function(res){
         unlockScreenAction(); showToast(res.message,res.status);
         if(res.status==='success'){ closeModal('celebrationEditorModal'); loadEnvisionRecap(); }
     },'json');
@@ -1208,48 +1236,29 @@ function saveCelebrationImage() {
 async function exportRecapJPEG() {
     if(!window.recapData||!window.recapData.length){showToast('No data to export.','warning');return;}
     const btn=document.getElementById('btnExportJPEG');
-    const orig=btn.innerHTML; btn.innerHTML='Rendering...'; btn.disabled=true; lockScreenAction();
+    const orig=btn.innerHTML; btn.disabled=true; lockScreenAction();
+
+    // Rendered by /assets/js/celebrants_export.js on a plain 2D canvas rather
+    // than by rasterising the DOM, so a phone and a laptop produce the exact
+    // same 3840x2160 slide.
+    const dateStr = new Date().toLocaleString('default',{month:'long',year:'numeric'});
     try {
-        const bgB64 = await getBase64FromUrl('/assets/images/celebration-charis.webp');
-        const logoB64 = await getBase64FromUrl('/assets/images/hod_logo.svg');
-        const wrapper = document.getElementById('hiddenExportWrapper');
-        const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Crect fill='%23e5e7eb' width='150' height='150'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dominant-baseline='middle' fill='%239ca3af' font-family='sans-serif' font-size='14'%3ENo Photo%3C/text%3E%3C/svg%3E";
-        const chunkSize=4, dateStr=new Date().toLocaleString('default',{month:'long',year:'numeric'});
-        const total=Math.ceil(window.recapData.length/chunkSize);
-        for(let i=0;i<total;i++){
-            const chunk=window.recapData.slice(i*chunkSize,(i+1)*chunkSize);
-            let cards='';
-            for(const item of chunk){
-                const imgB64 = item.display_picture ? await getBase64FromUrl(item.display_picture) : fallback;
-                const nameTop=`${item.first_name}`.toUpperCase(), nameBot=`${item.last_name}`.toUpperCase();
-                const badgeBg=item.event_type==='Birthday'?'#D11920':'#0A0E17';
-                cards+=`<div style="width:460px;height:820px;border-radius:18px;overflow:hidden;position:relative;background:#111;">
-                    <img src="${imgB64}" style="width:100%;height:100%;object-fit:cover;">
-                    <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.85) 0%,rgba(0,0,0,0) 50%);"></div>
-                    <div style="position:absolute;bottom:0;left:0;right:0;padding:28px;">
-                        <div style="display:inline-block;background:${badgeBg};color:#fff;font-size:10px;font-weight:900;text-transform:uppercase;padding:4px 12px;border-radius:20px;margin-bottom:10px;">${item.event_type.replace('_',' ')}</div>
-                        <p style="color:#fff;font-size:32px;font-weight:900;line-height:1.15;margin:0;">${nameTop}<br>${nameBot}</p>
-                    </div>
-                </div>`;
-            }
-            wrapper.innerHTML=`<div style="width:1920px;height:1080px;background:#0A0E17;display:flex;align-items:center;padding:60px;gap:30px;overflow:hidden;position:relative;">
-                <img src="${bgB64}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.08;">
-                <div style="position:relative;z-index:1;display:flex;align-items:center;flex:1;gap:30px;">${cards}</div>
-                <div style="position:relative;z-index:1;width:200px;text-align:center;color:white;">
-                    <img src="${logoB64}" style="width:100px;margin:0 auto 12px;display:block;">
-                    <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:rgba(255,255,255,.6);">Celebrations</p>
-                    <p style="font-size:13px;font-weight:900;color:white;margin-top:4px;">${dateStr}</p>
-                </div>
-            </div>`;
-            const canvas = await htmlToImage.toCanvas(wrapper.firstChild,{pixelRatio:1,quality:0.92});
-            const link=document.createElement('a'); link.download=`HOD_Celebrations_${dateStr}_Slide${i+1}.jpg`; link.href=canvas.toDataURL('image/jpeg',0.92); link.click();
-        }
-        unlockScreenAction(); btn.disabled=false; btn.innerHTML=orig; showToast('Export complete!','success');
-    } catch(e){ unlockScreenAction(); btn.disabled=false; btn.innerHTML=orig; showToast('Export failed: '+e.message,'error'); }
-}
-async function getBase64FromUrl(url) {
-    try { const res=await fetch(url); const blob=await res.blob(); return new Promise(r=>{ const fr=new FileReader(); fr.onloadend=()=>r(fr.result); fr.readAsDataURL(blob); }); }
-    catch(e){ return url; }
+        btn.innerHTML = 'Rendering...';
+        const slides = await CelebrantsExport.renderSlides(window.recapData, {
+            periodLabel: dateStr,
+            filePrefix: `HOD_Celebrations_${dateStr.replace(/\s+/g,'_')}`,
+            onProgress: (done,total) => { btn.innerHTML = `Rendering ${done}/${total}...`; }
+        });
+        btn.innerHTML = 'Saving...';
+        const how = await CelebrantsExport.deliverSlides(slides, `HOD Celebrations — ${dateStr}`);
+        unlockScreenAction(); btn.disabled=false; btn.innerHTML=orig;
+        showToast(how==='shared'
+            ? 'Slides ready to save or share.'
+            : `Export complete — ${slides.length} slide${slides.length>1?'s':''} downloaded.`,'success');
+    } catch(e){
+        unlockScreenAction(); btn.disabled=false; btn.innerHTML=orig;
+        showToast('Export failed: '+e.message,'error');
+    }
 }
 
 // ═══════════════════════════════════════════════════════════

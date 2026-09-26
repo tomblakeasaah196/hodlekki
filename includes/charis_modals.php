@@ -3,8 +3,6 @@
 // All modals for the Charis module (welfare, events, finance, library)
 ?>
 
-<div id="hiddenExportWrapper" class="fixed top-[-9999px] left-[-9999px] z-[-1] pointer-events-none opacity-0"></div>
-
 <div id="envisionRecapModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 sm:p-6 opacity-0 transition-opacity duration-300 overscroll-contain">
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-y-auto custom-scrollbar max-h-[80vh] transform scale-95 transition-transform duration-300 flex flex-col">
         <div class="px-6 py-5 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50 shrink-0 sticky top-0 z-50">
