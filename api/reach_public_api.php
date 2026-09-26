@@ -9,11 +9,42 @@ header('Content-Type: application/json');
 
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
-// Anchor the phone lookup on the right-hand tail so +234 / 0-prefixed
-// variants both match. Matches embrace_public_api.php's dedupe pattern.
+// Last 9 digits, so +234 / 0-prefixed spellings of one number match. A
+// short fragment ("1") must not count: the lookup is substring-based and
+// would otherwise match an arbitrary member.
 function reach_phone_match_key(string $phone): string {
-    $clean = preg_replace('/[^0-9]/', '', $phone) ?? '';
-    return ltrim($clean, '0');
+    $digits = preg_replace('/[^0-9]/', '', $phone) ?? '';
+    return strlen($digits) >= 9 ? substr($digits, -9) : '';
+}
+
+function reach_find_member(PDO $pdo, string $phone): ?array {
+    $key = reach_phone_match_key($phone);
+    if ($key === '') {
+        return null;
+    }
+    $stmt = $pdo->prepare("SELECT id, first_name, last_name FROM users WHERE phone LIKE ? LIMIT 1");
+    $stmt->execute(['%' . $key . '%']);
+    return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+
+// This endpoint is unauthenticated, so it never returns a full name for
+// a phone number — "Chika O." is enough for "is this you?".
+function reach_short_name(?string $first, ?string $last): string {
+    $first = trim((string) $first);
+    $last  = trim((string) $last);
+    return trim($first . ($last !== '' ? ' ' . mb_substr($last, 0, 1) . '.' : ''));
+}
+
+function reach_require_volunteer(PDO $pdo): array {
+    $volunteer = reach_find_member($pdo, trim($_POST['volunteer_phone'] ?? ''));
+    if (!$volunteer) {
+        echo json_encode([
+            'status'  => 'error',
+            'message' => 'Please sign in with a phone number from our family database.'
+        ]);
+        exit;
+    }
+    return $volunteer;
 }
 
 function reach_public_tier_fields(string $tier): array {
@@ -33,27 +64,11 @@ try {
         // database? If not, we block the form; volunteers must be members.
         // ------------------------------------------------------------------
         case 'check_volunteer':
-            $phone = trim($_POST['phone'] ?? $_GET['phone'] ?? '');
-            if ($phone === '') {
-                echo json_encode(['exists' => false, 'message' => 'Phone is required.']);
-                exit;
-            }
-            $key = reach_phone_match_key($phone);
-            if ($key === '') {
-                echo json_encode(['exists' => false]);
-                exit;
-            }
-
-            $stmt = $pdo->prepare("SELECT id, first_name, last_name FROM users WHERE phone LIKE ? LIMIT 1");
-            $stmt->execute(['%' . $key . '%']);
-            $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
+            $row = reach_find_member($pdo, trim($_POST['phone'] ?? ''));
             if ($row) {
                 echo json_encode([
-                    'exists'     => true,
-                    'user_id'    => (int) $row['id'],
-                    'first_name' => $row['first_name'],
-                    'last_name'  => $row['last_name']
+                    'exists' => true,
+                    'name'   => reach_short_name($row['first_name'], $row['last_name'])
                 ]);
             } else {
                 echo json_encode(['exists' => false]);
@@ -65,8 +80,9 @@ try {
         // this campaign (or elsewhere) by someone else?
         // ------------------------------------------------------------------
         case 'check_existing_lead':
-            $phone       = trim($_POST['phone'] ?? $_GET['phone'] ?? '');
-            $campaign_id = (int) ($_POST['campaign_id'] ?? $_GET['campaign_id'] ?? 0);
+            reach_require_volunteer($pdo);
+            $phone       = trim($_POST['phone'] ?? '');
+            $campaign_id = (int) ($_POST['campaign_id'] ?? 0);
 
             $out = [
                 'duplicate'            => false,
@@ -86,12 +102,10 @@ try {
             // Existing member match — informs the capturer this person is
             // already family (they should still get logged so we track the
             // reach touchpoint).
-            $memberStmt = $pdo->prepare("SELECT id, first_name, last_name FROM users WHERE phone LIKE ? LIMIT 1");
-            $memberStmt->execute(['%' . $key . '%']);
-            $member = $memberStmt->fetch(PDO::FETCH_ASSOC);
+            $member = reach_find_member($pdo, $phone);
             if ($member) {
                 $out['is_existing_member'] = true;
-                $out['member_name']        = trim($member['first_name'] . ' ' . $member['last_name']);
+                $out['member_name']        = reach_short_name($member['first_name'], $member['last_name']);
             }
 
             // Prior lead capture — surfaces "Sister Chika captured them
@@ -126,7 +140,7 @@ try {
                 $cap = $capStmt->fetch(PDO::FETCH_ASSOC);
                 if ($cap) {
                     if (!empty($cap['u_first'])) {
-                        $out['prior_capturer_name'] = trim($cap['u_first'] . ' ' . ($cap['u_last'] ?? ''));
+                        $out['prior_capturer_name'] = reach_short_name($cap['u_first'], $cap['u_last']);
                     } elseif (!empty($cap['captured_by_guest_name'])) {
                         $out['prior_capturer_name'] = $cap['captured_by_guest_name'];
                     }
@@ -183,35 +197,9 @@ try {
                 }
             }
 
-            $volunteer_phone = trim($_POST['volunteer_phone'] ?? '');
-            $volunteer_key   = reach_phone_match_key($volunteer_phone);
-            $volunteer_user_id = null;
-            $volunteer_guest_name = null;
+            $volunteer_user_id     = (int) reach_require_volunteer($pdo)['id'];
+            $volunteer_guest_name  = null;
             $volunteer_guest_phone = null;
-
-            if ($volunteer_key !== '') {
-                $vStmt = $pdo->prepare("SELECT id, first_name, last_name FROM users WHERE phone LIKE ? LIMIT 1");
-                $vStmt->execute(['%' . $volunteer_key . '%']);
-                $vRow = $vStmt->fetch(PDO::FETCH_ASSOC);
-                if ($vRow) {
-                    $volunteer_user_id = (int) $vRow['id'];
-                } else {
-                    // Volunteers must be in the family database. This
-                    // shouldn't happen — the Step 1 UI blocks progress
-                    // for unknown phones — but the server enforces it too.
-                    echo json_encode([
-                        'status'  => 'error',
-                        'message' => 'Your number is not in our family database yet. Please contact your leader.'
-                    ]);
-                    exit;
-                }
-            } else {
-                echo json_encode([
-                    'status'  => 'error',
-                    'message' => 'Please sign in with your phone number first.'
-                ]);
-                exit;
-            }
 
             $pdo->beginTransaction();
 
@@ -293,7 +281,9 @@ try {
         // extract_from_voice — POST transcript to Gemini and return JSON
         // ------------------------------------------------------------------
         case 'extract_from_voice':
-            $transcript = trim($_POST['transcript'] ?? '');
+            // Each call spends Gemini credit; only signed-in volunteers, short input.
+            reach_require_volunteer($pdo);
+            $transcript = mb_substr(trim($_POST['transcript'] ?? ''), 0, 600);
             if ($transcript === '') {
                 echo json_encode(['status' => 'error', 'message' => 'Empty transcript.']);
                 exit;
