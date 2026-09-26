@@ -68,7 +68,7 @@
     const EYEBROW    = 'HOUSEHOLD OF DAVID  \u2022  LEKKI CENTRE';
     const TITLE      = 'MONTHLY CELEBRATIONS';
     const HANDLE     = '#HODLC';
-    const SIGN_OFF   = 'WE LOVE YOU TOO';
+    const SIGN_OFF   = 'WE LOVE YOU';
 
     const CONFETTI_PALETTE = ['#F5A524', '#D11920', '#7DD3FC', '#86EFAC', '#FFFFFF', '#C084FC'];
     const CONFETTI_SEED    = 20260926;
