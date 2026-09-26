@@ -65,9 +65,13 @@
 
     const FONT = "'Montserrat', 'Inter', Arial, Helvetica, sans-serif";
 
+    const EYEBROW    = 'HOUSEHOLD OF DAVID  \u2022  LEKKI CENTRE';
     const TITLE      = 'MONTHLY CELEBRATIONS';
     const HANDLE     = '#HODLC';
     const SIGN_OFF   = 'WE LOVE YOU TOO';
+
+    const CONFETTI_PALETTE = ['#F5A524', '#D11920', '#7DD3FC', '#86EFAC', '#FFFFFF', '#C084FC'];
+    const CONFETTI_SEED    = 20260926;
 
     // Event accents, all chosen to read on a dark card.
     const ACCENTS = {
@@ -239,29 +243,146 @@
         return { lines: lines, clipped: clipped };
     }
 
-    // ── Vector ornaments (no emoji: emoji glyphs differ per OS) ──────────────
-    function drawConfetti(ctx, x, y, size) {
-        const bits = [
-            { dx: 0.02, dy: 0.06, w: 0.34, h: 0.13, rot: -0.55, c: '#F5A524' },
-            { dx: 0.50, dy: 0.00, w: 0.30, h: 0.12, rot:  0.62, c: '#7DD3FC' },
-            { dx: 0.04, dy: 0.56, w: 0.30, h: 0.12, rot:  0.85, c: '#D11920' },
-            { dx: 0.52, dy: 0.60, w: 0.32, h: 0.13, rot: -0.35, c: '#86EFAC' }
-        ];
-        bits.forEach(b => {
+    // ── Vector ornaments ────────────────────────────────────────────────────
+    // Nothing here is an emoji. Emoji are font glyphs and every OS ships its
+    // own artwork for them, so a single \ud83c\udf89 in the output would make the
+    // slide device-dependent again -- and it could not be brand-coloured.
+    // These are drawn from paths, so they are identical everywhere and use the
+    // church palette.
+
+    /** Deterministic PRNG. Same seed, same confetti, on every device. */
+    function mulberry32(a) {
+        return function () {
+            a |= 0; a = (a + 0x6D2B79F5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+
+    /**
+     * A drift of confetti across the slide: dense in the header band, thinning
+     * downward, so the frame feels like a celebration rather than a dark box.
+     * Cards are painted afterwards and hide whatever falls behind them, which
+     * is what gives the field its uneven, un-generated look.
+     */
+    function drawConfettiField(ctx) {
+        const rng = mulberry32(CONFETTI_SEED);
+        for (let i = 0; i < 110; i++) {
+            const x = rng() * SLIDE_W;
+            const y = Math.pow(rng(), 1.7) * SLIDE_H;      // biased toward the top
+            const colour = CONFETTI_PALETTE[Math.floor(rng() * CONFETTI_PALETTE.length)];
+            const scale = 7 + rng() * 15;
+            const rot = rng() * Math.PI * 2;
+            const kind = rng();
+
             ctx.save();
-            ctx.translate(x + b.dx * size, y + b.dy * size);
-            ctx.rotate(b.rot);
-            ctx.fillStyle = b.c;
-            roundedRectPath(ctx, 0, 0, b.w * size, b.h * size, b.h * size / 2);
-            ctx.fill();
+            ctx.globalAlpha = 0.16 + rng() * 0.46;
+            ctx.fillStyle = colour;
+            ctx.strokeStyle = colour;
+            ctx.translate(x, y);
+            ctx.rotate(rot);
+
+            if (kind < 0.46) {
+                // Rectangular flake.
+                roundedRectPath(ctx, -scale / 2, -scale / 4.5, scale, scale / 2.2, scale / 6);
+                ctx.fill();
+            } else if (kind < 0.72) {
+                // Round flake.
+                ctx.beginPath();
+                ctx.arc(0, 0, scale * 0.28, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                // Curled streamer.
+                ctx.lineWidth = Math.max(2, scale * 0.16);
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(-scale, 0);
+                ctx.bezierCurveTo(-scale * 0.35, -scale * 0.85, scale * 0.35, scale * 0.85, scale, 0);
+                ctx.stroke();
+            }
             ctx.restore();
-        });
-        [[0.44, 0.36, '#FFFFFF'], [0.88, 0.44, '#D11920'], [0.30, 0.92, '#F5A524']].forEach(d => {
+        }
+    }
+
+    /**
+     * Party popper, drawn rather than borrowed from the emoji font.
+     * Composed inside a normalised 100x100 box anchored at (left, top), so the
+     * whole burst is bounded and can be placed against type predictably.
+     */
+    function drawPartyPopper(ctx, left, top, size) {
+        const u = size / 100;
+        ctx.save();
+        ctx.translate(left, top);
+        ctx.scale(u, u);
+
+        const TIP = [14, 96];
+        const A   = [30, 40];   // mouth, upper edge
+        const B   = [70, 66];   // mouth, lower edge
+
+        // Cone body.
+        const body = ctx.createLinearGradient(TIP[0], TIP[1], B[0], A[1]);
+        body.addColorStop(0, '#9C5F12');
+        body.addColorStop(0.45, '#F5A524');
+        body.addColorStop(1, '#FFD98C');
+        ctx.beginPath();
+        ctx.moveTo(TIP[0], TIP[1]);
+        ctx.lineTo(A[0], A[1]);
+        ctx.quadraticCurveTo(58, 40, B[0], B[1]);
+        ctx.closePath();
+        ctx.fillStyle = body;
+        ctx.fill();
+
+        // Banding, clipped to the cone, for a little dimension.
+        ctx.save();
+        ctx.clip();
+        ctx.fillStyle = 'rgba(112,58,8,0.34)';
+        [[-6, 20], [6, 40]].forEach(off => {
             ctx.beginPath();
-            ctx.fillStyle = d[2];
-            ctx.arc(x + d[0] * size, y + d[1] * size, size * 0.055, 0, Math.PI * 2);
+            ctx.moveTo(TIP[0] - 20 + off[0], TIP[1] - off[1]);
+            ctx.lineTo(TIP[0] + 60 + off[0], TIP[1] - off[1] - 30);
+            ctx.lineTo(TIP[0] + 60 + off[0], TIP[1] - off[1] - 20);
+            ctx.lineTo(TIP[0] - 20 + off[0], TIP[1] - off[1] + 10);
+            ctx.closePath();
             ctx.fill();
         });
+        ctx.restore();
+
+        // Mouth rim.
+        ctx.beginPath();
+        ctx.moveTo(A[0], A[1]);
+        ctx.quadraticCurveTo(58, 40, B[0], B[1]);
+        ctx.quadraticCurveTo(42, 66, A[0], A[1]);
+        ctx.closePath();
+        ctx.fillStyle = '#FFEFC9';
+        ctx.fill();
+
+        // Streamers out of the mouth, all ending inside the box.
+        ctx.lineCap = 'round';
+        const streamers = [
+            { c: '#D11920', w: 7,   p: [[52, 46], [64, 12], [86, 26], [97, 6]] },
+            { c: '#7DD3FC', w: 6.5, p: [[56, 50], [82, 48], [84, 22], [99, 34]] },
+            { c: '#86EFAC', w: 6.5, p: [[46, 44], [44, 14], [62, 8], [60, 1]] },
+            { c: '#FFFFFF', w: 5.5, p: [[58, 56], [84, 62], [90, 48], [99, 56]] }
+        ];
+        streamers.forEach(st => {
+            ctx.strokeStyle = st.c;
+            ctx.lineWidth = st.w;
+            ctx.beginPath();
+            ctx.moveTo(st.p[0][0], st.p[0][1]);
+            ctx.bezierCurveTo(st.p[1][0], st.p[1][1], st.p[2][0], st.p[2][1], st.p[3][0], st.p[3][1]);
+            ctx.stroke();
+        });
+
+        [[74, 4, 4, '#F5A524'], [93, 44, 3.6, '#C084FC'], [80, 36, 3.2, '#FFFFFF'], [66, 24, 3, '#7DD3FC']]
+            .forEach(d => {
+                ctx.beginPath();
+                ctx.fillStyle = d[3];
+                ctx.arc(d[0], d[1], d[2], 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+        ctx.restore();
     }
 
     function drawHeart(ctx, cx, cy, size, colour) {
@@ -284,33 +405,52 @@
         ctx.fillStyle = INK;
         ctx.fillRect(0, 0, SLIDE_W, SLIDE_H);
 
+        // The photographic confetti stays, but only as grain -- the drawn
+        // field below it is what actually carries the celebration.
         if (texture) {
             ctx.save();
-            ctx.globalAlpha = 0.13;
+            ctx.globalAlpha = 0.07;
             drawCover(ctx, texture, 0, 0, SLIDE_W, SLIDE_H);
             ctx.restore();
         }
 
         // Warm brand glow top-right, a deeper one bottom-left.
         const warm = ctx.createRadialGradient(1580, 40, 40, 1580, 40, 1050);
-        warm.addColorStop(0, 'rgba(209,25,32,0.52)');
-        warm.addColorStop(0.55, 'rgba(120,16,24,0.20)');
+        warm.addColorStop(0, 'rgba(209,25,32,0.50)');
+        warm.addColorStop(0.55, 'rgba(120,16,24,0.19)');
         warm.addColorStop(1, 'rgba(11,13,18,0)');
         ctx.fillStyle = warm;
         ctx.fillRect(0, 0, SLIDE_W, SLIDE_H);
 
         const deep = ctx.createRadialGradient(140, 1120, 40, 140, 1120, 900);
-        deep.addColorStop(0, 'rgba(146,20,28,0.38)');
+        deep.addColorStop(0, 'rgba(146,20,28,0.36)');
         deep.addColorStop(1, 'rgba(11,13,18,0)');
         ctx.fillStyle = deep;
         ctx.fillRect(0, 0, SLIDE_W, SLIDE_H);
 
-        // Vignette to keep the cards forward.
-        const vig = ctx.createRadialGradient(SLIDE_W / 2, SLIDE_H / 2, SLIDE_H * 0.35,
+        drawConfettiField(ctx);
+
+        // Vignette, so the cards sit forward of the confetti.
+        const vig = ctx.createRadialGradient(SLIDE_W / 2, SLIDE_H / 2, SLIDE_H * 0.34,
                                              SLIDE_W / 2, SLIDE_H / 2, SLIDE_H * 0.95);
         vig.addColorStop(0, 'rgba(0,0,0,0)');
-        vig.addColorStop(1, 'rgba(0,0,0,0.45)');
+        vig.addColorStop(1, 'rgba(0,0,0,0.50)');
         ctx.fillStyle = vig;
+        ctx.fillRect(0, 0, SLIDE_W, SLIDE_H);
+
+        // Scrim over the header band: the confetti stays visible but sits
+        // behind the type instead of competing with it.
+        const headScrim = ctx.createLinearGradient(0, 0, 0, 215);
+        headScrim.addColorStop(0, 'rgba(10,12,18,0.62)');
+        headScrim.addColorStop(1, 'rgba(10,12,18,0)');
+        ctx.fillStyle = headScrim;
+        ctx.fillRect(0, 0, SLIDE_W, 215);
+
+        // A soft stage light under the card row lifts it off the backdrop.
+        const stage = ctx.createRadialGradient(SLIDE_W / 2, 600, 60, SLIDE_W / 2, 600, 980);
+        stage.addColorStop(0, 'rgba(255,214,170,0.10)');
+        stage.addColorStop(1, 'rgba(255,214,170,0)');
+        ctx.fillStyle = stage;
         ctx.fillRect(0, 0, SLIDE_W, SLIDE_H);
     }
 
@@ -320,52 +460,61 @@
             const lw = chrome.logo.naturalWidth || chrome.logo.width;
             const lh = chrome.logo.naturalHeight || chrome.logo.height;
             if (lw && lh) {
-                const drawH = 104;
-                ctx.drawImage(chrome.logo, PAD, 52, (lw / lh) * drawH, drawH);
+                const drawH = 100;
+                ctx.drawImage(chrome.logo, PAD, 56, (lw / lh) * drawH, drawH);
             }
         } else {
             ctx.fillStyle = '#FFFFFF';
             ctx.font = `800 32px ${FONT}`;
             ctx.textBaseline = 'middle';
-            ctx.fillText('HOD LEKKI', PAD, 104);
+            ctx.fillText('HOD LEKKI', PAD, 106);
             ctx.textBaseline = 'alphabetic';
         }
 
-        // Centre title, sized so it never collides with either side column.
-        const sideRoom = 420;
-        let titleSize = 58;
         ctx.textBaseline = 'alphabetic';
+
+        // Centre block: a quiet eyebrow over the headline gives the type
+        // somewhere to breathe and names the church without shouting.
+        const sideRoom = 400;
+        const maxTitleW = SLIDE_W - sideRoom * 2;
+        let titleSize = 60;
         for (; titleSize >= 34; titleSize -= 1) {
             ctx.font = `800 ${titleSize}px ${FONT}`;
-            if (trackedWidth(ctx, TITLE, titleSize * 0.02) <= SLIDE_W - sideRoom * 2 - 90) break;
+            if (trackedWidth(ctx, TITLE, titleSize * 0.015) <= maxTitleW - 130) break;
         }
+
+        ctx.font = `700 16px ${FONT}`;
+        ctx.fillStyle = 'rgba(255,255,255,0.62)';
+        fillTracked(ctx, EYEBROW, SLIDE_W / 2, 74, 4.6, 'center');
+
         ctx.font = `800 ${titleSize}px ${FONT}`;
-        const tracking = titleSize * 0.02;
+        const tracking = titleSize * 0.015;
         const titleW = trackedWidth(ctx, TITLE, tracking);
-        const confettiSize = titleSize * 1.25;
-        const blockW = titleW + 26 + confettiSize;
+        const popperSize = titleSize * 1.5;
+        const blockW = titleW + 18 + popperSize;
         const titleX = (SLIDE_W - blockW) / 2;
+        const titleBaseline = 140;
 
         ctx.fillStyle = '#FFFFFF';
-        fillTracked(ctx, TITLE, titleX, 132, tracking, 'left');
-        drawConfetti(ctx, titleX + titleW + 26, 132 - confettiSize * 0.82, confettiSize);
+        fillTracked(ctx, TITLE, titleX, titleBaseline, tracking, 'left');
+        // The popper box is anchored so its cone tip lands on the text baseline.
+        drawPartyPopper(ctx, titleX + titleW + 18, titleBaseline - popperSize * 0.96, popperSize);
 
         // Right column.
         const rightX = SLIDE_W - PAD;
         ctx.textAlign = 'right';
         ctx.fillStyle = '#FFFFFF';
         ctx.font = `800 34px ${FONT}`;
-        ctx.fillText(HANDLE, rightX, 110);
+        ctx.fillText(HANDLE, rightX, 108);
 
         ctx.font = `700 21px ${FONT}`;
         ctx.fillStyle = 'rgba(255,255,255,0.88)';
-        fillTracked(ctx, chrome.periodLabel.toUpperCase(), rightX, 152, 6, 'right');
+        fillTracked(ctx, chrome.periodLabel.toUpperCase(), rightX, 150, 6, 'right');
 
         ctx.font = `800 19px ${FONT}`;
         ctx.fillStyle = '#FFFFFF';
-        const heartGap = 30;
-        fillTracked(ctx, SIGN_OFF, rightX - heartGap, 192, 1.6, 'right');
-        drawHeart(ctx, rightX - 11, 185, 25, '#E0242C');
+        fillTracked(ctx, SIGN_OFF, rightX - 30, 190, 1.6, 'right');
+        drawHeart(ctx, rightX - 11, 183, 25, '#E0242C');
         ctx.textAlign = 'left';
     }
 
@@ -374,7 +523,7 @@
         const inset  = Math.round(cardW * 0.085);
         const textW  = cardW - inset * 2;
 
-        const maxName = Math.round(cardW * 0.105);
+        const maxName = Math.round(cardW * 0.108);
         let nameSize = maxName;
         let nameLines = 1;
 
@@ -394,32 +543,61 @@
             if (ok) break;
         }
 
-        const lineH     = Math.round(nameSize * 1.2);
-        const labelSize = Math.max(11, Math.round(cardW * 0.048));
-        const dateSize  = Math.max(11, Math.round(cardW * 0.046));
-        const padTop    = Math.round(cardW * 0.072);
-        const padBottom = Math.round(cardW * 0.072);
-        const gapLabel  = Math.round(cardW * 0.042);
-        const gapDate   = Math.round(cardW * 0.036);
+        const lineH     = Math.round(nameSize * 1.18);
+        const labelSize = Math.max(11, Math.round(cardW * 0.047));
+        const chipSize  = Math.max(11, Math.round(cardW * 0.049));
+        const padTop    = Math.round(cardW * 0.075);
+        const padBottom = Math.round(cardW * 0.078);
+        const gapLabel  = Math.round(cardW * 0.048);
 
-        const captionH = padTop + nameLines * lineH + gapLabel + labelSize
-                       + gapDate + dateSize + padBottom;
+        // The date moved onto the photo as a chip, so the caption carries only
+        // the name and the event -- a calmer block, and more room for the face.
+        const captionH = padTop + nameLines * lineH + gapLabel + labelSize + padBottom;
 
         return {
             inset: inset, textW: textW,
             nameSize: nameSize, lineH: lineH, nameLines: nameLines,
-            labelSize: labelSize, dateSize: dateSize,
-            padTop: padTop, gapLabel: gapLabel, gapDate: gapDate,
+            labelSize: labelSize, chipSize: chipSize,
+            padTop: padTop, gapLabel: gapLabel,
+            accentBar: Math.max(3, Math.round(cardW * 0.011)),
             captionH: captionH
         };
     }
 
-    function drawCard(ctx, person, photo, x, y, w, h, m) {
-        // Lift the card off the backdrop.
+    /** Frosted date chip, sat over the top-left of the photo. */
+    function drawDateChip(ctx, text, x, y, m) {
+        if (!text) return;
+        ctx.font = `800 ${m.chipSize}px ${FONT}`;
+        const padX = Math.round(m.chipSize * 0.85);
+        const padY = Math.round(m.chipSize * 0.62);
+        const tracking = m.chipSize * 0.06;
+        const w = trackedWidth(ctx, text, tracking) + padX * 2;
+        const h = m.chipSize + padY * 2;
+
         ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.55)';
-        ctx.shadowBlur = 38;
-        ctx.shadowOffsetY = 16;
+        ctx.fillStyle = 'rgba(9,11,16,0.66)';
+        roundedRectPath(ctx, x, y, w, h, h / 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textBaseline = 'middle';
+        fillTracked(ctx, text, x + padX, y + h / 2 + 0.5, tracking, 'left');
+        ctx.textBaseline = 'alphabetic';
+    }
+
+    function drawCard(ctx, person, photo, x, y, w, h, m) {
+        const accent = accentColour(person.event_type);
+
+        // Lift the card off the backdrop, with a breath of the event colour in
+        // the shadow so each card carries its own temperature.
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.58)';
+        ctx.shadowBlur = 42;
+        ctx.shadowOffsetY = 18;
         ctx.fillStyle = CARD_BG;
         roundedRectPath(ctx, x, y, w, h, CARD_R);
         ctx.fill();
@@ -439,14 +617,24 @@
             drawCover(ctx, photo, x, y, w, photoH);
         } else {
             // No photo on file -- common for Junior Church children. A monogram
-            // on the brand gradient beats a grey "No Photo" placeholder.
-            const g = ctx.createLinearGradient(x, y, x, y + photoH);
-            g.addColorStop(0, '#20252F');
-            g.addColorStop(1, '#141820');
+            // tinted with the event colour beats a grey "No Photo" block.
+            const g = ctx.createLinearGradient(x, y, x + w, y + photoH);
+            g.addColorStop(0, '#222838');
+            g.addColorStop(1, '#12161F');
             ctx.fillStyle = g;
             ctx.fillRect(x, y, w, photoH);
 
-            ctx.fillStyle = 'rgba(255,255,255,0.20)';
+            ctx.save();
+            ctx.globalAlpha = 0.10;
+            const halo = ctx.createRadialGradient(x + w / 2, y + photoH * 0.45, 10,
+                                                  x + w / 2, y + photoH * 0.45, w * 0.8);
+            halo.addColorStop(0, accent);
+            halo.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = halo;
+            ctx.fillRect(x, y, w, photoH);
+            ctx.restore();
+
+            ctx.fillStyle = 'rgba(255,255,255,0.22)';
             ctx.font = `800 ${Math.round(w * 0.40)}px ${FONT}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -455,50 +643,66 @@
             ctx.textBaseline = 'alphabetic';
         }
 
-        // Soften the seam between photo and caption.
-        const seam = ctx.createLinearGradient(0, captionY - photoH * 0.28, 0, captionY);
-        seam.addColorStop(0, 'rgba(10,12,17,0)');
-        seam.addColorStop(1, 'rgba(10,12,17,0.72)');
-        ctx.fillStyle = seam;
-        ctx.fillRect(x, captionY - photoH * 0.28, w, photoH * 0.28);
+        // Top-down scrim so the date chip always reads, whatever the photo.
+        const capTop = ctx.createLinearGradient(0, y, 0, y + photoH * 0.28);
+        capTop.addColorStop(0, 'rgba(6,8,12,0.55)');
+        capTop.addColorStop(1, 'rgba(6,8,12,0)');
+        ctx.fillStyle = capTop;
+        ctx.fillRect(x, y, w, photoH * 0.28);
 
-        // Caption band.
+        // Soften the seam between photo and caption.
+        const seam = ctx.createLinearGradient(0, captionY - photoH * 0.3, 0, captionY);
+        seam.addColorStop(0, 'rgba(10,12,17,0)');
+        seam.addColorStop(1, 'rgba(10,12,17,0.80)');
+        ctx.fillStyle = seam;
+        ctx.fillRect(x, captionY - photoH * 0.3, w, photoH * 0.3);
+
+        drawDateChip(ctx, person.event_date, x + m.inset, y + m.inset, m);
+
+        // Caption band, capped by a hairline in the event colour: the card is
+        // colour-coded at a glance without a loud badge.
         const band = ctx.createLinearGradient(0, captionY, 0, y + h);
-        band.addColorStop(0, 'rgba(14,17,24,0.94)');
-        band.addColorStop(1, 'rgba(9,11,16,0.98)');
+        band.addColorStop(0, 'rgba(15,18,26,0.95)');
+        band.addColorStop(1, 'rgba(8,10,15,0.99)');
         ctx.fillStyle = band;
         ctx.fillRect(x, captionY, w, m.captionH);
+
+        ctx.fillStyle = accent;
+        ctx.fillRect(x, captionY, w, m.accentBar);
 
         // Name.
         ctx.font = `800 ${m.nameSize}px ${FONT}`;
         ctx.fillStyle = '#FFFFFF';
         ctx.textBaseline = 'alphabetic';
         const lines = wrapText(ctx, fullName(person), m.textW, 2).lines;
-        let baseline = captionY + m.padTop + Math.round(m.nameSize * 0.82);
+        let baseline = captionY + m.accentBar + m.padTop + Math.round(m.nameSize * 0.80);
         lines.forEach(line => {
             ctx.fillText(line, x + m.inset, baseline);
             baseline += m.lineH;
         });
 
-        // Event label, then date, on the slide-wide grid.
-        const labelBaseline = captionY + m.padTop + m.nameLines * m.lineH
-                            + m.gapLabel + Math.round(m.labelSize * 0.8);
-        ctx.font = `800 ${m.labelSize}px ${FONT}`;
-        ctx.fillStyle = accentColour(person.event_type);
-        fillTracked(ctx, eventLabel(person.event_type), x + m.inset, labelBaseline, m.labelSize * 0.12, 'left');
+        // Event label on the slide-wide grid, led by an accent dot.
+        const labelBaseline = captionY + m.accentBar + m.padTop + m.nameLines * m.lineH
+                            + m.gapLabel + Math.round(m.labelSize * 0.34);
+        const dotR = Math.max(2.5, m.labelSize * 0.19);
+        ctx.beginPath();
+        ctx.fillStyle = accent;
+        ctx.arc(x + m.inset + dotR, labelBaseline, dotR, 0, Math.PI * 2);
+        ctx.fill();
 
-        if (person.event_date) {
-            ctx.font = `600 ${m.dateSize}px ${FONT}`;
-            ctx.fillStyle = 'rgba(255,255,255,0.72)';
-            ctx.fillText(String(person.event_date), x + m.inset,
-                         labelBaseline + m.gapDate + Math.round(m.dateSize * 0.9));
-        }
+        ctx.font = `800 ${m.labelSize}px ${FONT}`;
+        ctx.fillStyle = accent;
+        ctx.textBaseline = 'middle';
+        fillTracked(ctx, eventLabel(person.event_type),
+                    x + m.inset + dotR * 2 + Math.round(m.labelSize * 0.55),
+                    labelBaseline + 0.5, m.labelSize * 0.13, 'left');
+        ctx.textBaseline = 'alphabetic';
 
         ctx.restore();
 
         ctx.save();
         roundedRectPath(ctx, x + 0.5, y + 0.5, w - 1, h - 1, CARD_R);
-        ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
         ctx.lineWidth = 1;
         ctx.stroke();
         ctx.restore();
