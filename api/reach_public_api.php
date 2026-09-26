@@ -182,6 +182,7 @@ try {
             $category = reach_parse_categories($_POST['category'] ?? 'Other');
 
             $willing_for_visit = !empty($_POST['willing_for_visit']) ? 1 : 0;
+            $will_attend       = !empty($_POST['will_attend_church']) ? 1 : 0;
 
             // Only accept the tier's fields; ignore anything else the
             // volunteer's browser might send (belt-and-braces vs a
@@ -233,6 +234,10 @@ try {
                     if ($willing_for_visit === 1) {
                         $updateSets[] = "willing_for_visit = 1";
                     }
+                    if ($will_attend === 1) {
+                        $updateSets[] = "will_attend_church = 1";
+                        $updateSets[] = "status = IF(status IN ('Not_Spoken_To', 'Spoken_To', 'Cold'), 'Will_Attend', status)";
+                    }
                     if ($updateSets) {
                         $updateVals[] = $lead_id;
                         $sql = "UPDATE reach_leads SET " . implode(', ', $updateSets) . " WHERE id = ?";
@@ -244,12 +249,13 @@ try {
             if ($lead_id === null) {
                 $insLead = $pdo->prepare("
                     INSERT INTO reach_leads
-                        (campaign_id, first_name, last_name, phone, category, willing_for_visit,
+                        (campaign_id, first_name, last_name, phone, category, willing_for_visit, will_attend_church, status,
                          address, prayer_request, age_band, marital_status, language, best_time_to_call, notes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $insLead->execute([
-                    $campaign_id, $first_name, $last_name, $phone, $category, $willing_for_visit,
+                    $campaign_id, $first_name, $last_name, $phone, $category, $willing_for_visit, $will_attend,
+                    $will_attend ? 'Will_Attend' : 'Not_Spoken_To',
                     $optional['address'], $optional['prayer_request'], $optional['age_band'],
                     $optional['marital_status'], $optional['language'], $optional['best_time_to_call'],
                     $optional['notes']
@@ -310,7 +316,8 @@ try {
                 . "Extract structured data from this spoken sentence. Return ONLY a pure JSON object with these keys: "
                 . "first_name (string), last_name (string), phone (string, digits only), "
                 . "category (one of: New_Convert, Unsaved, Saved, Broken, Dechurched, Other), "
-                . "willing_for_visit (boolean), notes (string). "
+                . "willing_for_visit (boolean, true if they want someone to visit their home), "
+                . "will_attend_church (boolean, true if they said they will come to church), notes (string). "
                 . "If a field is not mentioned, use an empty string (or false for willing_for_visit). "
                 . "Do not invent values.\n\nTranscript: " . $transcript;
 
@@ -356,6 +363,7 @@ try {
                 'phone'             => preg_replace('/[^0-9+]/', '', (string) ($data['phone'] ?? '')),
                 'category'          => in_array(($data['category'] ?? ''), ['New_Convert', 'Unsaved', 'Saved', 'Broken', 'Dechurched', 'Other'], true) ? $data['category'] : 'Other',
                 'willing_for_visit' => !empty($data['willing_for_visit']),
+                'will_attend_church' => !empty($data['will_attend_church']),
                 'notes'             => (string) ($data['notes'] ?? '')
             ];
 

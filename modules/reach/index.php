@@ -15,56 +15,6 @@ try {
     error_log('Reach manager check: ' . $e->getMessage());
 }
 
-// Minimal Markdown for how_to_use.md: headings, bold, italic, code,
-// links, lists, blockquotes, paragraphs. Text is escaped before any tag
-// is added, and links only allow http(s), relative and #anchors.
-function reach_markdown(string $md): string {
-    $inline = function (string $t): string {
-        $t = htmlspecialchars($t, ENT_QUOTES, 'UTF-8');
-        $t = preg_replace('/`([^`]+)`/', '<code class="px-1.5 py-0.5 rounded bg-gray-100 text-[0.85em] text-gray-800">$1</code>', $t);
-        $t = preg_replace('/\*\*(.+?)\*\*/', '<strong class="font-bold text-gray-900">$1</strong>', $t);
-        $t = preg_replace('/(?<![\*\w])\*(?!\s)(.+?)(?<!\s)\*(?![\*\w])/', '<em>$1</em>', $t);
-        return preg_replace_callback('/\[([^\]]+)\]\(([^)\s]+)\)/', function ($m) {
-            $safe = preg_match('#^(https?://|/|\#)#', html_entity_decode($m[2]));
-            return $safe ? '<a href="' . $m[2] . '" class="text-emerald-700 font-semibold underline underline-offset-2">' . $m[1] . '</a>' : $m[1];
-        }, $t);
-    };
-    $html = ''; $para = []; $list = null; $items = []; $start = 1;
-    $flushPara = function () use (&$html, &$para) {
-        if ($para) { $html .= '<p class="text-gray-600 leading-relaxed">' . implode(' ', $para) . '</p>'; $para = []; }
-    };
-    $flushList = function () use (&$html, &$list, &$items, &$start) {
-        if ($list) {
-            $cls = $list === 'ol' ? 'list-decimal' : 'list-disc';
-            $html .= "<{$list}" . ($list === 'ol' && $start > 1 ? " start=\"{$start}\"" : '') . " class=\"{$cls} pl-6 space-y-1.5 text-gray-600 leading-relaxed marker:text-emerald-600\">" . implode('', array_map(fn($i) => "<li>{$i}</li>", $items)) . "</{$list}>";
-            $list = null; $items = [];
-        }
-    };
-    foreach (preg_split('/\R/', $md) as $line) {
-        if (preg_match('/^(#{1,3})\s+(.+)$/', $line, $m)) {
-            $flushPara(); $flushList();
-            $n = strlen($m[1]);
-            $cls = [1 => 'text-2xl font-display font-bold text-gray-900', 2 => 'text-lg font-display font-bold text-gray-900 pt-4 border-t border-gray-100 scroll-mt-24', 3 => 'text-base font-bold text-gray-900'][$n];
-            $id = $n === 2 ? ' id="guide-' . trim(preg_replace('/[^a-z0-9]+/', '-', strtolower($m[2])), '-') . '"' : '';
-            $html .= "<h{$n}{$id} class=\"{$cls}\">" . $inline($m[2]) . "</h{$n}>";
-        } elseif (preg_match('/^\s*(?:([-*])|(\d+)\.)\s+(.+)$/', $line, $m)) {
-            $flushPara();
-            $type = $m[1] !== '' ? 'ul' : 'ol';
-            if ($list !== $type) { $flushList(); $list = $type; $start = (int) ($m[2] ?: 1); }
-            $items[] = $inline($m[3]);
-        } elseif (preg_match('/^>\s?(.*)$/', $line, $m)) {
-            $flushPara(); $flushList();
-            $html .= '<blockquote class="border-l-4 border-emerald-500 bg-emerald-50/60 rounded-r-xl px-4 py-3 text-emerald-900 text-sm">' . $inline($m[1]) . '</blockquote>';
-        } elseif (trim($line) === '') {
-            $flushPara(); $flushList();
-        } else {
-            $flushList();
-            $para[] = $inline(trim($line));
-        }
-    }
-    $flushPara(); $flushList();
-    return $html;
-}
 $reach_types = [];
 $reach_default_image = REACH_FALLBACK_CAMPAIGN_IMAGE;
 try {
@@ -131,7 +81,7 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             </span>
             <span class="min-w-0">
-                <span class="block font-bold text-red-800"><span id="overdueCount">0</span> leads assigned &gt;5 days ago with no follow-up.</span>
+                <span class="block font-bold text-red-800"><span id="overdueCount">0</span> leads assigned &gt;<?= (int) reach_overdue_days($pdo) ?> days ago with no follow-up.</span>
                 <span id="overdueHint" class="block text-xs text-red-600 mt-0.5">Tap to show only these.</span>
             </span>
         </button>
@@ -414,6 +364,25 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
                     <button type="button" onclick="resetDefaultImage()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl font-bold text-sm">Use the church photo</button>
                 </div>
             </section>
+            <form id="reachSettingsForm" class="space-y-6">
+                <section class="space-y-2">
+                    <h4 class="font-bold text-gray-900">Follow-up</h4>
+                    <label class="flex items-center justify-between gap-3 text-sm text-gray-700">Mark a lead overdue after
+                        <span class="flex items-center gap-2"><input type="number" id="setOverdueDays" name="overdue_days" min="1" max="60" required class="w-20 px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold text-center focus:border-emerald-500 outline-none"> days</span>
+                    </label>
+                    <p class="text-xs text-gray-500">Counted from when the lead was assigned without any follow-up. A daily alert goes to the whole Reach team.</p>
+                </section>
+                <section class="space-y-2">
+                    <div class="flex items-center justify-between gap-3">
+                        <h4 class="font-bold text-gray-900">Evangelism guide</h4>
+                        <button type="button" onclick="restoreGuide()" class="text-xs font-bold text-emerald-700 hover:text-emerald-900">Restore default</button>
+                    </div>
+                    <p class="text-xs text-gray-500">Shown to volunteers on every campaign page. Use ## for headings, - for lists, **bold**, *italic*.</p>
+                    <textarea id="setGuide" name="guide" rows="12" class="w-full px-4 py-3 border border-gray-200 rounded-xl text-xs font-mono focus:border-emerald-500 outline-none"></textarea>
+                </section>
+                <input type="hidden" name="action" value="save_reach_settings">
+                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-800 text-white py-3 rounded-xl font-bold text-sm">Save settings</button>
+            </form>
         </div>
     </div>
 </div>
@@ -826,14 +795,14 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
 
     /* ============================ FOLLOW-UP TAB ============================ */
     const REACH_CAN_ASSIGN = <?= $reach_can_assign ? 'true' : 'false' ?>;
-    const FU_TABS = [['not_spoken', 'Not Spoken To'], ['spoken', 'Spoken To'], ['cold', 'Cold'], ['converted', 'Converted'], ['all', 'All']];
+    const FU_TABS = [['not_spoken', 'Not Spoken To'], ['will_come', 'Will Come to Church'], ['spoken', 'Spoken To'], ['cold', 'Cold'], ['converted', 'Visited Church'], ['all', 'All']];
     const FU_CATEGORIES = ['New_Convert', 'Unsaved', 'Saved', 'Broken', 'Dechurched', 'Other'];
     const CATEGORY_STYLE = {
         New_Convert: 'bg-emerald-100 text-emerald-800', Unsaved: 'bg-red-100 text-red-700', Saved: 'bg-blue-100 text-blue-800',
         Broken: 'bg-purple-100 text-purple-800', Dechurched: 'bg-amber-100 text-amber-800', Other: 'bg-gray-100 text-gray-700'
     };
     const OUTCOME_STYLE = {
-        Reached: 'bg-emerald-100 text-emerald-800', No_Answer: 'bg-gray-100 text-gray-700', Wrong_Number: 'bg-amber-100 text-amber-800',
+        Reached: 'bg-emerald-100 text-emerald-800', Promised_Church: 'bg-blue-600 text-white', No_Answer: 'bg-gray-100 text-gray-700', Wrong_Number: 'bg-amber-100 text-amber-800',
         Rescheduled: 'bg-blue-100 text-blue-800', Requested_No_Contact: 'bg-red-100 text-red-700', Declined: 'bg-red-100 text-red-700'
     };
     const CHANNEL_ICON = {
@@ -846,6 +815,11 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
     const fu = { ready: false, sub: 'not_spoken', category: '', overdue: false, page: 1, members: [], leadId: null };
 
     const label = s => String(s || '').replace(/_/g, ' ');
+    const WORDS = {
+        Promised_Church: 'Promised to come to church', Will_Attend: 'Will come to church', Converted: 'Visited church',
+        Not_Spoken_To: 'Not spoken to', Spoken_To: 'Spoken to', Declined: 'Declined', Requested_No_Contact: 'Asked not to be contacted'
+    };
+    const word = s => WORDS[s] || label(s);
     const catPills = cats => String(cats || 'Other').split(',').filter(Boolean)
         .map(c => pill(label(c), CATEGORY_STYLE[c] || CATEGORY_STYLE.Other)).join('');
     const pill = (text, cls) => `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${cls}">${escapeHtml(text)}</span>`;
@@ -934,11 +908,12 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
         const name = `${l.first_name} ${l.last_name || ''}`.trim();
         const member = !!l.capturer_user_id;
         const added = `Added by ${l.capturer_name || 'unknown'} · ${l.campaign_title || 'No campaign'} · ${relTime(l.captured_at || l.created_at)}`;
-        const last = l.last_outcome ? `Last: ${label(l.last_outcome)} · ${l.last_follower_name || '—'} · ${relTime(l.last_follow_up_date)}` : '';
+        const last = l.last_outcome ? `Last: ${word(l.last_outcome)} · ${l.last_follower_name || '—'} · ${relTime(l.last_follow_up_date)}` : '';
         const assign = l.assigned_to
             ? `<span class="inline-flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-gray-100 px-3 py-1.5 rounded-full">${icon('M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z', 'w-3.5 h-3.5')}${escapeHtml(l.assignee_name)}</span>`
             : `<span class="text-xs font-bold text-gray-400">Unassigned</span>${l.pushed_to_embrace_at ? '' : `<button type="button" onclick="event.stopPropagation(); claimLead(${l.id})" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-full text-xs font-bold">Claim</button>`}`;
         return `<div role="button" tabindex="0" onclick="openLead(${l.id})" onkeydown="if(event.key==='Enter')openLead(${l.id})" class="relative overflow-hidden bg-white rounded-3xl border border-gray-100 shadow-sm p-5 space-y-3 cursor-pointer hover:shadow-md hover:border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all">
+            ${l.will_attend_church == 1 && !l.pushed_to_embrace_at ? '<span class="absolute top-0 left-0 bg-blue-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-br-xl">Coming to church</span>' : ''}
             ${l.willing_for_visit == 1 ? '<span class="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-bl-xl">Willing to visit</span>' : ''}
             <div class="flex items-start justify-between gap-2 pr-16">
                 <div class="min-w-0"><p class="font-bold text-gray-900 truncate">${escapeHtml(name)}</p><p class="text-sm text-gray-500">${escapeHtml(l.phone || 'No phone')}</p></div>
@@ -987,12 +962,12 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
     function renderDrawer(d) {
         const l = d.lead;
         $('#drawerName').text(`${l.first_name} ${l.last_name || ''}`.trim());
-        $('#drawerSub').text([l.campaign_title, label(l.status)].filter(Boolean).join(' · '));
+        $('#drawerSub').text([l.campaign_title, word(l.status)].filter(Boolean).join(' · '));
         const field = (k, v) => v ? `<div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">${k}</p><p class="text-sm font-medium text-gray-800 whitespace-pre-line">${escapeHtml(v)}</p></div>` : '';
         const wa = (l.phone || '').replace(/\D/g, '').replace(/^0/, '234');
         const section = (title, body) => `<section class="space-y-3"><h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest">${title}</h4>${body}</section>`;
 
-        const profile = `<div class="flex flex-wrap gap-1.5">${catPills(l.category)}${l.willing_for_visit == 1 ? pill('Willing to visit', 'bg-red-600 text-white') : ''}</div>
+        const profile = `<div class="flex flex-wrap gap-1.5">${catPills(l.category)}${l.willing_for_visit == 1 ? pill('Home visit wanted', 'bg-red-600 text-white') : ''}${+l.will_attend_church ? pill('Will come to church', 'bg-blue-700 text-white') : ''}</div>
             ${l.phone ? `<div class="flex gap-2"><a href="tel:${escapeHtml(l.phone)}" class="flex-1 text-center bg-gray-100 hover:bg-gray-200 text-gray-800 py-2.5 rounded-xl text-sm font-bold">Call ${escapeHtml(l.phone)}</a><a href="https://wa.me/${wa}" target="_blank" rel="noopener" class="bg-[#25D366] hover:bg-[#128C7E] text-white px-4 py-2.5 rounded-xl text-sm font-bold">WhatsApp</a></div>` : ''}
             <div class="grid grid-cols-2 gap-4">${field('Address', l.address)}${field('Age group', l.age_band)}${field('Marital status', l.marital_status)}${field('Language', l.language)}${field('Best time to call', l.best_time_to_call)}${field('Assigned to', l.assignee_name || 'Unassigned')}</div>
             ${field('Prayer request', l.prayer_request)}${field('Notes', l.notes)}`;
@@ -1008,16 +983,16 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
                 <button type="button" onclick="assignLead(${l.id}, ${l.assigned_to ? 'true' : 'false'})" class="shrink-0 bg-gray-900 hover:bg-black text-white px-4 rounded-xl text-sm font-bold">${l.assigned_to ? 'Reassign' : 'Assign'}</button></div></div>`;
         }
         if (l.pushed_to_embrace_at) {
-            actions += `<button type="button" disabled class="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 py-3 rounded-xl font-bold text-sm cursor-not-allowed">Pushed to Embrace · ${escapeHtml(relTime(l.pushed_to_embrace_at))}</button>`;
+            actions += `<button type="button" disabled class="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 py-3 rounded-xl font-bold text-sm cursor-not-allowed">Visited church · with Embrace · ${escapeHtml(relTime(l.pushed_to_embrace_at))}</button>`;
             if (d.can_assign) {
                 actions += `<label class="flex items-center justify-between gap-3 text-sm font-semibold text-gray-700 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 cursor-pointer">Share testimony in monthly report<input type="checkbox" ${+l.share_testimony_in_report ? 'checked' : ''} onchange="setTestimony(${l.id}, this.checked)" class="w-5 h-5 accent-emerald-600"></label>`;
             }
         } else if (d.can_push) {
-            actions += `<button type="button" onclick="pushToEmbrace(${l.id})" class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-red-900/20">Push to Embrace as 1st Timer</button>`;
+            actions += `<button type="button" onclick="pushToEmbrace(${l.id})" class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-red-900/20">They came to church — send to Embrace</button>`;
         }
 
         const channelOpts = Object.keys(CHANNEL_ICON).map(c => `<option value="${c}">${label(c)}</option>`).join('');
-        const outcomeOpts = Object.keys(OUTCOME_STYLE).map(o => `<option value="${o}">${label(o)}</option>`).join('');
+        const outcomeOpts = Object.keys(OUTCOME_STYLE).map(o => `<option value="${o}">${word(o)}</option>`).join('');
         const logForm = `<form id="fuLogForm" class="space-y-3 bg-gray-50 border border-gray-100 rounded-2xl p-4">
             <div class="grid grid-cols-2 gap-2">
                 <select name="channel" required aria-label="Channel" class="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:border-emerald-500 outline-none">${channelOpts}</select>
@@ -1031,7 +1006,7 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
 
         const timeline = d.follow_ups.length ? `<ol class="relative border-l-2 border-gray-100 ml-3 space-y-5">${d.follow_ups.map(f => `
             <li class="ml-5"><span class="absolute -left-[15px] w-7 h-7 rounded-full bg-white border-2 border-emerald-200 text-emerald-600 flex items-center justify-center">${icon(CHANNEL_ICON[f.channel] || CHANNEL_ICON.Call, 'w-3.5 h-3.5')}</span>
-                <div class="flex flex-wrap items-center gap-2">${pill(label(f.outcome), OUTCOME_STYLE[f.outcome] || '')}<span class="text-xs font-bold text-gray-700">${label(f.channel)}</span><span class="text-xs text-gray-400">${escapeHtml(f.follower_name || '—')} · ${escapeHtml(relTime(f.created_at))}</span></div>
+                <div class="flex flex-wrap items-center gap-2">${pill(word(f.outcome), OUTCOME_STYLE[f.outcome] || '')}<span class="text-xs font-bold text-gray-700">${label(f.channel)}</span><span class="text-xs text-gray-400">${escapeHtml(f.follower_name || '—')} · ${escapeHtml(relTime(f.created_at))}</span></div>
                 ${f.notes ? `<p class="text-sm text-gray-700 mt-1 whitespace-pre-line">${escapeHtml(f.notes)}</p>` : ''}
                 ${f.next_touch_date ? `<p class="text-xs font-bold text-blue-700 mt-1">Next touch: ${escapeHtml(parseDate(f.next_touch_date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }))}</p>` : ''}
             </li>`).join('')}</ol>` : '<p class="text-sm text-gray-400 italic">No follow-ups yet — be the first to reach out.</p>';
@@ -1067,7 +1042,7 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
     }
 
     function pushToEmbrace(id) {
-        if (!confirm('Create a 1st Timer profile for this person and hand them to Embrace?')) return;
+        if (!confirm('Mark this person as having visited church? This creates their 1st Timer profile and hands them to Embrace.')) return;
         lockScreenAction();
         $.post(API_URL, { action: 'push_to_embrace', lead_id: id }, res => {
             unlockScreenAction();
@@ -1083,6 +1058,11 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
 
     /* ============================ CAMPAIGN SETTINGS ============================ */
     function openSettingsModal() {
+        $.post(API_URL, { action: 'fetch_campaign_settings' }, res => {
+            if (res.status !== 'success') return;
+            $('#setOverdueDays').val(res.data.overdue_days);
+            $('#setGuide').val(res.data.guide);
+        }, 'json');
         renderTypeChips();
         $('#defaultImagePreview').attr('src', REACH_DEFAULT_IMAGE);
         openModal('settingsModal');
@@ -1105,6 +1085,19 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
             showToast(res.message, res.status);
             if (res.status === 'success') { REACH_TYPES = res.data; renderTypeChips(); }
         }, 'json').fail(() => showToast('Server error', 'error'));
+    }
+    $('#reachSettingsForm').on('submit', function(e) {
+        e.preventDefault();
+        $.post(API_URL, $(this).serialize(), res => showToast(res.message, res.status), 'json')
+            .fail(() => showToast('Server error', 'error'));
+    });
+    function restoreGuide() {
+        if (!confirm('Replace the guide with the built-in version?')) return;
+        $('#setGuide').val('');
+        $.post(API_URL, $('#reachSettingsForm').serialize(), res => {
+            showToast(res.status === 'success' ? 'Default guide restored.' : res.message, res.status);
+            if (res.status === 'success') openSettingsModal();
+        }, 'json');
     }
     function applyDefaultImage(res) {
         showToast(res.message, res.status);
@@ -1132,7 +1125,7 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
     /* ============================ ANALYTICS TAB ============================ */
     // Validated with the dataviz palette checker (light surface #ffffff).
     const CAT_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300'];
-    const FUNNEL_COLORS = ['#10b981', '#047857', '#064e3b'];
+    const FUNNEL_COLORS = ['#10b981', '#059669', '#047857', '#064e3b'];
     const AREA_COLOR = '#047857';
     const an = { ready: false, preset: 'this_month', charts: {} };
     const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1201,12 +1194,12 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
             ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-50"><tr>${th('#')}${th('Volunteer')}${thn('Souls')}</tr></thead><tbody>${d.volunteer_leaderboard.map((v, i) => `<tr class="border-b border-gray-50"><td class="py-2 px-2 text-gray-400">${i + 1}</td><td class="py-2 px-2 font-semibold text-gray-800">${escapeHtml(v.name)} ${v.is_member ? pill('Member', 'bg-emerald-100 text-emerald-800') : pill('Guest', 'bg-yellow-100 text-yellow-800')}</td><td class="py-2 px-2 text-right font-bold">${v.souls}</td></tr>`).join('')}</tbody></table></div>`
             : '<p class="text-sm text-gray-400 italic">No captures in this period.</p>';
         const camps = d.campaigns_table.length
-            ? `<div class="overflow-x-auto"><table class="w-full text-sm min-w-[520px]"><thead class="bg-gray-50"><tr>${th('Campaign')}${th('Date')}${thn('Souls')}${thn('Follow-up')}${thn('Conversion')}${th('Last activity')}</tr></thead><tbody>${d.campaigns_table.map(c => `<tr class="border-b border-gray-50"><td class="py-2 px-2 font-semibold text-gray-800">${escapeHtml(c.title)}</td><td class="py-2 px-2 text-gray-500">${c.date ? escapeHtml(parseDate(c.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })) : '—'}</td><td class="py-2 px-2 text-right font-bold">${c.souls}</td><td class="py-2 px-2 text-right">${c.follow_up_rate}%</td><td class="py-2 px-2 text-right">${c.conversion_rate}%</td><td class="py-2 px-2 text-gray-500">${escapeHtml(relTime(c.last_activity) || '—')}</td></tr>`).join('')}</tbody></table></div>`
+            ? `<div class="overflow-x-auto"><table class="w-full text-sm min-w-[520px]"><thead class="bg-gray-50"><tr>${th('Campaign')}${th('Date')}${thn('Souls')}${thn('Follow-up')}${thn('Visited church')}${th('Last activity')}</tr></thead><tbody>${d.campaigns_table.map(c => `<tr class="border-b border-gray-50"><td class="py-2 px-2 font-semibold text-gray-800">${escapeHtml(c.title)}</td><td class="py-2 px-2 text-gray-500">${c.date ? escapeHtml(parseDate(c.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })) : '—'}</td><td class="py-2 px-2 text-right font-bold">${c.souls}</td><td class="py-2 px-2 text-right">${c.follow_up_rate}%</td><td class="py-2 px-2 text-right">${c.conversion_rate}%</td><td class="py-2 px-2 text-gray-500">${escapeHtml(relTime(c.last_activity) || '—')}</td></tr>`).join('')}</tbody></table></div>`
             : '<p class="text-sm text-gray-400 italic">No campaigns in this period.</p>';
 
         $('#anBody').html(`
             <div id="anPdfReady"></div>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">${tile('Souls Captured', k.souls)}${tile('Campaigns Run', k.campaigns)}${tile('Follow-up Rate', k.follow_up_rate + '%')}${tile('Conversion Rate', k.conversion_rate + '%')}</div>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">${tile('Souls Captured', k.souls)}${tile('Campaigns Run', k.campaigns)}${tile('Follow-up Rate', k.follow_up_rate + '%')}${tile('Visited Church', k.conversion_rate + '%')}</div>
             ${k.overdue ? `<button type="button" onclick="switchTab('followup'); fu.overdue = true; loadLeads();" class="mt-4 w-full text-left flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-[#d03b3b] hover:bg-red-100">${icon('M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z')}${k.overdue} assigned lead(s) overdue for a first follow-up — view them</button>` : ''}
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
                 ${anCard('Follow-up funnel', '<div class="h-64"><canvas id="chFunnel" role="img" aria-label="Follow-up funnel: ' + d.funnel.map(f => f.stage + ' ' + f.count).join(', ') + '"></canvas></div>')}

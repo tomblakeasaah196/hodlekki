@@ -10,7 +10,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/reach_helpers.php';
 
 const REACH_PDF_CATEGORY_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300'];
-const REACH_PDF_FUNNEL_COLORS   = ['#10b981', '#047857', '#064e3b'];
+const REACH_PDF_FUNNEL_COLORS   = ['#10b981', '#059669', '#047857', '#064e3b'];
 
 function reach_pdf_esc($s): string {
     return htmlspecialchars((string) $s, ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -22,7 +22,7 @@ function reach_pdf_svg(string $svg, int $w, int $h): string {
 
 function reach_pdf_funnel_svg(array $funnel): string {
     $w = 480; $h = 150; $max = max(1, ...array_column($funnel, 'count'));
-    $bw = 110; $gap = 45; $x = 30;
+    $bw = 92; $gap = 22; $x = 20;
     $s = "<svg xmlns='http://www.w3.org/2000/svg' width='{$w}' height='{$h}' viewBox='0 0 {$w} {$h}'>";
     $s .= "<line x1='20' y1='120' x2='" . ($w - 20) . "' y2='120' stroke='#e1e0d9' stroke-width='1'/>";
     foreach ($funnel as $i => $f) {
@@ -30,7 +30,7 @@ function reach_pdf_funnel_svg(array $funnel): string {
         $y = 120 - $bh;
         $s .= "<rect x='{$x}' y='{$y}' width='{$bw}' height='{$bh}' rx='4' fill='" . REACH_PDF_FUNNEL_COLORS[$i] . "'/>";
         $s .= "<text x='" . ($x + $bw / 2) . "' y='" . ($y - 6) . "' font-family='DejaVu Sans' font-size='13' font-weight='bold' fill='#0b0b0b' text-anchor='middle'>{$f['count']}</text>";
-        $s .= "<text x='" . ($x + $bw / 2) . "' y='138' font-family='DejaVu Sans' font-size='10' fill='#52514e' text-anchor='middle'>" . reach_pdf_esc($f['stage']) . "</text>";
+        $s .= "<text x='" . ($x + $bw / 2) . "' y='138' font-family='DejaVu Sans' font-size='8.5' fill='#52514e' text-anchor='middle'>" . reach_pdf_esc($f['stage']) . "</text>";
         $x += $bw + $gap;
     }
     return reach_pdf_svg($s . '</svg>', $w, $h);
@@ -57,7 +57,7 @@ function reach_report_narrative(array $a): string {
     $k = $a['kpis'];
     $range = date('j M Y', strtotime($a['range']['from'])) . ' – ' . date('j M Y', strtotime($a['range']['to']));
     $fallback = "Between {$range}, the Reach family took the gospel to the streets in {$k['campaigns']} campaign(s) and met {$k['souls']} soul(s). "
-        . "{$k['follow_up_rate']}% of them have heard from us again, and {$k['conversion_rate']}% have been welcomed into Embrace as first timers.\n\n"
+        . "{$k['follow_up_rate']}% of them have heard from us again, and {$k['conversion_rate']}% have come to church and been welcomed by Embrace.\n\n"
         . ($k['overdue'] > 0
             ? "{$k['overdue']} assigned lead(s) have waited more than five days for a first call — let us close that gap so no one we met is forgotten."
             : "Every assigned lead has been followed up on time. Thank you for your faithfulness — let us keep going.");
@@ -166,11 +166,11 @@ function reach_build_report_pdf(PDO $pdo, array $a, string $generated_by): strin
         . $tile('Souls captured', $k['souls'])
         . $tile('Campaigns run', $k['campaigns'])
         . $tile('Follow-up rate', $k['follow_up_rate'] . '%')
-        . $tile('Conversion rate', $k['conversion_rate'] . '%')
+        . $tile('Visited church', $k['conversion_rate'] . '%')
     . '</tr></table>'
-    . ($k['overdue'] > 0 ? '<p style="color:#d03b3b;font-weight:bold;margin:2px 0 0">! ' . $k['overdue'] . ' assigned lead(s) overdue for a first follow-up (&gt;5 days)</p>' : '')
+    . ($k['overdue'] > 0 ? '<p style="color:#d03b3b;font-weight:bold;margin:2px 0 0">! ' . $k['overdue'] . ' assigned lead(s) overdue for a first follow-up (&gt;' . reach_overdue_days($pdo) . ' days)</p>' : '')
     . '<h2>Follow-up funnel</h2>' . reach_pdf_funnel_svg($a['funnel'])
-    . '<h2>Campaigns</h2><table class="grid"><tr><th>Campaign</th><th>Date</th><th class="n">Souls</th><th class="n">Follow-up</th><th class="n">Conversion</th></tr>' . $campaign_rows . '</table>
+    . '<h2>Campaigns</h2><table class="grid"><tr><th>Campaign</th><th>Date</th><th class="n">Souls</th><th class="n">Follow-up</th><th class="n">Visited church</th></tr>' . $campaign_rows . '</table>
     <h2>Top 5 capturers</h2><table class="grid"><tr><th class="n" style="width:24px">#</th><th>Volunteer</th><th class="n">Souls</th></tr>' . $top5 . '</table>
 
     <div style="page-break-before: always"></div>

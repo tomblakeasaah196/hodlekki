@@ -6,11 +6,24 @@
 const REACH_DEPT_SQL = "(d.name LIKE '%Reach%' OR d.name LIKE '%Evangelism%')";
 const REACH_OVERDUE_DAYS = 5;
 
-// Assigned more than REACH_OVERDUE_DAYS ago and nobody has followed up
-// since the assignment.
-function reach_overdue_sql(string $alias = 'l.'): string {
+function reach_overdue_days(PDO $pdo): int {
+    static $days = null;
+    if ($days === null) {
+        try {
+            $days = (int) (reach_setting($pdo, 'overdue_days') ?? REACH_OVERDUE_DAYS);
+        } catch (PDOException $e) {
+            $days = REACH_OVERDUE_DAYS;
+        }
+        $days = max(1, min(60, $days));
+    }
+    return $days;
+}
+
+// Assigned more than $days ago and nobody has followed up since the
+// assignment.
+function reach_overdue_sql(int $days, string $alias = 'l.'): string {
     return "({$alias}assigned_to IS NOT NULL AND {$alias}pushed_to_embrace_at IS NULL"
-        . " AND {$alias}assigned_at < NOW() - INTERVAL " . REACH_OVERDUE_DAYS . " DAY"
+        . " AND {$alias}assigned_at < NOW() - INTERVAL " . $days . " DAY"
         . " AND ({$alias}last_follow_up_at IS NULL OR {$alias}last_follow_up_at < {$alias}assigned_at))";
 }
 
@@ -76,7 +89,7 @@ function reach_sidebar_counts(PDO $pdo, int $user_id): array {
         SELECT
             COALESCE(SUM(l.assigned_to IS NULL AND l.pushed_to_embrace_at IS NULL AND l.status <> 'Declined'), 0) AS unassigned_all,
             COALESCE(SUM(l.assigned_to = ? AND l.pushed_to_embrace_at IS NULL), 0) AS my_assigned,
-            COALESCE(SUM(l.assigned_to = ? AND " . reach_overdue_sql() . "), 0) AS my_overdue
+            COALESCE(SUM(l.assigned_to = ? AND " . reach_overdue_sql(reach_overdue_days($pdo)) . "), 0) AS my_overdue
         FROM reach_leads l
     ");
     $stmt->execute([$user_id, $user_id]);
@@ -107,15 +120,14 @@ function reach_analytics(PDO $pdo, string $from, string $to): array {
     $hi = (new DateTime($to))->modify('+1 day')->format('Y-m-d') . ' 00:00:00';
     $has_fu      = 'EXISTS(SELECT 1 FROM reach_follow_ups f WHERE f.lead_id = l.id)';
     $has_reached = "EXISTS(SELECT 1 FROM reach_follow_ups f WHERE f.lead_id = l.id AND f.outcome = 'Reached')";
-    $has_visit   = "EXISTS(SELECT 1 FROM reach_follow_ups f WHERE f.lead_id = l.id AND f.channel = 'In_Person_Visit')";
 
     $stmt = $pdo->prepare("
         SELECT COUNT(*) AS souls,
                COALESCE(SUM({$has_fu}), 0) AS followed,
                COALESCE(SUM({$has_reached}), 0) AS spoken,
-               COALESCE(SUM(l.pushed_to_embrace_at IS NOT NULL OR {$has_visit}), 0) AS visited_or_converted,
+               COALESCE(SUM(l.will_attend_church = 1 OR EXISTS(SELECT 1 FROM reach_follow_ups f WHERE f.lead_id = l.id AND f.outcome = 'Promised_Church')), 0) AS promised,
                COALESCE(SUM(l.pushed_to_embrace_at IS NOT NULL), 0) AS converted,
-               COALESCE(SUM(" . reach_overdue_sql() . "), 0) AS overdue
+               COALESCE(SUM(" . reach_overdue_sql(reach_overdue_days($pdo)) . "), 0) AS overdue
           FROM reach_leads l
          WHERE l.created_at >= ? AND l.created_at < ?
     ");
@@ -203,7 +215,8 @@ function reach_analytics(PDO $pdo, string $from, string $to): array {
         'funnel' => [
             ['stage' => 'Captured', 'count' => $t['souls']],
             ['stage' => 'Spoken To', 'count' => $t['spoken']],
-            ['stage' => 'Visited / Converted', 'count' => $t['visited_or_converted']],
+            ['stage' => 'Will Come to Church', 'count' => $t['promised']],
+            ['stage' => 'Visited Church', 'count' => $t['converted']],
         ],
         'category_breakdown'    => $categories,
         'area_breakdown'        => array_map(fn($a) => ['area' => $a['area'], 'count' => (int) $a['count']], $areas),
@@ -295,4 +308,96 @@ function reach_delete_upload(?string $path): void {
     if ($path && str_starts_with($path, '/uploads/reach_campaigns/') && !str_contains($path, '..')) {
         @unlink(__DIR__ . '/..' . $path);
     }
+}
+
+const REACH_DEFAULT_GUIDE_FILE = __DIR__ . '/reach_evangelism_guide.md';
+
+function reach_evangelism_guide(PDO $pdo): string {
+    try {
+        $custom = reach_setting($pdo, 'evangelism_guide');
+    } catch (PDOException $e) {
+        $custom = null;
+    }
+    return $custom ?? (string) @file_get_contents(REACH_DEFAULT_GUIDE_FILE);
+}
+
+// Called by Embrace when it registers a first timer: any Reach lead with
+// the same phone is marked "Visited Church", even if nobody pushed it.
+function reach_mark_visited_church(PDO $pdo, string $phone, int $user_id): void {
+    $digits = preg_replace('/[^0-9]/', '', $phone) ?? '';
+    if (strlen($digits) < 9 || $user_id <= 0) {
+        return;
+    }
+    try {
+        $stmt = $pdo->prepare("
+            SELECT l.id, l.first_name, l.last_name, l.assigned_to,
+                   (SELECT lc.captured_by_user_id FROM reach_lead_captures lc WHERE lc.lead_id = l.id ORDER BY lc.id LIMIT 1) AS capturer
+              FROM reach_leads l
+             WHERE l.phone LIKE ? AND l.pushed_to_embrace_at IS NULL
+        ");
+        $stmt->execute(['%' . substr($digits, -9) . '%']);
+        $upd = $pdo->prepare("
+            UPDATE reach_leads SET converted_to_user_id = ?, pushed_to_embrace_at = NOW(), status = 'Converted'
+             WHERE id = ? AND pushed_to_embrace_at IS NULL
+        ");
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $lead) {
+            $upd->execute([$user_id, $lead['id']]);
+            $name = trim($lead['first_name'] . ' ' . $lead['last_name']);
+            reach_notify($pdo, [$lead['assigned_to'], $lead['capturer']], 'They came to church!',
+                "{$name}, whom Reach met, has just been registered by Embrace as a first timer. Their lead is now marked Visited Church.");
+        }
+    } catch (PDOException $e) {
+        error_log('Reach visited-church sync: ' . $e->getMessage());
+    }
+}
+
+// Minimal Markdown for how_to_use.md and the evangelism guide: headings, bold, italic, code,
+// links, lists, blockquotes, paragraphs. Text is escaped before any tag
+// is added, and links only allow http(s), relative and #anchors.
+function reach_markdown(string $md): string {
+    $inline = function (string $t): string {
+        $t = htmlspecialchars($t, ENT_QUOTES, 'UTF-8');
+        $t = preg_replace('/`([^`]+)`/', '<code class="px-1.5 py-0.5 rounded bg-gray-100 text-[0.85em] text-gray-800">$1</code>', $t);
+        $t = preg_replace('/\*\*(.+?)\*\*/', '<strong class="font-bold text-gray-900">$1</strong>', $t);
+        $t = preg_replace('/(?<![\*\w])\*(?!\s)(.+?)(?<!\s)\*(?![\*\w])/', '<em>$1</em>', $t);
+        return preg_replace_callback('/\[([^\]]+)\]\(([^)\s]+)\)/', function ($m) {
+            $safe = preg_match('#^(https?://|/|\#)#', html_entity_decode($m[2]));
+            return $safe ? '<a href="' . $m[2] . '" class="text-emerald-700 font-semibold underline underline-offset-2">' . $m[1] . '</a>' : $m[1];
+        }, $t);
+    };
+    $html = ''; $para = []; $list = null; $items = []; $start = 1;
+    $flushPara = function () use (&$html, &$para) {
+        if ($para) { $html .= '<p class="text-gray-600 leading-relaxed">' . implode(' ', $para) . '</p>'; $para = []; }
+    };
+    $flushList = function () use (&$html, &$list, &$items, &$start) {
+        if ($list) {
+            $cls = $list === 'ol' ? 'list-decimal' : 'list-disc';
+            $html .= "<{$list}" . ($list === 'ol' && $start > 1 ? " start=\"{$start}\"" : '') . " class=\"{$cls} pl-6 space-y-1.5 text-gray-600 leading-relaxed marker:text-emerald-600\">" . implode('', array_map(fn($i) => "<li>{$i}</li>", $items)) . "</{$list}>";
+            $list = null; $items = [];
+        }
+    };
+    foreach (preg_split('/\R/', $md) as $line) {
+        if (preg_match('/^(#{1,3})\s+(.+)$/', $line, $m)) {
+            $flushPara(); $flushList();
+            $n = strlen($m[1]);
+            $cls = [1 => 'text-2xl font-display font-bold text-gray-900', 2 => 'text-lg font-display font-bold text-gray-900 pt-4 border-t border-gray-100 scroll-mt-24', 3 => 'text-base font-bold text-gray-900'][$n];
+            $id = $n === 2 ? ' id="guide-' . trim(preg_replace('/[^a-z0-9]+/', '-', strtolower($m[2])), '-') . '"' : '';
+            $html .= "<h{$n}{$id} class=\"{$cls}\">" . $inline($m[2]) . "</h{$n}>";
+        } elseif (preg_match('/^\s*(?:([-*])|(\d+)\.)\s+(.+)$/', $line, $m)) {
+            $flushPara();
+            $type = $m[1] !== '' ? 'ul' : 'ol';
+            if ($list !== $type) { $flushList(); $list = $type; $start = (int) ($m[2] ?: 1); }
+            $items[] = $inline($m[3]);
+        } elseif (preg_match('/^>\s?(.*)$/', $line, $m)) {
+            $flushPara(); $flushList();
+            $html .= '<blockquote class="border-l-4 border-emerald-500 bg-emerald-50/60 rounded-r-xl px-4 py-3 text-emerald-900 text-sm">' . $inline($m[1]) . '</blockquote>';
+        } elseif (trim($line) === '') {
+            $flushPara(); $flushList();
+        } else {
+            $flushList();
+            $para[] = $inline(trim($line));
+        }
+    }
+    $flushPara(); $flushList();
+    return $html;
 }

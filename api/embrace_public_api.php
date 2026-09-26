@@ -104,6 +104,10 @@ try {
                 $qr_hash
             ]);
 
+            // Reach: if this first timer was met through Reach, mark that lead "Visited Church".
+            require_once __DIR__ . '/../includes/reach_helpers.php';
+            reach_mark_visited_church($pdo, $phone, (int) $pdo->lastInsertId());
+
             // NOTIFICATION TRIGGER 1: Alert Embrace Leadership
             $embraceStmt = $pdo->query("
                 SELECT ud.user_id 

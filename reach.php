@@ -43,6 +43,7 @@ $e = fn($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 // get a usable card. WhatsApp ignores SVG previews, hence the PNG.
 $host     = $_SERVER['HTTP_HOST'] ?? 'hodlc.lpc.cm';
 $bg_image = reach_default_campaign_image($pdo);
+$guide_html = $slug !== '' ? reach_markdown(reach_evangelism_guide($pdo)) : '';
 $og_title = 'Reach — Household of David Lekki Centre';
 $og_desc  = 'Every soul counts. Meet people, log the encounter, watch heaven celebrate.';
 $og_image = 'https://' . $host . '/assets/images/logo_hod.png';
@@ -309,11 +310,23 @@ if ($campaign) {
                 <label for="fldVisit" class="flex items-center justify-between gap-4 rounded-2xl border border-hodRed/20 bg-hodRed/5 px-4 py-4 cursor-pointer">
                     <span>
                         <span class="block font-semibold text-hodRed">Open to a home visit?</span>
-                        <span class="block text-xs text-gray-600 mt-0.5">Someone from our church family will visit within 7 days.</span>
+                        <span class="block text-xs text-gray-600 mt-0.5">We go to them — someone from our church family will visit within 7 days.</span>
                     </span>
                     <span class="relative shrink-0">
                         <input type="checkbox" id="fldVisit" name="willing_for_visit" value="1" class="peer sr-only">
                         <span class="block w-12 h-7 rounded-full bg-gray-300 transition-colors peer-checked:bg-hodRed peer-focus-visible:ring-2 peer-focus-visible:ring-hodBlue peer-focus-visible:ring-offset-2"></span>
+                        <span class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5"></span>
+                    </span>
+                </label>
+
+                <label for="fldChurch" class="flex items-center justify-between gap-4 rounded-2xl border border-hodBlue/20 bg-hodBlue/5 px-4 py-4 cursor-pointer">
+                    <span>
+                        <span class="block font-semibold text-hodBlue">Will come to church?</span>
+                        <span class="block text-xs text-gray-600 mt-0.5">They come to us — they said they'll visit Household of David on Sunday.</span>
+                    </span>
+                    <span class="relative shrink-0">
+                        <input type="checkbox" id="fldChurch" name="will_attend_church" value="1" class="peer sr-only">
+                        <span class="block w-12 h-7 rounded-full bg-gray-300 transition-colors peer-checked:bg-hodBlue peer-focus-visible:ring-2 peer-focus-visible:ring-hodBlue peer-focus-visible:ring-offset-2"></span>
                         <span class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5"></span>
                     </span>
                 </label>
@@ -399,6 +412,21 @@ if ($campaign) {
                 </div>
             </div>
         </section>
+
+        <?php if ($guide_html !== ''): ?>
+        <details class="panel p-6 group">
+            <summary class="flex items-center justify-between gap-3 cursor-pointer list-none">
+                <span>
+                    <span class="block font-display font-bold text-gray-900 text-lg">Tips for sharing your faith</span>
+                    <span class="block text-sm text-gray-500 mt-0.5">Prayer, the Gospel in brief, inviting people to church, scriptures and books.</span>
+                </span>
+                <span class="shrink-0 w-9 h-9 rounded-full bg-hodBlue/10 text-hodBlue flex items-center justify-center transition-transform group-open:rotate-180" aria-hidden="true">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </span>
+            </summary>
+            <div class="mt-5 space-y-4 text-sm"><?= $guide_html ?></div>
+        </details>
+        <?php endif; ?>
 
         <p class="text-center text-xs text-white/50 pt-2">&copy; <?= date('Y') ?> Household of David · Reach</p>
     </main>
@@ -714,6 +742,7 @@ function applyVoice() {
         if (d.phone)      $('#fldPhone').val(d.phone);
         if (d.category && d.category !== 'Other') setCategories([d.category]);
         $('#fldVisit').prop('checked', !!d.willing_for_visit);
+        if (d.will_attend_church) $('#fldChurch').prop('checked', true);
         if (d.notes && $('#fldNotes').length) $('#fldNotes').val(d.notes);
         closeVoice();
         toast('Prefilled — check it, then save');

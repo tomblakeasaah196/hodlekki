@@ -132,6 +132,7 @@ GitHub Secrets / Variables), and rollback instructions live in
 **Cron (once, in cPanel → Cron Jobs):**
 ```
 * * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >/dev/null 2>&1
+0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/reach_lost_souls.php >/dev/null 2>&1
 ```
 
 **Runtime files preserved across deploys (via `.deployignore`):**
@@ -180,7 +181,7 @@ the untracked `.env` file.
 api/            JSON endpoints, one file per module (auth_api.php, ...).
 assets/         Static CSS / JS / images shipped to the browser.
 auth/           Login, logout, first-time password setup.
-cron/           Long-running CLI jobs (sms_queue_worker.php).
+cron/           CLI jobs (sms_queue_worker.php, reach_lost_souls.php daily at 07:00).
 includes/       Shared PHP: db.php, header.php, functions.php, PDF helpers,
                 sms_functions.php, sms_vault_key.php.
 modules/        One folder per ERP module; each has index.php as the view.
