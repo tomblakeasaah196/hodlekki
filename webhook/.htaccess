@@ -1,0 +1,9 @@
+# Only expose deploy.php. No directory listing, no other files.
+Options -Indexes
+
+<FilesMatch "^(?!deploy\.php$).*">
+    Require all denied
+</FilesMatch>
+
+# Belt-and-braces: never let a search crawler index the webhook.
+Header set X-Robots-Tag "noindex, nofollow, noarchive"

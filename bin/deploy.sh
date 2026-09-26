@@ -71,8 +71,11 @@ if [ ! -f "$REPO/.deployignore" ]; then
     exit 1
 fi
 mkdir -p "$DEPLOYPATH"
+# --no-overwrite-dir: without it, the archive's "." entry copies the repo
+# root's 700 mode onto the docroot, LiteSpeed (group nobody) can no longer
+# enter it, and the whole site returns 403/404.
 tar cf - --exclude-from="$REPO/.deployignore" -C "$REPO" . \
-  | ( cd "$DEPLOYPATH" && tar xpf - )
+  | ( cd "$DEPLOYPATH" && tar xpf - --no-overwrite-dir )
 echo "[deploy] tar -> $DEPLOYPATH done"
 
 # 3. Refresh Composer dependencies. -d allow_url_fopen=On because this host's
