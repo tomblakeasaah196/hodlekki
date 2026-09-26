@@ -231,6 +231,12 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
                         <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">End Time</label>
                         <input type="time" name="end_time" id="fldEnd" class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none bg-white text-sm">
                     </div>
+                    <div class="sm:col-span-2 flex flex-wrap items-center gap-2" role="group" aria-label="Duration">
+                        <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mr-1">Duration</span>
+                        <?php foreach ([30 => '30 min', 60 => '1 hr', 90 => '1½ hrs', 120 => '2 hrs'] as $mins => $dur_label): ?>
+                            <button type="button" data-min="<?= $mins ?>" onclick="setDuration(<?= $mins ?>)" aria-pressed="false" class="dur-pill px-3.5 py-1.5 rounded-full border text-xs font-bold bg-white text-gray-600 border-gray-200 hover:border-emerald-300 transition-all"><?= $dur_label ?></button>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
 
                 <div>
@@ -600,6 +606,38 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
         aiApply();
     }
 
+    const pad2 = n => String(n).padStart(2, '0');
+    const toMinutes = t => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+
+    // End time follows start time + the chosen duration, capped at 23:59
+    // because a time input can't roll over into the next day.
+    function setDuration(mins) {
+        if (!$('#fldStart').val()) {
+            const n = new Date();
+            $('#fldStart').val(`${pad2(n.getHours())}:${pad2(n.getMinutes())}`);
+        }
+        const end = Math.min(toMinutes($('#fldStart').val()) + mins, 23 * 60 + 59);
+        $('#fldEnd').val(`${pad2(Math.floor(end / 60))}:${pad2(end % 60)}`);
+        markDuration(mins);
+    }
+    function markDuration(mins) {
+        $('.dur-pill').each(function() {
+            const on = +this.dataset.min === mins;
+            $(this).toggleClass('bg-emerald-600 text-white border-emerald-600', on)
+                   .toggleClass('bg-white text-gray-600 border-gray-200', !on)
+                   .attr('aria-pressed', on ? 'true' : 'false');
+        });
+    }
+    function currentDuration() {
+        const s = $('#fldStart').val(), e = $('#fldEnd').val();
+        return s && e ? toMinutes(e) - toMinutes(s) : 0;
+    }
+    $('#fldStart').on('change', () => {
+        const active = +$('.dur-pill[aria-pressed="true"]').data('min');
+        if (active) setDuration(active);
+    });
+    $('#fldEnd').on('change', () => markDuration(currentDuration()));
+
     function openCampaignModal() {
         $('#campaignModalTitle').text('New Reach Campaign');
         $('#campaignActionField').val('create_campaign');
@@ -610,6 +648,11 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
         $('#fldScripture').val('');
         $('#scriptureSelect').val('');
         renderTypeOptions();
+        const start = new Date(Math.ceil(Date.now() / 300000) * 300000);
+        $('#fldDate').val(`${start.getFullYear()}-${pad2(start.getMonth() + 1)}-${pad2(start.getDate())}`);
+        $('#fldStart').val(`${pad2(start.getHours())}:${pad2(start.getMinutes())}`);
+        $('#fldEnd').val('');
+        markDuration(0);
         editingFlyer = null;
         $('#flyerPreview').attr('src', REACH_DEFAULT_IMAGE);
         $('#removeFlyerRow').addClass('hidden').removeClass('flex');
@@ -625,6 +668,9 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
         $('#campaignIdField').val(c.id);
         $('#fldTitle').val(c.title || '');
         renderTypeOptions(c.campaign_type);
+        $('#fldStart').val((c.start_time || '').slice(0, 5));
+        $('#fldEnd').val((c.end_time || '').slice(0, 5));
+        markDuration(currentDuration());
         $('#fldFlyer').val('');
         $('#fldRemoveFlyer').prop('checked', false);
         editingFlyer = c.flyer_path || null;
@@ -633,8 +679,6 @@ preg_match_all('/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/', $reach_guide_html, $reach_
         aiReset();
         $('#aiWriteLabel').text('Write with AI');
         $('#fldDate').val(c.campaign_date || '');
-        $('#fldStart').val(c.start_time || '');
-        $('#fldEnd').val(c.end_time || '');
         $('#fldLocation').val(c.location || '');
         $('#fldMeta').val(c.meta_description || '');
         $('#fldScripture').val(c.share_scripture || '');

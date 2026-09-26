@@ -14,7 +14,7 @@ Anyone in the Reach department can capture, claim and follow up leads. **HODs, D
 ## 2. Creating a campaign
 
 1. On **Campaigns**, click **New Campaign**.
-2. Enter a clear **title** (for example *Ikate Street Evangelism*) and the **location**. Add the event type, date and times if you know them.
+2. Enter a clear **title** (for example *Ikate Street Evangelism*) and the **location**. The date and start time are already set to today and now — change them if needed, then tap a **duration** (30 min, 1 hr, 1½ hrs or 2 hrs) to fill in the end time.
 3. Optionally upload the campaign **flyer** (JPG, PNG or WebP, up to 5 MB). It becomes the WhatsApp link preview and the background of the capture page. No flyer? The **default campaign image** is used instead.
 4. Click **Write with AI** — it writes the WhatsApp description and picks a fitting scripture from the title and location. Not quite right? Click **Another option** to cycle through up to three versions, or edit the text yourself.
 5. Choose the **form length** — how much volunteers ask each person:
