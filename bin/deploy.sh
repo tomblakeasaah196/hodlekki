@@ -79,7 +79,8 @@ echo "[deploy] tar -> $DEPLOYPATH done"
 #    CLI php.ini disables it and Composer needs it to reach packagist.
 cd "$DEPLOYPATH"
 "$PHP" -d allow_url_fopen=On "$COMPOSER" install \
-    --no-dev --optimize-autoloader --no-interaction 2>&1 | tail -40
+    --no-dev --optimize-autoloader --no-interaction \
+    --ignore-platform-req=ext-fileinfo 2>&1 | tail -40
 echo "[deploy] composer install done"
 
 # 4. Apply any pending SQL migrations.
