@@ -97,26 +97,34 @@ jobs:
         run: |
           set -euo pipefail
 
-          # curl exit code and body handling:
-          #   -sS       silent but still show errors
-          #   -f        fail on 4xx/5xx (so we exit nonzero on server rejection)
-          #   -X POST   explicit method (webhook only accepts POST)
-          #   -N        no output buffering — let progress lines stream through
-          #   --max-time 900   webhooks over 15 min are almost certainly stuck
-          #
           # The secret is passed only in the request header, never in the URL
           # or query string, so it can't leak into web-server access logs.
-          http_status=$(curl -sS -X POST -N \
+          #
+          # Body streams to a temp file (so we can print it right after the
+          # request) while curl -w prints ONLY the HTTP code to stdout, which
+          # we capture into a variable. This avoids the earlier bug where the
+          # 404 body and status code got concatenated ("Page Not Found404").
+          body_file=$(mktemp)
+          trap 'rm -f "$body_file"' EXIT
+
+          http_status=$(curl -sS -X POST \
             --max-time 900 \
-            -o >(cat) \
-            -w "%{http_code}" \
+            --output "$body_file" \
+            --write-out "%{http_code}" \
             -H "X-Deploy-Token: ${DEPLOY_WEBHOOK_SECRET}" \
             -H "User-Agent: github-actions-hodlekki/1.0" \
-            "${DEPLOY_WEBHOOK_URL}")
+            "${DEPLOY_WEBHOOK_URL}") || {
+              rc=$?
+              echo "::error::curl failed with exit code ${rc} — check DEPLOY_WEBHOOK_URL and network reachability"
+              exit "$rc"
+            }
 
+          echo "----- webhook response body -----"
+          cat "$body_file"
           echo ""
           echo "----- webhook returned HTTP ${http_status} -----"
+
           if [ "${http_status}" != "200" ]; then
-            echo "::error::Deploy webhook returned ${http_status}"
+            echo "::error::Deploy webhook returned HTTP ${http_status}"
             exit 1
           fi
