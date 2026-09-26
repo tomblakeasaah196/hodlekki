@@ -438,7 +438,7 @@ try {
 
             // 3. Fetch the Gemini key securely from your .env array configuration
             $gemini_api_key = $_ENV['GEMINI_API_KEY'] ?? ''; 
-            $url = 'https://googleapis.com' . $gemini_api_key;
+            $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $gemini_api_key;
 
 
 

@@ -1,6 +1,6 @@
 <?php
 // /modules/reach/index.php
-require_once '../../includes/header.php'; 
+require_once '../../includes/header.php';
 
 if (!isset($_SESSION['user_id'])) {
     echo "<script>window.location.href = '/auth/login.php';</script>";
@@ -9,213 +9,101 @@ if (!isset($_SESSION['user_id'])) {
 ?>
 
 <div class="max-w-7xl mx-auto space-y-6 pb-10">
-    
+
     <div class="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100/60 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6 animate-fade-in-up">
         <div class="absolute top-0 right-0 w-64 h-64 bg-emerald-50/80 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none z-0"></div>
-        
+
         <div class="relative z-10 flex items-center gap-4">
             <div class="w-14 h-14 bg-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0">
                 <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
             </div>
-            <div class="md:max-w-[75%] lg:max-w-sm">
-                <h2 class="text-2xl md:text-3xl font-display font-bold text-gray-900 tracking-tight">Reach & Evangelism</h2>
-                <p class="text-gray-500 text-sm md:text-base mt-1 font-medium">Manage outreach campaigns, rapid soul capture, and follow-up leads.</p>
+            <div class="md:max-w-[75%] lg:max-w-md">
+                <h2 class="text-2xl md:text-3xl font-display font-bold text-gray-900 tracking-tight">Reach &amp; Evangelism</h2>
+                <p class="text-gray-500 text-sm md:text-base mt-1 font-medium">Run outreach campaigns, share public capture links, and follow up leads.</p>
             </div>
         </div>
 
         <div class="relative z-10 flex gap-3 w-full md:w-auto">
-            <button onclick="openCampaignModal()" class="flex-1 md:flex-none bg-white border border-gray-200 text-gray-700 hover:text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50 px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm flex justify-center items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            <button onclick="openCampaignModal()" class="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-800 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-emerald-900/20 flex justify-center items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                 New Campaign
             </button>
-            <button onclick="openSoulModal()" class="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-800 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-emerald-900/20 flex justify-center items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                Log New Soul
-            </button>
         </div>
     </div>
 
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 animate-fade-in-up" style="animation-delay: 0.1s;">
-        <div class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex items-center justify-between">
-            <div><p class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Souls Won (YTD)</p><h3 id="statSouls" class="text-2xl font-black text-gray-900">0</h3></div>
-            <div class="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg></div>
-        </div>
-        <div class="bg-white p-5 rounded-3xl border border-emerald-100 shadow-sm flex items-center justify-between">
-            <div><p class="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-1">Campaigns</p><h3 id="statCampaigns" class="text-2xl font-black text-emerald-900">0</h3></div>
-            <div class="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
-        </div>
-        <div class="bg-white p-5 rounded-3xl border border-orange-100 shadow-sm flex items-center justify-between">
-            <div><p class="text-xs font-bold text-orange-500 uppercase tracking-widest mb-1">Pending Follow-up</p><h3 id="statPending" class="text-2xl font-black text-orange-900">0</h3></div>
-            <div class="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center text-orange-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
-        </div>
-        <div class="bg-white p-5 rounded-3xl border border-red-100 shadow-sm flex items-center justify-between">
-            <div><p class="text-xs font-bold text-red-500 uppercase tracking-widest mb-1">Hot Leads (Will Visit)</p><h3 id="statHotLeads" class="text-2xl font-black text-red-900">0</h3></div>
-            <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"></path></svg></div>
-        </div>
+    <div class="flex bg-gray-100 p-1.5 rounded-2xl w-full md:max-w-2xl animate-fade-in-up overflow-x-auto" style="animation-delay: 0.1s;">
+        <button onclick="switchTab('campaigns')" id="tabBtn-campaigns" class="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold transition-all bg-white text-emerald-700 shadow-sm">Campaigns</button>
+        <button onclick="switchTab('followup')" id="tabBtn-followup" class="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Follow-Up</button>
+        <button onclick="switchTab('analytics')" id="tabBtn-analytics" class="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Analytics</button>
+        <button onclick="switchTab('howto')" id="tabBtn-howto" class="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">How to Use</button>
     </div>
 
-    <div class="flex bg-gray-100 p-1.5 rounded-2xl w-full md:max-w-md animate-fade-in-up" style="animation-delay: 0.2s;">
-        <button onclick="switchTab('souls')" id="tabBtn-souls" class="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all bg-white text-emerald-700 shadow-sm">Captured Souls</button>
-        <button onclick="switchTab('campaigns')" id="tabBtn-campaigns" class="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Campaigns</button>
-    </div>
-
-    <div id="view-souls" class="animate-fade-in-up" style="animation-delay: 0.3s;">
-        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="overflow-x-auto custom-scrollbar min-h-[400px]">
-                <table class="w-full text-left text-sm text-gray-600">
-                    <thead class="bg-gray-50 text-gray-500 font-bold uppercase tracking-wider text-[10px] border-b border-gray-100">
-                        <tr>
-                            <th class="px-6 py-4">Evangelism Target</th>
-                            <th class="px-6 py-4">Contact Info</th>
-                            <th class="px-6 py-4">Spiritual Status</th>
-                            <th class="px-6 py-4">Campaign Origin</th>
-                            <th class="px-6 py-4 text-right">Follow-Up Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="soulsList" class="divide-y divide-gray-50">
-                        <tr><td colspan="5" class="px-6 py-12 text-center text-gray-400 font-medium"><svg class="animate-spin h-8 w-8 text-emerald-500 mx-auto mb-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Syncing outreach data...</td></tr>
-                    </tbody>
-                </table>
+    <div id="view-campaigns" class="animate-fade-in-up" style="animation-delay: 0.2s;">
+        <div id="campaignsGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 min-h-[240px]">
+            <div class="col-span-full text-center text-gray-400 font-medium py-12">
+                <svg class="animate-spin h-8 w-8 text-emerald-500 mx-auto mb-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                Loading campaigns...
             </div>
         </div>
     </div>
 
-    <div id="view-campaigns" class="hidden animate-fade-in-up" style="animation-delay: 0.3s;">
-        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="overflow-x-auto custom-scrollbar min-h-[400px]">
-                <table class="w-full text-left text-sm text-gray-600">
-                    <thead class="bg-gray-50 text-gray-500 font-bold uppercase tracking-wider text-[10px] border-b border-gray-100">
-                        <tr>
-                            <th class="px-6 py-4">Campaign Details</th>
-                            <th class="px-6 py-4">Type</th>
-                            <th class="px-6 py-4">Location</th>
-                            <th class="px-6 py-4 text-center">Souls Reached</th>
-                            <th class="px-6 py-4 text-center">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="campaignsList" class="divide-y divide-gray-50"></tbody>
-                </table>
+    <div id="view-followup" class="hidden animate-fade-in-up" style="animation-delay: 0.2s;">
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-10 text-center">
+            <div class="w-16 h-16 rounded-2xl bg-emerald-50 mx-auto mb-4 flex items-center justify-center text-emerald-600">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
             </div>
+            <h3 class="text-lg font-bold text-gray-900">Follow-Up dashboard is coming in PR 2</h3>
+            <p class="text-sm text-gray-500 mt-2 max-w-md mx-auto">Lead assignment, call queues, and pastor visitation tools land in the next release.</p>
         </div>
     </div>
 
-</div>
-
-<div id="soulModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 sm:p-6 opacity-0 transition-opacity duration-300 overscroll-contain">
-    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg transform scale-95 transition-transform duration-300 flex flex-col max-h-[80vh] md:max-h-[90vh] overflow-hidden">
-        
-        <div class="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-white rounded-t-3xl shrink-0">
-            <h3 class="text-xl font-display font-bold text-gray-900">Rapid Data Capture</h3>
-            <button onclick="closeModal('soulModal')" class="text-gray-400 hover:text-red-500 bg-gray-50 hover:bg-red-50 p-1.5 rounded-full transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+    <div id="view-analytics" class="hidden animate-fade-in-up" style="animation-delay: 0.2s;">
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-10 text-center">
+            <div class="w-16 h-16 rounded-2xl bg-emerald-50 mx-auto mb-4 flex items-center justify-center text-emerald-600">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900">Analytics is coming in PR 3</h3>
+            <p class="text-sm text-gray-500 mt-2 max-w-md mx-auto">Conversion funnels, capture heatmaps and top-volunteer boards will live here.</p>
         </div>
-        
-        <div class="overflow-y-auto flex-1 p-6 custom-scrollbar bg-gray-50/50">
-            <form id="soulForm" class="space-y-6">
-                <input type="hidden" name="action" value="save_soul">
-                
-                <div>
-                    <label class="block text-[11px] font-bold text-emerald-800 uppercase tracking-wider mb-2">Campaign Origin</label>
-                    <select name="campaign_id" id="inpCampaign" class="w-full px-4 py-3 border border-emerald-200 bg-emerald-50 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-emerald-900 shadow-sm cursor-pointer"></select>
-                </div>
+    </div>
 
-                <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">First Name *</label>
-                            <input type="text" name="first_name" required placeholder="e.g., John" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-emerald-500 outline-none font-bold text-gray-900">
-                        </div>
-                        <div>
-                            <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Last Name</label>
-                            <input type="text" name="last_name" placeholder="e.g., Doe" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-emerald-500 outline-none font-bold text-gray-900">
-                        </div>
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Phone Number</label>
-                            <input type="tel" name="phone" placeholder="080..." class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-emerald-500 outline-none font-bold text-gray-900">
-                        </div>
-                        <div>
-                            <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Gender</label>
-                            <select name="gender" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-emerald-500 outline-none font-bold text-gray-900 bg-white">
-                                <option value="Male">Male</option>
-                                <option value="Female">Female</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Home Address / Area</label>
-                        <input type="text" name="address" placeholder="e.g., Lekki Phase 1" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-emerald-500 outline-none font-medium text-gray-900 text-sm">
-                    </div>
-                </div>
-
-                <div class="bg-blue-50/50 p-5 rounded-2xl border border-blue-100 space-y-4">
-                    <h4 class="text-xs font-bold text-blue-800 uppercase tracking-widest border-b border-blue-100 pb-2">Spiritual Status</h4>
-                    
-                    <label class="flex items-center gap-3 cursor-pointer group">
-                        <div class="relative flex items-center justify-center">
-                            <input type="checkbox" name="is_churched" id="chkChurched" class="peer appearance-none w-6 h-6 border-2 border-blue-200 rounded-lg checked:bg-blue-600 checked:border-blue-600 transition-all">
-                            <svg class="absolute w-4 h-4 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
-                        </div>
-                        <span class="text-sm font-bold text-gray-700 group-hover:text-blue-700 transition-colors">They are currently churched</span>
-                    </label>
-
-                    <div id="prevChurchDiv" class="hidden pl-9 transition-all">
-                        <input type="text" name="previous_church" placeholder="Which church do they attend?" class="w-full px-4 py-2.5 border border-blue-200 rounded-xl focus:border-blue-500 outline-none font-medium text-gray-900 text-sm shadow-sm bg-white">
-                    </div>
-
-                    <label class="flex items-center gap-3 cursor-pointer group">
-                        <div class="relative flex items-center justify-center">
-                            <input type="checkbox" name="is_baptized" class="peer appearance-none w-6 h-6 border-2 border-blue-200 rounded-lg checked:bg-blue-600 checked:border-blue-600 transition-all">
-                            <svg class="absolute w-4 h-4 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
-                        </div>
-                        <span class="text-sm font-bold text-gray-700 group-hover:text-blue-700 transition-colors">They are baptized</span>
-                    </label>
-
-                    <label class="flex items-center gap-3 cursor-pointer group">
-                        <div class="relative flex items-center justify-center">
-                            <input type="checkbox" name="wants_to_visit" checked class="peer appearance-none w-6 h-6 border-2 border-red-200 rounded-lg checked:bg-red-500 checked:border-red-500 transition-all">
-                            <svg class="absolute w-4 h-4 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
-                        </div>
-                        <span class="text-sm font-bold text-red-600 group-hover:text-red-700 transition-colors">Willing to visit our church</span>
-                    </label>
-                </div>
-
-                <div>
-                    <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Prayer Requests / Notes</label>
-                    <textarea name="prayer_requests" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-emerald-500 outline-none font-medium text-gray-900 resize-none bg-white"></textarea>
-                </div>
-            </form>
-        </div>
-        <div class="p-6 border-t border-gray-100 bg-white shrink-0">
-            <button type="submit" form="soulForm" class="w-full bg-emerald-600 hover:bg-emerald-800 text-white px-6 py-4 rounded-xl font-bold shadow-lg transition-all flex justify-center items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                Secure Soul Record
-            </button>
+    <div id="view-howto" class="hidden animate-fade-in-up" style="animation-delay: 0.2s;">
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-10 text-center">
+            <div class="w-16 h-16 rounded-2xl bg-emerald-50 mx-auto mb-4 flex items-center justify-center text-emerald-600">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900">Field guide is coming in PR 3</h3>
+            <p class="text-sm text-gray-500 mt-2 max-w-md mx-auto">A step-by-step playbook for volunteers, HODs and pastors will land alongside analytics.</p>
         </div>
     </div>
 </div>
 
+<!-- ================================================================ -->
+<!-- CAMPAIGN CREATE / EDIT MODAL                                     -->
+<!-- ================================================================ -->
 <div id="campaignModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 sm:p-6 opacity-0 transition-opacity duration-300 overscroll-contain">
-    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md transform scale-95 transition-transform duration-300 border border-gray-100 flex flex-col max-h-[80vh] md:max-h-[90vh] overflow-hidden">
-        <div class="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-3xl shrink-0">
-            <h3 class="text-lg font-bold text-gray-900">Schedule Campaign</h3>
-            <button onclick="closeModal('campaignModal')" class="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-full transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-xl transform scale-95 transition-transform duration-300 border border-gray-100 flex flex-col max-h-[92vh] overflow-hidden">
+        <div class="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-white rounded-t-3xl shrink-0">
+            <h3 id="campaignModalTitle" class="text-lg font-display font-bold text-gray-900">New Reach Campaign</h3>
+            <button onclick="closeModal('campaignModal')" class="text-gray-400 hover:text-red-500 bg-gray-50 hover:bg-red-50 p-1.5 rounded-full transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
         </div>
-        <div class="overflow-y-auto flex-1 p-6 custom-scrollbar bg-white">
+        <div class="overflow-y-auto flex-1 p-6 custom-scrollbar bg-gray-50/40">
             <form id="campaignForm" class="space-y-5">
-                <input type="hidden" name="action" value="save_campaign">
-                
+                <input type="hidden" name="action" id="campaignActionField" value="create_campaign">
+                <input type="hidden" name="id" id="campaignIdField" value="">
+
                 <div>
                     <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Campaign Title *</label>
-                    <input type="text" name="title" required placeholder="e.g., Ikate Street Evangelism" class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none">
+                    <input type="text" name="title" id="fldTitle" required placeholder="e.g., Ikate Street Evangelism"
+                           class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none bg-white">
                 </div>
-                
-                <div class="grid grid-cols-2 gap-4">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Event Type *</label>
-                        <select name="campaign_type" required class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none bg-white cursor-pointer">
+                        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Event Type</label>
+                        <select name="campaign_type" id="fldType" class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none bg-white cursor-pointer">
                             <option value="Saturday_Evangelism">Saturday Evangelism</option>
                             <option value="Crusade">Crusade</option>
                             <option value="Welfare_Outreach">Welfare Outreach</option>
@@ -224,18 +112,136 @@ if (!isset($_SESSION['user_id'])) {
                         </select>
                     </div>
                     <div>
-                        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Date *</label>
-                        <input type="date" name="campaign_date" required class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none text-sm cursor-text">
+                        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Date</label>
+                        <input type="date" name="campaign_date" id="fldDate" class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none bg-white text-sm">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Start Time</label>
+                        <input type="time" name="start_time" id="fldStart" class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none bg-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">End Time</label>
+                        <input type="time" name="end_time" id="fldEnd" class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none bg-white text-sm">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Target Location</label>
-                    <input type="text" name="location" placeholder="e.g., Orphanage Home, Surulere" class="w-full px-4 py-3 border border-gray-200 rounded-xl font-medium focus:border-emerald-500 outline-none">
+                    <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Location</label>
+                    <input type="text" name="location" id="fldLocation" placeholder="e.g., Orphanage Home, Surulere"
+                           class="w-full px-4 py-3 border border-gray-200 rounded-xl font-medium focus:border-emerald-500 outline-none bg-white">
                 </div>
-                
-                <button type="submit" class="w-full bg-gray-900 hover:bg-black text-white px-6 py-4 rounded-xl font-bold shadow-md transition-all mt-2">Initialize Campaign</button>
+
+                <div class="bg-white p-4 rounded-2xl border border-gray-100">
+                    <div class="flex justify-between items-center mb-3">
+                        <label class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Payload Tier</label>
+                        <button type="button" onclick="toggleTierHelp()" class="w-6 h-6 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs flex items-center justify-center hover:bg-emerald-100" title="Which fields are shown in each tier?">i</button>
+                    </div>
+                    <div id="tierHelp" class="hidden mb-3 text-xs bg-emerald-50/70 border border-emerald-100 rounded-xl p-3 text-emerald-800 space-y-1">
+                        <p><strong>Rapid:</strong> first name, phone, category, willing-for-visit — 10-second capture.</p>
+                        <p><strong>Standard:</strong> adds address and prayer request.</p>
+                        <p><strong>Rich:</strong> adds age band, marital status, language, best time to call, notes.</p>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <label class="cursor-pointer">
+                            <input type="radio" name="payload_tier" value="Rapid" class="sr-only peer">
+                            <div class="rounded-xl border border-gray-200 py-3 text-center text-xs font-bold text-gray-700 peer-checked:bg-emerald-600 peer-checked:text-white peer-checked:border-emerald-600 transition-all">Rapid</div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="payload_tier" value="Standard" class="sr-only peer">
+                            <div class="rounded-xl border border-gray-200 py-3 text-center text-xs font-bold text-gray-700 peer-checked:bg-emerald-600 peer-checked:text-white peer-checked:border-emerald-600 transition-all">Standard</div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="payload_tier" value="Rich" checked class="sr-only peer">
+                            <div class="rounded-xl border border-gray-200 py-3 text-center text-xs font-bold text-gray-700 peer-checked:bg-emerald-600 peer-checked:text-white peer-checked:border-emerald-600 transition-all">Rich</div>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Meta Description
+                        <span class="text-gray-400 font-medium normal-case tracking-normal">(shows in WhatsApp / link previews)</span>
+                    </label>
+                    <textarea name="meta_description" id="fldMeta" rows="2" maxlength="300"
+                              class="w-full px-4 py-3 border border-gray-200 rounded-xl font-medium focus:border-emerald-500 outline-none bg-white resize-none"
+                              oninput="updateMetaCount()"></textarea>
+                    <p class="text-[10px] font-bold text-gray-400 mt-1"><span id="metaCount">0</span> / 160 chars recommended</p>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Share Scripture</label>
+                    <select id="scriptureSelect" onchange="onScriptureSelect()" class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none bg-white cursor-pointer">
+                        <option value="">— Pick a scripture —</option>
+                        <option>John 3:16 — For God so loved the world that he gave his one and only Son...</option>
+                        <option>Romans 10:9 — If you declare with your mouth "Jesus is Lord"...</option>
+                        <option>Acts 16:31 — Believe in the Lord Jesus, and you will be saved — you and your household.</option>
+                        <option>2 Corinthians 5:17 — Therefore, if anyone is in Christ, the new creation has come.</option>
+                        <option>Revelation 3:20 — Here I am! I stand at the door and knock...</option>
+                        <option>Isaiah 1:18 — Though your sins are like scarlet, they shall be as white as snow.</option>
+                        <option>Matthew 11:28 — Come to me, all you who are weary and burdened, and I will give you rest.</option>
+                        <option>Ephesians 2:8-9 — For it is by grace you have been saved, through faith.</option>
+                        <option value="__custom__">Custom scripture...</option>
+                    </select>
+                    <textarea name="share_scripture" id="fldScripture" rows="2" placeholder="Custom scripture text"
+                              class="w-full mt-2 px-4 py-3 border border-gray-200 rounded-xl font-medium focus:border-emerald-500 outline-none bg-white resize-none"></textarea>
+                </div>
+
+                <div id="statusRow" class="hidden">
+                    <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Status</label>
+                    <select name="status" id="fldStatus" class="w-full px-4 py-3 border border-gray-200 rounded-xl font-bold focus:border-emerald-500 outline-none bg-white cursor-pointer">
+                        <option value="Active">Active</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
             </form>
+        </div>
+        <div class="p-6 border-t border-gray-100 bg-white shrink-0 flex gap-3">
+            <button type="button" onclick="closeModal('campaignModal')" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold transition-all">Cancel</button>
+            <button type="submit" form="campaignForm" class="flex-1 bg-emerald-600 hover:bg-emerald-800 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all flex justify-center items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                Save Campaign
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SHARE MODAL                                                       -->
+<!-- ================================================================ -->
+<div id="shareModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 sm:p-6 opacity-0 transition-opacity duration-300 overscroll-contain">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md transform scale-95 transition-transform duration-300 border border-gray-100 flex flex-col max-h-[92vh] overflow-hidden">
+        <div class="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-white rounded-t-3xl shrink-0">
+            <h3 class="text-lg font-display font-bold text-gray-900">Share Public Link</h3>
+            <button onclick="closeModal('shareModal')" class="text-gray-400 hover:text-red-500 bg-gray-50 hover:bg-red-50 p-1.5 rounded-full transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="overflow-y-auto flex-1 p-6 custom-scrollbar bg-white space-y-5">
+            <div>
+                <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Campaign</p>
+                <p id="shareTitle" class="text-lg font-display font-bold text-gray-900">—</p>
+            </div>
+
+            <div class="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex flex-col items-center gap-3">
+                <img id="shareQr" src="" alt="QR" class="w-40 h-40 rounded-xl bg-white p-2 border border-gray-100">
+                <div class="w-full flex items-center gap-2">
+                    <input type="text" id="shareLink" readonly class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg font-mono text-xs bg-white">
+                    <button onclick="copyShareLink()" class="shrink-0 bg-gray-900 hover:bg-black text-white px-3 py-2 rounded-lg font-bold text-xs">Copy</button>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">WhatsApp Preview</label>
+                <textarea id="shareBlurb" rows="4" readonly class="w-full px-4 py-3 border border-gray-200 rounded-xl font-medium bg-gray-50 resize-none text-sm"></textarea>
+            </div>
+
+            <a id="shareWhatsapp" href="#" target="_blank" rel="noopener" class="w-full bg-[#25D366] hover:bg-[#128C7E] text-white px-6 py-3 rounded-xl font-bold transition-all flex justify-center items-center gap-2">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12.01 2C6.487 2 2 6.487 2 12.01c0 1.76.458 3.483 1.328 5.001L2 22l5.116-1.325a10.02 10.02 0 004.895 1.256h.005c5.522 0 10.008-4.486 10.008-10.008 0-2.674-1.041-5.185-2.932-7.076A9.943 9.943 0 0012.01 2z"/></svg>
+                Send via WhatsApp
+            </a>
         </div>
     </div>
 </div>
@@ -250,254 +256,244 @@ if (!isset($_SESSION['user_id'])) {
 <script>
     const API_URL = '/api/reach_api.php';
 
-    // ==========================================
-    // UI CORE LOGIC (UPGRADED)
-    // ==========================================
     function switchTab(tabId) {
-        $('#view-souls, #view-campaigns').addClass('hidden').removeClass('animate-fade-in-up');
-        $('#tabBtn-souls, #tabBtn-campaigns').removeClass('bg-white text-emerald-700 shadow-sm').addClass('text-gray-500 hover:text-gray-900');
-        
-        $(`#view-${tabId}`).removeClass('hidden').addClass('animate-fade-in-up');
-        $(`#tabBtn-${tabId}`).removeClass('text-gray-500 hover:text-gray-900').addClass('bg-white text-emerald-700 shadow-sm');
+        $('#view-campaigns, #view-followup, #view-analytics, #view-howto').addClass('hidden');
+        $('#tabBtn-campaigns, #tabBtn-followup, #tabBtn-analytics, #tabBtn-howto')
+            .removeClass('bg-white text-emerald-700 shadow-sm')
+            .addClass('text-gray-500 hover:text-gray-900');
+        $(`#view-${tabId}`).removeClass('hidden');
+        $(`#tabBtn-${tabId}`)
+            .removeClass('text-gray-500 hover:text-gray-900')
+            .addClass('bg-white text-emerald-700 shadow-sm');
     }
 
     function lockScreenAction() {
-        const blocker = document.getElementById('globalActionBlocker');
-        blocker.classList.remove('hidden');
-        document.body.style.overflow = 'hidden'; 
-        setTimeout(() => blocker.classList.remove('opacity-0'), 10);
+        const b = document.getElementById('globalActionBlocker');
+        b.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        setTimeout(() => b.classList.remove('opacity-0'), 10);
     }
-
     function unlockScreenAction() {
-        const blocker = document.getElementById('globalActionBlocker');
-        blocker.classList.add('opacity-0');
+        const b = document.getElementById('globalActionBlocker');
+        b.classList.add('opacity-0');
         setTimeout(() => {
-            blocker.classList.add('hidden');
-            if(document.querySelectorAll('.backdrop-blur-md:not(.hidden)').length === 0){
-                document.body.style.overflow = ''; 
+            b.classList.add('hidden');
+            if (document.querySelectorAll('.backdrop-blur-md:not(.hidden)').length === 0) {
+                document.body.style.overflow = '';
             }
         }, 300);
     }
-
     function openModal(id) {
         const m = document.getElementById(id);
-        if(!m) return;
-
-        document.body.appendChild(m); // Escape parent containers
+        if (!m) return;
+        document.body.appendChild(m);
         m.classList.remove('hidden');
-        document.body.style.overflow = 'hidden'; // Lock background scroll
-
-        requestAnimationFrame(() => { 
-            m.classList.remove('opacity-0'); 
-            m.children[0].classList.remove('scale-95'); 
+        document.body.style.overflow = 'hidden';
+        requestAnimationFrame(() => {
+            m.classList.remove('opacity-0');
+            m.children[0].classList.remove('scale-95');
         });
     }
-
     function closeModal(id) {
-    const m = document.getElementById(id);
-    if(!m) return;
-
-    m.classList.add('opacity-0'); 
-    m.children[0].classList.add('scale-95'); 
-    
-    setTimeout(() => { 
-        m.classList.add('hidden'); 
-        
-        // PATCH: Apply the same safety check used in unlockScreenAction
-        if(document.querySelectorAll('.backdrop-blur-md:not(.hidden)').length === 0){
-            document.body.style.overflow = ''; 
-        }
-        
-        const form = m.querySelector('form'); 
-        if(form) form.reset(); 
-        $('#prevChurchDiv').addClass('hidden'); 
-    }, 300);
-}
-
+        const m = document.getElementById(id);
+        if (!m) return;
+        m.classList.add('opacity-0');
+        m.children[0].classList.add('scale-95');
+        setTimeout(() => {
+            m.classList.add('hidden');
+            if (document.querySelectorAll('.backdrop-blur-md:not(.hidden)').length === 0) {
+                document.body.style.overflow = '';
+            }
+        }, 300);
+    }
     function showToast(msg, type = 'success') {
-        Toastify({ 
-            text: msg, 
-            gravity: "top", 
-            position: "center", 
-            duration: 3000,
-            style: { 
-                background: type === 'success' ? "#10B981" : "#EF4444", 
-                borderRadius: "10px", 
-                fontWeight: "bold",
+        Toastify({
+            text: msg, gravity: "top", position: "center", duration: 3000,
+            style: {
+                background: type === 'success' ? "#10B981" : "#EF4444",
+                borderRadius: "10px", fontWeight: "bold",
                 boxShadow: "0 10px 25px rgba(0,0,0,0.3)"
-            } 
+            }
         }).showToast();
     }
 
-    function handleAjaxForm(formId, successCallback) {
-    $(`#${formId}`).on('submit', function(e) {
-        e.preventDefault();
-        const btn = $(this).find('button[type="submit"]');
-        const origHtml = btn.html(); 
-        
-        // PATCH: Re-introduce the inline spinner for polished UX
-        const spinner = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
-        
-        btn.prop('disabled', true).addClass('opacity-75 cursor-not-allowed').html(spinner + 'Processing...');
-        lockScreenAction(); 
-        
-        $.post(API_URL, $(this).serialize(), function(res) {
-            btn.prop('disabled', false).removeClass('opacity-75 cursor-not-allowed').html(origHtml);
-            unlockScreenAction(); 
-            
-            showToast(res.message, res.status);
-            if(res.status === 'success' && successCallback) successCallback(res);
-        }, 'json').fail(function() {
-            btn.prop('disabled', false).removeClass('opacity-75 cursor-not-allowed').html(origHtml);
-            unlockScreenAction();
-            showToast("Server Error", "error");
-        });
-    });
-}
-
-    function openCampaignModal() { openModal('campaignModal'); }
-    function openSoulModal() { openModal('soulModal'); }
-
-    // Toggle Church Input
-    $('#chkChurched').on('change', function() {
-        if($(this).is(':checked')) {
-            $('#prevChurchDiv').removeClass('hidden');
-        } else {
-            $('#prevChurchDiv').addClass('hidden');
-            $('input[name="previous_church"]').val(''); // Clear it out
+    function toggleTierHelp() {
+        $('#tierHelp').toggleClass('hidden');
+    }
+    function updateMetaCount() {
+        const val = $('#fldMeta').val() || '';
+        $('#metaCount').text(val.length);
+    }
+    function onScriptureSelect() {
+        const val = $('#scriptureSelect').val();
+        if (val === '__custom__') {
+            $('#fldScripture').val('').focus();
+        } else if (val) {
+            $('#fldScripture').val(val);
         }
-    });
-
-    // ==========================================
-    // DATA RENDERING
-    // ==========================================
-    function loadDashboard() {
-        $.getJSON(API_URL, { action: 'fetch_dashboard' }, function(res) {
-            if(res.status === 'success') {
-                
-                // 1. Stats
-                $('#statSouls').text(res.stats.souls_ytd);
-                $('#statCampaigns').text(res.stats.campaigns_ytd);
-                $('#statPending').text(res.stats.pending_followups);
-                $('#statHotLeads').text(res.stats.wants_to_visit);
-
-                // 2. Render Souls List
-                let sHtml = '';
-                if(res.souls.length === 0) {
-                    sHtml = '<tr><td colspan="5" class="px-6 py-12 text-center text-gray-400 font-medium">No souls captured yet.</td></tr>';
-                } else {
-                    res.souls.forEach(s => {
-                        // Spiritual Badges
-                        let spBadges = '';
-                        if(s.is_churched == 1) spBadges += `<span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[9px] font-bold uppercase mr-1" title="${s.previous_church || 'Unknown Church'}">Churched</span>`;
-                        if(s.is_baptized == 1) spBadges += `<span class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[9px] font-bold uppercase mr-1">Baptized</span>`;
-                        if(s.wants_to_visit == 1) spBadges += `<span class="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[9px] font-bold uppercase border border-red-100">Hot Lead</span>`;
-                        
-                        // Select Dropdown for inline status update
-                        const selectHtml = `
-                            <select onchange="updateFollowUp(${s.id}, this.value)" class="w-full sm:w-auto text-xs font-bold text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-1.5 focus:border-emerald-500 outline-none shadow-sm cursor-pointer hover:border-gray-300 transition-colors">
-                                <option value="Pending_Followup" ${s.status === 'Pending_Followup' ? 'selected' : ''}>⏳ Pending Follow-Up</option>
-                                <option value="Contacted" ${s.status === 'Contacted' ? 'selected' : ''}>📞 Contacted</option>
-                                <option value="Visited_Church" ${s.status === 'Visited_Church' ? 'selected' : ''}>⛪ Visited Church</option>
-                                <option value="Joined" ${s.status === 'Joined' ? 'selected' : ''}>✅ Officially Joined</option>
-                                <option value="Lost" ${s.status === 'Lost' ? 'selected' : ''}>❌ Lost Lead</option>
-                            </select>
-                        `;
-
-                        sHtml += `
-                        <tr class="hover:bg-emerald-50/20 transition-colors border-b border-gray-50 last:border-0">
-                            <td class="px-6 py-4">
-                                <div class="flex items-center gap-3">
-                                    <div class="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 font-bold text-xs shrink-0 border border-gray-200">${s.first_name.charAt(0)}</div>
-                                    <div>
-                                        <p class="font-bold text-gray-900">${s.first_name} ${s.last_name || ''}</p>
-                                        <p class="text-[10px] text-gray-400 font-bold uppercase">${s.gender || 'Unknown'} • ${s.date_captured}</p>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4">
-                                <p class="text-xs font-bold text-gray-700">${s.phone || 'No phone'}</p>
-                                <p class="text-[10px] text-gray-500 truncate max-w-[150px] mt-0.5" title="${s.address || ''}">${s.address || '-'}</p>
-                            </td>
-                            <td class="px-6 py-4">${spBadges || '-'}</td>
-                            <td class="px-6 py-4">
-                                <p class="text-xs font-bold text-emerald-700">${s.campaign_title || 'Direct Entry'}</p>
-                                <p class="text-[9px] text-gray-400 font-bold uppercase mt-0.5">By: ${s.evangelist_fname || 'Unknown'}</p>
-                            </td>
-                            <td class="px-6 py-4 text-right">${selectHtml}</td>
-                        </tr>`;
-                    });
-                }
-                $('#soulsList').html(sHtml);
-
-                // 3. Render Campaigns List
-                let cHtml = '';
-                if(res.campaigns.length === 0) {
-                    cHtml = '<tr><td colspan="5" class="px-6 py-12 text-center text-gray-400 font-medium">No campaigns scheduled yet.</td></tr>';
-                } else {
-                    res.campaigns.forEach(c => {
-                        const statusBadge = c.status === 'Completed' 
-                            ? '<span class="bg-gray-100 text-gray-600 px-3 py-1 rounded-lg text-[10px] font-bold border border-gray-200 uppercase">Completed</span>' 
-                            : '<span class="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-lg text-[10px] font-bold border border-emerald-200 uppercase">Active</span>';
-                            
-                        cHtml += `
-                        <tr class="hover:bg-emerald-50/20 transition-colors border-b border-gray-50 last:border-0">
-                            <td class="px-6 py-4">
-                                <p class="font-bold text-gray-900">${c.title}</p>
-                                <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mt-0.5">${c.nice_date}</p>
-                            </td>
-                            <td class="px-6 py-4 text-xs font-bold text-gray-600">${c.campaign_type.replace('_', ' ')}</td>
-                            <td class="px-6 py-4 text-xs font-medium text-gray-500">${c.location || '-'}</td>
-                            <td class="px-6 py-4 text-center"><span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg font-black text-xs border border-blue-100">${c.souls_won} Souls</span></td>
-                            <td class="px-6 py-4 text-center">${statusBadge}</td>
-                        </tr>`;
-                    });
-                }
-                $('#campaignsList').html(cHtml);
-
-                // 4. Populate Active Campaigns Dropdown in Soul Form
-                let cOpts = '<option value="">No Specific Campaign (Direct Entry)</option>';
-                res.active_campaigns.forEach(c => cOpts += `<option value="${c.id}">${c.title}</option>`);
-                $('#inpCampaign').html(cOpts);
-            }
-        });
     }
 
-    function updateFollowUp(soulId, newStatus) {
-    lockScreenAction(); 
-    
-    $.post(API_URL, { action: 'update_soul_status', soul_id: soulId, status: newStatus }, function(res) {
-        unlockScreenAction();
-        
-        if(res.status === 'success') {
-            showToast(res.message, 'success');
-            loadDashboard(); 
-        } else {
-            showToast(res.message, 'error');
-            loadDashboard(); // PATCH: Force refresh to revert the dropdown if the server rejects it
+    function openCampaignModal() {
+        $('#campaignModalTitle').text('New Reach Campaign');
+        $('#campaignActionField').val('create_campaign');
+        $('#campaignIdField').val('');
+        $('#campaignForm')[0].reset();
+        $('input[name="payload_tier"][value="Rich"]').prop('checked', true);
+        $('#statusRow').addClass('hidden');
+        $('#fldScripture').val('');
+        $('#scriptureSelect').val('');
+        updateMetaCount();
+        openModal('campaignModal');
+    }
+
+    function openEditCampaignModal(c) {
+        $('#campaignModalTitle').text('Edit Campaign');
+        $('#campaignActionField').val('edit_campaign');
+        $('#campaignIdField').val(c.id);
+        $('#fldTitle').val(c.title || '');
+        $('#fldType').val(c.campaign_type || 'Saturday_Evangelism');
+        $('#fldDate').val(c.campaign_date || '');
+        $('#fldStart').val(c.start_time || '');
+        $('#fldEnd').val(c.end_time || '');
+        $('#fldLocation').val(c.location || '');
+        $('#fldMeta').val(c.meta_description || '');
+        $('#fldScripture').val(c.share_scripture || '');
+        $('#scriptureSelect').val('');
+        $(`input[name="payload_tier"][value="${c.payload_tier || 'Rich'}"]`).prop('checked', true);
+        $('#statusRow').removeClass('hidden');
+        $('#fldStatus').val(c.status || 'Active');
+        updateMetaCount();
+        openModal('campaignModal');
+    }
+
+    function statusPill(status) {
+        const map = {
+            'Active':    ['bg-emerald-50 text-emerald-700 border-emerald-200', 'Active'],
+            'Completed': ['bg-gray-100 text-gray-700 border-gray-200', 'Completed'],
+            'Cancelled': ['bg-red-50 text-red-600 border-red-200', 'Cancelled']
+        };
+        const [cls, label] = map[status] || map['Active'];
+        return `<span class="px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider ${cls}">${label}</span>`;
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function renderCampaigns(list) {
+        if (!list.length) {
+            $('#campaignsGrid').html(`
+                <div class="col-span-full bg-white rounded-3xl border border-dashed border-gray-200 p-10 text-center">
+                    <h3 class="text-lg font-bold text-gray-900">No campaigns yet</h3>
+                    <p class="text-sm text-gray-500 mt-1">Click <strong>New Campaign</strong> to schedule your first outreach.</p>
+                </div>`);
+            return;
         }
-    }, 'json').fail(function() {
-        unlockScreenAction();
-        showToast('Server error occurred.', 'error');
-        loadDashboard(); // PATCH: Force refresh to revert the dropdown on crash
+        const html = list.map(c => `
+            <div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 flex flex-col gap-4 hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start gap-3">
+                    <div class="min-w-0">
+                        <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">${escapeHtml((c.campaign_type||'').replace(/_/g,' '))}</p>
+                        <h4 class="font-display text-lg font-bold text-gray-900 truncate">${escapeHtml(c.title)}</h4>
+                        <p class="text-xs text-gray-500 font-medium mt-0.5 truncate">/reach.php?c=${escapeHtml(c.slug)}</p>
+                    </div>
+                    ${statusPill(c.status)}
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="bg-gray-50 rounded-xl py-2">
+                        <p class="text-[9px] font-bold text-gray-400 uppercase">Date</p>
+                        <p class="text-xs font-bold text-gray-800 mt-0.5">${escapeHtml(c.nice_date || '—')}</p>
+                    </div>
+                    <div class="bg-emerald-50 rounded-xl py-2">
+                        <p class="text-[9px] font-bold text-emerald-500 uppercase">Souls</p>
+                        <p class="text-sm font-black text-emerald-800 mt-0.5">${escapeHtml(c.souls_count)}</p>
+                    </div>
+                    <div class="bg-blue-50 rounded-xl py-2">
+                        <p class="text-[9px] font-bold text-blue-500 uppercase">Tier</p>
+                        <p class="text-xs font-bold text-blue-800 mt-0.5">${escapeHtml(c.payload_tier)}</p>
+                    </div>
+                </div>
+                <div class="flex gap-2 pt-1">
+                    <button onclick='openShareModal(${c.id})' class="flex-1 bg-emerald-600 hover:bg-emerald-800 text-white px-3 py-2 rounded-xl font-bold text-xs transition-all flex justify-center items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12s-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+                        Share
+                    </button>
+                    <button onclick='openEditCampaignModal(${JSON.stringify(c).replace(/'/g, "&#39;")})' class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-xl font-bold text-xs transition-all">Edit</button>
+                    <button onclick="deleteCampaign(${c.id}, '${escapeHtml((c.title||'').replace(/'/g,'\\\'')) }')" class="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded-xl font-bold text-xs transition-all">Delete</button>
+                </div>
+            </div>`).join('');
+        $('#campaignsGrid').html(html);
+    }
+
+    function loadCampaigns() {
+        $.getJSON(API_URL, { action: 'fetch_campaigns' }, function(res) {
+            if (res.status === 'success') {
+                renderCampaigns(res.data || []);
+            } else {
+                showToast(res.message || 'Failed to load campaigns', 'error');
+            }
+        }).fail(() => showToast('Server error while loading campaigns', 'error'));
+    }
+
+    function deleteCampaign(id, title) {
+        if (!confirm(`Delete campaign "${title}"?\n\nIf any souls were captured, it will be marked Cancelled instead.`)) return;
+        lockScreenAction();
+        $.post(API_URL, { action: 'delete_campaign', id: id }, function(res) {
+            unlockScreenAction();
+            showToast(res.message, res.status);
+            if (res.status === 'success') loadCampaigns();
+        }, 'json').fail(() => { unlockScreenAction(); showToast('Server error', 'error'); });
+    }
+
+    function openShareModal(id) {
+        lockScreenAction();
+        $.getJSON(API_URL, { action: 'fetch_campaign_share_bundle', id: id }, function(res) {
+            unlockScreenAction();
+            if (res.status !== 'success') {
+                showToast(res.message || 'Could not load share bundle', 'error');
+                return;
+            }
+            const d = res.data;
+            $('#shareTitle').text(d.title);
+            $('#shareLink').val(d.public_url);
+            $('#shareBlurb').val(d.whatsapp_text);
+            $('#shareWhatsapp').attr('href', d.whatsapp_link);
+            $('#shareQr').attr('src', d.qr_data_url);
+            openModal('shareModal');
+        }).fail(() => { unlockScreenAction(); showToast('Server error', 'error'); });
+    }
+
+    function copyShareLink() {
+        const el = document.getElementById('shareLink');
+        el.select();
+        el.setSelectionRange(0, 99999);
+        try {
+            navigator.clipboard.writeText(el.value);
+            showToast('Link copied');
+        } catch (e) {
+            document.execCommand('copy');
+            showToast('Link copied');
+        }
+    }
+
+    $('#campaignForm').on('submit', function(e) {
+        e.preventDefault();
+        lockScreenAction();
+        $.post(API_URL, $(this).serialize(), function(res) {
+            unlockScreenAction();
+            showToast(res.message, res.status);
+            if (res.status === 'success') {
+                closeModal('campaignModal');
+                loadCampaigns();
+            }
+        }, 'json').fail(() => { unlockScreenAction(); showToast('Server error', 'error'); });
     });
-}
 
-$(document).ready(function() {
-    loadDashboard();
-    handleAjaxForm('soulForm', function() { closeModal('soulModal'); loadDashboard(); });
-    handleAjaxForm('campaignForm', function() { closeModal('campaignModal'); loadDashboard(); });
-
-    // PATCH: Wire up the dead search bar
-    $('#searchInput').on('keyup', function() {
-        const val = $(this).val().toLowerCase();
-        $('#soulsList tr').each(function() {
-            if($(this).find('td').attr('colspan')) return; // Skip the "Syncing..." row
-            $(this).toggle($(this).text().toLowerCase().indexOf(val) > -1);
-        });
+    $(document).ready(function() {
+        loadCampaigns();
     });
-});
-
 </script>
 
 <?php require_once '../../includes/footer.php'; ?>
