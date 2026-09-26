@@ -17,5 +17,7 @@ deployment:
     - export DEPLOYPATH=/home/smartqaq/public_html/hodlc.lpc.cm
     - export REPO=/home/smartqaq/repositories/hodlekki
     - /bin/rsync -a --delete --exclude-from=$REPO/.deployignore $REPO/ $DEPLOYPATH/
-    - cd $DEPLOYPATH && /usr/local/bin/ea-php83 /home/smartqaq/composer.phar install --no-dev --optimize-autoloader --no-interaction 2>&1 | tail -40
+    # -d allow_url_fopen=On is required: this host's CLI php.ini disables it,
+    # which would make Composer fail to download packages from packagist.
+    - cd $DEPLOYPATH && /usr/local/bin/ea-php83 -d allow_url_fopen=On /home/smartqaq/composer.phar install --no-dev --optimize-autoloader --no-interaction 2>&1 | tail -40
     - cd $DEPLOYPATH && /usr/local/bin/ea-php83 db/migrate.php
