@@ -32,8 +32,11 @@ The timestamp guarantees lexical ordering. Keep the description in
   blocks (they aren't supported by `PDO::exec`); if you need a stored
   procedure or trigger, put it in its own file and keep the body inline
   with `;`-terminated statements.
-- **Transactional per file.** Each file runs inside a single transaction.
-  If any statement fails, the whole file rolls back and the deploy stops.
+- **Transactional per file — for DML only.** Each file runs inside a single
+  transaction, but MySQL auto-commits every DDL statement (CREATE / ALTER /
+  DROP), so a file that fails halfway through its DDL stays half-applied.
+  Keep DDL files to one logical change and make each statement idempotent.
+  Any failure still stops the deploy.
 - **Idempotency is nice-to-have.** Prefer `CREATE TABLE IF NOT EXISTS`,
   `ADD COLUMN IF NOT EXISTS` (MySQL 8+), and `INSERT ... ON DUPLICATE
   KEY UPDATE` so re-running is safe if something goes wrong mid-way.

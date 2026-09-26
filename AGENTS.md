@@ -108,8 +108,8 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   - Forward-only. To reverse a change, ship another forward migration.
   - Plain `;`-terminated SQL. No `DELIMITER` blocks (PDO::exec can't
     parse them — split stored procedures across files if needed).
-  - Each file runs inside a single transaction. If anything fails the
-    whole file rolls back and the deploy stops.
+  - Each file runs inside a transaction, but MySQL auto-commits DDL, so
+    a file failing mid-DDL stays half-applied. Any failure stops the deploy.
   - Prefer idempotent DDL (`CREATE TABLE IF NOT EXISTS`,
     `INSERT ... ON DUPLICATE KEY UPDATE`).
   - Do NOT edit or delete a migration file that has already been

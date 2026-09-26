@@ -175,10 +175,16 @@ foreach ($pending as $id => $path) {
         // DELIMITER blocks — or split them across files.
         $pdo->exec($sql);
         $insert->execute([':id' => $id]);
-        $pdo->commit();
+        // MySQL implicitly commits on DDL (CREATE/ALTER/DROP), which ends the
+        // transaction; commit()/rollBack() would then throw on PHP 8.
+        if ($pdo->inTransaction()) {
+            $pdo->commit();
+        }
         echo "OK\n";
     } catch (Throwable $e) {
-        $pdo->rollBack();
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         echo "FAILED\n";
         fwrite(STDERR, "[migrate] {$id} failed: " . $e->getMessage() . "\n");
         exit(1);
