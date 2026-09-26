@@ -128,3 +128,10 @@ jobs:
             echo "::error::Deploy webhook returned HTTP ${http_status}"
             exit 1
           fi
+
+          # The webhook streams output, so its 200 is sent before the deploy
+          # finishes; the real result is only in the final marker line.
+          if ! grep -q '^\[webhook\] DEPLOY OK$' "$body_file"; then
+            echo "::error::Deploy script failed on the server (no '[webhook] DEPLOY OK' in response)"
+            exit 1
+          fi

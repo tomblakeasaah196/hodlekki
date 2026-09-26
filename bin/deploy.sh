@@ -32,6 +32,10 @@ fi
 
 set -euo pipefail
 
+# The webhook runs us from LiteSpeed's PHP, which doesn't set HOME, and
+# Composer refuses to start without HOME or COMPOSER_HOME.
+export HOME="${HOME:-/home/smartqaq}"
+
 REPO=/home/smartqaq/repositories/hodlekki
 DEPLOYPATH=/home/smartqaq/public_html/hodlc.lpc.cm
 PHP=/usr/local/bin/ea-php83
