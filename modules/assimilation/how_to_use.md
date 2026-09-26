@@ -246,3 +246,8 @@ volunteer knows who they are calling before they dial:
 - **Reached out N×** — how many times anyone has contacted them across every
   follow-up round, when the last contact was, who made it and the outcome.
   If nobody has called before, the pill says **Nobody has reached out yet**.
+
+People assigned to you show their **full name and phone number**, so you can
+be sure who you are calling. People in the unassigned pool show only first
+name and last initial until you claim them. Your profile photo appears next
+to "Signed in as" when you have one on your profile.
