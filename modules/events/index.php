@@ -1118,7 +1118,7 @@ require_once '../../includes/header.php';
             $('#pendingCount').text(res.pending.length); $('#checkedInCount').text(res.checked_in.length);
             let p = ''; res.pending.forEach(u => { p += `<div class="roster-card flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100" data-name="${(u.first_name+' '+u.last_name).toLowerCase()}"><div><p class="font-bold text-gray-900">${esc(u.first_name)} ${esc(u.last_name)}</p><p class="text-[10px] text-gray-500">${esc(u.spiritual_status)}</p></div><button onclick="clockIn(event,${id},${u.id})" class="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors">Clock In</button></div>`; });
             $('#pendingList').html(p || '<p class="text-center text-gray-400 py-4">All cleared!</p>');
-            let c = ''; res.checked_in.forEach(u => { const t=new Date(u.check_in_time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); c += `<div class="roster-card flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100" data-name="${(u.first_name+' '+u.last_name).toLowerCase()}"><div><p class="font-bold text-gray-900">${esc(u.first_name)} ${esc(u.last_name)}</p><p class="text-[10px] text-gray-500">${esc(u.spiritual_status)}</p></div><span class="text-xs font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg">${t}</span></div>`; });
+            let c = ''; res.checked_in.forEach(u => { const t=new Date(u.check_in_time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); c += `<div class="roster-card flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100" data-name="${(u.first_name+' '+u.last_name).toLowerCase()}"><div><p class="font-bold text-gray-900">${esc(u.first_name)} ${esc(u.last_name)}</p><p class="text-[10px] text-gray-500">${esc(u.spiritual_status)}</p></div><div class="flex items-center gap-2"><span class="text-xs font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg">${t}</span><button onclick="clockOut(event,${id},${u.id})" title="Undo clock-in" class="bg-gray-50 text-gray-500 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Clock Out</button></div></div>`; });
             $('#checkedInList').html(c || '<p class="text-center text-gray-400 py-4">Waiting…</p>');
         }, 'json');
     }
@@ -1147,6 +1147,16 @@ require_once '../../includes/header.php';
         const btn = ev ? ev.currentTarget : null;
         if(btn){ $(btn).replaceWith(`<span class="px-4 py-2 rounded-xl text-xs font-bold text-gray-400 border border-gray-100">Logging…</span>`); }
         $.post(API_URL,{action:'mark_attendance',event_id:id,user_id:uid},function(res){
+            if(res.status==='error') showToast(res.message,'error');
+            loadRoster(id);
+        },'json').fail(()=>{ showToast('Server Error','error'); loadRoster(id); });
+    }
+
+    function clockOut(ev, id, uid){
+        if(!confirm('Clock this person out? They will move back to Pending Clock-In.')) return;
+        const btn = ev ? ev.currentTarget : null;
+        if(btn){ $(btn).prop('disabled', true).text('…'); }
+        $.post(API_URL,{action:'clock_out',event_id:id,user_id:uid},function(res){
             if(res.status==='error') showToast(res.message,'error');
             loadRoster(id);
         },'json').fail(()=>{ showToast('Server Error','error'); loadRoster(id); });
