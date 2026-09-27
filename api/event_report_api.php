@@ -300,15 +300,18 @@ try {
             $sysSms = ['cnt'=>0,'unique_recipients'=>0,'cost'=>0];
             $systemCampaigns = [];
             if (report_table_exists($pdo,'sms_log') && report_table_exists($pdo,'sms_campaigns')) {
-                $sys = $pdo->prepare("SELECT COUNT(*) AS cnt, COUNT(DISTINCT recipient_phone) AS unique_recipients, SUM(cost) AS cost FROM sms_log WHERE campaign_id IN (SELECT id FROM sms_campaigns WHERE event_id=?)");
+                // Only messages that reached BulkSMS count as sends: blocked (spam guard /
+                // suppression) and refused (invalid number, empty wallet) rows cost ₦0.
+                $sys = $pdo->prepare("SELECT COUNT(*) AS cnt, COUNT(DISTINCT l.recipient_phone) AS unique_recipients, SUM(l.cost) AS cost FROM sms_log l WHERE l.campaign_id IN (SELECT id FROM sms_campaigns WHERE event_id=?) AND l.status NOT IN ('blocked','queued') AND NOT (l.status = 'failed' AND (l.message_id IS NULL OR l.message_id = ''))");
                 $sys->execute([$eid]); $sysSms = $sys->fetch(PDO::FETCH_ASSOC);
 
                 // Consolidate chunked sends into one line per campaign title.
                 $sc = $pdo->prepare(
                     "SELECT c.title AS title, COUNT(l.id) AS rows_sent, COUNT(DISTINCT l.recipient_phone) AS uniq,
-                            COALESCE(SUM(l.cost),0) AS cost, MAX(l.created_at) AS last_sent
+                            COALESCE(SUM(l.cost),0) AS cost, MAX(l.created_at) AS last_sent,
+                            SUM(l.status = 'delivered') AS delivered, GROUP_CONCAT(DISTINCT c.id ORDER BY c.id) AS campaign_ids
                      FROM sms_log l JOIN sms_campaigns c ON c.id = l.campaign_id
-                     WHERE c.event_id = ? GROUP BY c.title ORDER BY last_sent ASC"
+                     WHERE c.event_id = ? AND l.status NOT IN ('blocked','queued') AND NOT (l.status = 'failed' AND (l.message_id IS NULL OR l.message_id = '')) GROUP BY c.title ORDER BY last_sent ASC"
                 );
                 $sc->execute([$eid]);
                 $systemCampaigns = $sc->fetchAll(PDO::FETCH_ASSOC);
