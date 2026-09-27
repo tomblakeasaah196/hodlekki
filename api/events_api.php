@@ -451,6 +451,29 @@ try {
             break;
 
         // =====================================================================================
+        // ACTION 4B: CLOCK OUT (UNDO A MISTAKEN CLOCK-IN)
+        // =====================================================================================
+        case 'clock_out':
+            $event_id = $_POST['event_id'] ?? '';
+            $target_user_id = $_POST['user_id'] ?? '';
+
+            if (empty($event_id) || empty($target_user_id)) {
+                echo json_encode(['status' => 'error', 'message' => 'Missing event or user data.']);
+                exit;
+            }
+
+            $delStmt = $pdo->prepare("DELETE FROM attendance WHERE event_id = ? AND user_id = ?");
+            $delStmt->execute([$event_id, $target_user_id]);
+
+            if ($delStmt->rowCount() === 0) {
+                echo json_encode(['status' => 'warning', 'message' => 'User was not checked in.']);
+                exit;
+            }
+
+            echo json_encode(['status' => 'success', 'message' => 'Attendee moved back to pending.']);
+            break;
+
+        // =====================================================================================
         // ACTION 5: ADD CUSTOM REGISTRATION FIELD
         // =====================================================================================
         case 'add_custom_field':
