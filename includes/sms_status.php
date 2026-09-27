@@ -1,4 +1,5 @@
 <?php
+// /includes/sms_status.php
 /**
  * ============================================================================
  * SMS STUDIO — Shared delivery-status & error-code vocabulary
@@ -9,8 +10,10 @@
  * the two paths can never disagree about the same message.
  *
  * Order matters: failure patterns are tested first, because 'undeliv' and
- * 'not delivered' both CONTAIN 'deliv'. An unrecognised status returns null —
- * we log it for a human rather than guess.
+ * 'not delivered' both CONTAIN 'deliv'. Interim patterns are tested BEFORE
+ * 'deliv' too: "awaiting delivery" / "pending delivery" / "delivery queued"
+ * also contain 'deliv' and used to be recorded as Delivered. An unrecognised
+ * status returns null — we log it for a human rather than guess.
  * ============================================================================
  */
 
@@ -27,10 +30,14 @@ function sms_map_dlr_status($raw) {
               'reject','delet','block','dnd','invalid','unknown','absent'] as $n) {
         if (strpos($s, $n) !== false) return 'failed';
     }
-    // 2) DELIVERED
+    // 2) INTERIM wording that also contains 'deliv' ("awaiting delivery")
+    foreach (['await','pend','queue','enroute','en route','accept','submit','process','schedul','buffer'] as $n) {
+        if (strpos($s, $n) !== false) return 'pending';
+    }
+    // 3) DELIVERED (DELIVRD, delivered, delivered to handset)
     if (strpos($s, 'deliv') !== false) return 'delivered';
-    // 3) INTERIM
-    foreach (['sent','accept','pend','queue','submit','route','await'] as $n) {
+    // 4) Weak interim words ("sent", "routed")
+    foreach (['sent','route'] as $n) {
         if (strpos($s, $n) !== false) return 'pending';
     }
     return null;
