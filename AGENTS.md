@@ -209,6 +209,14 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   via `includes/sms_vault_key.php`). Rotating the key invalidates every
   encrypted row in `sms_settings`; re-encrypt or reset those tokens
   before rotating.
+- SMS sends go through `sms_send_one()` and delivery reports through
+  `sms_apply_dlr()` (both in `includes/sms_functions.php`). Never write
+  `sms_log.status` directly: those two record every movement in
+  `sms_status_events` (the History timeline) and refuse to move a
+  delivered message backwards. Never retry a billable BulkSMS POST.
+- Cron jobs must set `$_SERVER['DOCUMENT_ROOT']` before requiring
+  `includes/db.php` (it loads `.env` from there, which is empty under
+  CLI) — see any file in `cron/`.
 - `.htaccess`, `.user.ini`, and `php.ini` in the repo mirror the cPanel
   MultiPHP INI Editor output. Editing them by hand can break the
   production PHP handler configuration. Only `php.ini` is committed at

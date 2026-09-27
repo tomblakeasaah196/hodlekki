@@ -182,7 +182,8 @@ $reach = count(report_reach_as_of($pdo, $event_id, date('Y-m-d'), $hasPhoneStatu
 $sysSms = ['cnt'=>0,'uniq'=>0,'cost'=>0];
 $systemCampaigns = [];   // consolidated by campaign title
 if (report_table_exists($pdo,'sms_log') && report_table_exists($pdo,'sms_campaigns')) {
-    $sys = $pdo->prepare("SELECT COUNT(*) cnt, COUNT(DISTINCT recipient_phone) uniq, COALESCE(SUM(cost),0) cost FROM sms_log WHERE campaign_id IN (SELECT id FROM sms_campaigns WHERE event_id=?)");
+    // Only messages that reached BulkSMS count (blocked / refused rows cost ₦0).
+    $sys = $pdo->prepare("SELECT COUNT(*) cnt, COUNT(DISTINCT l.recipient_phone) uniq, COALESCE(SUM(l.cost),0) cost FROM sms_log l WHERE l.campaign_id IN (SELECT id FROM sms_campaigns WHERE event_id=?) AND l.status NOT IN ('blocked','queued') AND NOT (l.status = 'failed' AND (l.message_id IS NULL OR l.message_id = ''))");
     $sys->execute([$event_id]); $sysSms = $sys->fetch(PDO::FETCH_ASSOC);
 
     // Consolidate the fragmented chunked sends into one clean line per campaign title.
@@ -193,7 +194,7 @@ if (report_table_exists($pdo,'sms_log') && report_table_exists($pdo,'sms_campaig
                 MAX(l.created_at) AS last_sent
          FROM sms_log l
          JOIN sms_campaigns c ON c.id = l.campaign_id
-         WHERE c.event_id = ?
+         WHERE c.event_id = ? AND l.status NOT IN ('blocked','queued') AND NOT (l.status = 'failed' AND (l.message_id IS NULL OR l.message_id = ''))
          GROUP BY c.title
          ORDER BY last_sent ASC"
     );

@@ -54,6 +54,15 @@ The internal ERP is organised as one directory per module under
 - `sms_studio` — BulkSMS-backed transactional and campaign SMS.
   Credentials are encrypted at rest in the `sms_settings` table with
   AES-256-GCM; the vault key lives in `.env`, never in source.
+  Campaigns are queued and sent by `cron/sms_queue_worker.php` (or from
+  the open Studio page if that cron job stops). Every status movement of
+  every message (queued → sent → delivered / failed, blocked, unknown) is
+  stored in `sms_status_events` with its WAT time and shown in the History
+  drawer; delivery reports arrive through `api/sms_webhook.php` (needs
+  `SMS_WEBHOOK_SECRET`) or are polled by the worker. A number is
+  auto-suppressed after 3 carrier-confirmed failures in a row. Deep links:
+  `/modules/sms_studio/index.php?phone=0803…`, `?msg=<id>`,
+  `?campaign=<ids>`.
 - `contact_extractor` — bulk import of contacts from pasted text.
 
 ## Tech stack
@@ -139,6 +148,12 @@ GitHub Secrets / Variables), and rollback instructions live in
 15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/assimilation_watchlists.php >/dev/null 2>&1
 ```
 
+`sms_queue_worker.php` sends queued SMS for ~55 s (about one per second),
+then fetches delivery reports for messages still awaiting one. Overlapping
+runs are safe (a MySQL named lock lets one run at a time) and a run that
+dies mid-send is recovered without texting anyone twice. SMS Studio's
+status bar turns red when this job has not run for 3 minutes.
+
 `assimilation_watchlists.php` re-runs every active Assimilation watchlist,
 sends managers one in-app digest per watchlist naming only the people who
 are newly drifted, and detects anyone who has come back to church. It is
@@ -182,6 +197,7 @@ the untracked `.env` file.
 | `DB_PASS`          | MySQL password.                                      |
 | `GEMINI_API_KEY`   | Google Gemini API key (server-side LLM calls).       |
 | `SMS_VAULT_KEY`    | 64-hex AES-256-GCM key for the SMS Studio vault.     |
+| `SMS_WEBHOOK_SECRET` | Shared secret for BulkSMS delivery callbacks (`api/sms_webhook.php?token=…`). Optional; without it the worker polls for delivery reports. |
 | `GEOAPIFY_API_KEY` | Client-side address-autocomplete key (domain-lock in the Geoapify dashboard). |
 
 ## Directory structure

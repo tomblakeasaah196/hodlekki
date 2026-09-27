@@ -205,7 +205,8 @@ function renderSmsTable(sysCamp, manual){
   // System campaigns (sent via ERP SMS Studio), consolidated by title
   if(sysCamp && sysCamp.length){
     sysCamp.forEach(s=>{ h+=`<tr class="bg-blue-50/40">
-      <td class="px-3 py-2 font-bold">${esc(s.title)} <span class="text-[9px] uppercase font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">System</span></td>
+      <td class="px-3 py-2 font-bold">${esc(s.title)} <span class="text-[9px] uppercase font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">System</span>
+        <a href="/modules/sms_studio/index.php?campaign=${encodeURIComponent(s.campaign_ids||'')}" class="block text-[10px] font-semibold text-[#123b8c] hover:underline">${Number(s.delivered||0).toLocaleString()} delivered · open in SMS Studio →</a></td>
       <td class="px-3 py-2">${esc((s.last_sent||'').slice(0,10))}</td>
       <td class="px-3 py-2 text-right">${Number(s.uniq).toLocaleString()}</td>
       <td class="px-3 py-2 text-right">1</td>
