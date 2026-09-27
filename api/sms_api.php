@@ -27,7 +27,8 @@ function sms_t($dt) {
     if ($dt === null || $dt === '' || strpos((string)$dt, '0000-00-00') === 0) return null;
     $ts = strtotime((string)$dt);
     if ($ts === false) return null;
-    return ['raw' => (string)$dt, 'iso' => date('c', $ts), 'label' => date('D j M Y, g:i:s a', $ts) . ' WAT'];
+    return ['raw' => (string)$dt, 'iso' => date('c', $ts), 'label' => date('D j M Y, g:i:s a', $ts) . ' WAT',
+            'short' => date('j M Y, g:i:s a', $ts)];
 }
 function sms_ids_param($v, $max = 500) {
     if (is_string($v)) $v = explode(',', $v);
@@ -567,8 +568,9 @@ try {
             $final = [];
             $ids = array_map('intval', array_column($rows, 'id'));
             if ($ids && sms_table_exists($pdo, 'sms_status_events')) {
-                $ev = $pdo->prepare("SELECT sms_log_id, MAX(created_at) last_at,
-                        MAX(CASE WHEN to_status IN ('delivered','failed','unknown','blocked') THEN created_at END) final_at
+                // from_status = to_status rows are notes (e.g. "resent as #N"), not status changes
+                $ev = $pdo->prepare("SELECT sms_log_id, MAX(CASE WHEN NOT (from_status <=> to_status) THEN created_at END) last_at,
+                        MAX(CASE WHEN to_status IN ('delivered','failed','unknown','blocked') AND NOT (from_status <=> to_status) THEN created_at END) final_at
                         FROM sms_status_events WHERE sms_log_id IN (" . sms_in($ids) . ") GROUP BY sms_log_id");
                 $ev->execute($ids);
                 foreach ($ev->fetchAll(PDO::FETCH_ASSOC) as $e) $final[$e['sms_log_id']] = $e;
@@ -728,7 +730,7 @@ try {
             $final = [];
             $ids = array_map('intval', array_column($msgs, 'id'));
             if ($ids && sms_table_exists($pdo, 'sms_status_events')) {
-                $ev = $pdo->prepare("SELECT sms_log_id, MAX(CASE WHEN to_status IN ('delivered','failed','unknown','blocked') THEN created_at END) final_at
+                $ev = $pdo->prepare("SELECT sms_log_id, MAX(CASE WHEN to_status IN ('delivered','failed','unknown','blocked') AND NOT (from_status <=> to_status) THEN created_at END) final_at
                                      FROM sms_status_events WHERE sms_log_id IN (" . sms_in($ids) . ") GROUP BY sms_log_id");
                 $ev->execute($ids);
                 foreach ($ev->fetchAll(PDO::FETCH_ASSOC) as $e) $final[$e['sms_log_id']] = $e['final_at'];

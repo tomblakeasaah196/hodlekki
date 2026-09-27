@@ -19,6 +19,8 @@ $profilePicPath = !empty($_SESSION['picture_path']) ? htmlspecialchars($_SESSION
 
 $currentModule = basename(dirname($_SERVER['PHP_SELF']));
 $isDashboard = ($_SERVER['PHP_SELF'] == '/index.php' || $currentModule == 'dashboard');
+$moduleTitles = ['sms_studio' => 'SMS Studio'];
+$moduleTitle = $moduleTitles[$currentModule] ?? ucfirst(str_replace('_', ' ', $currentModule));
 
 // Helper function for active link styling
 function getLinkStyle($isActive) {
@@ -82,6 +84,7 @@ function userHasNavAccess($allowed_roles = [], $allowed_dept_ids = []) {
 // Define specific role groupings based on your matrix
 $pastors = ['Resident_Pastor', 'Assoc_Pastor'];
 $pastors_directors = ['Resident_Pastor', 'Assoc_Pastor', 'Director'];
+$sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head']; // mirrors SMS_ALLOWED_ROLES in includes/sms_functions.php
 
 ?>
 <!DOCTYPE html>
@@ -89,7 +92,7 @@ $pastors_directors = ['Resident_Pastor', 'Assoc_Pastor', 'Director'];
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $isDashboard ? 'Dashboard' : ucfirst(str_replace('_', ' ', $currentModule)) ?> | HOD Lekki Centre</title>
+    <title><?= $isDashboard ? 'Dashboard' : htmlspecialchars($moduleTitle) ?> | HOD Lekki Centre</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -290,7 +293,7 @@ $pastors_directors = ['Resident_Pastor', 'Assoc_Pastor', 'Director'];
     <?php endif; ?>
     <?php endif; ?>
 
-    <?php if (userHasNavAccess($pastors_directors, [1, 3, 13])): // Wrapper for Core Operations header ?>
+    <?php if (userHasNavAccess(array_merge($pastors_directors, $sms_roles), [1, 3, 13])): // Wrapper for Core Operations header ?>
     <p class="px-4 pt-5 pb-2 text-[10px] font-bold text-blue-300/60 uppercase tracking-widest">Core Operations</p>
     
     <?php if (userHasNavAccess($pastors, [1])): // IDI ?>
@@ -311,6 +314,13 @@ $pastors_directors = ['Resident_Pastor', 'Assoc_Pastor', 'Director'];
     <a href="/modules/events/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'events') ?>">
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
         <span class="font-medium text-sm">Events & Attendance</span>
+    </a>
+    <?php endif; ?>
+
+    <?php if (userHasNavAccess($sms_roles, [])): // Same roles the SMS API accepts ?>
+    <a href="/modules/sms_studio/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'sms_studio') ?>">
+        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+        <span class="font-medium text-sm">SMS Studio</span>
     </a>
     <?php endif; ?>
 
@@ -386,7 +396,7 @@ $pastors_directors = ['Resident_Pastor', 'Assoc_Pastor', 'Director'];
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
                     </button>
                     <h1 class="text-xl sm:text-2xl font-display font-bold text-gray-900 tracking-tight hidden sm:block">
-                        <?= $isDashboard ? 'Workspace' : ucfirst(str_replace('_', ' ', $currentModule)) ?>
+                        <?= $isDashboard ? 'Workspace' : htmlspecialchars($moduleTitle) ?>
                     </h1>
                 </div>
                 
