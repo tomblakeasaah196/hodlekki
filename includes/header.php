@@ -128,6 +128,7 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="/assets/js/modal-manager.js" defer></script>
 
     <style>
         /* Custom scrollbar for sidebar */
@@ -135,6 +136,54 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
+
+        /*
+         * Shared authenticated-dialog contract. modal-manager.js applies these
+         * classes to fixed modal roots so every module gets viewport centring,
+         * a non-interactive blurred background, scroll lock, and safe mobile
+         * sizing without having to reimplement those behaviours.
+         */
+        .app-modal-overlay {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100dvw !important;
+            height: 100dvh !important;
+            overflow: auto !important;
+            overscroll-behavior: contain;
+            background-color: rgba(15, 23, 42, 0.74) !important;
+            -webkit-backdrop-filter: blur(10px) saturate(85%) !important;
+            backdrop-filter: blur(10px) saturate(85%) !important;
+        }
+        .app-modal-overlay:not(.app-modal-preserve-layout) {
+            align-items: center !important;
+            justify-content: center !important;
+            padding: clamp(0.75rem, 2.5vw, 2rem) !important;
+        }
+        .app-modal-overlay:not(.hidden):not([hidden]) { display: flex !important; }
+        .app-modal-overlay:not(.app-modal-preserve-layout) > .app-modal-panel {
+            max-width: calc(100dvw - clamp(1.5rem, 5vw, 4rem));
+            max-height: calc(100dvh - clamp(1.5rem, 5vw, 4rem)) !important;
+            margin: auto;
+            overflow-y: auto !important;
+            overscroll-behavior: contain;
+            touch-action: pan-y;
+        }
+        .app-modal-overlay > .app-modal-panel:focus { outline: none; }
+        html.app-modal-open,
+        body.app-modal-open { overscroll-behavior: none; }
+        main.app-modal-scroll-locked { overflow: hidden !important; }
+        @media (max-width: 640px) {
+            .app-modal-overlay:not(.app-modal-preserve-layout) { padding: 0.75rem !important; }
+            .app-modal-overlay:not(.app-modal-preserve-layout) > .app-modal-panel {
+                max-width: calc(100dvw - 1.5rem);
+                max-height: calc(100dvh - 1.5rem) !important;
+                border-radius: 1.25rem;
+            }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .app-modal-overlay,
+            .app-modal-overlay > .app-modal-panel { transition-duration: 0.01ms !important; }
+        }
     </style>
 </head>
 <body class="bg-[#F8FAFC] font-sans text-gray-800 antialiased flex h-[100dvh] overflow-hidden selection:bg-hodRed selection:text-white">
@@ -644,4 +693,5 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
             });
         </script>
 
-        <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10 animate-fade-in-up relative z-0">
+        <!-- Keep this scroll container untransformed: transformed ancestors break viewport-fixed dialogs. -->
+        <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10">
