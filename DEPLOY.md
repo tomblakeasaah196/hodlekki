@@ -16,6 +16,15 @@ Every push to `main` triggers `.github/workflows/deploy.yml`, which:
       `uploads/`, `assets/uploads/`, and every `error_log` file survive.
    c. `composer install --no-dev --optimize-autoloader`.
    d. `php db/migrate.php` — applies any new files in `db/migrations/`.
+   e. `php db/backfill_embrace_sunday_checkins.php` — reconciliation pass,
+      runs on *every* deploy (not a one-time migration). Checks every
+      active Embrace first-timer record against the Sunday_Service they
+      were added for and creates the missing `attendance` row if the
+      real-time auto-checkin (see `api/embrace_api.php::add_visitor`)
+      ever missed them. See the script's header comment for the exact
+      attribution rule and `db/migrations/README.md` for why this isn't
+      a normal migration. A failure here is logged, not fatal to the
+      deploy.
 5. Output is streamed line-by-line back to the Actions log AND mirrored
    to `/home/smartqaq/deploy.log` on the server. If the caller
    disconnects, the deploy still finishes and the full log is available
