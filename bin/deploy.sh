@@ -11,6 +11,7 @@
 #   2. rsync repo -> docroot, applying .deployignore
 #   3. composer install --no-dev
 #   4. php db/migrate.php
+#   5. php db/backfill_embrace_sunday_checkins.php
 #
 # Only one deploy runs at a time (flock on /home/smartqaq/.deploy.lock).
 # Full log always mirrored to /home/smartqaq/deploy.log so you can review
@@ -92,6 +93,14 @@ echo "[deploy] composer install done"
 
 # 4. Apply any pending SQL migrations.
 "$PHP" db/migrate.php
+
+# 5. Reconciliation pass: check in any Embrace first-timer who slipped
+#    through without an attendance record for the Sunday they were added.
+#    Unlike step 4 this is NOT a one-time migration — it's idempotent and
+#    deliberately re-runs on every single deploy as a standing safety net.
+#    A failure here is logged but never fails the deploy (see the script's
+#    own exit-code handling), so a data hiccup can't block shipping code.
+"$PHP" db/backfill_embrace_sunday_checkins.php
 
 echo "============================================================"
 echo "[deploy] $(date -Iseconds) OK"

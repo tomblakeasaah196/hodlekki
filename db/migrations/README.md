@@ -58,6 +58,26 @@ The deploy step (`.cpanel.yml`) calls `php db/migrate.php` automatically
 after each successful `git pull` + `composer install`. If a migration
 fails, the deploy is marked failed in cPanel's Git Version Control log.
 
+## Not everything belongs in db/migrations
+
+`db/backfill_embrace_sunday_checkins.php` lives next to this folder but is
+**not** a migration — it's a data-reconciliation script. The difference
+matters:
+
+- A migration in this folder runs exactly **once**, ever (tracked by
+  `migration_id` in `schema_migrations`).
+- `backfill_embrace_sunday_checkins.php` is **idempotent** and runs again
+  on **every** deploy on purpose (wired into `bin/deploy.sh` right after
+  `php db/migrate.php`), so it keeps acting as a standing safety net —
+  if it fixed something today, running it again tomorrow with nothing new
+  to fix is a silent no-op.
+
+If you ever write another "keep reconciling this forever" job, follow the
+same pattern: a standalone CLI script (own `.env`/PDO bootstrap, same as
+`db/migrate.php`, since `includes/db.php` needs `$_SERVER['DOCUMENT_ROOT']`
+which isn't set under the CLI SAPI) that is safe to run repeatedly, called
+from `bin/deploy.sh` directly rather than dropped into `db/migrations/`.
+
 ## Example
 
 ```sql
