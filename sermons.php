@@ -37,26 +37,143 @@ if (isset($_GET['sermon'])) {
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
 <head>
+    <!-- charset first so a long og:description can't push it past the 1024-byte sniff window -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <!-- Open Graph Tags for WhatsApp/Social Media -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="<?= $og_title ?>">
     <meta property="og:description" content="<?= $og_desc ?>">
     <meta property="og:image" content="<?= $og_image ?>">
     <meta property="og:url" content="<?= $og_url ?>">
-    
+    <meta name="twitter:card" content="summary_large_image">
+
     <!-- Safely inject the auto-open script here -->
     <?= $autoOpenScript ?>
 
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sermons | Household of David Lekki Centre</title>
-    
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
-    
+
     <link rel="stylesheet" href="/assets/css/style.css">
-    
+
+    <!--
+        Sermon modal styles live here, not in Tailwind classes: assets/css/style.css is a
+        pre-built bundle that doesn't contain every utility this page used (e.g. bg-hodBlue/95,
+        bg-gray-900/99), which is what left the modal panel and notes see-through.
+    -->
+    <style>
+        :root { --sermon-panel-rgb: 15, 26, 51; }
+
+        /* Modal panel: solid, so nothing from the page behind it bleeds through */
+        .sermon-panel { background: rgb(var(--sermon-panel-rgb)); }
+
+        /* Desktop: sermon (left) and conversation (right) scroll independently.
+           The lg:overflow-* utilities in the markup aren't in the built style.css. */
+        @media (min-width: 1024px) {
+            .sermon-body { overflow: hidden; }
+            .sermon-main { overflow-y: auto; }
+        }
+
+        /* Hero: show the artwork as-is, fade only the bottom edge into the panel */
+        .sermon-hero-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+        .sermon-hero-scrim {
+            position: absolute; inset: 0; z-index: 10; pointer-events: none;
+            background: linear-gradient(to top,
+                rgb(var(--sermon-panel-rgb)) 0%,
+                rgba(var(--sermon-panel-rgb), .78) 22%,
+                rgba(var(--sermon-panel-rgb), 0) 55%);
+        }
+        #modalDetails .sermon-title-shadow { text-shadow: 0 2px 16px rgba(0, 0, 0, .55); }
+
+        /* Sermon cards: light bottom scrim instead of a flat 40% black wash */
+        .sermon-card-scrim {
+            position: absolute; inset: 0; z-index: 10; pointer-events: none;
+            background: linear-gradient(to top, rgba(0, 0, 0, .55) 0%, rgba(0, 0, 0, 0) 50%);
+        }
+
+        /* Full notes: opaque card, high-contrast text, real hanging bullets */
+        .sermon-notes-card {
+            background: #0a1120;
+            border: 1px solid rgba(255, 255, 255, .1);
+            border-radius: 1rem;
+            padding: 1.5rem;
+        }
+        .sermon-notes {
+            color: #e8ecf4; font-size: 1rem; line-height: 1.8; font-weight: 400;
+            max-width: 70ch; overflow-wrap: anywhere;
+        }
+        .sermon-notes p { margin: 0 0 .85rem; }
+        .sermon-notes .note-label { color: #fff; font-weight: 600; }
+        .sermon-notes .note-sub { color: #fff; font-weight: 600; margin: 1.25rem 0 .5rem; }
+        .sermon-notes .note-h {
+            font-family: 'Montserrat', sans-serif; font-weight: 700; color: #fff;
+            font-size: 1.125rem; line-height: 1.4;
+            margin: 1.9rem 0 .7rem; padding-left: .75rem; border-left: 3px solid #D11920;
+        }
+        .sermon-notes .note-li { position: relative; padding-left: 1.4rem; margin: 0 0 .6rem; }
+        .sermon-notes .note-li::before {
+            content: ''; position: absolute; left: .25rem; top: .8em;
+            width: .4rem; height: .4rem; border-radius: 50%; background: #D11920;
+        }
+        .sermon-notes > :first-child { margin-top: 0; }
+
+        /* Audio: dark controls so the time readout isn't white-on-white */
+        #modalAudio { color-scheme: dark; }
+
+        /* Share buttons (modal row + card share sheet) */
+        .share-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+        .share-btn {
+            display: inline-flex; align-items: center; gap: .5rem;
+            padding: .55rem .9rem; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .14);
+            background: rgba(255, 255, 255, .08); color: #fff; cursor: pointer;
+            font: 600 .75rem/1 'Inter', sans-serif; letter-spacing: .02em; text-decoration: none;
+            transition: background-color .2s, border-color .2s, transform .2s;
+        }
+        .share-btn:hover { transform: translateY(-1px); }
+        .share-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        .share-btn svg { width: 1rem; height: 1rem; flex: none; fill: currentColor; }
+        .share-btn--wa { background: #25D366; border-color: #25D366; color: #06331a; }
+        .share-btn--wa:hover { background: #3be07a; }
+        .share-btn--fb:hover { background: #1877F2; border-color: #1877F2; }
+        .share-btn--x:hover { background: #000; border-color: rgba(255, 255, 255, .5); }
+        .share-btn--tg:hover { background: #229ED9; border-color: #229ED9; }
+        .share-btn--mail:hover, .share-btn--copy:hover, .share-btn--more:hover {
+            background: #D11920; border-color: #D11920;
+        }
+
+        /* Card share icon (top-right of the thumbnail) */
+        .sermon-card-share {
+            position: absolute; top: .75rem; right: .75rem; z-index: 20;
+            width: 2.25rem; height: 2.25rem; border-radius: 999px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(0, 0, 0, .55); border: 1px solid rgba(255, 255, 255, .25); color: #fff;
+            transition: background-color .2s, border-color .2s;
+        }
+        .sermon-card-share:hover { background: #D11920; border-color: #D11920; }
+        .sermon-card-share svg { width: 1rem; height: 1rem; }
+
+        /* Share sheet opened from a card */
+        .share-sheet {
+            position: fixed; inset: 0; z-index: 70;
+            display: flex; align-items: flex-end; justify-content: center;
+        }
+        .share-sheet[hidden] { display: none; }
+        .share-sheet__backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .75); }
+        .share-sheet__panel {
+            position: relative; width: 100%; max-width: 30rem; padding: 1.5rem;
+            background: rgb(var(--sermon-panel-rgb)); border: 1px solid rgba(255, 255, 255, .12);
+            border-radius: 1.5rem 1.5rem 0 0; box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
+        }
+        @media (min-width: 640px) {
+            .share-sheet { align-items: center; padding: 1.5rem; }
+            .share-sheet__panel { border-radius: 1.5rem; }
+        }
+    </style>
+
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
@@ -145,7 +262,7 @@ if (isset($_GET['sermon'])) {
     <div id="sermonModal" class="fixed inset-0 z-50 hidden flex flex-col justify-end sm:justify-center items-center p-0 sm:p-6 opacity-0 transition-opacity duration-500">
         <div class="absolute inset-0 bg-black/80 backdrop-blur-xl" onclick="closeSermon()"></div>
         
-        <div class="relative w-full max-w-6xl h-[95vh] sm:h-[85vh] bg-hodBlue/95 border border-white/10 sm:rounded-3xl shadow-2xl flex flex-col transform translate-y-full sm:scale-95 transition-transform duration-500 overflow-hidden">
+        <div class="sermon-panel relative w-full max-w-6xl h-[95vh] sm:h-[85vh] border border-white/10 sm:rounded-3xl shadow-2xl flex flex-col transform translate-y-full sm:scale-95 transition-transform duration-500 overflow-hidden">
             
             <div class="absolute top-4 right-4 z-50">
                 <button onclick="closeSermon()" class="bg-black/50 text-white hover:bg-hodRed hover:text-white w-10 h-10 rounded-full flex items-center justify-center transition-all backdrop-blur-md border border-white/20">
@@ -153,24 +270,29 @@ if (isset($_GET['sermon'])) {
                 </button>
             </div>
 
-            <div class="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden custom-scrollbar">
+            <div class="sermon-body flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden custom-scrollbar">
                 
-                <div class="w-full lg:w-2/3 border-b lg:border-b-0 lg:border-r border-white/10 flex flex-col lg:overflow-y-auto custom-scrollbar">
+                <div class="sermon-main w-full lg:w-2/3 border-b lg:border-b-0 lg:border-r border-white/10 flex flex-col lg:overflow-y-auto custom-scrollbar">
                     
                     <div id="modalVideoContainer" class="w-full aspect-video bg-black hidden shrink-0 relative">
                         <div id="youtubePlayer" class="absolute inset-0 w-full h-full"></div>
                     </div>
                     
                     <div id="modalImageContainer" class="w-full h-64 sm:h-80 bg-gray-900 shrink-0 relative overflow-hidden">
-                        <div class="absolute inset-0 bg-gradient-to-t from-hodBlue to-transparent z-10"></div>
-                        <img id="modalCover" src="" class="w-full h-full object-cover opacity-60 mix-blend-overlay">
+                        <img id="modalCover" src="" alt="" class="sermon-hero-img">
+                        <div class="sermon-hero-scrim"></div>
                     </div>
 
                     <div id="modalDetails" class="p-6 md:p-8 -mt-20 relative z-20 shrink-0 transition-all duration-300">
                         <span id="modalType" class="text-white text-[10px] font-bold uppercase tracking-widest bg-hodRed px-3 py-1 rounded-full shadow-lg">Service Type</span>
-                        <h2 id="modalTitle" class="text-3xl md:text-4xl font-heading text-white font-bold mt-4 leading-tight">Sermon Title</h2>
+                        <h2 id="modalTitle" class="sermon-title-shadow text-3xl md:text-4xl font-heading text-white font-bold mt-4 leading-tight">Sermon Title</h2>
                         <p class="text-gray-300 mt-2 font-light tracking-wide text-sm md:text-base">Ministering: <span id="modalPreacher" class="font-bold text-white">Preacher</span> <span class="mx-2 opacity-50">•</span> <span id="modalDate">Date</span></p>
                         
+                        <div id="modalShare" class="mt-6 hidden">
+                            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Share this message</p>
+                            <div id="modalShareButtons" class="share-row"></div>
+                        </div>
+
                         <div id="modalAudioContainer" class="mt-8 bg-white/5 p-4 rounded-2xl border border-white/10 hidden backdrop-blur-md">
                             <div class="flex items-center justify-between mb-3 px-2">
                                 <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Listen Audio</p>
@@ -183,8 +305,8 @@ if (isset($_GET['sermon'])) {
                     </div>
 
                     <div class="px-6 pb-8 md:px-8 flex-1 w-full">
-                        <div class="bg-gray-900/99 backdrop-blur-3xl rounded-2xl p-6 shadow-inner border border-gray-700/90">
-                            <div class="prose prose-invert max-w-none text-gray-100 font-light text-sm md:text-base leading-relaxed" id="modalNotes"></div>
+                        <div class="sermon-notes-card">
+                            <div class="sermon-notes" id="modalNotes"></div>
                         </div>
                     </div>
                 </div>
@@ -221,10 +343,155 @@ if (isset($_GET['sermon'])) {
         </div>
     </div>
 
+    <!-- Share sheet, opened from the share icon on a sermon card -->
+    <div id="shareSheet" class="share-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="shareSheetTitle">
+        <div class="share-sheet__backdrop" onclick="closeShareSheet()"></div>
+        <div class="share-sheet__panel">
+            <div class="flex items-start justify-between gap-4 mb-1">
+                <h3 id="shareSheetTitle" class="font-heading font-bold text-lg text-white">Share this message</h3>
+                <button type="button" onclick="closeShareSheet()" aria-label="Close" class="bg-black/50 text-white hover:bg-hodRed w-8 h-8 rounded-full flex items-center justify-center transition-all border border-white/20 shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <p id="shareSheetSermon" class="text-sm text-gray-300 mb-5"></p>
+            <div id="shareSheetButtons" class="share-row"></div>
+        </div>
+    </div>
+
     <script>
         const API_URL = '/api/public_sermons_api.php';
         let ytPlayer;
-        let playTracked = false; 
+        let playTracked = false;
+        let openSlug = null;        // slug of the sermon currently open in the modal
+        const sermonCache = {};     // slug -> card data, so a card can be shared without opening it
+
+        // --- Sharing ---
+        // Brand glyphs from Simple Icons (CC0), 24x24 viewBox
+        const svgIcon = d => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
+        const SHARE_ICONS = {
+            whatsapp: svgIcon('M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z'),
+            facebook: svgIcon('M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z'),
+            x: svgIcon('M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z'),
+            telegram: svgIcon('M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z'),
+            // Generic glyphs (stroke style, not brand marks)
+            share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>',
+            mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
+            link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 007.07 0l3-3a5 5 0 00-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 00-7.07 0l-3 3a5 5 0 007.07 7.07l1.5-1.5"/></svg>'
+        };
+
+        // Always share the clean /sermons?sermon=<slug> URL: it's what sermons.php builds its
+        // og: tags from, so WhatsApp/Facebook show the cover image and summary.
+        function sermonShareData(s) {
+            const url = window.location.origin + '/sermons?sermon=' + encodeURIComponent(s.slug);
+            const text = [s.title, [s.preacher, s.nice_date].filter(Boolean).join(' • ')].filter(Boolean).join('\n');
+            return { url: url, title: s.title, text: text };
+        }
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+            return new Promise((resolve, reject) => {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.setAttribute('readonly', '');
+                ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+                document.body.appendChild(ta);
+                ta.select();
+                let ok = false;
+                try { ok = document.execCommand('copy'); } catch (e) {}
+                document.body.removeChild(ta);
+                ok ? resolve() : reject();
+            });
+        }
+
+        function renderShareButtons(container, s) {
+            const d = sermonShareData(s);
+            const enc = encodeURIComponent;
+            const links = [
+                { cls: 'wa',   label: 'WhatsApp', icon: SHARE_ICONS.whatsapp, href: 'https://wa.me/?text=' + enc(d.text + '\n' + d.url) },
+                { cls: 'fb',   label: 'Facebook', icon: SHARE_ICONS.facebook, href: 'https://www.facebook.com/sharer/sharer.php?u=' + enc(d.url) },
+                { cls: 'x',    label: 'X',        icon: SHARE_ICONS.x,        href: 'https://twitter.com/intent/tweet?text=' + enc(d.text) + '&url=' + enc(d.url) },
+                { cls: 'tg',   label: 'Telegram', icon: SHARE_ICONS.telegram, href: 'https://t.me/share/url?url=' + enc(d.url) + '&text=' + enc(d.text) },
+                { cls: 'mail', label: 'Email',    icon: SHARE_ICONS.mail,     href: 'mailto:?subject=' + enc(d.title) + '&body=' + enc(d.text + '\n\n' + d.url) }
+            ];
+
+            const $c = $(container).empty();
+            links.forEach(l => {
+                $('<a>', { href: l.href, target: '_blank', rel: 'noopener noreferrer', 'class': 'share-btn share-btn--' + l.cls })
+                    .html(l.icon + '<span>' + l.label + '</span>')
+                    .appendTo($c);
+            });
+
+            $('<button>', { type: 'button', 'class': 'share-btn share-btn--copy' })
+                .html(SHARE_ICONS.link + '<span>Copy link</span>')
+                .on('click', function() {
+                    copyToClipboard(d.url).then(
+                        () => Toastify({ text: 'Link copied', style: { background: '#1D356A', color: 'white' } }).showToast(),
+                        () => window.prompt('Copy this link:', d.url)
+                    );
+                })
+                .appendTo($c);
+
+            // Phones and some desktops expose the system share sheet (every installed app)
+            if (navigator.share) {
+                $('<button>', { type: 'button', 'class': 'share-btn share-btn--more' })
+                    .html(SHARE_ICONS.share + '<span>More…</span>')
+                    .on('click', function() {
+                        navigator.share({ title: d.title, text: d.text, url: d.url }).catch(() => {}); // AbortError = user cancelled
+                    })
+                    .appendTo($c);
+            }
+        }
+
+        function openShareSheet(slug) {
+            const s = sermonCache[slug];
+            if (!s) return;
+            $('#shareSheetSermon').text(s.title);
+            renderShareButtons('#shareSheetButtons', s);
+            $('#shareSheet').prop('hidden', false);
+        }
+
+        function closeShareSheet() {
+            $('#shareSheet').prop('hidden', true);
+        }
+
+        $(document).on('keydown', function(e) {
+            if (e.key === 'Escape') closeShareSheet();
+        });
+
+        // --- Full notes: plain text from the admin textarea -> readable blocks ---
+        // "1. Heading" -> heading, "• item" / "- item" -> hanging bullet, "Label: text" -> bold label.
+        // Built with .text() so notes are never interpreted as HTML.
+        function renderNotes(raw) {
+            const $n = $('#modalNotes').empty();
+            const bulletRe = /^(?:[•·▪◦]\s*|[-–*]\s+)/;
+
+            String(raw || '').replace(/\r\n?/g, '\n').split('\n').forEach(line => {
+                const t = line.trim();
+                if (!t) return;
+
+                if (t.length <= 90 && /^\d+[.)]\s+\S/.test(t)) {
+                    $n.append($('<h4>').addClass('note-h').text(t));
+                } else if (bulletRe.test(t)) {
+                    $n.append($('<p>').addClass('note-li').text(t.replace(bulletRe, '')));
+                } else {
+                    const m = t.match(/^([A-Za-z]+(?: [A-Za-z]+){0,2}):\s*(.*)$/);
+                    if (m && m[2] === '') {
+                        $n.append($('<p>').addClass('note-sub').text(t));
+                    } else if (m) {
+                        $n.append($('<p>').append(
+                            $('<span>').addClass('note-label').text(m[1] + ':'),
+                            document.createTextNode(' ' + m[2])
+                        ));
+                    } else {
+                        $n.append($('<p>').text(t));
+                    }
+                }
+            });
+
+            if (!$n.children().length) {
+                $n.append($('<p>').addClass('italic opacity-50').text('Detailed notes are not available.'));
+            }
+        }
 
         // Init YouTube API - Patched for CORS and Origin security
         function onYouTubeIframeAPIReady() {
@@ -263,12 +530,14 @@ if (isset($_GET['sermon'])) {
                 if(res.status === 'success') {
                     let html = '';
                     res.sermons.forEach(s => {
+                        sermonCache[s.slug] = s;
                         const cover = s.cover_image_path || 'https://images.unsplash.com/photo-1438232992991-995b7058bbb3?w=800&q=80';
                         html += `
                         <div onclick="openSermon('${s.slug}')" class="glass-card rounded-3xl overflow-hidden cursor-pointer group flex flex-col h-[400px]">
                             <div class="h-48 relative overflow-hidden shrink-0">
-                                <div class="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors duration-500 z-10"></div>
                                 <img src="${cover}" class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700">
+                                <div class="sermon-card-scrim"></div>
+                                <button type="button" onclick="event.stopPropagation(); openShareSheet('${s.slug}')" class="sermon-card-share" aria-label="Share this sermon" title="Share">${SHARE_ICONS.share}</button>
                                 <div class="absolute bottom-3 left-3 z-20 bg-hodRed text-white text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full">${s.service_type}</div>
                             </div>
                             <div class="p-6 flex-1 flex flex-col">
@@ -300,6 +569,9 @@ if (isset($_GET['sermon'])) {
     $('body').css('overflow', 'hidden');
     $('#modalTitle').text('Loading...');
     $('#modalCommentsList').empty();
+    $('#modalNotes').empty();
+    $('#modalShare').addClass('hidden');
+    openSlug = null;
     $('#modalVideoContainer, #modalAudioContainer').addClass('hidden');
     $('#modalImageContainer').removeClass('hidden');
     
@@ -320,14 +592,17 @@ if (isset($_GET['sermon'])) {
             
             // Keep using s.id here so comments still save to the correct numeric ID
             $('#commentSermonId').val(s.id); 
+            openSlug = s.slug;
             
             $('#modalType').text(s.service_type);
             $('#modalTitle').text(s.title);
             $('#modalPreacher').text(s.preacher);
             $('#modalDate').text(s.nice_date);
             
-            const notes = s.full_notes ? s.full_notes.replace(/\n/g, '<br>') : '<p class="italic opacity-50">Detailed notes are not available.</p>';
-            $('#modalNotes').html(notes);
+            renderNotes(s.full_notes);
+
+            renderShareButtons('#modalShareButtons', s);
+            $('#modalShare').removeClass('hidden');
 
             if(s.youtube_link) {
                 $('#modalImageContainer').addClass('hidden');
@@ -420,6 +695,7 @@ if (isset($_GET['sermon'])) {
             e.preventDefault();
             const btn = $(this).find('button[type="submit"]');
             const origText = btn.text();
+            const slug = openSlug;
             btn.prop('disabled', true).text('Submitting...');
             
             $.post(API_URL, $(this).serialize(), function(res) {
@@ -428,9 +704,12 @@ if (isset($_GET['sermon'])) {
                     $('#commentForm')[0].reset();
                     Toastify({ text: res.message, style: { background: "#1D356A", color: "white" } }).showToast();
                     
-                    $.getJSON(API_URL, { action: 'get_sermon', sermon_id: $('#commentSermonId').val() }, function(fresh) {
-                        if(fresh.status === 'success') renderComments(fresh.comments);
-                    });
+                    // get_sermon looks sermons up by slug (not id). Skip if the visitor has since opened another one.
+                    if(slug) {
+                        $.getJSON(API_URL, { action: 'get_sermon', slug: slug }, function(fresh) {
+                            if(fresh.status === 'success' && openSlug === slug) renderComments(fresh.comments);
+                        });
+                    }
                 } else {
                     Toastify({ text: res.message, style: { background: "#D11920" } }).showToast();
                 }
