@@ -267,7 +267,126 @@ try {
             break;
 
         // =====================================================================================
-        // ACTION 2.5: UPDATE EXISTING EVENT (Parametric edit)
+        // ACTION 2.5: CREATE THE RECURRING MONTHLY SUNDAY + MIDWEEK SERVICES
+        // =====================================================================================
+        case 'create_monthly_services':
+            $month = trim((string)($_POST['month'] ?? ''));
+            if (!preg_match('/^([0-9]{4})-(0[1-9]|1[0-2])$/', $month, $monthParts)) {
+                echo json_encode(['status' => 'error', 'message' => 'Please select a valid month.']);
+                exit;
+            }
+
+            $year = (int)$monthParts[1];
+            $monthNumber = (int)$monthParts[2];
+            $monthStart = DateTimeImmutable::createFromFormat(
+                '!Y-m-d',
+                sprintf('%04d-%02d-01', $year, $monthNumber),
+                new DateTimeZone('Africa/Lagos')
+            );
+            $dateErrors = DateTimeImmutable::getLastErrors();
+            if (!$monthStart || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0))) {
+                echo json_encode(['status' => 'error', 'message' => 'Please select a valid month.']);
+                exit;
+            }
+
+            $location = 'Hebron, Kon-X Building, Beside Scapular Plaza, Agungi, Lekki';
+            $daysInMonth = (int)$monthStart->format('t');
+            $lastDay = $monthStart->modify('last day of this month');
+            $lastSundayDay = $daysInMonth - (int)$lastDay->format('w');
+            $serviceRows = [];
+
+            for ($day = 1; $day <= $daysInMonth; $day++) {
+                $serviceDate = $monthStart->setDate($year, $monthNumber, $day);
+                $weekday = (int)$serviceDate->format('w'); // Sunday = 0, Thursday = 4
+
+                if ($weekday === 0) {
+                    $isThanksgiving = ($day === $lastSundayDay);
+                    $serviceRows[] = [
+                        'title' => $isThanksgiving ? 'Total Experience - Thanksgiving Service' : 'Total Experience',
+                        'category' => 'Sunday_Service',
+                        'event_date' => $serviceDate->format('Y-m-d') . ' 09:30:00',
+                        'description' => $isThanksgiving
+                            ? 'Join us for our monthly Thanksgiving Service as we give thanks to God for His faithfulness.'
+                            : 'A time of worship, the Word and fellowship at our Total Experience Sunday Service.',
+                    ];
+                } elseif ($weekday === 4) {
+                    $serviceRows[] = [
+                        'title' => 'Mercy Experience',
+                        'category' => 'Midweek_Service',
+                        'event_date' => $serviceDate->format('Y-m-d') . ' 18:30:00',
+                        'description' => 'Join us for Mercy Experience, our midweek service for worship, the Word and fellowship.',
+                    ];
+                }
+            }
+
+            $created = [];
+            $skipped = [];
+            $existingStmt = $pdo->prepare(
+                'SELECT id FROM events WHERE title = ? AND event_category = ? AND event_date = ? LIMIT 1'
+            );
+            $insertStmt = $pdo->prepare('
+                INSERT INTO events (
+                    title, event_category, event_date, end_date, description, location,
+                    youtube_url, external_registration_url, banner_image_url, ministers,
+                    ministers_image_url, department_id, tribe_id, created_by,
+                    requires_registration, allow_visitors, registration_token
+                ) VALUES (?, ?, ?, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, 0, 0, NULL)
+            ');
+
+            try {
+                $pdo->beginTransaction();
+                foreach ($serviceRows as $service) {
+                    $existingStmt->execute([$service['title'], $service['category'], $service['event_date']]);
+                    $existingId = $existingStmt->fetchColumn();
+                    if ($existingId !== false) {
+                        $skipped[] = ['id' => (int)$existingId, 'title' => $service['title'], 'event_date' => $service['event_date']];
+                        continue;
+                    }
+
+                    $insertStmt->execute([
+                        $service['title'],
+                        $service['category'],
+                        $service['event_date'],
+                        $service['description'],
+                        $location,
+                        $user_id,
+                    ]);
+                    $created[] = [
+                        'id' => (int)$pdo->lastInsertId(),
+                        'title' => $service['title'],
+                        'event_date' => $service['event_date'],
+                    ];
+                }
+                $pdo->commit();
+            } catch (PDOException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                throw $e;
+            }
+
+            $monthLabel = $monthStart->format('F Y');
+            $createdCount = count($created);
+            $skippedCount = count($skipped);
+            if ($createdCount > 0 && $skippedCount > 0) {
+                $message = "Created {$createdCount} service" . ($createdCount === 1 ? '' : 's') . " for {$monthLabel}; {$skippedCount} already existed and were skipped.";
+            } elseif ($createdCount > 0) {
+                $message = "Created {$createdCount} service" . ($createdCount === 1 ? '' : 's') . " for {$monthLabel}.";
+            } else {
+                $message = "All {$skippedCount} services for {$monthLabel} already exist. Nothing was duplicated.";
+            }
+
+            echo json_encode([
+                'status' => 'success',
+                'message' => $message,
+                'month' => $month,
+                'created_count' => $createdCount,
+                'skipped_count' => $skippedCount,
+                'created' => $created,
+                'skipped' => $skipped,
+            ]);
+            break;
+
+        // =====================================================================================
+        // ACTION 3: UPDATE EXISTING EVENT (Parametric edit)
         // =====================================================================================
         case 'update_event':
             $event_id = $_POST['event_id'] ?? '';

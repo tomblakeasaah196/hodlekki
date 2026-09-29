@@ -28,7 +28,7 @@ require_once '../../includes/header.php';
 
     <!-- ============================ SECTION: EVENTS ============================ -->
     <section id="section-events" class="space-y-6 animate-fade-in-up">
-        <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:flex-wrap justify-between items-stretch sm:items-center gap-3 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
             <div class="relative w-full sm:w-80">
                 <input type="text" id="searchEvents" placeholder="Search events..." class="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-hodBlue focus:border-transparent outline-none transition-all bg-gray-50">
                 <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
@@ -36,6 +36,10 @@ require_once '../../includes/header.php';
             <button onclick="startNewEvent()" class="bg-hodBlue hover:bg-[#152750] text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 text-sm shrink-0">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                 New Event
+            </button>
+            <button onclick="openMonthlyServicesModal()" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 text-sm shrink-0" title="Create all Total Experience and Mercy Experience services for a month">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                Create Monthly Services
             </button>
             <a href="/modules/sms_studio/index.php"
                class="inline-flex items-center gap-2 bg-[#123b8c] hover:bg-[#152750] text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all shrink-0"
@@ -448,6 +452,56 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
+<!-- Monthly Services Modal -->
+<div id="monthlyServicesModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform scale-95 transition-transform duration-300">
+        <div class="px-6 py-5 border-b border-gray-100 bg-red-50/60 flex justify-between items-start gap-4">
+            <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-red-600 mb-1">Monthly schedule</p>
+                <h3 class="text-xl md:text-2xl font-bold text-gray-900">Create Monthly Services</h3>
+                <p class="text-sm text-gray-500 mt-1">Add every Sunday and Thursday service in one click.</p>
+            </div>
+            <button type="button" onclick="closeMonthlyServicesModal()" class="text-gray-400 hover:text-red-500 transition-colors shrink-0" aria-label="Close">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <form id="monthlyServicesForm" class="p-6 space-y-5">
+            <div>
+                <label for="monthlyServicesMonth" class="block text-xs font-bold text-gray-600 uppercase mb-1.5">Month *</label>
+                <input type="month" id="monthlyServicesMonth" name="month" required class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-hodBlue outline-none font-bold">
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="rounded-2xl bg-blue-50 border border-blue-100 p-4">
+                    <p class="text-[10px] font-black uppercase tracking-wider text-hodBlue">Sundays</p>
+                    <p class="font-bold text-gray-900 mt-1">Total Experience · 9:30 AM</p>
+                    <p class="text-xs text-gray-500 mt-1">The last Sunday is marked as Thanksgiving Service.</p>
+                </div>
+                <div class="rounded-2xl bg-purple-50 border border-purple-100 p-4">
+                    <p class="text-[10px] font-black uppercase tracking-wider text-purple-700">Thursdays</p>
+                    <p class="font-bold text-gray-900 mt-1">Mercy Experience · 6:30 PM</p>
+                    <p class="text-xs text-gray-500 mt-1">All services use the standard Hebron location.</p>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-gray-200 overflow-hidden">
+                <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-3">
+                    <p class="text-xs font-bold text-gray-700 uppercase tracking-wider">Events to be created</p>
+                    <span id="monthlyServicesCount" class="text-xs font-black text-hodBlue bg-blue-100 px-2.5 py-1 rounded-full">0 services</span>
+                </div>
+                <div id="monthlyServicesPreview" class="max-h-52 overflow-y-auto divide-y divide-gray-100"></div>
+            </div>
+            <p class="text-xs text-gray-500"><span class="font-bold text-gray-700">Location:</span> Hebron, Kon-X Building, Beside Scapular Plaza, Agungi, Lekki</p>
+            <p class="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">Registration links are turned off for these services. If a date already exists, it will be skipped instead of duplicated.</p>
+
+            <div class="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pt-1">
+                <button type="button" onclick="closeMonthlyServicesModal()" class="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">Cancel</button>
+                <button type="submit" id="monthlyServicesSubmit" class="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-md transition-all">Create Monthly Services</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div id="globalActionBlocker" class="fixed inset-0 w-screen h-screen z-[100000] hidden items-center justify-center bg-gray-900/40 backdrop-blur-sm transition-opacity duration-300 opacity-0">
     <div class="bg-white p-4 rounded-2xl shadow-2xl flex items-center gap-3"><svg class="animate-spin h-6 w-6 text-hodBlue" viewBox="0 0 24 24" fill="none"><circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span class="font-bold text-gray-700 text-sm">Processing...</span></div>
 </div>
@@ -552,7 +606,7 @@ require_once '../../includes/header.php';
             } else {
                 res.data.forEach(e => {
                     const d = new Date(e.event_date);
-                    let dStr = d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+                    let dStr = d.toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
                     const so = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
                     if(e.end_date && e.end_date !== so){ dStr += ' – ' + new Date(e.end_date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
                     const closed = e.is_closed == 1;
@@ -578,7 +632,7 @@ require_once '../../includes/header.php';
             let attOpts = '<option value="">-- Choose an active event --</option>';
             res.data.forEach(e => {
                 const d2 = new Date(e.event_date);
-                let d2Str = d2.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+                let d2Str = d2.toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
                 const so2 = `${d2.getFullYear()}-${String(d2.getMonth()+1).padStart(2,'0')}-${String(d2.getDate()).padStart(2,'0')}`;
                 if(e.end_date && e.end_date !== so2) d2Str += ' – ' + new Date(e.end_date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
                 regOpts += `<option value="${e.id}">${esc(e.title)}</option>`;
@@ -651,6 +705,102 @@ require_once '../../includes/header.php';
         renderPreview();
         switchSection('configure');
     }
+
+    // ---------- Monthly service generator ----------
+    function currentMonthValue(){
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    // Keep the preview in the browser, while the API recalculates the dates before inserting.
+    function monthlyServiceSchedule(monthValue){
+        const match = /^([0-9]{4})-(0[1-9]|1[0-2])$/.exec(monthValue || '');
+        if(!match) return [];
+        const year = Number(match[1]);
+        const monthIndex = Number(match[2]) - 1;
+        const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+        const lastSunday = lastDay - new Date(year, monthIndex, lastDay).getDay();
+        const schedule = [];
+
+        for(let day = 1; day <= lastDay; day++){
+            const date = new Date(year, monthIndex, day);
+            const weekday = date.getDay();
+            let hour = null;
+            let minute = 0;
+            let title = '';
+            let category = '';
+            if(weekday === 0){
+                hour = 9; minute = 30; category = 'Sunday_Service';
+                title = day === lastSunday ? 'Total Experience - Thanksgiving Service' : 'Total Experience';
+            } else if(weekday === 4){
+                hour = 18; minute = 30; category = 'Midweek_Service'; title = 'Mercy Experience';
+            }
+            if(hour === null) continue;
+            const datePart = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const timePart = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+            schedule.push({
+                date: datePart,
+                eventDate: `${datePart} ${timePart}`,
+                title,
+                category,
+                label: date.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }),
+                timeLabel: new Date(year, monthIndex, day, hour, minute).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })
+            });
+        }
+        return schedule;
+    }
+
+    function renderMonthlyServicesPreview(){
+        const schedule = monthlyServiceSchedule($('#monthlyServicesMonth').val());
+        $('#monthlyServicesCount').text(`${schedule.length} service${schedule.length === 1 ? '' : 's'}`);
+        if(!schedule.length){
+            $('#monthlyServicesPreview').html('<p class="p-5 text-sm text-gray-400 text-center">Choose a valid month to see the schedule.</p>');
+            return;
+        }
+        $('#monthlyServicesPreview').html(schedule.map(service => {
+            const thanksgiving = service.title.indexOf('Thanksgiving') !== -1;
+            return `<div class="px-4 py-3 flex items-center justify-between gap-3">
+                <div class="min-w-0"><p class="font-bold text-gray-800 text-sm truncate">${esc(service.title)}</p><p class="text-xs text-gray-500">${esc(service.label)}</p></div>
+                <div class="shrink-0 text-right"><p class="text-xs font-black ${thanksgiving ? 'text-red-600' : 'text-hodBlue'}">${esc(service.timeLabel)}</p><p class="text-[10px] text-gray-400 uppercase tracking-wider">${thanksgiving ? 'Thanksgiving' : (service.category === 'Sunday_Service' ? 'Sunday Service' : 'Midweek Service')}</p></div>
+            </div>`;
+        }).join(''));
+    }
+
+    function openMonthlyServicesModal(){
+        if(!$('#monthlyServicesMonth').val()) $('#monthlyServicesMonth').val(currentMonthValue());
+        renderMonthlyServicesPreview();
+        openModal('monthlyServicesModal');
+    }
+
+    function closeMonthlyServicesModal(){ closeModal('monthlyServicesModal'); }
+
+    $('#monthlyServicesMonth').on('change input', renderMonthlyServicesPreview);
+    $('#monthlyServicesForm').on('submit', function(e){
+        e.preventDefault();
+        const month = $('#monthlyServicesMonth').val();
+        const schedule = monthlyServiceSchedule(month);
+        if(!schedule.length){ showToast('Choose a valid month first.', 'error'); return; }
+
+        const btn = $('#monthlyServicesSubmit');
+        const original = btn.text();
+        btn.prop('disabled', true).html('<span class="spinner"></span> Creating…');
+        lockScreen();
+        $.post(API_URL, { action:'create_monthly_services', month:month }, function(res){
+            btn.prop('disabled', false).text(original);
+            unlockScreen();
+            if(res.status !== 'success'){
+                showToast(res.message || 'Could not create the monthly services.', 'error');
+                return;
+            }
+            closeMonthlyServicesModal();
+            showToast(res.message, 'success');
+            loadEvents();
+        }, 'json').fail(function(){
+            btn.prop('disabled', false).text(original);
+            unlockScreen();
+            showToast('Server Error. The monthly services were not created.', 'error');
+        });
+    });
 
     // ---------- Configure form submit (create / update) ----------
     $('#cfgCustomPeriod').on('change', function(){
