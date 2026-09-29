@@ -37,6 +37,60 @@ function processProfileImage($file) {
 }
 
 /**
+ * Helper: Auto-check-in a brand new first timer for TODAY's open Sunday
+ * Service / Midweek Service. Deterministic + safe: only ever attaches to a
+ * service that is (a) the right category, (b) actually happening today, and
+ * (c) still open (is_closed = 0) — i.e. exactly the service the Embrace desk
+ * is standing in right now. Never touches event_registrations. Never throws
+ * — a failure here must not block the first-timer's own registration.
+ * Returns the number of services the person was marked present for.
+ */
+function embrace_auto_checkin_today(PDO $pdo, int $visitorUserId, int $staffUserId): int {
+    if ($visitorUserId <= 0) return 0;
+    try {
+        // Widened SQL filter (DATE(event_date) <= today, still open); the exact
+        // event_date..end_date window is then checked in PHP the same way
+        // api/checkin_api.php already does it, so an empty-string end_date
+        // never trips up a raw SQL date comparison.
+        $stmt = $pdo->prepare("
+            SELECT id, event_date, end_date FROM events
+            WHERE event_category IN ('Sunday_Service', 'Midweek_Service')
+              AND is_closed = 0
+              AND DATE(event_date) <= CURDATE()
+        ");
+        $stmt->execute();
+        $candidates = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (!$candidates) return 0;
+
+        $today = date('Y-m-d');
+        $eventIds = [];
+        foreach ($candidates as $c) {
+            $startDate = date('Y-m-d', strtotime($c['event_date']));
+            $endDate = !empty($c['end_date']) ? $c['end_date'] : $startDate;
+            if ($today >= $startDate && $today <= $endDate) $eventIds[] = (int)$c['id'];
+        }
+        if (!$eventIds) return 0;
+
+        $marked = 0;
+        foreach ($eventIds as $eid) {
+            $dup = $pdo->prepare("SELECT id FROM attendance WHERE event_id = ? AND user_id = ?");
+            $dup->execute([$eid, $visitorUserId]);
+            if ($dup->fetch()) continue;
+
+            $pdo->prepare("
+                INSERT INTO attendance (event_id, user_id, status, check_in_time, checked_in_by, attendance_date)
+                VALUES (?, ?, 'Present', NOW(), ?, CURDATE())
+            ")->execute([$eid, $visitorUserId, $staffUserId]);
+            $marked++;
+        }
+        return $marked;
+    } catch (\Throwable $e) {
+        error_log('embrace_auto_checkin_today failed: ' . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
  * Helper: Zero-Trust Notes Fetcher (Updated Patch)
  * Flat visibility architecture: Everyone sees everything, EXCEPT Pastor-only notes.
  */
@@ -153,6 +207,14 @@ try {
             require_once __DIR__ . '/../includes/reach_helpers.php';
             reach_mark_visited_church($pdo, $phone, (int) $pdo->lastInsertId());
 
+            // ATTENDANCE AUTO-CHECK-IN: a first timer captured on Embrace was
+            // obviously physically in the building — mark them Present for
+            // whichever Sunday/Midweek service is happening right now, so
+            // they show up immediately in the Events & Attendance module and
+            // the Analytics tab without anyone having to check them in twice.
+            $newVisitorId = (int) $pdo->lastInsertId();
+            $auto_checked_in_events = embrace_auto_checkin_today($pdo, $newVisitorId, $user_id);
+
             // NOTIFICATION TRIGGER
             $embStmt = $pdo->query("SELECT ud.user_id FROM user_departments ud JOIN departments d ON ud.department_id = d.id WHERE d.name LIKE '%Embrace%' AND ud.role_in_dept IN ('Director', 'HOD') AND ud.is_active = 1");
             $embrace_leaders = $embStmt->fetchAll(PDO::FETCH_COLUMN);
@@ -165,7 +227,11 @@ try {
                 }
             }
 
-            echo json_encode(['status' => 'success', 'message' => 'First Timer registered and added to follow-up queue.']);
+            $successMsg = 'First Timer registered and added to follow-up queue.';
+            if ($auto_checked_in_events > 0) {
+                $successMsg .= " They've also been marked Present for today's service.";
+            }
+            echo json_encode(['status' => 'success', 'message' => $successMsg, 'auto_checked_in' => $auto_checked_in_events > 0]);
             break;
             
         // =====================================================================================

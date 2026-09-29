@@ -4,6 +4,7 @@ require_once '../../includes/header.php';
 ?>
 <link rel="stylesheet" href="https://cdn.quilljs.com/1.3.7/quill.snow.css">
 <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <div class="max-w-7xl mx-auto space-y-6 pb-12">
 
     <!-- Header -->
@@ -23,6 +24,10 @@ require_once '../../includes/header.php';
             <button onclick="switchSection('configure')" id="btn-configure" class="shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Configure</button>
             <button onclick="switchSection('registrations')" id="btn-registrations" class="shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Registrations</button>
             <button onclick="switchSection('attendance')" id="btn-attendance" class="shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Attendance</button>
+            <button onclick="switchSection('analytics')" id="btn-analytics" class="shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900 flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                Analytics
+            </button>
         </div>
     </div>
 
@@ -387,6 +392,237 @@ require_once '../../includes/header.php';
             </div>
         </div>
     </section>
+
+    <!-- ============================ SECTION: ANALYTICS ============================ -->
+    <section id="section-analytics" class="hidden space-y-5 animate-fade-in-up">
+
+        <!-- Sub-tabs: Midweek | Sunday (each fully independent) -->
+        <div class="bg-white p-4 md:p-5 rounded-3xl shadow-sm border border-gray-100/60">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="flex bg-gray-50/80 p-1.5 rounded-2xl border border-gray-100 w-full md:w-auto">
+                    <button onclick="anSwitchCategory('Midweek_Service')" id="anCatBtn-Midweek_Service" class="an-cat-btn flex-1 md:flex-none whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-white text-hodBlue shadow-sm">Midweek Service</button>
+                    <button onclick="anSwitchCategory('Sunday_Service')" id="anCatBtn-Sunday_Service" class="an-cat-btn flex-1 md:flex-none whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Sunday Service</button>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button onclick="openCompareModal()" class="inline-flex items-center gap-1.5 bg-gray-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/></svg>
+                        Compare Periods
+                    </button>
+                    <button onclick="anExportCsv()" class="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+                        Export CSV
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 mt-4 pt-4 border-t border-gray-100">
+                <div class="flex-1 min-w-[180px]">
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Period</label>
+                    <select id="anPeriodPreset" onchange="anOnPresetChange()" class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-hodBlue cursor-pointer">
+                        <option value="8">Last 8 services</option>
+                        <option value="3m">Last 3 months</option>
+                        <option value="6m">Last 6 months</option>
+                        <option value="12m" selected>Last 12 months</option>
+                        <option value="ytd">This year (YTD)</option>
+                        <option value="all">All time</option>
+                        <option value="custom">Custom range…</option>
+                    </select>
+                </div>
+                <div id="anCustomRangeWrap" class="hidden flex-1 flex items-end gap-2 min-w-[280px]">
+                    <div class="flex-1">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">From</label>
+                        <input type="date" id="anCustomStart" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-hodBlue">
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">To</label>
+                        <input type="date" id="anCustomEnd" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-hodBlue">
+                    </div>
+                    <button onclick="anApplyCustomRange()" class="bg-hodBlue hover:bg-[#152750] text-white px-4 py-2.5 rounded-xl text-xs font-bold shrink-0">Go</button>
+                </div>
+                <div class="min-w-[160px]">
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Chart grouping</label>
+                    <select id="anGranularity" class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-hodBlue cursor-pointer">
+                        <option value="month">Monthly</option>
+                        <option value="week">Weekly</option>
+                        <option value="service">Per service</option>
+                    </select>
+                </div>
+            </div>
+            <p id="anRangeSummary" class="text-[11px] text-gray-400 font-semibold mt-3"></p>
+        </div>
+
+        <!-- Loading / Empty states -->
+        <div id="anLoading" class="hidden bg-white rounded-3xl border border-gray-100 p-16 text-center">
+            <div class="inline-block w-8 h-8 border-4 border-hodBlue/20 border-t-hodBlue rounded-full animate-spin"></div>
+            <p class="text-gray-400 text-sm font-bold mt-4">Crunching the numbers…</p>
+        </div>
+        <div id="anEmpty" class="hidden bg-white rounded-3xl border border-gray-100 p-16 text-center text-gray-400">
+            <svg class="w-12 h-12 mx-auto mb-3 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            <p class="font-bold text-gray-500">No services found in this period</p>
+            <p class="text-xs text-gray-400 mt-1">Try widening the date range above.</p>
+        </div>
+        <div id="anErrorBox" class="hidden bg-red-50 border border-red-100 text-red-700 rounded-3xl p-6 text-sm font-bold"></div>
+
+        <div id="anContent" class="hidden space-y-5">
+
+            <!-- KPI Cards -->
+            <div id="anKpiGrid" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4"></div>
+
+            <!-- Main Attendance Trend -->
+            <div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 md:p-6">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-1">
+                    <div class="flex items-center gap-1.5">
+                        <h3 class="font-bold text-gray-900">Attendance Trend</h3>
+                        <button type="button" onclick="anInfo('Attendance Trend','Total number of people marked Present for each period. Click any point on the line to see every service inside that period. The dashed line is the average across the whole chart.')" class="an-info-btn">ⓘ</button>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-400" id="anTrendCaption"></span>
+                </div>
+                <div class="h-64 md:h-80 mt-3"><canvas id="anTrendChart"></canvas></div>
+            </div>
+
+            <!-- Gender + Spiritual Status -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 md:p-6">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <div class="flex items-center gap-1.5">
+                            <h3 class="font-bold text-gray-900">Gender Split</h3>
+                            <button type="button" onclick="anInfo('Gender Split','Male vs Female count of everyone marked Present in the selected period, based on each attendee\'s profile in the congregation database.')" class="an-info-btn">ⓘ</button>
+                        </div>
+                        <div class="flex bg-gray-50 rounded-lg p-1 border border-gray-100">
+                            <button onclick="anSetGenderView('totals')" id="anGenderViewBtn-totals" class="an-toggle-btn active">Totals</button>
+                            <button onclick="anSetGenderView('trend')" id="anGenderViewBtn-trend" class="an-toggle-btn">Trend</button>
+                        </div>
+                    </div>
+                    <div class="h-56 md:h-64"><canvas id="anGenderChart"></canvas></div>
+                </div>
+                <div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 md:p-6">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <div class="flex items-center gap-1.5">
+                            <h3 class="font-bold text-gray-900">Who Attended</h3>
+                            <button type="button" onclick="anInfo('Who Attended','Breaks attendance down by each person\'s status on their profile: Member, Worker, Pastor, 1st/2nd/3rd Timer, Visitor or Non-Member. This is the same status used across the rest of the church database.')" class="an-info-btn">ⓘ</button>
+                        </div>
+                        <div class="flex bg-gray-50 rounded-lg p-1 border border-gray-100">
+                            <button onclick="anSetStatusView('totals')" id="anStatusViewBtn-totals" class="an-toggle-btn active">Totals</button>
+                            <button onclick="anSetStatusView('trend')" id="anStatusViewBtn-trend" class="an-toggle-btn">Trend</button>
+                        </div>
+                    </div>
+                    <div class="h-56 md:h-64"><canvas id="anStatusChart"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Region leaderboard -->
+            <div id="anRegionCard" class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 md:p-6">
+                <div class="flex items-center gap-1.5 mb-3">
+                    <h3 class="font-bold text-gray-900">Region Leaderboard</h3>
+                    <button type="button" onclick="anInfo('Region Leaderboard','Total attendance in the selected period, grouped by each attendee\'s home Region. \'Unassigned\' means the person has a profile but no Region set yet.')" class="an-info-btn">ⓘ</button>
+                </div>
+                <div class="h-64 md:h-72"><canvas id="anRegionChart"></canvas></div>
+            </div>
+
+            <!-- Services table -->
+            <div class="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                <div class="p-4 md:p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="flex items-center gap-1.5">
+                        <h3 class="font-bold text-gray-900">Services</h3>
+                        <button type="button" onclick="anInfo('Services table','Every individual service inside the selected period. \'vs previous\' compares each service to the one right before it (same service type), even if that one falls outside the selected range. Tap the ⓘ on any row to open the full breakdown.')" class="an-info-btn">ⓘ</button>
+                    </div>
+                    <div class="relative w-full sm:w-72">
+                        <input type="text" id="anTableSearch" placeholder="Search by title or date…" oninput="anRenderTable()" class="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-hodBlue bg-gray-50">
+                        <svg class="w-4 h-4 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                </div>
+                <div class="overflow-x-auto hidden md:block">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-gray-50 text-gray-500 font-bold uppercase tracking-wider text-[10px] border-b border-gray-100">
+                            <tr>
+                                <th class="px-5 py-3 cursor-pointer select-none" onclick="anSort('event_date')">Date <span class="an-sort-ind" data-col="event_date"></span></th>
+                                <th class="px-5 py-3">Title</th>
+                                <th class="px-5 py-3 cursor-pointer select-none" onclick="anSort('total')">Attendance <span class="an-sort-ind" data-col="total"></span></th>
+                                <th class="px-5 py-3">Male / Female</th>
+                                <th class="px-5 py-3 cursor-pointer select-none" onclick="anSort('first_timers')">1st Timers <span class="an-sort-ind" data-col="first_timers"></span></th>
+                                <th class="px-5 py-3">Workers</th>
+                                <th class="px-5 py-3 cursor-pointer select-none" onclick="anSort('vs_previous')">vs Previous <span class="an-sort-ind" data-col="vs_previous"></span></th>
+                                <th class="px-5 py-3 text-right">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="anTableBody" class="divide-y divide-gray-50 text-gray-700"></tbody>
+                    </table>
+                </div>
+                <div id="anCardList" class="md:hidden divide-y divide-gray-50"></div>
+                <div class="px-5 py-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-3">
+                    <span id="anPageInfo" class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Showing 0</span>
+                    <div class="flex gap-2" id="anPaginationControls"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- Info popover modal (generic, reused everywhere for "ⓘ" triggers) -->
+<div id="anInfoModal" class="fixed inset-0 w-screen h-screen bg-gray-900/70 backdrop-blur-sm hidden z-[10050] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden transform scale-95 transition-transform duration-300">
+        <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+            <h3 id="anInfoTitle" class="text-sm font-bold text-gray-900">Info</h3>
+            <button onclick="closeModal('anInfoModal')" class="text-gray-400 hover:text-red-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div id="anInfoBody" class="p-5 text-sm text-gray-600 leading-relaxed"></div>
+    </div>
+</div>
+
+<!-- Event Detail Modal -->
+<div id="anEventModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9998] flex items-center justify-center p-2 sm:p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[94vh]">
+        <div class="px-5 md:px-6 py-4 border-b border-gray-100 bg-gray-50/60 flex justify-between items-start gap-4 shrink-0">
+            <div id="anEventModalHeader" class="min-w-0"></div>
+            <button onclick="closeModal('anEventModal')" class="text-gray-400 hover:text-red-500 bg-white p-1.5 rounded-full shadow-sm shrink-0"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div id="anEventModalBody" class="p-5 md:p-6 overflow-y-auto custom-scrollbar space-y-5"></div>
+    </div>
+</div>
+
+<!-- Period Detail Modal -->
+<div id="anPeriodModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9997] flex items-center justify-center p-2 sm:p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]">
+        <div class="px-5 md:px-6 py-4 border-b border-gray-100 bg-blue-50/60 flex justify-between items-center shrink-0">
+            <div id="anPeriodModalHeader"></div>
+            <button onclick="closeModal('anPeriodModal')" class="text-blue-400 hover:text-blue-700 bg-white p-1.5 rounded-full shadow-sm"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div id="anPeriodModalBody" class="p-5 md:p-6 overflow-y-auto custom-scrollbar space-y-3"></div>
+    </div>
+</div>
+
+<!-- Compare Periods Modal -->
+<div id="anCompareModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9996] flex items-center justify-center p-2 sm:p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[94vh]">
+        <div class="px-5 md:px-6 py-4 border-b border-gray-100 bg-gray-900 flex justify-between items-center shrink-0">
+            <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Analytics</p>
+                <h3 class="text-lg font-bold text-white">Compare Periods — <span id="anCompareCatLabel"></span></h3>
+            </div>
+            <button onclick="closeModal('anCompareModal')" class="text-gray-400 hover:text-white bg-white/10 p-1.5 rounded-full"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div class="p-5 md:p-6 overflow-y-auto custom-scrollbar space-y-5">
+            <div class="flex flex-wrap gap-2" id="anComparePresets"></div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="bg-blue-50/50 border border-blue-100 rounded-2xl p-4">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-hodBlue mb-2">Period A</p>
+                    <div class="flex gap-2">
+                        <input type="date" id="anCompA_start" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none">
+                        <input type="date" id="anCompA_end" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none">
+                    </div>
+                </div>
+                <div class="bg-red-50/50 border border-red-100 rounded-2xl p-4">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-hodRed mb-2">Period B</p>
+                    <div class="flex gap-2">
+                        <input type="date" id="anCompB_start" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none">
+                        <input type="date" id="anCompB_end" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none">
+                    </div>
+                </div>
+            </div>
+            <button onclick="anRunCompare()" class="w-full bg-hodBlue hover:bg-[#152750] text-white px-6 py-3.5 rounded-xl font-bold shadow-md transition-all">Run Comparison</button>
+            <div id="anCompareResults" class="hidden space-y-5"></div>
+        </div>
+    </div>
 </div>
 
 <!-- Field Modal -->
@@ -509,6 +745,23 @@ require_once '../../includes/header.php';
     @keyframes fadeInUp{ from{ opacity:0; transform:translateY(14px); } to{ opacity:1; transform:none; } }
     .animate-fade-in-up{ animation:fadeInUp .5s ease both; }
 
+    /* Analytics tab */
+    .an-info-btn{ display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:9999px; background:#EEF2FF; color:#1D356A; font-size:11px; font-weight:900; line-height:1; border:none; cursor:pointer; flex-shrink:0; }
+    .an-info-btn:hover{ background:#1D356A; color:#fff; }
+    .an-toggle-btn{ padding:.35rem .7rem; font-size:11px; font-weight:800; border-radius:8px; color:#6B7280; cursor:pointer; transition:all .15s; }
+    .an-toggle-btn.active{ background:#fff; color:#1D356A; box-shadow:0 1px 2px rgba(0,0,0,.08); }
+    .an-sort-ind{ font-size:9px; color:#9CA3AF; }
+    .an-kpi-card{ background:#fff; border:1px solid #F3F4F6; border-radius:20px; padding:16px; position:relative; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+    .an-kpi-card .an-kpi-label{ font-size:10px; font-weight:800; color:#6B7280; text-transform:uppercase; letter-spacing:.06em; }
+    .an-kpi-card .an-kpi-value{ font-size:22px; font-weight:900; color:#111827; margin-top:4px; line-height:1.1; }
+    .an-kpi-card .an-kpi-sub{ font-size:11px; color:#9CA3AF; margin-top:4px; font-weight:600; }
+    .an-badge{ display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:800; padding:2px 7px; border-radius:9999px; }
+    .an-badge.up{ background:#DCFCE7; color:#15803D; }
+    .an-badge.down{ background:#FEE2E2; color:#B91C1C; }
+    .an-badge.flat{ background:#F3F4F6; color:#6B7280; }
+    .an-clickable{ cursor:pointer; transition:transform .15s; }
+    .an-clickable:hover{ transform:translateY(-1px); }
+
     /* Quill rich-text editor (Description) */
     #cfgDescriptionEditor{ background:#fff; border:1px solid #e5e7eb; border-radius:14px; overflow:hidden; }
     #cfgDescriptionEditor .ql-toolbar.ql-snow{ border:0; border-bottom:1px solid #e5e7eb; border-top-left-radius:14px; border-top-right-radius:14px; background:#f8fafc; }
@@ -565,7 +818,7 @@ require_once '../../includes/header.php';
 
     // ---------- Section switching ----------
     function switchSection(id){
-        ['events','configure','registrations','attendance'].forEach(s => {
+        ['events','configure','registrations','attendance','analytics'].forEach(s => {
             $('#section-'+s).addClass('hidden');
             $('#btn-'+s).removeClass('bg-white text-hodBlue shadow-sm').addClass('text-gray-500 hover:text-gray-900');
         });
@@ -573,6 +826,7 @@ require_once '../../includes/header.php';
         $('#btn-'+id).removeClass('text-gray-500 hover:text-gray-900').addClass('bg-white text-hodBlue shadow-sm');
         if(id === 'registrations') loadRegSelect();
         if(id === 'attendance') loadAttendanceSelect();
+        if(id === 'analytics') initAnalytics();
     }
 
     // ---------- Helpers ----------
@@ -1316,6 +1570,617 @@ require_once '../../includes/header.php';
 
     // ---------- Search ----------
     $('#searchEvents').on('keyup', function(){ const v=$(this).val().toLowerCase(); $('#eventsGrid > div').each(function(){ const card=$(this); if(card.find('h4').length) card.toggle(card.text().toLowerCase().indexOf(v)>-1); }); });
+
+    // ================================================================================
+    // ANALYTICS TAB — Sunday Service & Midweek Service attendance analytics
+    // Data source: the `attendance` roster (+ `checkins` as a defensive union) via
+    // /api/event_analytics_api.php. NEVER touches event_registrations.
+    // ================================================================================
+    const ANALYTICS_API = '/api/event_analytics_api.php';
+    let anInitialized = false;
+    let anCategory = 'Midweek_Service';
+    let anPeriodState = {
+        Midweek_Service: { preset: '12m', start: null, end: null },
+        Sunday_Service:  { preset: '12m', start: null, end: null }
+    };
+    let anCurrentOverview = null;
+    let anGenderView = 'totals', anStatusView = 'totals';
+    let anSort_ = { col: 'event_date', dir: 'desc' };
+    let anPage = 1, anPerPage = 15;
+    let anChartTrend = null, anChartGender = null, anChartStatus = null, anChartRegion = null;
+    let anEvtCharts = { spark: null, status: null, region: null, pace: null };
+    let anEventRoster = [];
+
+    function anParseDate(d){ if(!d) return new Date(); return new Date(String(d).replace(' ','T')); }
+    function anFmtDateShort(d){ return anParseDate(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+    function anFmtDateFull(d){ return anParseDate(d).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}); }
+    function anFmtNum(n){ return (n===null||n===undefined?0:n).toLocaleString(); }
+    function anShortTitle(t){ return t && t.length>30 ? t.slice(0,28)+'…' : (t||''); }
+    function anPctChange(from,to){ if(!from) return null; return Math.round((to-from)/from*1000)/10; }
+    function anBadgeHtml(pct){
+        if(pct===null||pct===undefined) return '<span class="an-badge flat">—</span>';
+        if(pct>0) return `<span class="an-badge up">▲ +${pct}%</span>`;
+        if(pct<0) return `<span class="an-badge down">▼ ${pct}%</span>`;
+        return '<span class="an-badge flat">No change</span>';
+    }
+    function anVsPreviousHtml(e){ return anBadgeHtml(e.vs_previous===undefined?null:e.vs_previous); }
+
+    function anInfo(title, body){ $('#anInfoTitle').text(title); $('#anInfoBody').text(body); openModal('anInfoModal'); }
+
+    // ---------- Init / tab switching ----------
+    function initAnalytics(){
+        if(anInitialized) return;
+        anInitialized = true;
+        $('#anGranularity').on('change', function(){ $(this).data('userset', true); anLoadOverview(); });
+        anSwitchCategory('Midweek_Service');
+    }
+
+    function anSwitchCategory(cat){
+        anCategory = cat;
+        $('.an-cat-btn').removeClass('bg-white text-hodBlue shadow-sm').addClass('text-gray-500 hover:text-gray-900');
+        $('#anCatBtn-'+cat).addClass('bg-white text-hodBlue shadow-sm').removeClass('text-gray-500 hover:text-gray-900');
+        $('#anPeriodPreset').val(anPeriodState[cat].preset);
+        if(anPeriodState[cat].start) $('#anCustomStart').val(anPeriodState[cat].start);
+        if(anPeriodState[cat].end) $('#anCustomEnd').val(anPeriodState[cat].end);
+        anOnPresetChange(false);
+        anLoadOverview();
+    }
+
+    function anOnPresetChange(reload){
+        const v = $('#anPeriodPreset').val();
+        anPeriodState[anCategory].preset = v;
+        if(v === 'custom'){
+            $('#anCustomRangeWrap').removeClass('hidden');
+            if(!$('#anCustomStart').val()){
+                const e = new Date(), s = new Date(); s.setMonth(s.getMonth()-12);
+                $('#anCustomStart').val(s.toISOString().slice(0,10));
+                $('#anCustomEnd').val(e.toISOString().slice(0,10));
+            }
+            return; // wait for the explicit "Go" click
+        }
+        $('#anCustomRangeWrap').addClass('hidden');
+        if(reload !== false) anLoadOverview();
+    }
+
+    function anApplyCustomRange(){
+        const s = $('#anCustomStart').val(), e = $('#anCustomEnd').val();
+        if(!s || !e){ showToast('Pick both a start and end date.','error'); return; }
+        anPeriodState[anCategory].start = s; anPeriodState[anCategory].end = e;
+        anLoadOverview();
+    }
+
+    function anComputeRange(){
+        const st = anPeriodState[anCategory];
+        const today = new Date();
+        const fmt = d => d.toISOString().slice(0,10);
+        let start = null, end = fmt(today), limit = 0;
+        switch(st.preset){
+            case '8': limit = 8; break;
+            case '3m': { const s=new Date(); s.setMonth(s.getMonth()-3); start=fmt(s); break; }
+            case '6m': { const s=new Date(); s.setMonth(s.getMonth()-6); start=fmt(s); break; }
+            case 'ytd': start = today.getFullYear()+'-01-01'; break;
+            case 'all': start = '2000-01-01'; break;
+            case 'custom': start = st.start; end = st.end; break;
+            case '12m':
+            default: { const s=new Date(); s.setMonth(s.getMonth()-12); start=fmt(s); }
+        }
+        if(!start && !limit){ const s=new Date(); s.setMonth(s.getMonth()-12); start=fmt(s); }
+        return { start, end, limit };
+    }
+
+    function anDefaultGranularity(range){
+        if($('#anGranularity').data('userset')) return $('#anGranularity').val();
+        if(range.limit === 8){ $('#anGranularity').val('service'); return 'service'; }
+        const days = range.start ? (new Date(range.end) - new Date(range.start)) / 86400000 : 400;
+        const g = days <= 120 ? 'week' : 'month';
+        $('#anGranularity').val(g);
+        return g;
+    }
+
+    function anLoadOverview(){
+        const range = anComputeRange();
+        const granularity = anDefaultGranularity(range);
+        $('#anContent,#anEmpty,#anErrorBox').addClass('hidden');
+        $('#anLoading').removeClass('hidden');
+
+        const payload = { action:'overview', category: anCategory, granularity };
+        if(range.limit) payload.limit = range.limit; else { payload.start_date = range.start; payload.end_date = range.end; }
+
+        $.post(ANALYTICS_API, payload, function(res){
+            $('#anLoading').addClass('hidden');
+            if(res.status !== 'success'){ $('#anErrorBox').removeClass('hidden').text(res.message || 'Something went wrong.'); return; }
+            anCurrentOverview = res;
+            if(!res.events.length){ $('#anEmpty').removeClass('hidden'); return; }
+            $('#anContent').removeClass('hidden');
+            const rs = res.range;
+            $('#anRangeSummary').text(`Showing ${res.events.length} service${res.events.length===1?'':'s'}, ${anFmtDateShort(rs.start)} – ${anFmtDateShort(rs.end)}.`);
+            anRenderKpis(res);
+            anRenderTrend(res);
+            anRenderGender(res);
+            anRenderStatus(res);
+            anRenderRegion(res);
+            anPage = 1; anSort_ = { col:'event_date', dir:'desc' };
+            $('#anTableSearch').val('');
+            anRenderTable();
+        }, 'json').fail(function(){ $('#anLoading').addClass('hidden'); $('#anErrorBox').removeClass('hidden').text('Server error while loading analytics.'); });
+    }
+
+    // ---------- KPI cards ----------
+    function anKpiCard(label, value, sub, badge, clickId){
+        const clickAttr = clickId ? `onclick="anOpenEvent(${clickId})"` : '';
+        const clickCls = clickId ? 'an-clickable' : '';
+        return `<div class="an-kpi-card ${clickCls}" ${clickAttr}>
+            <span class="an-kpi-label">${label}</span>
+            <div class="an-kpi-value">${value}</div>
+            <div class="an-kpi-sub flex items-center gap-1.5 flex-wrap">${sub||''} ${badge||''}</div>
+        </div>`;
+    }
+    function anRenderKpis(o){
+        const k = o.kpis;
+        const html = [
+            anKpiCard('Services Held', anFmtNum(k.services_count), o.category_label),
+            anKpiCard('Total Attendance', anFmtNum(k.total_attendance), `${k.services_count} service${k.services_count===1?'':'s'}`, anBadgeHtml(k.growth_pct)),
+            anKpiCard('Avg / Service', anFmtNum(k.avg_attendance), k.baseline_avg!==null ? `baseline ${anFmtNum(k.baseline_avg)}` : 'no baseline yet', anBadgeHtml(k.avg_vs_baseline)),
+            anKpiCard('Peak Service', anFmtNum(k.peak.total), `${esc(anShortTitle(k.peak.title))} · ${anFmtDateShort(k.peak.date)}`, null, k.peak.id),
+            anKpiCard('Lowest Service', anFmtNum(k.lowest.total), `${esc(anShortTitle(k.lowest.title))} · ${anFmtDateShort(k.lowest.date)}`, null, k.lowest.id),
+            anKpiCard('First-Timers Reached', anFmtNum(k.first_timers_total), `${k.first_timer_rate}% of attendance`),
+        ];
+        $('#anKpiGrid').html(html.join(''));
+    }
+
+    // ---------- Main trend chart ----------
+    function anRenderTrend(o){
+        const t = o.trend;
+        const labels = t.map(b => b.label);
+        const totals = t.map(b => b.total);
+        const avg = totals.length ? (totals.reduce((a,b)=>a+b,0) / totals.length) : 0;
+        const avgLine = totals.map(() => Math.round(avg*10)/10);
+        $('#anTrendCaption').text(`${t.length} point${t.length===1?'':'s'} · ${o.range.granularity==='service'?'per service':o.range.granularity}`);
+
+        if(anChartTrend) anChartTrend.destroy();
+        anChartTrend = new Chart(document.getElementById('anTrendChart').getContext('2d'), {
+            type: 'line',
+            data: { labels, datasets: [
+                { label:'Attendance', data: totals, borderColor:'#1D356A', backgroundColor:'rgba(29,53,106,0.08)', fill:true, tension:.35, pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#1D356A' },
+                { label:'Average', data: avgLine, borderColor:'#D1D5DB', borderDash:[6,6], borderWidth:1.5, pointRadius:0, fill:false, tension:0 }
+            ]},
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display:true, position:'top', labels:{ boxWidth:10, font:{size:11, weight:'bold'} } } },
+                scales: { y: { beginAtZero:true, ticks:{ precision:0 } } },
+                onClick: (evt, elements) => {
+                    if(!elements.length) return;
+                    const bucket = t[elements[0].index];
+                    if(o.range.granularity === 'service') anOpenEvent(bucket.event_ids[0]);
+                    else anOpenPeriod(bucket);
+                }
+            }
+        });
+    }
+
+    // ---------- Gender chart ----------
+    function anSetGenderView(v){
+        anGenderView = v;
+        $('#anGenderViewBtn-totals,#anGenderViewBtn-trend').removeClass('active');
+        $('#anGenderViewBtn-'+v).addClass('active');
+        if(anCurrentOverview) anRenderGender(anCurrentOverview);
+    }
+    function anRenderGender(o){
+        if(anChartGender) anChartGender.destroy();
+        const ctx = document.getElementById('anGenderChart').getContext('2d');
+        if(anGenderView === 'totals'){
+            const g = o.gender_totals;
+            const labels = ['Male','Female'], data = [g.Male, g.Female], colors = ['#1D356A','#D11920'];
+            if(g.Unknown > 0){ labels.push('Not on file'); data.push(g.Unknown); colors.push('#9CA3AF'); }
+            anChartGender = new Chart(ctx, { type:'doughnut', data:{ labels, datasets:[{ data, backgroundColor:colors, borderWidth:0 }] },
+                options:{ responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{ position:'bottom', labels:{boxWidth:10,font:{size:11,weight:'bold'}} } } } });
+        } else {
+            const labels = o.trend.map(b => b.label);
+            anChartGender = new Chart(ctx, { type:'bar', data:{ labels, datasets:[
+                { label:'Male', data:o.trend.map(b=>b.male), backgroundColor:'#1D356A', borderRadius:4 },
+                { label:'Female', data:o.trend.map(b=>b.female), backgroundColor:'#D11920', borderRadius:4 }
+            ]}, options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{stacked:true}, y:{stacked:true,beginAtZero:true,ticks:{precision:0}} }, plugins:{ legend:{position:'bottom',labels:{boxWidth:10,font:{size:11,weight:'bold'}}} } } });
+        }
+    }
+
+    // ---------- Spiritual status chart ----------
+    function anSetStatusView(v){
+        anStatusView = v;
+        $('#anStatusViewBtn-totals,#anStatusViewBtn-trend').removeClass('active');
+        $('#anStatusViewBtn-'+v).addClass('active');
+        if(anCurrentOverview) anRenderStatus(anCurrentOverview);
+    }
+    function anRenderStatus(o){
+        if(anChartStatus) anChartStatus.destroy();
+        const ctx = document.getElementById('anStatusChart').getContext('2d');
+        const keys = Object.keys(o.status_totals).filter(k => o.status_totals[k] > 0);
+        if(!keys.length){ return; }
+        if(anStatusView === 'totals'){
+            anChartStatus = new Chart(ctx, { type:'doughnut', data:{ labels: keys.map(k=>o.status_labels[k]), datasets:[{ data: keys.map(k=>o.status_totals[k]), backgroundColor: keys.map(k=>o.status_colors[k]), borderWidth:0 }] },
+                options:{ responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{position:'bottom', labels:{boxWidth:9,font:{size:10,weight:'bold'}}} } } });
+        } else {
+            const labels = o.trend.map(b => b.label);
+            const datasets = keys.map(k => ({ label:o.status_labels[k], data:o.trend.map(b=>b.status[k]||0), backgroundColor:o.status_colors[k] }));
+            anChartStatus = new Chart(ctx, { type:'bar', data:{ labels, datasets }, options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{stacked:true}, y:{stacked:true,beginAtZero:true,ticks:{precision:0}} }, plugins:{ legend:{position:'bottom',labels:{boxWidth:9,font:{size:10,weight:'bold'}}} } } });
+        }
+    }
+
+    // ---------- Region leaderboard ----------
+    function anRenderRegion(o){
+        const entries = Object.entries(o.region_totals || {}).slice(0, 10);
+        if(!entries.length){ $('#anRegionCard').addClass('hidden'); return; }
+        $('#anRegionCard').removeClass('hidden');
+        if(anChartRegion) anChartRegion.destroy();
+        anChartRegion = new Chart(document.getElementById('anRegionChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: entries.map(e=>e[0]), datasets:[{ data: entries.map(e=>e[1]), backgroundColor:'#1D356A', borderRadius:6 }] },
+            options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ beginAtZero:true, ticks:{precision:0} } } }
+        });
+    }
+
+    // ---------- Services table (client-side search/sort/paginate) ----------
+    function anSort(col){
+        if(anSort_.col === col) anSort_.dir = anSort_.dir === 'asc' ? 'desc' : 'asc';
+        else { anSort_.col = col; anSort_.dir = 'desc'; }
+        anPage = 1; anRenderTable();
+    }
+    function anGoPage(p){ anPage = p; anRenderTable(); }
+    function anRenderTable(){
+        if(!anCurrentOverview) return;
+        const q = ($('#anTableSearch').val() || '').toLowerCase();
+        let rows = anCurrentOverview.events.filter(e => !q || e.title.toLowerCase().includes(q) || anFmtDateShort(e.event_date).toLowerCase().includes(q));
+        rows = rows.slice().sort((a,b) => {
+            let av = a[anSort_.col], bv = b[anSort_.col];
+            if(anSort_.col === 'event_date'){ av = anParseDate(a.event_date).getTime(); bv = anParseDate(b.event_date).getTime(); }
+            if(anSort_.col === 'vs_previous'){ av = (av===null||av===undefined) ? -Infinity : av; bv = (bv===null||bv===undefined) ? -Infinity : bv; }
+            if(av < bv) return anSort_.dir === 'asc' ? -1 : 1;
+            if(av > bv) return anSort_.dir === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        $('.an-sort-ind').text('');
+        $('.an-sort-ind[data-col="'+anSort_.col+'"]').text(anSort_.dir === 'asc' ? '▲' : '▼');
+
+        const total = rows.length;
+        const totalPages = Math.max(1, Math.ceil(total / anPerPage));
+        if(anPage > totalPages) anPage = totalPages;
+        const start = (anPage - 1) * anPerPage;
+        const pageRows = rows.slice(start, start + anPerPage);
+
+        let html = '';
+        pageRows.forEach(e => {
+            html += `<tr class="hover:bg-gray-50/60">
+                <td class="px-5 py-3 font-bold text-gray-800 whitespace-nowrap">${anFmtDateShort(e.event_date)}</td>
+                <td class="px-5 py-3 text-gray-600 max-w-[220px] truncate" title="${esc(e.title)}">${esc(e.title)}</td>
+                <td class="px-5 py-3 font-black text-gray-900">${anFmtNum(e.total)}</td>
+                <td class="px-5 py-3 text-gray-500"><span class="text-hodBlue font-bold">${e.male}</span> / <span class="text-hodRed font-bold">${e.female}</span></td>
+                <td class="px-5 py-3">${anFmtNum(e.first_timers)}</td>
+                <td class="px-5 py-3">${anFmtNum(e.workers)}</td>
+                <td class="px-5 py-3">${anVsPreviousHtml(e)}</td>
+                <td class="px-5 py-3 text-right"><button onclick="anOpenEvent(${e.id})" class="an-info-btn" style="width:26px;height:26px;font-size:13px;">ⓘ</button></td>
+            </tr>`;
+        });
+        $('#anTableBody').html(html || `<tr><td colspan="8" class="px-5 py-10 text-center text-gray-400">No matching services.</td></tr>`);
+
+        let cards = '';
+        pageRows.forEach(e => {
+            cards += `<div class="p-4 flex items-center justify-between gap-3 an-clickable" onclick="anOpenEvent(${e.id})">
+                <div class="min-w-0">
+                    <p class="text-xs font-bold text-gray-400">${anFmtDateShort(e.event_date)}</p>
+                    <p class="font-bold text-gray-900 truncate">${esc(e.title)}</p>
+                    <p class="text-[11px] text-gray-500 mt-0.5">${e.male}M / ${e.female}F · ${e.first_timers} 1st-timers</p>
+                </div>
+                <div class="text-right shrink-0">
+                    <p class="text-lg font-black text-gray-900">${anFmtNum(e.total)}</p>
+                    ${anVsPreviousHtml(e)}
+                </div>
+            </div>`;
+        });
+        $('#anCardList').html(cards || `<div class="p-8 text-center text-gray-400 text-sm">No matching services.</div>`);
+
+        $('#anPageInfo').text(`Showing ${total===0?0:start+1}-${Math.min(start+anPerPage,total)} of ${total}`);
+        let pag = '';
+        for(let p=1; p<=totalPages; p++){
+            if(totalPages > 7 && Math.abs(p-anPage) > 2 && p !== 1 && p !== totalPages){ if(p===2 || p===totalPages-1) pag += '<span class="px-2 text-gray-300">…</span>'; continue; }
+            pag += `<button onclick="anGoPage(${p})" class="w-8 h-8 rounded-lg text-xs font-bold ${p===anPage?'bg-hodBlue text-white':'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}">${p}</button>`;
+        }
+        $('#anPaginationControls').html(pag);
+    }
+
+    // ---------- Period Detail Modal (click a point on the trend chart) ----------
+    function anOpenPeriod(bucket){
+        const events = anCurrentOverview.events.filter(e => bucket.event_ids.includes(e.id));
+        const total = events.reduce((s,e)=>s+e.total,0);
+        const avg = events.length ? Math.round(total/events.length*10)/10 : 0;
+        $('#anPeriodModalHeader').html(`<div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-hodBlue">${esc(anCurrentOverview.category_label)}</p>
+            <h3 class="text-lg font-bold text-gray-900">${esc(bucket.label)}</h3>
+            <p class="text-xs text-gray-400 mt-0.5">${events.length} service${events.length===1?'':'s'} · ${anFmtNum(total)} total attendance · avg ${avg}</p>
+        </div>`);
+        let rows = '';
+        events.forEach(e => {
+            rows += `<button onclick="closeModal('anPeriodModal'); anOpenEvent(${e.id});" class="w-full text-left flex items-center justify-between gap-3 p-3.5 rounded-2xl border border-gray-100 hover:border-hodBlue/30 hover:bg-blue-50/30 transition-all">
+                <div class="min-w-0">
+                    <p class="font-bold text-gray-900 truncate">${esc(e.title)}</p>
+                    <p class="text-xs text-gray-400">${anFmtDateShort(e.event_date)}${e.location ? ' · '+esc(e.location) : ''}</p>
+                </div>
+                <div class="text-right shrink-0">
+                    <p class="text-lg font-black text-gray-900">${anFmtNum(e.total)}</p>
+                    ${anVsPreviousHtml(e)}
+                </div>
+            </button>`;
+        });
+        $('#anPeriodModalBody').html(rows);
+        openModal('anPeriodModal');
+    }
+
+    // ---------- Event Detail Modal ----------
+    function anOpenEvent(id){
+        if(!id) return;
+        openModal('anEventModal');
+        $('#anEventModalHeader').html('<p class="text-gray-400 text-sm">Loading…</p>');
+        $('#anEventModalBody').html('<div class="py-16 text-center"><div class="inline-block w-7 h-7 border-4 border-hodBlue/20 border-t-hodBlue rounded-full animate-spin"></div></div>');
+        $.post(ANALYTICS_API, { action:'event_detail', event_id:id }, function(res){
+            if(res.status !== 'success'){ $('#anEventModalHeader').html(''); $('#anEventModalBody').html(`<p class="text-red-500 text-sm font-bold">${esc(res.message||'Failed to load.')}</p>`); return; }
+            anRenderEventModal(res);
+        }, 'json').fail(() => { $('#anEventModalBody').html('<p class="text-red-500 text-sm font-bold">Server error.</p>'); });
+    }
+
+    let anFullReportNote = '';
+    function anExpandReportNote(btn){
+        const target = document.getElementById('anReportNoteText');
+        if(target) target.textContent = anFullReportNote;
+        if(btn) btn.remove();
+    }
+    function anReportNotesHtml(notes){
+        const plain = String(notes).replace(/<[^>]*>/g, '');
+        if(!plain.trim()) return '';
+        const isLong = plain.length > 160;
+        anFullReportNote = plain;
+        const shortText = isLong ? plain.slice(0,160) + '…' : plain;
+        let html = `<div class="border border-gray-100 rounded-2xl p-4 bg-amber-50/40">
+            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Report Notes</p>
+            <p class="text-sm text-gray-700 leading-relaxed" id="anReportNoteText">${esc(shortText)}</p>`;
+        if(isLong){
+            html += `<button type="button" class="text-xs font-bold text-hodBlue mt-1.5 hover:underline" onclick="anExpandReportNote(this)">Read full note</button>`;
+        }
+        html += `</div>`;
+        return html;
+    }
+
+    function anToggleRoster(){
+        $('#anRosterPanel').toggleClass('hidden');
+        $('#anRosterChevron').toggleClass('rotate-180');
+    }
+    function anRenderRoster(){
+        const q = ($('#anRosterSearchInput').val() || '').toLowerCase();
+        const statusMap = { '1st_Timer':'1st Timer','2nd_Timer':'2nd Timer','3rd_Timer':'3rd Timer','Non_Member':'Non-Member','Not_On_File':'Not on file' };
+        const rows = anEventRoster.filter(r => !q || ((r.first_name||'')+' '+(r.last_name||'')).toLowerCase().includes(q) || (r.phone||'').includes(q));
+        let html = '';
+        rows.forEach(r => {
+            const statusLabel = statusMap[r.spiritual_status] || (r.spiritual_status || 'Unspecified');
+            html += `<div class="p-3 flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                    <p class="font-bold text-gray-800 text-sm truncate">${esc(((r.first_name||'')+' '+(r.last_name||'')).trim())}</p>
+                    <p class="text-[11px] text-gray-400">${esc(r.phone||'—')}${r.region_name ? ' · '+esc(r.region_name) : ''}</p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    ${r.gender ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${r.gender==='Male'?'bg-blue-50 text-hodBlue':'bg-red-50 text-hodRed'}">${r.gender}</span>` : ''}
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">${esc(statusLabel)}</span>
+                </div>
+            </div>`;
+        });
+        $('#anRosterList').html(html || '<div class="p-6 text-center text-gray-400 text-xs">No matches.</div>');
+    }
+
+    function anRenderEventModal(res){
+        const e = res.event, s = res.stats;
+        const catCls = e.category === 'Sunday_Service' ? 'bg-blue-50 text-hodBlue' : 'bg-red-50 text-hodRed';
+        $('#anEventModalHeader').html(`<div class="min-w-0">
+            <span class="inline-block text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded ${catCls}">${esc(e.category_label)}</span>
+            <h3 class="text-lg md:text-xl font-bold text-gray-900 mt-1.5 truncate">${esc(e.title)}</h3>
+            <p class="text-xs text-gray-500 mt-1">${anFmtDateFull(e.event_date)}${e.location ? ' · '+esc(e.location) : ''}</p>
+        </div>`);
+
+        const ministersHtml = (e.ministers && e.ministers.length) ? `<div class="flex flex-wrap gap-2">${e.ministers.map(m => `<span class="text-xs font-bold bg-gray-50 border border-gray-100 px-2.5 py-1 rounded-full text-gray-600">${esc(m.name||'')}</span>`).join('')}</div>` : '';
+
+        const prevHtml = res.previous
+            ? `<div class="an-kpi-card"><span class="an-kpi-label">vs Previous Service</span><div class="an-kpi-value">${anFmtNum(res.previous.total)}</div><div class="an-kpi-sub">${anFmtDateShort(res.previous.date)} ${anBadgeHtml(res.previous.delta_pct)}</div></div>`
+            : `<div class="an-kpi-card"><span class="an-kpi-label">vs Previous Service</span><div class="an-kpi-value text-gray-300">—</div><div class="an-kpi-sub">No earlier service on record</div></div>`;
+
+        const baselineHtml = res.baseline_avg !== null
+            ? `<div class="an-kpi-card"><span class="an-kpi-label">vs 12-Service Average</span><div class="an-kpi-value">${anFmtNum(res.baseline_avg)}</div><div class="an-kpi-sub">${anBadgeHtml(anPctChange(res.baseline_avg, s.total))}</div></div>`
+            : '';
+
+        const kpiGrid = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="an-kpi-card"><span class="an-kpi-label">Total Attendance</span><div class="an-kpi-value">${anFmtNum(s.total)}</div></div>
+            <div class="an-kpi-card"><span class="an-kpi-label">Male / Female</span><div class="an-kpi-value text-lg"><span class="text-hodBlue">${s.male}</span> / <span class="text-hodRed">${s.female}</span></div></div>
+            <div class="an-kpi-card"><span class="an-kpi-label">1st Timers</span><div class="an-kpi-value">${anFmtNum(s.first_timers)}</div></div>
+            <div class="an-kpi-card"><span class="an-kpi-label">Workers</span><div class="an-kpi-value">${anFmtNum(s.workers)}</div></div>
+            ${prevHtml}
+            ${baselineHtml}
+        </div>`;
+
+        const hasRegionData = Object.keys(s.region||{}).length > 0;
+
+        $('#anEventModalBody').html(`
+            ${ministersHtml}
+            ${kpiGrid}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="border border-gray-100 rounded-2xl p-4">
+                    <div class="flex items-center gap-1.5 mb-2"><p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Last 8 Occurrences</p><button type="button" onclick="anInfo('Last 8 Occurrences','A quick sparkline of the last 8 occurrences of this service (same category), with this specific service highlighted in red.')" class="an-info-btn">ⓘ</button></div>
+                    <div class="h-40"><canvas id="anEvtSparkChart"></canvas></div>
+                </div>
+                <div class="border border-gray-100 rounded-2xl p-4">
+                    <div class="flex items-center gap-1.5 mb-2"><p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Check-in Pace</p><button type="button" onclick="anInfo('Check-in Pace','How attendance built up hour by hour, based on the exact time each person was marked Present.')" class="an-info-btn">ⓘ</button></div>
+                    <div class="h-40">${res.pace.has_data ? '<canvas id="anEvtPaceChart"></canvas>' : '<div class="h-full flex items-center justify-center text-xs text-gray-400 text-center px-4">No timestamped check-in data for this service.</div>'}</div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="border border-gray-100 rounded-2xl p-4">
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Who Attended</p>
+                    <div class="h-48"><canvas id="anEvtStatusChart"></canvas></div>
+                </div>
+                <div class="border border-gray-100 rounded-2xl p-4">
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">By Region</p>
+                    <div class="h-48">${hasRegionData ? '<canvas id="anEvtRegionChart"></canvas>' : '<div class="h-full flex items-center justify-center text-xs text-gray-400">No region data available.</div>'}</div>
+                </div>
+            </div>
+            ${res.event.report_notes ? anReportNotesHtml(res.event.report_notes) : ''}
+            <div>
+                <button type="button" onclick="anToggleRoster()" id="anRosterToggleBtn" class="w-full flex items-center justify-between bg-gray-50 hover:bg-gray-100 rounded-2xl px-4 py-3 border border-gray-100 transition-all">
+                    <span class="text-sm font-bold text-gray-700">View Attendee Roster (${res.roster.length})</span>
+                    <svg class="w-4 h-4 text-gray-400 transition-transform" id="anRosterChevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <div id="anRosterPanel" class="hidden mt-3">
+                    <input type="text" id="anRosterSearchInput" placeholder="Search roster…" oninput="anRenderRoster()" class="w-full mb-3 px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-hodBlue">
+                    <div class="max-h-72 overflow-y-auto custom-scrollbar border border-gray-100 rounded-xl divide-y divide-gray-50" id="anRosterList"></div>
+                </div>
+            </div>
+        `);
+
+        anEventRoster = res.roster;
+        anRenderRoster();
+
+        if(anEvtCharts.spark) anEvtCharts.spark.destroy();
+        anEvtCharts.spark = new Chart(document.getElementById('anEvtSparkChart').getContext('2d'), {
+            type: 'line',
+            data: { labels: res.sparkline.map(p => anFmtDateShort(p.date)), datasets: [{ data: res.sparkline.map(p => p.total), borderColor:'#1D356A', backgroundColor:'rgba(29,53,106,.08)', fill:true, tension:.3, pointRadius:3, pointBackgroundColor: res.sparkline.map(p => p.id===e.id ? '#D11920' : '#1D356A') }] },
+            options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, ticks:{precision:0}} } }
+        });
+
+        if(res.pace.has_data){
+            if(anEvtCharts.pace) anEvtCharts.pace.destroy();
+            anEvtCharts.pace = new Chart(document.getElementById('anEvtPaceChart').getContext('2d'), {
+                type: 'bar',
+                data: { labels: res.pace.hours.map(h => h.label), datasets: [{ data: res.pace.hours.map(h => h.count), backgroundColor:'#D11920', borderRadius:4 }] },
+                options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true,ticks:{precision:0}} } }
+            });
+        }
+
+        if(anEvtCharts.status) anEvtCharts.status.destroy();
+        const skeys = Object.keys(s.status).filter(k => s.status[k] > 0);
+        anEvtCharts.status = new Chart(document.getElementById('anEvtStatusChart').getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: skeys.map(k => res.status_labels[k]), datasets: [{ data: skeys.map(k => s.status[k]), backgroundColor: skeys.map(k => res.status_colors[k]), borderWidth:0 }] },
+            options: { responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ legend:{position:'bottom', labels:{boxWidth:9,font:{size:10,weight:'bold'}}} } }
+        });
+
+        if(hasRegionData){
+            if(anEvtCharts.region) anEvtCharts.region.destroy();
+            const rentries = Object.entries(s.region).slice(0,8);
+            anEvtCharts.region = new Chart(document.getElementById('anEvtRegionChart').getContext('2d'), {
+                type: 'doughnut',
+                data: { labels: rentries.map(x=>x[0]), datasets:[{ data: rentries.map(x=>x[1]), backgroundColor:['#1D356A','#D11920','#2563EB','#F97316','#10B981','#7C3AED','#F59E0B','#06B6D4'], borderWidth:0 }] },
+                options: { responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ legend:{position:'bottom', labels:{boxWidth:9,font:{size:10,weight:'bold'}}} } }
+            });
+        }
+    }
+
+    // ---------- Compare Periods Modal ----------
+    function openCompareModal(){
+        $('#anCompareCatLabel').text(anCategory === 'Sunday_Service' ? 'Sunday Service' : 'Midweek Service');
+        $('#anCompareResults').addClass('hidden').html('');
+        anRenderComparePresets();
+        openModal('anCompareModal');
+    }
+    function anFmtISO(d){ return d.toISOString().slice(0,10); }
+    function anSetCompareInputs(aS,aE,bS,bE){ $('#anCompA_start').val(aS); $('#anCompA_end').val(aE); $('#anCompB_start').val(bS); $('#anCompB_end').val(bE); }
+    function anPresetMonths(){
+        const now = new Date();
+        anSetCompareInputs(anFmtISO(new Date(now.getFullYear(), now.getMonth(), 1)), anFmtISO(now),
+            anFmtISO(new Date(now.getFullYear(), now.getMonth()-1, 1)), anFmtISO(new Date(now.getFullYear(), now.getMonth(), 0)));
+    }
+    function anPresetQuarters(){
+        const now = new Date(); const q = Math.floor(now.getMonth()/3);
+        anSetCompareInputs(anFmtISO(new Date(now.getFullYear(), q*3, 1)), anFmtISO(now),
+            anFmtISO(new Date(now.getFullYear(), (q-1)*3, 1)), anFmtISO(new Date(now.getFullYear(), q*3, 0)));
+    }
+    function anPresetYears(){
+        const now = new Date();
+        anSetCompareInputs(now.getFullYear()+'-01-01', anFmtISO(now), (now.getFullYear()-1)+'-01-01', (now.getFullYear()-1)+'-12-31');
+    }
+    function anPresetLast4(){
+        if(!anCurrentOverview || !anCurrentOverview.events.length){ showToast('Load some data on this tab first.','error'); return; }
+        const all = anCurrentOverview.events.slice().sort((a,b) => anParseDate(a.event_date) - anParseDate(b.event_date));
+        const last4 = all.slice(-4), prev4 = all.slice(-8,-4);
+        if(!last4.length){ showToast('Not enough services loaded yet.','error'); return; }
+        const aS = last4[0].event_date.slice(0,10), aE = last4[last4.length-1].event_date.slice(0,10);
+        const bS = prev4.length ? prev4[0].event_date.slice(0,10) : aS;
+        const bE = prev4.length ? prev4[prev4.length-1].event_date.slice(0,10) : aS;
+        anSetCompareInputs(aS,aE,bS,bE);
+    }
+    function anRenderComparePresets(){
+        window._anComparePresets = [
+            { label:'This month vs last month', fn: anPresetMonths },
+            { label:'This quarter vs last quarter', fn: anPresetQuarters },
+            { label:'This year vs last year', fn: anPresetYears },
+            { label:'Last 4 vs previous 4 services', fn: anPresetLast4 },
+        ];
+        $('#anComparePresets').html(window._anComparePresets.map((p,i) => `<button type="button" onclick="anApplyComparePreset(${i})" class="text-xs font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 px-3.5 py-2 rounded-xl transition-colors">${p.label}</button>`).join(''));
+    }
+    function anApplyComparePreset(i){ window._anComparePresets[i].fn(); }
+
+    function anRunCompare(){
+        const a_start = $('#anCompA_start').val(), a_end = $('#anCompA_end').val(), b_start = $('#anCompB_start').val(), b_end = $('#anCompB_end').val();
+        if(!a_start || !a_end || !b_start || !b_end){ showToast('Please fill in both period ranges.','error'); return; }
+        $.post(ANALYTICS_API, { action:'compare', category:anCategory, a_start, a_end, b_start, b_end }, function(res){
+            if(res.status !== 'success'){ showToast(res.message || 'Comparison failed.','error'); return; }
+            anRenderCompareResults(res);
+        }, 'json').fail(() => showToast('Server error while comparing.','error'));
+    }
+
+    function anRenderCompareResults(res){
+        const A = res.a, B = res.b, D = res.deltas;
+        const row = (label, av, bv, d) => `<tr class="border-b border-gray-50">
+            <td class="py-2.5 text-xs font-bold text-gray-500">${label}</td>
+            <td class="py-2.5 text-sm font-black text-hodBlue text-right pr-4">${av}</td>
+            <td class="py-2.5 text-sm font-black text-hodRed text-right pr-4">${bv}</td>
+            <td class="py-2.5 text-right">${anBadgeHtml(d)}</td>
+        </tr>`;
+        $('#anCompareResults').removeClass('hidden').html(`
+            <div class="grid grid-cols-2 gap-3 text-center">
+                <div class="bg-blue-50/50 rounded-2xl p-3"><p class="text-[10px] font-bold text-hodBlue uppercase">Period A</p><p class="text-xs text-gray-500 mt-0.5">${anFmtDateShort(A.label_start)} – ${anFmtDateShort(A.label_end)}</p></div>
+                <div class="bg-red-50/50 rounded-2xl p-3"><p class="text-[10px] font-bold text-hodRed uppercase">Period B</p><p class="text-xs text-gray-500 mt-0.5">${anFmtDateShort(B.label_start)} – ${anFmtDateShort(B.label_end)}</p></div>
+            </div>
+            <table class="w-full mt-2">
+                <thead><tr class="text-left text-[10px] font-black text-gray-400 uppercase border-b border-gray-100"><th class="pb-2">Metric</th><th class="pb-2 text-right pr-4">A</th><th class="pb-2 text-right pr-4">B</th><th class="pb-2 text-right">A → B</th></tr></thead>
+                <tbody>
+                    ${row('Services Held', A.services_count, B.services_count, D.services_count)}
+                    ${row('Total Attendance', anFmtNum(A.total_attendance), anFmtNum(B.total_attendance), D.total_attendance)}
+                    ${row('Avg / Service', A.avg_attendance, B.avg_attendance, D.avg_attendance)}
+                    ${row('First-Timers', A.first_timers, B.first_timers, D.first_timers)}
+                    ${row('Workers Present', A.workers, B.workers, D.workers)}
+                </tbody>
+            </table>
+            <div class="h-56"><canvas id="anCompareChart"></canvas></div>
+        `);
+        if(window._anCompareChart) window._anCompareChart.destroy();
+        window._anCompareChart = new Chart(document.getElementById('anCompareChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: ['Total Attendance','Avg / Service','First-Timers','Workers'],
+                datasets: [
+                    { label:'Period A', data:[A.total_attendance, A.avg_attendance, A.first_timers, A.workers], backgroundColor:'#1D356A', borderRadius:6 },
+                    { label:'Period B', data:[B.total_attendance, B.avg_attendance, B.first_timers, B.workers], backgroundColor:'#D11920', borderRadius:6 },
+                ] },
+            options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom', labels:{boxWidth:10,font:{size:11,weight:'bold'}}} }, scales:{ y:{beginAtZero:true, ticks:{precision:0}} } }
+        });
+    }
+
+    // ---------- CSV export (client-side, from whatever is currently loaded) ----------
+    function anExportCsv(){
+        if(!anCurrentOverview || !anCurrentOverview.events.length){ showToast('Nothing to export yet.','error'); return; }
+        const headers = ['Date','Title','Total Attendance','Male','Female','1st Timers','Workers','vs Previous %'];
+        const lines = [headers.join(',')];
+        anCurrentOverview.events.forEach(e => {
+            lines.push([anFmtDateShort(e.event_date), '"'+String(e.title).replace(/"/g,'""')+'"', e.total, e.male, e.female, e.first_timers, e.workers, (e.vs_previous===null||e.vs_previous===undefined?'':e.vs_previous)].join(','));
+        });
+        const blob = new Blob([lines.join('\n')], { type:'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `${anCurrentOverview.category_label.replace(/\s+/g,'_')}_analytics_${anCurrentOverview.range.start}_to_${anCurrentOverview.range.end}.csv`;
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
 
     $(document).ready(function(){
         if(typeof Quill !== 'undefined'){
