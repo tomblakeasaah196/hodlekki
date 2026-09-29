@@ -19,20 +19,35 @@ require_once '../../includes/header.php';
                 <p class="text-gray-500 text-xs md:text-sm mt-1 font-medium">Build, publish & track exceptional events.</p>
             </div>
         </div>
-        <div class="relative z-10 flex overflow-x-auto custom-scrollbar bg-gray-50/80 p-1.5 rounded-2xl border border-gray-100 w-full md:w-auto">
-            <button onclick="switchSection('events')" id="btn-events" class="shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-white text-hodBlue shadow-sm">Events</button>
-            <button onclick="switchSection('configure')" id="btn-configure" class="shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Configure</button>
-            <button onclick="switchSection('registrations')" id="btn-registrations" class="shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Registrations</button>
-            <button onclick="switchSection('attendance')" id="btn-attendance" class="shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Attendance</button>
-            <button onclick="switchSection('analytics')" id="btn-analytics" class="shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900 flex items-center gap-1.5">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                Analytics
-            </button>
+        <div class="relative z-10 event-tabs-area">
+            <div id="eventTabsShell" class="event-tabs-shell">
+                <button type="button" id="eventTabsPrev" class="event-tabs-control" aria-label="Show previous Events Center sections" title="Show previous sections">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <div id="eventSectionTabs" class="event-tabs custom-scrollbar" role="tablist" aria-label="Events Center sections">
+                    <button type="button" onclick="switchSection('events', true)" id="btn-events" data-section="events" role="tab" aria-controls="section-events" aria-selected="true" aria-current="page" tabindex="0" class="event-tab event-tab-active shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all">Events</button>
+                    <button type="button" onclick="switchSection('configure', true)" id="btn-configure" data-section="configure" role="tab" aria-controls="section-configure" aria-selected="false" tabindex="-1" class="event-tab shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Configure</button>
+                    <button type="button" onclick="switchSection('registrations', true)" id="btn-registrations" data-section="registrations" role="tab" aria-controls="section-registrations" aria-selected="false" tabindex="-1" class="event-tab shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Registrations</button>
+                    <button type="button" onclick="switchSection('attendance', true)" id="btn-attendance" data-section="attendance" role="tab" aria-controls="section-attendance" aria-selected="false" tabindex="-1" class="event-tab shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900">Attendance</button>
+                    <button type="button" onclick="switchSection('analytics', true)" id="btn-analytics" data-section="analytics" role="tab" aria-controls="section-analytics" aria-selected="false" tabindex="-1" class="event-tab shrink-0 whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-900 flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        Analytics
+                    </button>
+                </div>
+                <button type="button" id="eventTabsNext" class="event-tabs-control" aria-label="Show more Events Center sections" title="Show more sections">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="m9 18 6-6-6-6"/></svg>
+                </button>
+            </div>
+            <p id="eventTabsStatus" class="event-tabs-status" role="status" aria-live="polite">
+                <span id="eventTabsInstruction" class="hidden">Swipe or use the arrows to see more</span>
+                <span id="eventTabsDivider" class="hidden" aria-hidden="true">&middot;</span>
+                <span>Viewing: <strong id="eventTabsCurrent">Events</strong></span>
+            </p>
         </div>
     </div>
 
     <!-- ============================ SECTION: EVENTS ============================ -->
-    <section id="section-events" class="space-y-6 animate-fade-in-up">
+    <section id="section-events" role="tabpanel" aria-labelledby="btn-events" class="space-y-6 animate-fade-in-up">
         <div class="flex flex-col sm:flex-row sm:flex-wrap justify-between items-stretch sm:items-center gap-3 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
             <div class="relative w-full sm:w-80">
                 <input type="text" id="searchEvents" placeholder="Search events..." class="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-hodBlue focus:border-transparent outline-none transition-all bg-gray-50">
@@ -80,7 +95,7 @@ require_once '../../includes/header.php';
     </section>
 
     <!-- ============================ SECTION: CONFIGURE ============================ -->
-    <section id="section-configure" class="hidden space-y-6 animate-fade-in-up">
+    <section id="section-configure" role="tabpanel" aria-labelledby="btn-configure" class="hidden space-y-6 animate-fade-in-up">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             <!-- Builder -->
             <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 md:p-7 space-y-5">
@@ -263,7 +278,7 @@ require_once '../../includes/header.php';
     </section>
 
     <!-- ============================ SECTION: REGISTRATIONS ============================ -->
-    <section id="section-registrations" class="hidden space-y-6 animate-fade-in-up">
+    <section id="section-registrations" role="tabpanel" aria-labelledby="btn-registrations" class="hidden space-y-6 animate-fade-in-up">
         
         <!-- Top Control Bar -->
         <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-4 justify-between items-center">
@@ -344,7 +359,7 @@ require_once '../../includes/header.php';
     </section>
 
     <!-- ============================ SECTION: ATTENDANCE ============================ -->
-    <section id="section-attendance" class="hidden space-y-6 animate-fade-in-up">
+    <section id="section-attendance" role="tabpanel" aria-labelledby="btn-attendance" class="hidden space-y-6 animate-fade-in-up">
         <div class="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 justify-between items-center">
             <div class="w-full md:w-1/2">
                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Select Event to Track</label>
@@ -394,7 +409,7 @@ require_once '../../includes/header.php';
     </section>
 
     <!-- ============================ SECTION: ANALYTICS ============================ -->
-    <section id="section-analytics" class="hidden space-y-5 animate-fade-in-up">
+    <section id="section-analytics" role="tabpanel" aria-labelledby="btn-analytics" class="hidden space-y-5 animate-fade-in-up">
 
         <!-- Sub-tabs: Midweek | Sunday (each fully independent) -->
         <div class="bg-white p-4 md:p-5 rounded-3xl shadow-sm border border-gray-100/60">
@@ -745,6 +760,31 @@ require_once '../../includes/header.php';
     @keyframes fadeInUp{ from{ opacity:0; transform:translateY(14px); } to{ opacity:1; transform:none; } }
     .animate-fade-in-up{ animation:fadeInUp .5s ease both; }
 
+    /* Events Center section navigator */
+    .event-tabs-area{ width:100%; max-width:100%; min-width:0; }
+    .event-tabs-shell{ display:flex; align-items:center; width:100%; max-width:100%; min-width:0; padding:6px; border:1px solid #F3F4F6; border-radius:16px; background:rgba(249,250,251,.82); }
+    .event-tabs{ display:flex; flex:1 1 auto; gap:4px; min-width:0; overflow-x:auto; overflow-y:hidden; padding-bottom:3px; scroll-behavior:smooth; scroll-snap-type:x proximity; scrollbar-width:thin; scrollbar-color:#94A3B8 transparent; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; }
+    .event-tabs::-webkit-scrollbar{ width:auto; height:4px; }
+    .event-tabs::-webkit-scrollbar-track{ background:transparent; }
+    .event-tabs::-webkit-scrollbar-thumb{ background:#94A3B8; border-radius:999px; }
+    .event-tab{ position:relative; isolation:isolate; overflow:hidden; scroll-snap-align:center; color:#6B7280; transition:transform .24s cubic-bezier(.22,1,.36,1), box-shadow .24s ease, background .24s ease, color .18s ease; }
+    .event-tab:hover{ color:#111827; background:rgba(255,255,255,.75); transform:translateY(-1px); }
+    .event-tab.event-tab-active{ color:#fff; background:linear-gradient(135deg, #EA2A31 0%, #D11920 58%, #B91C1C 100%); transform:translateY(-3px); box-shadow:0 9px 18px rgba(209,25,32,.28), 0 2px 4px rgba(127,29,29,.18); animation:eventTabLift .42s cubic-bezier(.22,1,.36,1) both; }
+    .event-tab.event-tab-active::before{ content:''; position:absolute; z-index:0; pointer-events:none; top:1px; right:12px; left:12px; height:1px; border-radius:999px; background:rgba(255,255,255,.58); }
+    .event-tab.event-tab-active::after{ content:''; position:absolute; z-index:0; pointer-events:none; inset:0; width:48%; background:linear-gradient(105deg, transparent, rgba(255,255,255,.28), transparent); transform:translateX(-180%) skewX(-18deg); animation:eventTabShine .68s .1s ease-out both; }
+    .event-tab.event-tab-active:hover{ color:#fff; background:linear-gradient(135deg, #F23A40 0%, #D11920 58%, #B91C1C 100%); transform:translateY(-4px); }
+    .event-tab:focus-visible, .event-tabs-control:focus-visible{ outline:3px solid rgba(209,25,32,.32); outline-offset:2px; }
+    @keyframes eventTabLift{ 0%{ transform:translateY(1px) scale(.975); box-shadow:0 2px 5px rgba(209,25,32,.12); } 70%{ transform:translateY(-4px) scale(1.015); } 100%{ transform:translateY(-3px) scale(1); box-shadow:0 9px 18px rgba(209,25,32,.28), 0 2px 4px rgba(127,29,29,.18); } }
+    @keyframes eventTabShine{ from{ transform:translateX(-180%) skewX(-18deg); } to{ transform:translateX(390%) skewX(-18deg); } }
+    .event-tabs-control{ display:none; align-items:center; justify-content:center; flex:0 0 auto; width:30px; height:30px; margin:0 3px; border-radius:10px; color:#D11920; background:#fff; border:1px solid #E5E7EB; box-shadow:0 1px 2px rgba(0,0,0,.05); transition:opacity .15s, background .15s, color .15s; }
+    .event-tabs-control:hover{ color:#fff; background:#D11920; }
+    .event-tabs-shell.has-overflow .event-tabs-control{ display:inline-flex; }
+    .event-tabs-shell.at-start #eventTabsPrev, .event-tabs-shell.at-end #eventTabsNext{ visibility:hidden; pointer-events:none; }
+    .event-tabs-status{ display:flex; align-items:center; justify-content:flex-end; gap:6px; margin:7px 4px 0; color:#6B7280; font-size:10px; font-weight:700; letter-spacing:.01em; }
+    .event-tabs-status strong{ color:#D11920; font-weight:900; }
+    @media (min-width:768px){ .event-tabs-area{ width:min(100%, 610px); } }
+    @media (prefers-reduced-motion:reduce){ .event-tabs{ scroll-behavior:auto; } .event-tab, .event-tab.event-tab-active{ animation:none; transition:none; } }
+
     /* Analytics tab */
     .an-info-btn{ display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:9999px; background:#EEF2FF; color:#1D356A; font-size:11px; font-weight:900; line-height:1; border:none; cursor:pointer; flex-shrink:0; }
     .an-info-btn:hover{ background:#1D356A; color:#fff; }
@@ -817,13 +857,106 @@ require_once '../../includes/header.php';
     let descQuill = null;              // Quill instance for the Description editor
 
     // ---------- Section switching ----------
-    function switchSection(id){
-        ['events','configure','registrations','attendance','analytics'].forEach(s => {
-            $('#section-'+s).addClass('hidden');
-            $('#btn-'+s).removeClass('bg-white text-hodBlue shadow-sm').addClass('text-gray-500 hover:text-gray-900');
+    const EVENT_SECTIONS = ['events', 'configure', 'registrations', 'attendance', 'analytics'];
+    const EVENT_SECTION_LABELS = {
+        events: 'Events',
+        configure: 'Configure',
+        registrations: 'Registrations',
+        attendance: 'Attendance',
+        analytics: 'Analytics'
+    };
+
+    function updateEventTabsOverflow(){
+        const tabs = document.getElementById('eventSectionTabs');
+        const shell = document.getElementById('eventTabsShell');
+        const prev = document.getElementById('eventTabsPrev');
+        const next = document.getElementById('eventTabsNext');
+        const instruction = document.getElementById('eventTabsInstruction');
+        const divider = document.getElementById('eventTabsDivider');
+        if(!tabs || !shell || !prev || !next) return;
+
+        const hasOverflow = tabs.scrollWidth > tabs.clientWidth + 2;
+        const maxScroll = Math.max(0, tabs.scrollWidth - tabs.clientWidth);
+        const atStart = tabs.scrollLeft <= 2;
+        const atEnd = tabs.scrollLeft >= maxScroll - 2;
+
+        shell.classList.toggle('has-overflow', hasOverflow);
+        shell.classList.toggle('at-start', atStart);
+        shell.classList.toggle('at-end', atEnd);
+        prev.disabled = !hasOverflow || atStart;
+        next.disabled = !hasOverflow || atEnd;
+        if(instruction) instruction.classList.toggle('hidden', !hasOverflow);
+        if(divider) divider.classList.toggle('hidden', !hasOverflow);
+    }
+
+    function revealEventSectionTab(id, shouldFocus = false){
+        const tab = document.getElementById('btn-' + id);
+        const tabs = document.getElementById('eventSectionTabs');
+        if(!tab || !tabs) return;
+
+        const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        requestAnimationFrame(() => {
+            tab.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest', inline: 'center' });
+            if(shouldFocus){
+                try { tab.focus({ preventScroll: true }); }
+                catch(e) { tab.focus(); }
+            }
+            requestAnimationFrame(updateEventTabsOverflow);
         });
-        $('#section-'+id).removeClass('hidden').addClass('animate-fade-in-up');
-        $('#btn-'+id).removeClass('text-gray-500 hover:text-gray-900').addClass('bg-white text-hodBlue shadow-sm');
+    }
+
+    function initEventTabs(){
+        const tabs = document.getElementById('eventSectionTabs');
+        const prev = document.getElementById('eventTabsPrev');
+        const next = document.getElementById('eventTabsNext');
+        if(!tabs || !prev || !next) return;
+
+        const scrollTabs = direction => {
+            const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            tabs.scrollBy({ left: direction * Math.max(180, tabs.clientWidth * .75), behavior: reduceMotion ? 'auto' : 'smooth' });
+        };
+
+        prev.addEventListener('click', () => scrollTabs(-1));
+        next.addEventListener('click', () => scrollTabs(1));
+        tabs.addEventListener('scroll', updateEventTabsOverflow, { passive: true });
+        tabs.addEventListener('wheel', event => {
+            if(Math.abs(event.deltaY) <= Math.abs(event.deltaX) || tabs.scrollWidth <= tabs.clientWidth) return;
+            event.preventDefault();
+            tabs.scrollLeft += event.deltaY;
+        }, { passive: false });
+        tabs.addEventListener('keydown', event => {
+            const currentTab = event.target.closest('.event-tab');
+            if(!currentTab) return;
+            let index = EVENT_SECTIONS.indexOf(currentTab.dataset.section);
+            if(event.key === 'ArrowRight') index = (index + 1) % EVENT_SECTIONS.length;
+            else if(event.key === 'ArrowLeft') index = (index - 1 + EVENT_SECTIONS.length) % EVENT_SECTIONS.length;
+            else if(event.key === 'Home') index = 0;
+            else if(event.key === 'End') index = EVENT_SECTIONS.length - 1;
+            else return;
+            event.preventDefault();
+            switchSection(EVENT_SECTIONS[index], true);
+        });
+        window.addEventListener('resize', updateEventTabsOverflow);
+        if(window.ResizeObserver) new ResizeObserver(updateEventTabsOverflow).observe(tabs);
+        updateEventTabsOverflow();
+    }
+
+    function switchSection(id, shouldFocus = false){
+        if(!EVENT_SECTIONS.includes(id)) return;
+        EVENT_SECTIONS.forEach(s => {
+            $('#section-' + s).addClass('hidden');
+            $('#btn-' + s)
+                .removeClass('event-tab-active bg-white text-hodBlue shadow-sm')
+                .addClass('text-gray-500 hover:text-gray-900')
+                .attr({ 'aria-selected': 'false', 'aria-current': null, tabindex: '-1' });
+        });
+        $('#section-' + id).removeClass('hidden').addClass('animate-fade-in-up');
+        $('#btn-' + id)
+            .removeClass('text-gray-500 hover:text-gray-900 bg-white text-hodBlue shadow-sm')
+            .addClass('event-tab-active')
+            .attr({ 'aria-selected': 'true', 'aria-current': 'page', tabindex: '0' });
+        $('#eventTabsCurrent').text(EVENT_SECTION_LABELS[id]);
+        revealEventSectionTab(id, shouldFocus);
         if(id === 'registrations') loadRegSelect();
         if(id === 'attendance') loadAttendanceSelect();
         if(id === 'analytics') initAnalytics();
@@ -2194,6 +2327,7 @@ require_once '../../includes/header.php';
                 renderPreview();
             });
         }
+        initEventTabs();
         loadEvents(); renderPreview();
     });
 </script>
