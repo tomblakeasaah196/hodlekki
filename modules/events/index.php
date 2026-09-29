@@ -38,15 +38,9 @@ require_once '../../includes/header.php';
                 New Event
             </button>
             <button onclick="openMonthlyServicesModal()" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 text-sm shrink-0" title="Create all Total Experience and Mercy Experience services for a month">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                Create Monthly Services
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                Monthly
             </button>
-            <a href="/modules/sms_studio/index.php"
-               class="inline-flex items-center gap-2 bg-[#123b8c] hover:bg-[#152750] text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all shrink-0"
-               title="Open SMS Studio">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2H7a2 2 0 01-2-2v-3M5 8a3 3 0 016 0m0 0h8m-8 0V4a1 1 0 10-2 0m10 0v2a2 2 0 01-2 2"/></svg>
-                SMS Studio
-            </a>
             <a href="/modules/event_qr/index.php"
                class="inline-flex items-center gap-2 bg-[#123b8c] hover:bg-[#152750] text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all shrink-0"
                title="Generate a branded event QR poster">
@@ -59,18 +53,23 @@ require_once '../../includes/header.php';
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                 Event Report
             </a>
-            <a href="/modules/checkin_qr/index.php"
-               class="inline-flex items-center gap-2 bg-[#123b8c] hover:bg-[#152750] text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all shrink-0"
-               title="Generate the check-in QR code for this event">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4m11-5a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                Check-in QR
-            </a>
-            <a href="/modules/checkin_monitor/index.php"
-               class="inline-flex items-center gap-2 bg-[#123b8c] hover:bg-[#152750] text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all shrink-0"
-               title="View live check-in KPIs">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                Check-in Monitor
-            </a>
+            <details class="relative shrink-0 group">
+                <summary class="list-none cursor-pointer inline-flex w-full items-center justify-center gap-2 bg-[#123b8c] hover:bg-[#152750] text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all text-sm [&::-webkit-details-marker]:hidden">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4m11-5a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    Check-in
+                    <svg class="w-4 h-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </summary>
+                <div class="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-xl border border-gray-100 bg-white p-1.5 shadow-xl">
+                    <a href="/modules/checkin_qr/index.php" class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold text-gray-700 hover:bg-blue-50 hover:text-hodBlue" title="Generate the check-in QR code for this event">
+                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h6v6H3V3zm12 0h6v6h-6V3zM3 15h6v6H3v-6zm12 0h2v2h-2v-2zm4 0h2v6h-6v-2h4v-4z"/></svg>
+                        Check-in QR
+                    </a>
+                    <a href="/modules/checkin_monitor/index.php" class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold text-gray-700 hover:bg-blue-50 hover:text-hodBlue" title="View live check-in KPIs">
+                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19V9m5 10V5m5 14v-7m5 7V3"/></svg>
+                        Check-in Monitor
+                    </a>
+                </div>
+            </details>
         </div>
         <div id="eventsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"></div>
     </section>
