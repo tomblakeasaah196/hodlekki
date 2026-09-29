@@ -362,6 +362,7 @@ if (isset($_GET['sermon'])) {
         const API_URL = '/api/public_sermons_api.php';
         let ytPlayer;
         let playTracked = false;
+        let openSlug = null;        // slug of the sermon currently open in the modal
         const sermonCache = {};     // slug -> card data, so a card can be shared without opening it
 
         // --- Sharing ---
@@ -570,6 +571,7 @@ if (isset($_GET['sermon'])) {
     $('#modalCommentsList').empty();
     $('#modalNotes').empty();
     $('#modalShare').addClass('hidden');
+    openSlug = null;
     $('#modalVideoContainer, #modalAudioContainer').addClass('hidden');
     $('#modalImageContainer').removeClass('hidden');
     
@@ -590,6 +592,7 @@ if (isset($_GET['sermon'])) {
             
             // Keep using s.id here so comments still save to the correct numeric ID
             $('#commentSermonId').val(s.id); 
+            openSlug = s.slug;
             
             $('#modalType').text(s.service_type);
             $('#modalTitle').text(s.title);
@@ -692,6 +695,7 @@ if (isset($_GET['sermon'])) {
             e.preventDefault();
             const btn = $(this).find('button[type="submit"]');
             const origText = btn.text();
+            const slug = openSlug;
             btn.prop('disabled', true).text('Submitting...');
             
             $.post(API_URL, $(this).serialize(), function(res) {
@@ -700,9 +704,12 @@ if (isset($_GET['sermon'])) {
                     $('#commentForm')[0].reset();
                     Toastify({ text: res.message, style: { background: "#1D356A", color: "white" } }).showToast();
                     
-                    $.getJSON(API_URL, { action: 'get_sermon', sermon_id: $('#commentSermonId').val() }, function(fresh) {
-                        if(fresh.status === 'success') renderComments(fresh.comments);
-                    });
+                    // get_sermon looks sermons up by slug (not id). Skip if the visitor has since opened another one.
+                    if(slug) {
+                        $.getJSON(API_URL, { action: 'get_sermon', slug: slug }, function(fresh) {
+                            if(fresh.status === 'success' && openSlug === slug) renderComments(fresh.comments);
+                        });
+                    }
                 } else {
                     Toastify({ text: res.message, style: { background: "#D11920" } }).showToast();
                 }
