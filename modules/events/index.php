@@ -769,15 +769,15 @@ require_once '../../includes/header.php';
     .event-tabs::-webkit-scrollbar-thumb{ background:#94A3B8; border-radius:999px; }
     .event-tab{ scroll-snap-align:center; color:#6B7280; }
     .event-tab:hover{ color:#111827; background:rgba(255,255,255,.75); }
-    .event-tab.event-tab-active{ color:#fff; background:#1D356A; box-shadow:0 5px 12px rgba(29,53,106,.24); }
-    .event-tab.event-tab-active:hover{ color:#fff; background:#152B59; }
-    .event-tab:focus-visible, .event-tabs-control:focus-visible{ outline:3px solid rgba(29,53,106,.32); outline-offset:2px; }
-    .event-tabs-control{ display:none; align-items:center; justify-content:center; flex:0 0 auto; width:30px; height:30px; margin:0 3px; border-radius:10px; color:#1D356A; background:#fff; border:1px solid #E5E7EB; box-shadow:0 1px 2px rgba(0,0,0,.05); transition:opacity .15s, background .15s, color .15s; }
-    .event-tabs-control:hover{ color:#fff; background:#1D356A; }
+    .event-tab.event-tab-active{ color:#fff; background:#D11920; box-shadow:0 5px 12px rgba(209,25,32,.24); }
+    .event-tab.event-tab-active:hover{ color:#fff; background:#B91C1C; }
+    .event-tab:focus-visible, .event-tabs-control:focus-visible{ outline:3px solid rgba(209,25,32,.32); outline-offset:2px; }
+    .event-tabs-control{ display:none; align-items:center; justify-content:center; flex:0 0 auto; width:30px; height:30px; margin:0 3px; border-radius:10px; color:#D11920; background:#fff; border:1px solid #E5E7EB; box-shadow:0 1px 2px rgba(0,0,0,.05); transition:opacity .15s, background .15s, color .15s; }
+    .event-tabs-control:hover{ color:#fff; background:#D11920; }
     .event-tabs-shell.has-overflow .event-tabs-control{ display:inline-flex; }
     .event-tabs-shell.at-start #eventTabsPrev, .event-tabs-shell.at-end #eventTabsNext{ visibility:hidden; pointer-events:none; }
     .event-tabs-status{ display:flex; align-items:center; justify-content:flex-end; gap:6px; margin:7px 4px 0; color:#6B7280; font-size:10px; font-weight:700; letter-spacing:.01em; }
-    .event-tabs-status strong{ color:#1D356A; font-weight:900; }
+    .event-tabs-status strong{ color:#D11920; font-weight:900; }
     @media (min-width:768px){ .event-tabs-area{ width:min(100%, 610px); } }
     @media (prefers-reduced-motion:reduce){ .event-tabs{ scroll-behavior:auto; } }
 
