@@ -129,6 +129,8 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script src="/assets/js/modal-manager.js" defer></script>
+    <script src="/assets/js/tab-deeplink.js" defer></script>
+    <script src="/assets/js/global-search.js" defer></script>
 
     <style>
         /* Custom scrollbar for sidebar */
@@ -435,6 +437,184 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
         </div>
     </aside>
 
+    <?php
+    // ====================================================================
+    // GLOBAL SEARCH INDEX (Ctrl/Cmd+K palette)
+    // Mirrors the sidebar's RBAC gates exactly — every entry below is only
+    // added when the equivalent sidebar link would have rendered. Tabs use
+    // the shared #tab= deep-link convention handled by assets/js/tab-deeplink.js.
+    // ====================================================================
+    $gsItems = [];
+    $gsAdd = static function ($id, $label, $url, $group, $icon, $keywords = [], $tabs = []) use (&$gsItems) {
+        $gsItems[] = ['id' => $id, 'type' => 'module', 'label' => $label, 'url' => $url, 'group' => $group, 'icon' => $icon, 'keywords' => $keywords];
+        foreach ($tabs as $tabId => $tabLabel) {
+            $gsItems[] = [
+                'id'       => $id . ':' . $tabId,
+                'type'     => 'tab',
+                'label'    => $label . ' › ' . $tabLabel,
+                'url'      => $url . '#tab=' . rawurlencode($tabId),
+                'group'    => $group,
+                'icon'     => $icon,
+                'keywords' => array_merge($keywords, array_map('strtolower', explode(' ', $tabLabel))),
+            ];
+        }
+    };
+
+    // --- Command Center ---
+    if (userHasNavAccess($pastors_directors, [1])) {
+        $gsAdd('dashboard', 'Dashboard', '/index.php', 'Command Center',
+            'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z',
+            ['home', 'workspace', 'overview', 'kpi']);
+    }
+    $gsAdd('member_portal', ($_SESSION['first_name'] ?? 'Member') . "'s Portal", '/modules/member_portal/index.php', 'Command Center',
+        'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
+        ['member portal', 'my portal', 'home']);
+    $gsAdd('profile', 'My Profile', '/modules/profile/index.php', 'Command Center',
+        'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+        ['account', 'settings', 'picture', 'password', 'details']);
+    $gsAdd('regions', 'Regional Hubs', '/modules/regions/index.php', 'Command Center',
+        'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z',
+        ['regions', 'hubs', 'locations', 'broadcast'],
+        ['hub' => 'My Region']);
+    if (userHasNavAccess($pastors, [1])) {
+        $gsAdd('idi', 'Data Insights (IDI)', '/modules/idi/index.php', 'Command Center',
+            'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+            ['idi', 'analytics', 'insights', 'data', 'reports', 'statistics']);
+    }
+
+    // --- Growth & Retention ---
+    if (userHasNavAccess($pastors, [1])) {
+        $gsAdd('congregation', 'Congregation', '/modules/congregation/index.php', 'Growth & Retention',
+            'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z',
+            ['members', 'people', 'database', 'roster', 'directory']);
+    }
+    if (userHasNavAccess($pastors, [1, 8])) {
+        $gsAdd('reach', 'Reach (Evangelism)', '/modules/reach/index.php', 'Growth & Retention',
+            'M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+            ['evangelism', 'outreach', 'souls', 'leads', 'campaigns'],
+            ['campaigns' => 'Campaigns', 'followup' => 'Follow-Up', 'analytics' => 'Analytics', 'howto' => 'How to Use']);
+    }
+    if (userHasNavAccess($pastors, [1, 2])) {
+        $gsAdd('embrace', 'Embrace (First Timers)', '/modules/embrace/index.php', 'Growth & Retention',
+            'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
+            ['first timers', 'visitors', 'welcome', 'guests']);
+    }
+    if (!empty($assim_nav)) {
+        $gsAdd('assimilation', 'Assimilation', '/modules/assimilation/index.php', 'Growth & Retention',
+            'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
+            ['new converts', 'follow up', 'retention', 'integration'],
+            !empty($assim_manager)
+                ? ['find' => 'Find People', 'followup' => 'Follow-Up', 'team' => 'Team', 'analytics' => 'Analytics', 'howto' => 'How to Use']
+                : ['followup' => 'Follow-Up', 'team' => 'Team', 'howto' => 'How to Use']);
+    }
+    if (userHasNavAccess($pastors, [1, 10])) {
+        $gsAdd('charis', 'Charis (Welfare)', '/modules/charis/index.php', 'Growth & Retention',
+            'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
+            ['welfare', 'care', 'benevolence', 'support'],
+            ['welfare' => 'Welfare', 'events' => 'Event Planning', 'finance' => 'Finance', 'library' => 'Library', 'howto' => 'How To Use']);
+    }
+    $gsAdd('academy', 'HOD Academy', '/modules/academy/index.php', 'Growth & Retention',
+        'M12 14l9-5-9-5-9 5 9 5z M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z',
+        ['school', 'lms', 'courses', 'classes', 'study', 'exams', 'learning'],
+        ['student-dash' => 'My Noticeboard', 'student-study' => 'Study & Assignments', 'student-exam' => 'Examination Portal', 'student-result' => 'My Result Slip']);
+
+    // --- Specialized Units ---
+    if (userHasNavAccess($pastors, [1, 11])) {
+        $gsAdd('junior_church', 'Junior Church', '/modules/junior_church/index.php', 'Specialized Units',
+            'M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+            ['kids', 'children', 'sunday school'],
+            ['services' => 'Service Tracker', 'roster' => 'Children Roster', 'curriculum' => 'Curriculums']);
+    }
+    if (userHasNavAccess($pastors, [1, 4])) {
+        $gsAdd('river_of_life', 'River of Life (Choir)', '/modules/river_of_life/index.php', 'Specialized Units',
+            'M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3',
+            ['choir', 'music', 'worship', 'songs'],
+            ['kanban' => 'Roster Kanban', 'rehearsals' => 'Rehearsals', 'attendance' => 'Attendance']);
+    }
+    if (userHasNavAccess($pastors, [1, 3])) {
+        $gsAdd('envision', 'Envision (Media)', '/modules/envision/index.php', 'Specialized Units',
+            'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z',
+            ['media', 'video', 'radio', 'sermons', 'broadcast'],
+            ['roster' => 'Crew Roster', 'archive' => 'Sermon Archive', 'comments' => 'Moderation', 'config' => 'Broadcast Config']);
+    }
+    if (userHasNavAccess($pastors, [1, 7])) {
+        $gsAdd('zoe', 'Zoe (Prayer)', '/modules/zoe/index.php', 'Specialized Units',
+            'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z',
+            ['prayer', 'intercessory', 'intercession'],
+            ['requests' => 'Church Requests', 'sessions' => 'Prayer Sessions & Campaigns', 'roster' => 'Zoe Roster', 'war_room' => 'The War Room']);
+    }
+
+    // --- Core Operations ---
+    if (userHasNavAccess($pastors, [1])) {
+        $gsAdd('departments', 'Departments', '/modules/departments/index.php', 'Core Operations',
+            'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10',
+            ['units', 'teams', 'workforce']);
+    }
+    if (userHasNavAccess($pastors, [1, 13])) {
+        $gsAdd('tribes', 'Tribes', '/modules/tribes/index.php', 'Core Operations',
+            'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
+            ['camp david', 'cells', 'groups'],
+            ['global' => 'Global Dashboard', 'mytribe' => 'My Tribe', 'meetings' => 'Meetings & Rhema', 'roster' => 'Duty Roster']);
+    }
+    if (userHasNavAccess($pastors_directors, [1])) {
+        $gsAdd('events', 'Events & Attendance', '/modules/events/index.php', 'Core Operations',
+            'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+            ['calendar', 'services', 'check-in', 'checkin', 'attendance']);
+    }
+    if (userHasNavAccess($sms_roles, [])) {
+        $gsAdd('sms_studio', 'SMS Studio', '/modules/sms_studio/index.php', 'Core Operations',
+            'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
+            ['text', 'messages', 'bulk sms', 'broadcast'],
+            ['campaigns' => 'Campaigns', 'history' => 'History']);
+    }
+    if (userHasNavAccess($pastors_directors, [1, 3])) {
+        $gsAdd('assets', 'Asset Management', '/modules/assets/index.php', 'Core Operations',
+            'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
+            ['inventory', 'equipment', 'gear'],
+            ['inventory' => 'Master Inventory', 'logs' => 'Activity Logs']);
+    }
+    if (userHasNavAccess($pastors_directors, [1])) {
+        $gsAdd('pastoral', 'Pastoral Desk', '/modules/pastoral/index.php', 'Core Operations',
+            'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
+            ['questions', 'feedback'],
+            ['impressions' => 'Impressions', 'qa' => 'Pastoral Q&A', 'suggestions' => 'Suggestion Box']);
+        $gsAdd('announcements', 'Announcements', '/modules/announcements/index.php', 'Core Operations',
+            'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z',
+            ['news', 'notices', 'bulletin']);
+        $gsAdd('testimonies', 'Testimonies (Admin)', '/modules/testimonies/index.php', 'Core Operations',
+            'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z',
+            ['stories', 'praise reports']);
+    }
+
+    // --- Security & Stewardship ---
+    if (userHasNavAccess($pastors_directors, [])) {
+        $gsAdd('finance', 'Finance & Stewardship', '/modules/finance/index.php', 'Security & Stewardship',
+            'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+            ['money', 'giving', 'tithe', 'offering', 'ledger'],
+            ['dashboard' => 'IDI Overview', 'transactions' => 'Master Ledger', 'config' => 'System Configuration']);
+        if (userHasNavAccess(['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD'], [])) {
+            $gsAdd('requisition', 'Requisitions', '/modules/requisition/index.php', 'Security & Stewardship',
+                'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+                ['purchase', 'spend', 'approvals', 'expenses'],
+                ['requisitions' => 'Requisitions', 'analytics' => 'Analytics']);
+        }
+        if ($is_super_admin) {
+            $gsAdd('roles', 'Role Management', '/modules/roles/index.php', 'Security & Stewardship',
+                'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+                ['permissions', 'rbac', 'security', 'access'],
+                ['tab-roster' => 'Master Roster', 'tab-audit' => 'Audit Trail']);
+        }
+    }
+
+    // --- Quick actions ---
+    $gsItems[] = [
+        'id' => 'action:logout', 'type' => 'action', 'label' => 'Secure Sign Out',
+        'url' => '/auth/logout.php', 'group' => 'Actions',
+        'icon' => 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1',
+        'keywords' => ['logout', 'log out', 'sign out', 'exit'],
+    ];
+    ?>
+
     <div class="flex-1 flex flex-col h-[100dvh] overflow-hidden relative bg-transparent">
         
         <header class="bg-white/80 backdrop-blur-xl border-b border-gray-200/60 sticky top-0 z-30 shadow-sm">
@@ -451,6 +631,16 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
                 
                 <div class="flex items-center gap-3 sm:gap-5">
                     
+                    <!-- Global search trigger: pill with shortcut hint on desktop, icon on mobile -->
+                    <button type="button" data-gs-open class="hidden md:flex items-center gap-2.5 w-56 lg:w-64 px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50/80 text-gray-400 hover:text-gray-600 hover:border-gray-300 hover:bg-white transition-all text-sm focus:outline-none focus:ring-2 focus:ring-blue-100" aria-label="Search navigation (Ctrl+K)">
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        <span class="flex-1 text-left font-medium">Search…</span>
+                        <kbd data-gs-kbd class="text-[10px] font-bold text-gray-400 bg-white border border-gray-200 rounded-md px-1.5 py-0.5 shadow-sm tracking-wide">Ctrl K</kbd>
+                    </button>
+                    <button type="button" data-gs-open class="md:hidden text-gray-400 hover:text-hodBlue p-2 rounded-xl hover:bg-blue-50 transition-all focus:outline-none focus:ring-2 focus:ring-blue-100" aria-label="Search navigation">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </button>
+
                     <div class="relative" id="notificationDropdownContainer">
                         <button onclick="toggleNotifications()" class="text-gray-400 hover:text-hodBlue relative p-2 rounded-xl hover:bg-blue-50 transition-all focus:outline-none focus:ring-2 focus:ring-blue-100">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
@@ -500,6 +690,34 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
                 </div>
             </div>
         </header>
+
+        <!-- ============================================================ -->
+        <!-- GLOBAL COMMAND PALETTE (Ctrl/Cmd+K) — logic in global-search.js -->
+        <!-- data-modal-ignore keeps modal-manager.js from re-styling it.   -->
+        <!-- ============================================================ -->
+        <div id="gsOverlay" data-modal-ignore class="hidden opacity-0 fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200" role="dialog" aria-modal="true" aria-label="Search navigation">
+            <div class="h-full w-full flex items-start justify-center px-3 sm:px-4 pt-[8vh] sm:pt-[13vh] pb-8">
+                <div id="gsPanel" class="w-full max-w-xl bg-white rounded-2xl shadow-[0_25px_80px_-15px_rgba(0,0,0,0.5)] border border-gray-200/70 overflow-hidden transform scale-95 -translate-y-2 transition-all duration-200 flex flex-col max-h-full">
+                    <div class="flex items-center gap-3 px-4 sm:px-5 border-b border-gray-100 shrink-0">
+                        <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        <input id="gsInput" type="text" autocomplete="off" spellcheck="false" placeholder="Search modules, tabs, people, events…" class="flex-1 py-4 text-[15px] font-medium text-gray-900 placeholder-gray-400 bg-transparent outline-none border-0 focus:ring-0" aria-label="Search">
+                        <svg id="gsSpinner" class="hidden animate-spin w-4 h-4 text-hodBlue shrink-0" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                        <kbd class="hidden sm:block text-[10px] font-bold text-gray-400 bg-gray-50 border border-gray-200 rounded-md px-1.5 py-0.5 shrink-0">Esc</kbd>
+                    </div>
+                    <div id="gsResults" class="flex-1 overflow-y-auto custom-scrollbar overscroll-contain pb-2 min-h-[120px] max-h-[55vh]" role="listbox" aria-label="Search results"></div>
+                    <div class="hidden sm:flex items-center gap-4 px-5 py-2.5 border-t border-gray-100 bg-gray-50/70 text-[10px] font-bold text-gray-400 uppercase tracking-wider shrink-0">
+                        <span class="flex items-center gap-1.5"><kbd class="bg-white border border-gray-200 rounded px-1 py-0.5 normal-case">↑↓</kbd> Navigate</span>
+                        <span class="flex items-center gap-1.5"><kbd class="bg-white border border-gray-200 rounded px-1 py-0.5 normal-case">↵</kbd> Open</span>
+                        <span class="flex items-center gap-1.5"><kbd class="bg-white border border-gray-200 rounded px-1 py-0.5 normal-case">Esc</kbd> Close</span>
+                        <span class="ml-auto normal-case tracking-normal font-semibold">HOD Lekki · Quick Nav</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            // RBAC-filtered navigation index for the command palette (built server-side).
+            window.HOD_SEARCH_INDEX = <?= json_encode($gsItems, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+        </script>
 
         <script>
             let isNotifOpen = false;
