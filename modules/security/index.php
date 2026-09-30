@@ -28,7 +28,7 @@ $viewerIsSuper = security_is_super_admin($pdo);
             <div>
                 <h2 class="text-2xl md:text-3xl font-display font-bold text-white tracking-tight">Security Centre</h2>
                 <p class="text-gray-400 text-sm md:text-base mt-1 font-medium">
-                    Revoke accounts, reset passwords, kill live sessions and read the audit trail.
+                    Revoke accounts, reset passwords, change sign-in emails, kill live sessions and read the audit trail.
                 </p>
             </div>
         </div>
@@ -72,23 +72,31 @@ $viewerIsSuper = security_is_super_admin($pdo);
 
     <!-- ========================= ACCOUNTS TAB ======================== -->
     <div id="pane-accounts" class="sec-pane space-y-4">
-        <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row gap-3">
+        <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col lg:flex-row gap-3">
             <div class="relative flex-1">
                 <input type="text" id="accountSearch" placeholder="Search by name, email or phone..."
                     class="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all bg-gray-50 focus:bg-white font-medium">
                 <svg class="w-5 h-5 text-gray-400 absolute left-4 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </div>
-            <select id="accountFilter" class="px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold bg-gray-50 focus:bg-white outline-none cursor-pointer">
-                <option value="all">All accounts</option>
-                <option value="active">Active only</option>
-                <option value="suspended">Suspended</option>
-                <option value="revoked">Revoked</option>
-                <option value="locked">Locked out</option>
-                <option value="must_change">Must change password</option>
-                <option value="no_password">No password set</option>
-                <option value="online">Online now</option>
-                <option value="privileged">Has system roles</option>
-            </select>
+            <div class="flex flex-col sm:flex-row gap-3">
+                <select id="accountFilter" class="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold bg-gray-50 focus:bg-white outline-none cursor-pointer">
+                    <option value="all">All accounts</option>
+                    <option value="active">Active only</option>
+                    <option value="suspended">Suspended</option>
+                    <option value="revoked">Revoked</option>
+                    <option value="locked">Locked out</option>
+                    <option value="must_change">Must change password</option>
+                    <option value="no_password">No password set</option>
+                    <option value="no_email">No sign-in email</option>
+                    <option value="online">Online now</option>
+                    <option value="privileged">Has system roles</option>
+                </select>
+                <button type="button" id="btnGenerateEmails" title="Create a unique @hodlc.com sign-in email for every account that has none"
+                    class="flex-1 sm:flex-none bg-gray-900 hover:bg-black text-white text-[11px] font-black uppercase tracking-widest px-4 py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>
+                    Generate missing emails
+                </button>
+            </div>
         </div>
 
         <div class="bg-white rounded-3xl shadow-sm border border-gray-100/60 overflow-hidden">
@@ -108,8 +116,9 @@ $viewerIsSuper = security_is_super_admin($pdo);
                     </tbody>
                 </table>
             </div>
-            <div class="px-6 py-3 bg-gray-50/50 border-t border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-widest">
-                <span id="accountsCount">0</span> account(s) shown · newest problems first · max 300 rows
+            <div class="px-6 py-3 bg-gray-50/50 border-t border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-widest flex flex-col sm:flex-row items-center justify-between gap-3">
+                <span id="accountsRange">0 account(s) shown</span>
+                <div id="accountsPager" class="flex items-center gap-1"></div>
             </div>
         </div>
     </div>
@@ -233,6 +242,7 @@ $viewerIsSuper = security_is_super_admin($pdo);
 const SEC_API = '/api/security_api.php';
 const VIEWER_IS_SUPER = <?= $viewerIsSuper ? 'true' : 'false' ?>;
 const SCHEMA_READY = <?= $schemaReady ? 'true' : 'false' ?>;
+const SEC_EMAIL_DOMAIN = <?= json_encode(SECURITY_LOGIN_EMAIL_DOMAIN) ?>;
 
 let manageUserId = null;
 let loadedTabs = {};
@@ -336,11 +346,40 @@ function loadOverview() {
 
 /* ---------------------------------------------------------- accounts */
 
+let accountsPage = 1;
+
+function accountsPagerHtml(pg) {
+    // Compact numbered pager: first, last, and a window around the current page.
+    if (!pg || pg.pages <= 1) return '';
+
+    const current = pg.page;
+    const want = new Set([1, pg.pages, current - 1, current, current + 1]);
+    const items = [...want].filter(n => n >= 1 && n <= pg.pages).sort((a, b) => a - b);
+
+    const btn = (n, label, opts = {}) => `
+        <button type="button" data-page="${n}"
+            class="min-w-[30px] h-8 px-2 rounded-lg text-[11px] font-black transition-all ${n === current ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-900 hover:text-gray-900'} ${opts.disabled ? 'opacity-40 pointer-events-none' : ''}"
+            ${opts.disabled ? 'disabled' : ''}>${label ?? n}</button>`;
+
+    let html = btn(Math.max(1, current - 1), '‹', { disabled: current <= 1 });
+
+    let prev = 0;
+    items.forEach(n => {
+        if (n - prev > 1) html += '<span class="px-1 text-gray-300 font-black">…</span>';
+        html += btn(n);
+        prev = n;
+    });
+
+    html += btn(Math.min(pg.pages, current + 1), '›', { disabled: current >= pg.pages });
+    return html;
+}
+
 function loadAccounts() {
     const payload = {
         action: 'fetch_accounts',
         search: $('#accountSearch').val() || '',
-        filter: $('#accountFilter').val() || 'all'
+        filter: $('#accountFilter').val() || 'all',
+        page: accountsPage
     };
 
     $('#accountsBody').html('<tr><td colspan="5" class="text-center py-20 text-gray-400 font-bold animate-pulse">Loading accounts…</td></tr>');
@@ -348,11 +387,27 @@ function loadAccounts() {
     post(payload, function(res) {
         if (res.status !== 'success') {
             $('#accountsBody').html(`<tr><td colspan="5" class="text-center py-20 text-red-500 font-bold">${esc(res.message || 'Could not load accounts.')}</td></tr>`);
+            $('#accountsRange').text('Could not load accounts.');
+            $('#accountsPager').html('');
             return;
         }
 
         const rows = res.data || [];
-        $('#accountsCount').text(rows.length);
+        const pg = res.pagination || null;
+
+        if (pg) {
+            accountsPage = pg.page; // the server clamps out-of-range pages
+            $('#accountsRange').text(
+                pg.total === 0
+                    ? 'No accounts match — nothing beyond this point'
+                    : `Showing ${pg.from.toLocaleString()}–${pg.to.toLocaleString()} of ${pg.total.toLocaleString()} account(s)`
+                      + ` · page ${pg.page} of ${pg.pages} · 100 per page · problems first`
+            );
+            $('#accountsPager').html(accountsPagerHtml(pg));
+        } else {
+            $('#accountsRange').text(`${rows.length} account(s) shown`);
+            $('#accountsPager').html('');
+        }
 
         if (!rows.length) {
             $('#accountsBody').html('<tr><td colspan="5" class="text-center py-20 text-gray-400 font-bold">No accounts match that search.</td></tr>');
@@ -385,7 +440,9 @@ function loadAccounts() {
                                  class="w-9 h-9 rounded-xl object-cover bg-gray-100 border border-gray-200 shrink-0">
                             <div class="min-w-0">
                                 <p class="font-bold text-gray-900 truncate">${esc(name)}</p>
-                                <p class="text-[11px] text-gray-400 font-medium truncate">${esc(u.email || 'no email')}</p>
+                                ${u.email
+                                    ? `<p class="text-[11px] text-gray-400 font-medium truncate">${esc(u.email)}</p>`
+                                    : '<p class="text-[11px] text-amber-600 font-bold truncate">no sign-in email</p>'}
                             </div>
                         </div>
                     </td>
@@ -570,7 +627,7 @@ function renderManage(d) {
         $('#mgBody').html(`
             <div class="bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl p-5 text-sm font-semibold">
                 You cannot run security actions on this account from here.
-                ${u.id == <?= (int) $_SESSION['user_id'] ?> ? 'To change your own password use <a class="underline" href="/modules/profile/index.php#security">My Profile → Security</a>.' : 'It belongs to a Super Admin and you are not one.'}
+                ${u.id == <?= (int) $_SESSION['user_id'] ?> ? 'To change your own password use <a class="underline" href="/modules/profile/index.php#security">My Profile → Security</a>. To change your own sign-in email, ask another admin to do it for you.' : 'It belongs to a Super Admin and you are not one.'}
             </div>`);
         return;
     }
@@ -673,6 +730,52 @@ function renderManage(d) {
             </div>
         </div>`;
 
+    const suggestedLogin = (u.first_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const emailInput = (id, label) => `
+        <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">${label}</label>
+            <div class="flex items-center border border-gray-200 rounded-xl bg-gray-50 focus-within:bg-white focus-within:ring-2 focus-within:ring-gray-900 focus-within:border-transparent transition-all overflow-hidden">
+                <input type="text" id="${id}" autocomplete="off" spellcheck="false" placeholder="e.g. ${esc(suggestedLogin || 'grace')}"
+                    class="flex-1 min-w-0 px-3 py-2.5 text-xs font-bold bg-transparent outline-none">
+                <span class="shrink-0 px-3 py-2.5 text-xs font-bold text-gray-400 select-none border-l border-gray-200 bg-gray-50/80">@${esc(SEC_EMAIL_DOMAIN)}</span>
+            </div>
+        </div>`;
+
+    const hasLoginEmail = !!(u.email || '').trim();
+    const emailBlock = `
+        <div class="border border-gray-100 rounded-2xl overflow-hidden">
+            <div class="px-4 py-3 bg-gray-50/70 border-b border-gray-100">
+                <p class="text-xs font-black text-gray-900 uppercase tracking-widest">${hasLoginEmail ? 'Change sign-in email' : 'Set sign-in email'}</p>
+                <p class="text-[11px] text-gray-500 font-medium mt-0.5">
+                    The email they type on the sign-in screen — not their personal email. ${hasLoginEmail ? 'For members who find their system-generated address too long or hard to remember.' : 'This member was created without one — set it here so they can sign in.'}
+                </p>
+            </div>
+            <div class="p-4 space-y-3">
+                <div class="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 text-[11px] font-medium text-gray-600">
+                    <span class="text-gray-400 uppercase tracking-widest text-[9px] font-bold block">Current sign-in email</span>
+                    ${hasLoginEmail
+                        ? `<span class="font-bold text-gray-900 break-all">${esc(u.email)}</span>`
+                        : '<span class="font-bold text-amber-600">None set — they cannot sign in until you give them one.</span>'}
+                    ${u.real_email ? `<span class="block text-gray-400 mt-1">Personal email (untouched here): ${esc(u.real_email)}</span>` : ''}
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    ${emailInput('mgNewEmail', 'New sign-in email')}
+                    ${emailInput('mgConfirmEmail', 'Confirm new email')}
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <label class="flex items-center gap-2 text-[11px] font-semibold text-gray-600 cursor-pointer select-none">
+                        <input type="checkbox" id="mgEmailSignout" class="w-4 h-4 rounded border-gray-300 text-hodBlue focus:ring-hodBlue cursor-pointer">
+                        Sign them out of every device now
+                    </label>
+                    <span class="text-[10px] text-gray-400 font-medium">Their password and personal email are not touched.</span>
+                </div>
+                <button type="button" data-act="change_email"
+                    class="w-full bg-gray-900 hover:bg-black text-white text-[11px] font-black uppercase tracking-widest px-4 py-3 rounded-xl transition-all">
+                    ${hasLoginEmail ? 'Change sign-in email' : 'Set sign-in email'}
+                </button>
+            </div>
+        </div>`;
+
     const toolsBlock = `
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button type="button" data-act="force_logout"
@@ -748,7 +851,7 @@ function renderManage(d) {
             </div>
         </div>`;
 
-    $('#mgBody').html(facts + rolesBlock + statusBlock + resetBlock + toolsBlock + sessionsBlock + historyBlock);
+    $('#mgBody').html(facts + rolesBlock + statusBlock + resetBlock + emailBlock + toolsBlock + sessionsBlock + historyBlock);
 }
 
 /* ------------------------------------------------------------ actions */
@@ -822,6 +925,28 @@ $(document).on('click', '[data-act]', function() {
             reason: ($('#mgReason').val() || '').trim()
         };
 
+    } else if (act === 'change_email') {
+        // The inputs hold the part before the @ — the fixed suffix in the UI
+        // shows it — but a pasted full address is accepted too (the server
+        // normalises both the same way).
+        const withDomain = v => {
+            v = (v || '').trim().toLowerCase();
+            return v === '' ? v : (v.includes('@') ? v : v + '@' + SEC_EMAIL_DOMAIN);
+        };
+        const em = ($('#mgNewEmail').val() || '').trim();
+        const cf = ($('#mgConfirmEmail').val() || '').trim();
+        if (em === '' || cf === '') { toast('Type the new sign-in email twice.', 'warning'); return; }
+        if (withDomain(em) !== withDomain(cf)) { toast('The two email addresses do not match.', 'warning'); return; }
+        confirmMsg = `Change their sign-in email to ${withDomain(em)}? The old one will stop working immediately — their password stays the same.`;
+        payload = {
+            action: 'change_email',
+            user_id: uid,
+            new_email: em,
+            confirm_email: cf,
+            sign_out_everywhere: $('#mgEmailSignout').is(':checked') ? 1 : 0,
+            reason: ($('#mgReason').val() || '').trim()
+        };
+
     } else if (act === 'force_logout') {
         confirmMsg = 'Sign this member out of every device right now?';
         payload = { action: 'force_logout', user_id: uid };
@@ -866,8 +991,34 @@ function debounce(fn) {
 }
 
 $('.sec-tab').on('click', function() { switchTab($(this).data('tab')); });
-$('#accountSearch').on('input', function() { debounce(loadAccounts); });
-$('#accountFilter').on('change', loadAccounts);
+$('#accountSearch').on('input', function() { accountsPage = 1; debounce(loadAccounts); });
+$('#accountFilter').on('change', function() { accountsPage = 1; loadAccounts(); });
+
+$('#accountsPager').on('click', '[data-page]', function() {
+    const page = parseInt($(this).data('page'), 10);
+    if (!page || page === accountsPage) return;
+    accountsPage = page;
+    loadAccounts();
+    // Jump back to the top of the roster so the new page is visible.
+    $('#pane-accounts')[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+$('#btnGenerateEmails').on('click', function() {
+    if (!confirm('Generate a unique @' + SEC_EMAIL_DOMAIN + ' sign-in email for EVERY account that has none, all at once?\n\n'
+        + 'Members keep their password and personal email. Each one gets an in-app notification with their new address.')) return;
+    const btn = $(this);
+    btn.prop('disabled', true).addClass('opacity-50');
+    post({ action: 'generate_missing_emails' }, function(res) {
+        btn.prop('disabled', false).removeClass('opacity-50');
+        if (res.status !== 'success') return;
+        toast(res.message, 'success');
+        loadOverview();
+        accountsPage = 1;
+        loadAccounts();
+        if (loadedTabs.audit) loadAudit();
+    });
+});
+
 $('#btnRefreshSessions').on('click', loadSessions);
 $('#loginSearch').on('input', function() { debounce(loadLogins); });
 $('#loginFilter').on('change', loadLogins);

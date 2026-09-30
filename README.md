@@ -15,8 +15,8 @@ The internal ERP is organised as one directory per module under
 - `congregation` — master member directory and household records.
 - `departments`, `roles` — RBAC matrix, department membership, role assignment.
 - `security` — Security Centre (Super Admin + Resident Pastor): suspend or
-  revoke accounts, reset passwords, kill live sessions, clear failed-login
-  lockouts, and read the login/audit trails. See
+  revoke accounts, reset passwords, change sign-in emails, kill live sessions,
+  clear failed-login lockouts, and read the login/audit trails. See
   [`modules/security/how_to_use.md`](modules/security/how_to_use.md).
 - `regions`, `tribes` — geographic and small-group segmentation of members.
 - `profile`, `member_portal`, `parent_portal` — self-service views for

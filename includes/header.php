@@ -628,6 +628,13 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
                 ['permissions', 'rbac', 'security', 'access'],
                 ['tab-roster' => 'Master Roster', 'tab-audit' => 'Audit Trail']);
         }
+        // Mirrors the sidebar Security Centre link: Super Admin + Resident Pastor.
+        if (userHasNavAccess(['Resident_Pastor'], [])) {
+            $gsAdd('security', 'Security Centre', '/modules/security/index.php', 'Security & Stewardship',
+                'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
+                ['suspend', 'revoke', 'reset password', 'sign-in email', 'lockout', 'kill sessions', 'login attempts', 'audit'],
+                ['accounts' => 'Accounts', 'sessions' => 'Live Sessions', 'logins' => 'Login Activity', 'audit' => 'Audit Trail']);
+        }
     }
 
     // --- Quick actions ---
