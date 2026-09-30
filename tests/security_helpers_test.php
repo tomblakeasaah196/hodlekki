@@ -119,6 +119,59 @@ $rules = security_password_rules();
 ok('policy advertises 5 rules', count($rules) === 5);
 ok('policy advertises the real minimum length', str_contains($rules[0], (string) SECURITY_MIN_PASSWORD_LENGTH));
 
+echo "\n--- sign-in email policy (admin Change sign-in email) ---\n";
+
+ok('bare prefix is expanded onto the system domain',
+    security_normalize_login_email('Grace ') === 'grace@' . SECURITY_LOGIN_EMAIL_DOMAIN);
+ok('full address is lowercased and kept',
+    security_normalize_login_email('Grace@HODLC.com') === 'grace@' . SECURITY_LOGIN_EMAIL_DOMAIN);
+ok('dots and digits survive normalisation',
+    security_normalize_login_email('j.okafor2') === 'j.okafor2@' . SECURITY_LOGIN_EMAIL_DOMAIN);
+ok('junk is rejected', security_normalize_login_email('not an email') === null);
+ok('empty input is rejected', security_normalize_login_email('   ') === null);
+ok('empty string is rejected', security_normalize_login_email('') === null);
+ok('a bare @ goes nowhere', security_normalize_login_email('@') === null);
+ok('two @s are invalid', security_normalize_login_email('a@b@c.com') === null);
+ok('oversized input is rejected',
+    security_normalize_login_email(str_repeat('a', 200)) === null);
+ok('oversized-but-valid input is still rejected',
+    security_normalize_login_email(str_repeat('a', 185) . '@x.com') === null);
+
+ok('policy accepts a bare prefix', security_login_email_problems('grace') === []);
+ok('policy accepts a full system address',
+    security_login_email_problems('GRACE@hodlc.com') === []);
+ok('policy rejects a foreign domain', security_login_email_problems('grace@gmail.com') !== []);
+ok('policy rejects garbage', security_login_email_problems('not an email') !== []);
+ok('policy explains an empty field', security_login_email_problems('   ') !== []);
+ok('policy explains an oversized field',
+    security_login_email_problems(str_repeat('a', 200)) !== []);
+
+echo "\n--- sign-in email prefix builder (bulk generator) ---\n";
+
+ok('first.last from two names',
+    security_login_email_prefix('Oluchi', 'Chiamaka') === 'oluchi.chiamaka');
+ok('shortest part of each name wins',
+    security_login_email_prefix('Alexander', 'Jo') === 'alexander.jo');
+ok('hyphenated names split into parts',
+    security_login_email_prefix('Mary-Jane', 'Okafor-Obi') === 'mary.obi');
+ok('punctuation is stripped',
+    security_login_email_prefix("O'Brien!", 'Ng.') === 'obrien.ng');
+ok('case is lowered',
+    security_login_email_prefix('GRACE', 'OKAFOR') === 'grace.okafor');
+ok('last name alone when first is empty',
+    security_login_email_prefix('', 'Okafor') === 'okafor');
+ok('first name alone when last is empty',
+    security_login_email_prefix('Grace', '') === 'grace');
+ok('very long combos fall back to the first name',
+    security_login_email_prefix('Benedicta', 'Oluwadamilola') === 'benedicta');
+ok('both empty yields nothing',
+    security_login_email_prefix('', '') === '');
+ok('punctuation-only names yield nothing',
+    security_login_email_prefix('***', '---') === '');
+ok('single letters still combine',
+    security_login_email_prefix('J', 'O') === 'j.o');
+
+
 echo "\n--- device description ---\n";
 
 ok(

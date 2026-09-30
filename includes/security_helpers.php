@@ -40,6 +40,15 @@ const SECURITY_PASSWORD_CHANGE_WINDOW_MINUTES = 15;
 /** Cookie used to tell the login screen why the user was kicked out. */
 const SECURITY_SIGNOUT_COOKIE = 'hod_signout_notice';
 
+/**
+ * Domain every system-generated sign-in email lives in (users.email). Members
+ * sign in with this address; their personal address is users.real_email.
+ */
+const SECURITY_LOGIN_EMAIL_DOMAIN = 'hodlc.com';
+
+/** Hard cap for users.email — matches login_attempts.email VARCHAR(190). */
+const SECURITY_LOGIN_EMAIL_MAX_LENGTH = 190;
+
 // --------------------------------------------------------------------------
 // Request context
 // --------------------------------------------------------------------------
@@ -296,6 +305,155 @@ if (!function_exists('security_suggest_password')) {
         shuffle($out);
 
         return implode('', $out);
+    }
+}
+
+// --------------------------------------------------------------------------
+// Login-email policy (admin Security Centre)
+// --------------------------------------------------------------------------
+
+if (!function_exists('security_login_email_prefix')) {
+    /**
+     * The username part for a generated sign-in email, built the same way
+     * api/congregation_api.php builds one for a new member: the shortest
+     * name part of each name ("Oluchi Chiamaka" -> "oluchi.chiamaka"),
+     * falling back to whichever name exists. Returns '' when neither name
+     * yields anything usable (e.g. both names are punctuation).
+     */
+    function security_login_email_prefix(string $firstName, string $lastName): string
+    {
+        $shortest = static function (string $name): string {
+            $best = '';
+            foreach (preg_split('/[\s\-]+/', trim($name)) ?: [] as $part) {
+                $clean = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $part) ?? '');
+                if ($clean === '') {
+                    continue;
+                }
+                if ($best === '' || strlen($clean) < strlen($best)) {
+                    $best = $clean;
+                }
+            }
+            return $best;
+        };
+
+        $first = $shortest($firstName);
+        $last  = $shortest($lastName);
+
+        if ($first !== '' && $last !== '') {
+            // Same 20-character ceiling the congregation creator applies.
+            $combined = $first . '.' . $last;
+            return strlen($combined) > 20 ? $first : $combined;
+        }
+
+        return $first !== '' ? $first : $last;
+    }
+}
+
+if (!function_exists('security_generate_login_email')) {
+    /**
+     * Builds a unique @hodlc.com sign-in email for a member who has none.
+     *
+     * Appends 2, 3, … while the address is taken, checking both the live
+     * table and the $reserved list (addresses handed out earlier in the same
+     * batch, which are not in the DB yet).
+     *
+     * @param string[] $reserved Lowercase addresses to treat as taken.
+     * @return string|null The email, or null when no prefix could be built.
+     */
+    function security_generate_login_email(PDO $pdo, string $firstName, string $lastName, array $reserved = []): ?string
+    {
+        $prefix = security_login_email_prefix($firstName, $lastName);
+        if ($prefix === '') {
+            return null;
+        }
+
+        $check = $pdo->prepare('SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1');
+
+        $candidate = $prefix . '@' . SECURITY_LOGIN_EMAIL_DOMAIN;
+        $counter   = 1;
+
+        while (true) {
+            $taken = in_array($candidate, $reserved, true);
+            if (!$taken) {
+                $check->execute([$candidate]);
+                $taken = $check->fetch() !== false;
+            }
+            if (!$taken) {
+                return $candidate;
+            }
+
+            $counter++;
+            $candidate = $prefix . $counter . '@' . SECURITY_LOGIN_EMAIL_DOMAIN;
+        }
+    }
+}
+
+if (!function_exists('security_normalize_login_email')) {
+    /**
+     * Normalises an admin-supplied sign-in email.
+     *
+     * Accepts either a bare prefix ("grace") or a full address
+     * ("grace@hodlc.com") and returns the full lowercase address, or null when
+     * the input can never be a valid sign-in email.
+     */
+    function security_normalize_login_email(string $raw): ?string
+    {
+        $email = strtolower(trim($raw));
+
+        if ($email === '') {
+            return null;
+        }
+        if (!str_contains($email, '@')) {
+            $email .= '@' . SECURITY_LOGIN_EMAIL_DOMAIN;
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+        if (strlen($email) > SECURITY_LOGIN_EMAIL_MAX_LENGTH) {
+            return null;
+        }
+
+        return $email;
+    }
+}
+
+if (!function_exists('security_login_email_problems')) {
+    /**
+     * Human-readable reasons a new sign-in email is rejected (mirrors
+     * security_password_problems). An empty array means the address is fine.
+     *
+     * Sign-in emails are locked to the church system domain on purpose: it
+     * keeps the login identity (users.email) clearly separate from the
+     * member's personal inbox (users.real_email).
+     */
+    function security_login_email_problems(string $raw): array
+    {
+        $trimmed = strtolower(trim($raw));
+
+        if ($trimmed === '') {
+            return ['Type the new sign-in email first.'];
+        }
+        if (strlen($trimmed) > SECURITY_LOGIN_EMAIL_MAX_LENGTH) {
+            return ['It must be shorter than ' . SECURITY_LOGIN_EMAIL_MAX_LENGTH . ' characters.'];
+        }
+
+        $email = $trimmed;
+        if (!str_contains($email, '@')) {
+            $email .= '@' . SECURITY_LOGIN_EMAIL_DOMAIN;
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return ['That is not a valid email address.'];
+        }
+
+        if (!str_ends_with($email, '@' . SECURITY_LOGIN_EMAIL_DOMAIN)) {
+            return [
+                'Sign-in emails must end in @' . SECURITY_LOGIN_EMAIL_DOMAIN
+                . ' (the church system address) — to change their personal email, edit it on the member profile instead.',
+            ];
+        }
+
+        return [];
     }
 }
 
@@ -754,7 +912,8 @@ if (!function_exists('security_guard_target')) {
 
         if ($actorId === $targetId) {
             return 'For safety you cannot run security actions on your own account here. '
-                 . 'Use My Profile → Security to change your own password.';
+                 . 'Use My Profile → Security to change your own password, or ask another admin '
+                 . 'to change your own sign-in email.';
         }
 
         $targetIsSuper = security_is_super_admin($pdo, $targetId);

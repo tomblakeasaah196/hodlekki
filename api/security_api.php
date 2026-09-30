@@ -46,7 +46,7 @@ if (!security_schema_ready($pdo)) {
 $action        = $_POST['action'] ?? $_GET['action'] ?? '';
 $isSuperAdmin  = security_is_super_admin($pdo, $admin_id);
 $writeActions  = [
-    'set_status', 'reset_password', 'force_logout', 'revoke_session',
+    'set_status', 'reset_password', 'change_email', 'force_logout', 'revoke_session',
     'unlock_account', 'set_force_change', 'restore_roles',
 ];
 
@@ -119,11 +119,15 @@ try {
             break;
 
         // =================================================================
-        // READ: the account roster
+        // READ: the account roster (paginated, 100 per page)
         // =================================================================
         case 'fetch_accounts':
             $search = trim((string) ($_POST['search'] ?? $_GET['search'] ?? ''));
             $filter = (string) ($_POST['filter'] ?? $_GET['filter'] ?? 'all');
+            $page   = max(1, (int) ($_POST['page'] ?? $_GET['page'] ?? 1));
+
+            // Fixed page size — the client cannot ask for everything at once.
+            $perPage = 100;
 
             $where  = [];
             $params = [];
@@ -155,6 +159,9 @@ try {
                 case 'no_password':
                     $where[] = "(u.password_hash IS NULL OR u.password_hash = '')";
                     break;
+                case 'no_email':
+                    $where[] = "(u.email IS NULL OR u.email = '')";
+                    break;
                 case 'online':
                     $where[] = "EXISTS (SELECT 1 FROM user_sessions s
                                          WHERE s.user_id = u.id AND s.revoked_at IS NULL
@@ -164,6 +171,17 @@ try {
                     $where[] = "EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id)";
                     break;
             }
+
+            $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+
+            // Total matching rows, so the pager can offer every page.
+            $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users u{$whereSql}");
+            $countStmt->execute($params);
+            $total = (int) $countStmt->fetchColumn();
+
+            $pages = max(1, (int) ceil($total / $perPage));
+            $page  = min($page, $pages);
+            $offset = ($page - 1) * $perPage;
 
             $sql = "
                 SELECT u.id, u.first_name, u.last_name, u.email, u.phone, u.picture_path,
@@ -181,22 +199,30 @@ try {
                          WHERE s.user_id = u.id AND s.revoked_at IS NULL
                            AND s.last_seen_at >= (NOW() - INTERVAL 1 DAY)) AS live_sessions
                   FROM users u
-            ";
-            if ($where) {
-                $sql .= ' WHERE ' . implode(' AND ', $where);
-            }
-            $sql .= "
+                {$whereSql}
                  ORDER BY (u.account_status <> 'active') DESC,
                           (u.locked_until IS NOT NULL AND u.locked_until > NOW()) DESC,
-                          u.first_name ASC, u.last_name ASC
-                 LIMIT 300
+                          u.first_name ASC, u.last_name ASC, u.id ASC
+                 LIMIT {$perPage} OFFSET {$offset}
             ";
 
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            echo json_encode(['status' => 'success', 'data' => $rows, 'count' => count($rows)]);
+            echo json_encode([
+                'status'      => 'success',
+                'data'        => $rows,
+                'count'       => count($rows),
+                'pagination'  => [
+                    'page'     => $page,
+                    'per_page' => $perPage,
+                    'pages'    => $pages,
+                    'total'    => $total,
+                    'from'     => $total > 0 ? $offset + 1 : 0,
+                    'to'       => $offset + count($rows),
+                ],
+            ]);
             break;
 
         // =================================================================
@@ -478,6 +504,206 @@ try {
                 'status'  => 'success',
                 'message' => "Password reset for {$name}. {$killed} session(s) signed out."
                            . ($requireChange ? ' They must choose a new password at next sign-in.' : ''),
+            ]);
+            break;
+
+        // =================================================================
+        // WRITE: admin changes a member's sign-in (login) email
+        // =================================================================
+        // This is the system-generated email the member types on the sign-in
+        // screen (users.email) — never their personal address (real_email),
+        // which the member edits themselves on their profile. Used when a
+        // member finds their generated address too long or keeps forgetting it.
+        case 'change_email':
+            $target_id     = (int) ($_POST['user_id'] ?? 0);
+            $new_email     = strtolower(trim((string) ($_POST['new_email'] ?? '')));
+            $confirm       = strtolower(trim((string) ($_POST['confirm_email'] ?? '')));
+            $reason        = trim((string) ($_POST['reason'] ?? ''));
+            $killSessions  = !empty($_POST['sign_out_everywhere']);
+
+            $blocked = security_guard_target($pdo, $admin_id, $target_id, 'change_email');
+            if ($blocked !== null) {
+                echo json_encode(['status' => 'error', 'message' => $blocked]);
+                exit;
+            }
+
+            $target = security_api_target($pdo, $target_id);
+            if (!$target) {
+                echo json_encode(['status' => 'error', 'message' => 'That member no longer exists.']);
+                exit;
+            }
+
+            if ($new_email === '' || $confirm === '') {
+                echo json_encode(['status' => 'error', 'message' => 'Type the new sign-in email twice.']);
+                exit;
+            }
+
+            $problems = security_login_email_problems($new_email);
+            if (!empty($problems)) {
+                echo json_encode(['status' => 'error', 'message' => 'Email rejected: ' . implode(' ', $problems)]);
+                exit;
+            }
+
+            // Both entries may be bare prefixes or full addresses — normalise
+            // before comparing so "grace" and "grace@hodlc.com" still match.
+            $newFull     = security_normalize_login_email($new_email);
+            $confirmFull = security_normalize_login_email($confirm);
+
+            if ($newFull === null || $confirmFull === null || !hash_equals($newFull, $confirmFull)) {
+                echo json_encode(['status' => 'error', 'message' => 'The two email addresses do not match.']);
+                exit;
+            }
+
+            $old_email = strtolower(trim((string) $target['email']));
+            $old_display = $old_email !== '' ? $old_email : '(none — no sign-in email was set)';
+
+            if ($newFull === $old_email) {
+                echo json_encode([
+                    'status'  => 'error',
+                    'message' => "That is already {$target['first_name']}'s sign-in email.",
+                ]);
+                exit;
+            }
+
+            // Uniqueness is checked in the application: users.email has no
+            // unique index in the baseline schema, so a duplicate would make
+            // the login query silently pick the first row that matches.
+            // LOWER() keeps this safe whatever the column collation is.
+            $dupStmt = $pdo->prepare("SELECT id FROM users WHERE LOWER(email) = ? AND id <> ? LIMIT 1");
+            $dupStmt->execute([$newFull, $target_id]);
+            if ($dupStmt->fetch()) {
+                echo json_encode([
+                    'status'  => 'error',
+                    'message' => 'That sign-in email is already used by another member. Pick a different one.',
+                ]);
+                exit;
+            }
+
+            $pdo->prepare("UPDATE users SET email = ? WHERE id = ?")->execute([$newFull, $target_id]);
+
+            // Optional: sign them out so their next sign-in uses the new
+            // address (existing sessions stay valid otherwise — sessions are
+            // keyed by user id, not by email).
+            $killed = 0;
+            if ($killSessions) {
+                $killed = security_revoke_sessions(
+                    $pdo,
+                    $target_id,
+                    $admin_id,
+                    'Sign-in email changed by an administrator'
+                );
+            }
+
+            $name = trim($target['first_name'] . ' ' . $target['last_name']);
+
+            security_log(
+                $pdo,
+                'login_email_changed',
+                $target_id,
+                "Sign-in email changed by administrator from {$old_display} to {$newFull}."
+                . ($killSessions ? " Sessions killed: {$killed}." : '')
+                . ($reason !== '' ? " Reason: {$reason}" : '')
+            );
+            security_notify_user(
+                $pdo,
+                $target_id,
+                'Sign-in Email Changed',
+                'Your sign-in email was changed from ' . $old_display . ' to ' . $newFull
+                . ' by an administrator. Use the new one next time you sign in — your password has not changed.'
+            );
+
+            echo json_encode([
+                'status'  => 'success',
+                'message' => "Sign-in email for {$name} is now {$newFull}. Their password is unchanged"
+                           . ($killed > 0 ? " and {$killed} session(s) were signed out" : '')
+                           . '. Tell them — the old address will no longer work.',
+            ]);
+            break;
+
+        // =================================================================
+        // WRITE: generate sign-in emails for every account that has none
+        // =================================================================
+        // One click for "some members were created without an email at all".
+        // Mirrors the generator used when a member is created in the
+        // Congregation module (shortest name parts, numeric suffix until
+        // unique), so bulk-filled addresses look exactly like generated ones.
+        case 'generate_missing_emails':
+            $missing = $pdo->query("
+                SELECT id, first_name, last_name
+                  FROM users
+                 WHERE email IS NULL OR email = ''
+                 ORDER BY first_name ASC, last_name ASC, id ASC
+            ")->fetchAll(PDO::FETCH_ASSOC);
+
+            if (!$missing) {
+                echo json_encode([
+                    'status'  => 'success',
+                    'message' => 'Every account already has a sign-in email — nothing to generate.',
+                    'data'    => ['generated' => [], 'skipped' => []],
+                ]);
+                exit;
+            }
+
+            $update  = $pdo->prepare("UPDATE users SET email = ? WHERE id = ? AND (email IS NULL OR email = '')");
+            $reserved = [];   // addresses handed out in this batch
+            $generated = [];  // rows for the response
+            $skipped   = [];  // members whose names yield no usable prefix
+
+            $pdo->beginTransaction();
+            try {
+                foreach ($missing as $m) {
+                    $email = security_generate_login_email(
+                        $pdo,
+                        (string) $m['first_name'],
+                        (string) $m['last_name'],
+                        $reserved
+                    );
+
+                    $name = trim($m['first_name'] . ' ' . $m['last_name']) ?: 'Member #' . $m['id'];
+
+                    if ($email === null) {
+                        // No letters or digits in either name — nothing to
+                        // build an address from. Set it by hand instead.
+                        $skipped[] = ['id' => (int) $m['id'], 'name' => $name];
+                        continue;
+                    }
+
+                    $update->execute([$email, (int) $m['id']]);
+                    if ($update->rowCount() < 1) {
+                        continue; // email was set by someone else mid-batch — leave it
+                    }
+
+                    $reserved[] = $email;
+                    $generated[] = ['id' => (int) $m['id'], 'name' => $name, 'email' => $email];
+
+                    security_log(
+                        $pdo,
+                        'login_email_generated',
+                        (int) $m['id'],
+                        "Sign-in email generated for a member who had none: {$email}."
+                    );
+                    security_notify_user(
+                        $pdo,
+                        (int) $m['id'],
+                        'Your Sign-in Email',
+                        'Your sign-in email is ' . $email . '. Use it with your password to sign in.'
+                    );
+                }
+                $pdo->commit();
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+
+            $msg = count($generated) . ' sign-in email(s) generated.';
+            if ($skipped) {
+                $msg .= ' ' . count($skipped) . ' member(s) were skipped — their names have no letters or digits, so set an email by hand on the Manage panel.';
+            }
+
+            echo json_encode([
+                'status'  => 'success',
+                'message' => $msg,
+                'data'    => ['generated' => $generated, 'skipped' => $skipped],
             ]);
             break;
 

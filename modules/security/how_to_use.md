@@ -2,7 +2,9 @@
 
 **Who can open it:** Super Admin and the Resident Pastor.
 **Where:** sidebar → *Security & Stewardship* → **Security Centre**
-(`/modules/security/index.php`).
+(`/modules/security/index.php`) — or search "Security" in the Ctrl/Cmd+K
+palette (each tab — Accounts, Live Sessions, Login Activity, Audit Trail — is
+searchable there too).
 
 Clearance is checked against the live `user_roles` table, not
 `$_SESSION['active_role']` — switching your active role on the profile screen
@@ -39,7 +41,8 @@ trail and shown to the member in the sign-in error message.
 ## 2. Guard rails you cannot override
 
 1. **You cannot act on your own account here.** Change your own password at
-   *My Profile → Security*.
+   *My Profile → Security*; to change your own sign-in email, ask another
+   admin to do it from this page.
 2. **A Resident Pastor cannot act on a Super Admin.** Only a Super Admin can.
 3. **The last active Super Admin cannot be suspended or revoked.** Promote a
    second Super Admin in Role Management first.
@@ -81,7 +84,51 @@ Everything they were signed into is signed out immediately.
 
 ---
 
-## 5. Automatic protections (no admin action needed)
+## 5. Changing a member's sign-in email, step by step
+
+Use this when a member keeps forgetting their system-generated sign-in email,
+or finds it too long — they sign in with `grace@hodlc.com`, not their personal
+Gmail/Yahoo address. It also **sets** a sign-in email for members who were
+created without one (the card reads "Set sign-in email" and shows a warning
+that they cannot sign in yet). The personal email lives on their profile and
+is never touched here.
+
+1. **Accounts** tab → search for the member → **Manage**.
+2. Scroll to **Change sign-in email**. Their current sign-in email (and
+   personal email, if they have one) is shown at the top of the card.
+3. Type what they want *before* the `@` — the `@hodlc.com` part is fixed, so
+   it cannot be mistyped. Type it again in the confirm box.
+4. If the account may be compromised, or you simply want them to sign in
+   fresh with the new address, tick **Sign them out of every device now**.
+5. Press **Change sign-in email** and confirm.
+6. **Tell the member the new address** — the old one stops working the moment
+   you press the button. Their password does not change.
+
+The new address must end in `@hodlc.com` and must not already belong to
+another member. Every change is written to the audit trail
+(`login_email_changed`, showing the old and new address) and the member gets
+an in-app notification.
+
+### Filling every missing email at once
+
+If several members have no sign-in email at all, don't do them one by one:
+
+1. **Accounts** tab → **Generate missing emails** (toolbar button).
+2. Confirm. The system generates a unique `@hodlc.com` address for **every**
+   account without one, exactly the way new members' addresses are generated
+   (shortest name parts, e.g. `oluchi.chiamaka@hodlc.com`, with a number
+   appended if that address is already taken).
+3. Each member generated for gets an in-app notification telling them their
+   new sign-in email. One `login_email_generated` audit row is written per
+   member.
+
+Accounts whose names contain no letters or digits (rare) are skipped and
+listed in the message — set those by hand via *Manage*. To see who is missing
+an email first, filter the roster by **No sign-in email**.
+
+---
+
+## 6. Automatic protections (no admin action needed)
 
 - **5 consecutive failed sign-ins** locks the account for **15 minutes** and
   writes an `account_auto_locked` audit row. Clear it early with *Clear lockout*.
@@ -98,7 +145,7 @@ Everything they were signed into is signed out immediately.
 
 ---
 
-## 6. What members see on their side
+## 7. What members see on their side
 
 *My Profile → Security & Password* lets any member:
 
@@ -110,7 +157,7 @@ Everything they were signed into is signed out immediately.
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 **"Security tables are not installed yet."**
 The migration has not run. On the server:
@@ -124,6 +171,13 @@ their browser stays painted until they interact with it.
 **Someone was reinstated but has no modules.**
 Their roles are still frozen by the earlier Revoke. A Super Admin must press
 **Restore roles**, and the member must sign out and back in.
+
+**A member cannot sign in after their email was changed.**
+They are probably still typing the old address — the Login Activity tab will
+show their attempts as `unknown_email` failures. Tell them the new address
+(the Audit Trail records both old and new). If they were signed out of every
+device, they must sign in again with the new email and their existing
+password.
 
 **An admin locked themselves out.**
 Another Super Admin clears it from this page. If literally nobody can get in,
