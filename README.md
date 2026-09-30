@@ -14,6 +14,10 @@ The internal ERP is organised as one directory per module under
 **Members & structure**
 - `congregation` — master member directory and household records.
 - `departments`, `roles` — RBAC matrix, department membership, role assignment.
+- `security` — Security Centre (Super Admin + Resident Pastor): suspend or
+  revoke accounts, reset passwords, kill live sessions, clear failed-login
+  lockouts, and read the login/audit trails. See
+  [`modules/security/how_to_use.md`](modules/security/how_to_use.md).
 - `regions`, `tribes` — geographic and small-group segmentation of members.
 - `profile`, `member_portal`, `parent_portal` — self-service views for
   members, parents of junior-church kids, and staff.
@@ -234,6 +238,19 @@ entry points.
 - Never commit `.env`, live database dumps, member uploads, or anything
   matching `.gitignore`.
 - Run a manual smoke of the module you touched before opening the PR.
+
+### Checks you can run without a database
+
+There is no full test suite, but these run anywhere and are worth doing
+before a PR:
+
+```bash
+php tests/security_helpers_test.php      # password policy, device/IP parsing
+python3 tests/modal_contract_test.py     # shared modal contract
+python3 tests/php_structure_check.py .   # brace/quote sanity when php is absent
+```
+
+CI additionally runs `php -l` over the whole tree plus a secret sweep.
 
 ## License
 

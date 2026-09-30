@@ -48,6 +48,9 @@ tailwind.config.js
 /DEPLOY.md
 /AGENTS.md
 
+# Developer test scripts — never serve these from the docroot
+tests/
+
 # IDE / OS junk
 .vscode/
 .idea/

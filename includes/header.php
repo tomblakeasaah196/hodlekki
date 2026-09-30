@@ -10,8 +10,25 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Ensure the database connection is available for department checks
+// Ensure the database connection is available for department checks.
+// db.php also runs security_enforce_session(), which tears down the session if
+// the account has been suspended, revoked or signed out by an administrator —
+// so the guard above catches it on the very next request.
 require_once __DIR__ . '/db.php';
+
+// Re-check after the security gate: the session may have just been destroyed.
+if (!isset($_SESSION['user_id'])) {
+    header("Location: /auth/login.php");
+    exit;
+}
+
+// An outstanding forced password change blocks every other authenticated page.
+// /auth/change_password.php deliberately does NOT include this file, so there
+// is no redirect loop.
+if (!empty($_SESSION['must_change_password'])) {
+    header("Location: /auth/change_password.php");
+    exit;
+}
 
 $firstName = htmlspecialchars($_SESSION['first_name'] ?? 'User');
 $activeRole = htmlspecialchars($_SESSION['active_role'] ?? 'Member');
@@ -423,6 +440,13 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
     <a href="/modules/roles/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'roles') ?>">
         <svg class="w-5 h-5 shrink-0 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
         <span class="font-bold text-sm text-red-700">Role Management</span>
+    </a>
+    <?php endif; ?>
+
+    <?php if (userHasNavAccess(['Resident_Pastor'], [])): // Super Admin + Resident Pastor ?>
+    <a href="/modules/security/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'security') ?>">
+        <svg class="w-5 h-5 shrink-0 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+        <span class="font-bold text-sm text-red-700">Security Centre</span>
     </a>
     <?php endif; ?>
     

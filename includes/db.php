@@ -56,4 +56,15 @@ try {
         "message" => "Database Connection Failed: Check your configuration or credentials."
     ]));
 }
+
+// 9. Account security gate.
+//    Hooking this in here (rather than in header.php) means a single call
+//    covers every authenticated page AND every api/*.php endpoint: when an
+//    admin suspends, revokes or force-signs-out an account in the Security
+//    Centre, the very next request from that browser loses its session.
+//    It never redirects or prints — it only tears the session down, so
+//    header.php bounces the user to /auth/login.php and API endpoints fall
+//    through to their own "Unauthorized" JSON. CLI (cron) is skipped.
+require_once __DIR__ . '/security_helpers.php';
+security_enforce_session($pdo);
 ?>
