@@ -54,8 +54,16 @@ if (isset($_SESSION['user_id'])) {
         <div class="w-full max-w-md m-auto bg-white/10 backdrop-blur-2xl border border-white/20 rounded-3xl p-6 sm:p-8 shadow-2xl transition-all duration-300">
             
             <div class="text-center mb-8">
-                <h1 class="text-2xl font-display font-bold text-white tracking-tight">Security Setup</h1>
-                <p id="subheading" class="text-blue-100/70 text-sm mt-2">Enter your registered email to set a new password.</p>
+                <h1 class="text-2xl font-display font-bold text-white tracking-tight">First-Time Password Setup</h1>
+                <p id="subheading" class="text-blue-100/70 text-sm mt-2">For accounts that have never had a password. Enter your registered email to create one.</p>
+            </div>
+
+            <div class="mb-6 p-4 rounded-xl text-xs font-medium bg-white/5 border border-white/15 text-blue-100/80 leading-relaxed">
+                <strong class="block text-white font-bold mb-1">Already have a password?</strong>
+                This page can only create a password for the very first time. To change an existing one,
+                <a href="/auth/login.php" class="underline decoration-white/30 underline-offset-2 hover:text-white">sign in</a>
+                and go to <span class="text-white font-semibold">My Profile → Security</span>, or ask a church
+                administrator to reset it for you.
             </div>
 
             <div id="alert-box" class="hidden mb-6 p-4 rounded-xl text-sm font-medium transition-all shadow-sm"></div>

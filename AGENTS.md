@@ -43,6 +43,12 @@ follow-up on a plain PHP 8.3 + MySQL stack.
     `Content-Type: application/json`, then check `$_SESSION['user_id']`
     and often `$_SESSION['active_role']` + department membership. See
     `api/reach_api.php` for the canonical shape.
+  - **`includes/db.php` runs `security_enforce_session($pdo)` on every
+    non-CLI request.** If the account has been suspended/revoked, the
+    session individually revoked, or "sign out everywhere" pressed, it
+    silently destroys the session — it never redirects or prints, so the
+    existing `!isset($_SESSION['user_id'])` guard in each page/endpoint
+    does the rest. Do not add output or redirects to that function.
 - **RBAC roles** (values of `$_SESSION['active_role']`):
   `Super_Admin`, `Resident_Pastor`, `Assoc_Pastor`, `Church_Member`, plus
   department-based clearance via the `user_departments` table.
@@ -194,12 +200,56 @@ follow-up on a plain PHP 8.3 + MySQL stack.
 - Do not open a PR that pushes secrets, member uploads, `.env`, or SQL
   dumps. Run `git status` before every commit.
 
+## Account security (added 2026-09-30)
+
+Schema: `db/migrations/20261005090000_security_core.sql`.
+Helpers: `includes/security_helpers.php` (every function no-ops safely if
+that migration has not been applied yet — the tree is rsynced to prod
+*before* `php db/migrate.php` runs, so nothing may hard-fail in that gap).
+
+- **`users` columns:** `account_status` (`active` / `suspended` /
+  `revoked`), `status_reason`, `status_changed_at/by`,
+  `must_change_password`, `password_changed_at`, `sessions_valid_from`,
+  `last_login_at/ip`, `failed_login_count`, `locked_until`.
+- **New tables:** `security_audit_log`, `user_sessions` (keyed by
+  `sha256(session_id)` — never store the raw session id), `login_attempts`.
+- **Password policy lives in ONE place:** `security_password_problems()`.
+  Every entry point calls it (self-service change, admin reset, first-time
+  setup). Do not re-implement length/complexity checks inline.
+- **Never write `users.password_hash` without also** setting
+  `password_changed_at`, clearing `failed_login_count` / `locked_until`,
+  and calling `security_revoke_sessions()`. A credential change must kill
+  existing sessions.
+- **Revoking freezes roles** (`user_roles.is_frozen = 1`) and
+  `api/auth_api.php` excludes frozen rows when building
+  `$_SESSION['roles']`. That flag used to be dead — `roles_api.php`
+  wrote it and nothing read it. If you touch role loading, keep the
+  `COALESCE(ur.is_frozen, 0) = 0` filter.
+- **Guard rails** are server-side in `security_guard_target()`: no acting
+  on yourself, a `Resident_Pastor` cannot act on a `Super_Admin`, and the
+  last active `Super_Admin` cannot be suspended or revoked. Reuse it for
+  any new privileged action rather than re-checking by hand.
+- **`/auth/setup_password.php` is FIRST-TIME ONLY.** It is public, so it
+  refuses any account whose `password_hash` is already set, and is
+  rate-limited per IP. Do not loosen this — before 2026-09-30 anyone who
+  knew a member's first name and phone number could take over their
+  account from the open internet.
+- **`/auth/change_password.php` must never include `includes/header.php`.**
+  header.php redirects to it whenever `must_change_password` is set;
+  including header.php there would be an infinite redirect loop.
+- Security Centre changes should update `modules/security/how_to_use.md`
+  (same courtesy as Reach / Assimilation, though CI does not enforce it
+  for this module yet).
+
 ## Common pitfalls spotted during onboarding
 
 - `includes/auth_middleware.php` is currently an **empty file**. Do not
   rely on it as a guard; every page/API rolls its own session check.
-  If you consolidate auth, wire the new middleware into every endpoint
-  in the same PR — otherwise gates go missing silently.
+  The one shared hook that *does* run everywhere is
+  `security_enforce_session()` in `includes/db.php` (account status and
+  session revocation only — it does not do RBAC). If you consolidate
+  auth further, wire the new middleware into every endpoint in the same
+  PR — otherwise gates go missing silently.
 - The Geoapify API key is hardcoded in four places (`connect.php`,
   `modules/congregation/index.php`, `modules/embrace/index.php`,
   `modules/profile/index.php`). Long-term this should be replaced with

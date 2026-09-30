@@ -7,6 +7,18 @@ if (isset($_SESSION['user_id'])) {
     header("Location: /index.php");
     exit;
 }
+
+// Constants only — this file has no DB work to do.
+require_once __DIR__ . '/../includes/security_helpers.php';
+
+// When the security gate tears a session down (suspension, revoke, "sign out
+// everywhere"), it leaves a short-lived cookie explaining why. Show it once,
+// then clear it.
+$signOutNotice = '';
+if (!empty($_COOKIE[SECURITY_SIGNOUT_COOKIE])) {
+    $signOutNotice = substr((string) $_COOKIE[SECURITY_SIGNOUT_COOKIE], 0, 300);
+    setcookie(SECURITY_SIGNOUT_COOKIE, '', ['expires' => time() - 3600, 'path' => '/']);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -119,6 +131,13 @@ if (isset($_SESSION['user_id'])) {
                         <p class="text-gray-500 text-sm mt-1">Enter your details to access your dashboard.</p>
                     </div>
 
+                    <?php if ($signOutNotice !== ''): ?>
+                    <div class="mb-6 p-4 rounded-xl text-sm font-semibold bg-amber-50 text-amber-800 border border-amber-200 shadow-sm flex items-start gap-3">
+                        <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        <span><?= htmlspecialchars($signOutNotice) ?></span>
+                    </div>
+                    <?php endif; ?>
+
                     <div id="alert-box" class="hidden mb-6 p-4 rounded-xl text-sm font-medium transition-all shadow-sm"></div>
 
                     <form id="loginForm" class="space-y-5">
@@ -132,7 +151,7 @@ if (isset($_SESSION['user_id'])) {
                         <div>
                             <div class="flex items-center justify-between mb-2">
                                 <label for="password" class="block text-xs font-semibold text-gray-600 uppercase tracking-wider">Password</label>
-                                <a href="/auth/setup_password.php" class="text-xs font-semibold text-hodRed hover:text-red-700 transition-colors underline decoration-hodRed/30 underline-offset-4">Set/Change password?</a>
+                                <a href="/auth/setup_password.php" class="text-xs font-semibold text-hodRed hover:text-red-700 transition-colors underline decoration-hodRed/30 underline-offset-4">First time? Set your password</a>
                             </div>
                             <input type="password" id="password" name="password" required 
                                 class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-hodBlue focus:border-transparent transition-all bg-gray-50 hover:bg-white focus:bg-white outline-none text-gray-800 shadow-sm"

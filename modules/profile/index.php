@@ -183,6 +183,124 @@ if (!isset($_SESSION['user_id'])) {
             </button>
         </div>
     </form>
+
+    <!-- ============================================================ -->
+    <!-- SECURITY: CHANGE PASSWORD + SIGN-IN ACTIVITY                 -->
+    <!-- ============================================================ -->
+    <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden" id="securityCard">
+        <div class="px-6 py-5 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center text-white shadow-sm shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-bold text-gray-900">Security &amp; Password</h3>
+                <p class="text-xs text-gray-500 font-medium">Change your password and review where you are signed in.</p>
+            </div>
+        </div>
+
+        <div id="forcedChangeBanner" class="hidden mx-6 mt-6 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl p-4 text-sm font-semibold">
+            An administrator has asked you to set a new password before you continue.
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-0">
+
+            <!-- Change password form -->
+            <form id="changePasswordForm" class="lg:col-span-3 p-6 space-y-5 lg:border-r border-gray-100" autocomplete="off">
+                <input type="hidden" name="action" value="change_password">
+
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-700 uppercase mb-1.5">Current Password</label>
+                    <div class="relative">
+                        <input type="password" name="current_password" id="inpCurrentPw" required autocomplete="current-password"
+                            class="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-gray-900 font-bold focus:border-hodBlue focus:ring-1 focus:ring-hodBlue outline-none transition-all"
+                            placeholder="Enter the password you use today">
+                        <button type="button" data-toggle-pw="inpCurrentPw" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 p-1" aria-label="Show password">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-700 uppercase mb-1.5">New Password</label>
+                        <div class="relative">
+                            <input type="password" name="new_password" id="inpNewPw" required autocomplete="new-password"
+                                class="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-gray-900 font-bold focus:border-hodBlue focus:ring-1 focus:ring-hodBlue outline-none transition-all"
+                                placeholder="Choose a strong password">
+                            <button type="button" data-toggle-pw="inpNewPw" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 p-1" aria-label="Show password">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-700 uppercase mb-1.5">Confirm New Password</label>
+                        <div class="relative">
+                            <input type="password" name="confirm_password" id="inpConfirmPw" required autocomplete="new-password"
+                                class="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-gray-900 font-bold focus:border-hodBlue focus:ring-1 focus:ring-hodBlue outline-none transition-all"
+                                placeholder="Type it once more">
+                            <button type="button" data-toggle-pw="inpConfirmPw" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 p-1" aria-label="Show password">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                            </button>
+                        </div>
+                        <p id="pwMatchNote" class="hidden text-[11px] font-bold mt-1.5"></p>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 border border-gray-100 rounded-2xl p-4 space-y-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Password Strength</span>
+                        <span id="pwStrengthLabel" class="text-[11px] font-bold text-gray-400 uppercase">Waiting…</span>
+                    </div>
+                    <div class="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                        <div id="pwStrengthBar" class="h-full w-0 bg-gray-300 rounded-full transition-all duration-300"></div>
+                    </div>
+                    <ul id="pwRules" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] font-semibold text-gray-500 pt-1"></ul>
+                </div>
+
+                <label class="flex items-start gap-3 cursor-pointer select-none">
+                    <input type="checkbox" name="sign_out_others" value="1" checked
+                        class="mt-0.5 w-4 h-4 rounded border-gray-300 text-hodBlue focus:ring-hodBlue cursor-pointer">
+                    <span class="text-xs text-gray-600 font-medium leading-relaxed">
+                        Sign out my other devices after changing the password.
+                        <span class="block text-gray-400">Recommended if you think someone else has used your account.</span>
+                    </span>
+                </label>
+
+                <button type="submit" class="w-full sm:w-auto bg-hodRed hover:bg-red-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-red-500/20 transition-all flex items-center justify-center gap-2">
+                    Update Password
+                </button>
+            </form>
+
+            <!-- Sign-in activity -->
+            <div class="lg:col-span-2 p-6 bg-gray-50/40 space-y-5">
+                <div class="grid grid-cols-1 gap-3">
+                    <div class="bg-white border border-gray-100 rounded-2xl p-4">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Last Sign-in</p>
+                        <p id="secLastLogin" class="text-sm font-bold text-gray-900">—</p>
+                        <p id="secLastIp" class="text-[11px] text-gray-400 font-medium mt-0.5"></p>
+                    </div>
+                    <div class="bg-white border border-gray-100 rounded-2xl p-4">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Password Last Changed</p>
+                        <p id="secPwChanged" class="text-sm font-bold text-gray-900">—</p>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Signed-in Devices</p>
+                        <span id="secSessionCount" class="text-[10px] font-bold text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">0</span>
+                    </div>
+                    <div id="secSessionList" class="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                        <p class="text-xs text-gray-400 font-medium">Loading…</p>
+                    </div>
+                    <button type="button" id="btnSignOutOthers"
+                        class="mt-3 w-full border border-gray-300 hover:border-hodRed hover:text-hodRed text-gray-700 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all">
+                        Sign out all other devices
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="nameChangeModal" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]">
@@ -475,11 +593,177 @@ function initAddressAutocomplete() {
     });
 
     // ==========================================
+    // SECURITY: PASSWORD CHANGE + SIGNED-IN DEVICES
+    // ==========================================
+    const PW_MIN_LENGTH = 10;
+
+    const PW_RULES = [
+        { id: 'len',   label: `At least ${PW_MIN_LENGTH} characters`, test: v => v.length >= PW_MIN_LENGTH },
+        { id: 'upper', label: 'One UPPERCASE letter',                 test: v => /[A-Z]/.test(v) },
+        { id: 'lower', label: 'One lowercase letter',                 test: v => /[a-z]/.test(v) },
+        { id: 'digit', label: 'One number',                           test: v => /[0-9]/.test(v) },
+        { id: 'sym',   label: 'A symbol (optional, stronger)',        test: v => /[^A-Za-z0-9]/.test(v), optional: true }
+    ];
+
+    function escHtml(value) {
+        if (value === null || value === undefined) return '';
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function prettyDate(raw) {
+        if (!raw) return null;
+        const d = new Date(String(raw).replace(' ', 'T'));
+        if (isNaN(d.getTime())) return String(raw);
+        return d.toLocaleString('en-GB', {
+            day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
+        });
+    }
+
+    function renderPwRules() {
+        $('#pwRules').html(PW_RULES.map(r => `
+            <li data-rule="${r.id}" class="flex items-center gap-2">
+                <span class="rule-dot w-3.5 h-3.5 rounded-full border-2 border-gray-300 shrink-0"></span>
+                <span class="rule-text text-gray-500">${r.label}</span>
+            </li>`).join(''));
+    }
+
+    function evaluatePassword() {
+        const value = $('#inpNewPw').val() || '';
+        let requiredTotal = 0, requiredMet = 0, bonus = 0;
+
+        PW_RULES.forEach(rule => {
+            const ok = rule.test(value);
+            if (rule.optional) {
+                if (ok) bonus++;
+            } else {
+                requiredTotal++;
+                if (ok) requiredMet++;
+            }
+            const li = $(`#pwRules li[data-rule="${rule.id}"]`);
+            li.find('.rule-dot')
+                .toggleClass('bg-emerald-500 border-emerald-500', ok)
+                .toggleClass('border-gray-300', !ok);
+            li.find('.rule-text')
+                .toggleClass('text-emerald-700', ok)
+                .toggleClass('text-gray-500', !ok);
+        });
+
+        let score = 0;
+        if (value.length > 0) {
+            score = (requiredMet / requiredTotal) * 70;
+            if (value.length >= 14) score += 15;
+            else if (value.length >= 12) score += 8;
+            if (bonus) score += 15;
+            score = Math.min(100, Math.round(score));
+        }
+
+        let label = 'Waiting…', colour = 'bg-gray-300', text = 'text-gray-400';
+        if (value.length > 0) {
+            if (requiredMet < requiredTotal) { label = 'Too weak';  colour = 'bg-red-500';     text = 'text-red-600'; }
+            else if (score < 80)             { label = 'Good';      colour = 'bg-amber-500';   text = 'text-amber-600'; }
+            else                             { label = 'Strong';    colour = 'bg-emerald-500'; text = 'text-emerald-600'; }
+        }
+
+        $('#pwStrengthBar').css('width', score + '%')
+            .removeClass('bg-gray-300 bg-red-500 bg-amber-500 bg-emerald-500').addClass(colour);
+        $('#pwStrengthLabel').text(label)
+            .removeClass('text-gray-400 text-red-600 text-amber-600 text-emerald-600').addClass(text);
+
+        checkPwMatch();
+    }
+
+    function checkPwMatch() {
+        const a = $('#inpNewPw').val() || '';
+        const b = $('#inpConfirmPw').val() || '';
+        const note = $('#pwMatchNote');
+
+        if (b.length === 0) { note.addClass('hidden'); return; }
+
+        if (a === b) {
+            note.removeClass('hidden text-red-600').addClass('text-emerald-600').text('Passwords match.');
+        } else {
+            note.removeClass('hidden text-emerald-600').addClass('text-red-600').text('Passwords do not match yet.');
+        }
+    }
+
+    function resetPasswordForm() {
+        $('#changePasswordForm')[0].reset();
+        $('#changePasswordForm input[name="sign_out_others"]').prop('checked', true);
+        $('#pwMatchNote').addClass('hidden');
+        evaluatePassword();
+    }
+
+    function loadSecurity() {
+        $.post(API_URL, { action: 'fetch_security' }, function(res) {
+            if (res.status !== 'success') return;
+            const d = res.data || {};
+
+            $('#secLastLogin').text(prettyDate(d.last_login_at) || 'This is your first recorded sign-in');
+            $('#secLastIp').text(d.last_login_ip ? `from ${d.last_login_ip}` : '');
+            $('#secPwChanged').text(prettyDate(d.password_changed_at) || 'Not recorded yet');
+
+            const sessions = d.sessions || [];
+            $('#secSessionCount').text(sessions.length);
+
+            if (!sessions.length) {
+                $('#secSessionList').html('<p class="text-xs text-gray-400 font-medium">No other signed-in devices on record.</p>');
+            } else {
+                $('#secSessionList').html(sessions.map(s => `
+                    <div class="bg-white border ${s.is_current ? 'border-emerald-200' : 'border-gray-100'} rounded-xl px-3 py-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-xs font-bold text-gray-900 truncate">${escHtml(s.device)}</span>
+                            ${s.is_current ? '<span class="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full uppercase shrink-0">This device</span>' : ''}
+                        </div>
+                        <p class="text-[10px] text-gray-400 font-medium mt-0.5">
+                            ${escHtml(s.ip_address || 'unknown IP')} · last active ${escHtml(prettyDate(s.last_seen_at) || '—')}
+                        </p>
+                    </div>`).join(''));
+            }
+
+            if (d.must_change_password) {
+                $('#forcedChangeBanner').removeClass('hidden');
+            }
+        }, 'json');
+    }
+
+    // Show / hide password toggles
+    $(document).on('click', '[data-toggle-pw]', function() {
+        const input = $('#' + $(this).data('toggle-pw'));
+        const isHidden = input.attr('type') === 'password';
+        input.attr('type', isHidden ? 'text' : 'password');
+        $(this).toggleClass('text-hodBlue', isHidden).toggleClass('text-gray-400', !isHidden);
+    });
+
+    $(document).on('input', '#inpNewPw', evaluatePassword);
+    $(document).on('input', '#inpConfirmPw', checkPwMatch);
+
+    $(document).on('click', '#btnSignOutOthers', function() {
+        if (!confirm('Sign out every other device signed in as you? This device stays signed in.')) return;
+
+        const btn = $(this);
+        btn.prop('disabled', true).addClass('opacity-60');
+
+        $.post(API_URL, { action: 'sign_out_other_devices' }, function(res) {
+            btn.prop('disabled', false).removeClass('opacity-60');
+            showToast(res.message, res.status);
+            if (res.status === 'success') loadSecurity();
+        }, 'json');
+    });
+
+    // ==========================================
     // INITIALIZATION
     // ==========================================
     $(document).ready(function() {
         loadProfile();
         initAddressAutocomplete();
+        renderPwRules();
+        evaluatePassword();
+        loadSecurity();
 
         // Main Form Save
         handleAjaxForm('profileForm');
@@ -488,6 +772,18 @@ function initAddressAutocomplete() {
         handleAjaxForm('nameChangeForm', function() {
             closeModal('nameChangeModal');
         });
+
+        // Password Change
+        handleAjaxForm('changePasswordForm', function() {
+            resetPasswordForm();
+            $('#forcedChangeBanner').addClass('hidden');
+            loadSecurity();
+        });
+
+        // Deep link from the nav / a forced-change redirect
+        if (window.location.hash === '#security') {
+            document.getElementById('securityCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     });
 </script>
 
