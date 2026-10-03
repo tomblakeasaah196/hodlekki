@@ -158,11 +158,20 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   script:
   1. `git fetch origin main && git reset --hard origin/main` in
      `/home/smartqaq/repositories/hodlekki`.
-  2. `rsync -a --delete` from repo → `/home/smartqaq/public_html/hodlc.lpc.cm/`,
-     applying `.deployignore` so `.env`, root `.htaccess`, `.user.ini`,
-     `uploads/`, `assets/uploads/`, and `error_log` files survive.
-     Nested `.htaccess` files (e.g. `webhook/.htaccess`) DO sync,
-     because the docroot pattern is anchored with `/`.
+  2. Copy repo → `/home/smartqaq/public_html/hodlc.lpc.cm/` by streaming
+     through **`tar`** (rsync is not installed on this host), applying
+     `--exclude-from=.deployignore` so `.env`, root `.htaccess`,
+     `.user.ini`, `php.ini`, `uploads/`, `assets/uploads/`, and
+     `error_log` files survive. Nested `.htaccess` files (e.g.
+     `webhook/.htaccess`) DO deploy, because the docroot entry is
+     written root-anchored as `./.htaccess`.
+     **The copy never deletes.** A file removed or renamed in the repo
+     lingers in the docroot until someone deletes it by hand.
+     `.deployignore` is read by tar, not rsync: root-only entries are
+     written `./name`, bare names match at any depth, and a pattern that
+     starts or ends with `/` is silently ignored. The lint job's
+     "Deploy exclusions must hold under tar" step enforces this — read
+     the comment at the top of `.deployignore` before editing it.
   3. `composer install --no-dev --optimize-autoloader` using
      `/home/smartqaq/composer.phar` (needs `-d allow_url_fopen=On`
      because CLI php.ini disables it on this host).

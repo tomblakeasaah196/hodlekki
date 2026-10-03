@@ -133,9 +133,10 @@ and LiteSpeed. Deploys are automated: every push to `main` triggers a
 GitHub Actions workflow (`.github/workflows/deploy.yml`) that lints the
 tree, then POSTs (with an `X-Deploy-Token` header) to a webhook on the
 live site (`https://hodlc.lpc.cm/webhook/deploy.php`). The webhook runs
-[`bin/deploy.sh`](bin/deploy.sh), which does the `git pull`, rsyncs the
-repo into the docroot, runs `composer install --no-dev`, and applies
-any pending migrations from `db/migrations/`.
+[`bin/deploy.sh`](bin/deploy.sh), which does the `git pull`, copies the
+repo into the docroot with `tar` (honouring `.deployignore`, and never
+deleting), runs `composer install --no-dev`, and applies any pending
+migrations from `db/migrations/`.
 
 The same `bin/deploy.sh` is what cPanel's `.cpanel.yml` runs when you
 click **Deploy HEAD Commit** manually, so both automatic and manual
