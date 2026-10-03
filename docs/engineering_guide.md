@@ -3193,7 +3193,7 @@ Each PR sets its **own** row to ✅, with the PR link, the date and notes for th
 | PR | Status | Pull request | Merged | Notes for the next PR |
 |---|---|---|---|---|
 | Guide | ✅ | [#28](https://github.com/tomblakeasaah196/hodlekki/pull/28) | 2026-10-03 | Design, build plan and prompts. The Appendix A SQL was tested on MySQL 8.0.46 and MariaDB 10.11.14. |
-| PR0 | ⬜ | — | — | — |
+| PR0 | ✅ | [#29](https://github.com/tomblakeasaah196/hodlekki/pull/29) | 2026-10-03 | `.deployignore` is now in **tar** pattern format: root-only entries are `./name`, bare names match at any depth, and a pattern starting or ending with `/` is silently ignored (that was O16). Read the header comment in the file before adding entries. The lint job step "Deploy exclusions must hold under tar" re-runs the deploy's tar pipeline on every push and pull request and fails if `.git`, `.github`, `.cpanel.yml`, `.deployignore`, `php.ini`, `tests`, `docs`, `AGENTS.md` or `DEPLOY.md` would be copied, or if `index.php`, `includes/db.php` or `webhook/.htaccess` would not be — so PR1 must add `./live` in `./name` form and keep `assets/se/**` copyable. The deploy copy **never deletes**: a renamed or removed public file lingers in the docroot (§5 risk table). Owner cleanup of the already-published `.git/`, `.github/`, `tests/`, `docs/`, `AGENTS.md`, `DEPLOY.md` is tracked in §27 (O16). |
 | PR1 | ⬜ | — | — | — |
 | PR2 | ⬜ | — | — | — |
 | PR3 | ⬜ | — | — | — |
