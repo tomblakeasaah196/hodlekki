@@ -1,0 +1,4 @@
+# Repo-only documentation. Never serve anything in this folder, even if a
+# deploy copies it into the docroot.
+Options -Indexes
+Require all denied
