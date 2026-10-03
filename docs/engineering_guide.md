@@ -2786,7 +2786,7 @@ live/*
 !live/.keep
 ```
 
-`.deployignore`: `live/` needs no entry (runtime files are never in the repo, and tar never deletes them). But `bin/deploy.sh` copies with **tar**, and tar ignores every pattern that starts or ends with `/` (tested with GNU tar 1.35): the existing `tests/` entry does **not** keep `tests/special_events/**` out of the docroot. Add `./tests` (tar matches member names such as `./tests`), as `./docs` was added with this guide (plus `docs/.htaccess` deny-all). The other affected entries are open item O16.
+`.deployignore`: `live/` needs no entry (runtime files are never in the repo, and tar never deletes them). The rest is already done: **PR0** rewrote the whole file in tar's pattern format, because `bin/deploy.sh` copies with **tar**, and tar silently ignores every pattern that starts or ends with `/` (tested with GNU tar 1.35) — the old `tests/` entry kept nothing out of the docroot. `./tests` and `./docs` now do (plus `docs/.htaccess` deny-all), and the lint job's "Deploy exclusions must hold under tar" step fails the build if any of them regresses. When PR1 adds files, follow the format documented at the top of `.deployignore`: root-only entries are written `./name`, bare names match at any depth.
 
 ### 21.4 Login "return to" (`auth/login.php`, `api/auth_api.php`)
 
@@ -3132,7 +3132,7 @@ Planned design so v1 does not paint us into a corner:
 | O13 | SMS: sender ID confirmed, units budget for ~300 reminders + ~150 thank-yous | Tom-Blake / Finance | Phase B |
 | O14 | Reach/Embrace HODs agree to the hand-off rules (§17.2) | Chidera / Odun-Ayo | Phase D |
 | O15 | Whether `/e/` hub should be public | Envision | Phase D (optional) |
-| O16 | **Deploy exclusions do not work under tar.** `.deployignore` was written for rsync. tar ignores entries that start or end with `/`, so `.git/`, `.github/`, `tests/`, `/AGENTS.md`, `/DEPLOY.md` and `/php.ini` are copied into the docroot on every deploy. Check that `https://hodlc.lpc.cm/.git/config` returns 403/404, rewrite the entries in tar form (`./.git`, `./.github`, `./tests`, `./AGENTS.md`, `./DEPLOY.md`, `./php.ini`, …) in a separate PR, and test it with a manual cPanel deploy (AGENTS.md). Remove any copies already in the docroot, because tar never deletes. Scheduled as **PR0** (§28). | Tom-Blake | Before the Phase A deploy |
+| O16 | ✅ **Fixed by PR0.** *(Deploy exclusions did not work under tar: `.deployignore` was written for rsync, and tar silently ignores entries that start or end with `/`, so `.git/`, `.github/`, `tests/`, `/AGENTS.md`, `/DEPLOY.md` and `/php.ini` were copied into the docroot on every deploy.)* Every entry is now in tar form, and a lint-job step re-runs the deploy's tar pipeline on each push and pull request and fails if any of those paths would be copied. **Two things are still on the owner:** (a) delete the copies already in the docroot — tar never deletes — via cPanel File Manager in `public_html/hodlc.lpc.cm/`: `.git/`, `.github/`, `tests/`, `docs/`, `AGENTS.md`, `DEPLOY.md`, and confirm `https://hodlc.lpc.cm/.git/config` then returns 403/404; (b) note that `./php.ini` is excluded, so edits to the repo's `php.ini` no longer deploy — the docroot copy is authoritative, as that file intends. | Tom-Blake | Cleanup after the PR0 merge, before the Phase A deploy |
 
 ---
 
@@ -3211,6 +3211,8 @@ Every design change made during the build is logged here (newest last), and the 
 | 2026-10-03 | Guide | §9.4, A.3, A.7 | `se_message_runs` moved from the Phase B migration into `se_ops` (Phase A). A.7 renamed `20261013090200_se_live_state.sql`. | Waitlist promotions and on-demand link SMS ship with registration (PR2). |
 | 2026-10-03 | Guide | Appendix A rules, §9.5 | `fk_se_karaoke_reg` is `ON DELETE RESTRICT`, and deleting a draft removes karaoke rows first. | MySQL 8 rejects `CASCADE` on a column that feeds a stored generated column. |
 | 2026-10-03 | Guide | §11.13 | Test mode and Reset rehearsal start in PR3, with the toggle in Studio → Live and the host console. PR4–PR6 extend the reset to their tables. | The check-in rehearsal (PR3) needs test mode before any game exists. |
+| 2026-10-03 | PR0 | §21.3, §27 (O16) | `./composer.phar`, `./tailwindcss-linux-x64`, `./input.css` and `./tailwind.config.js` are root-anchored in `.deployignore`, not bare. `node_modules`, `.env*`, `error_log`, `.vscode`, `.idea`, `.DS_Store` and `Thumbs.db` stay bare (any depth), as PR0 specifies. | A bare `input.css` would also match `assets/se/css/input.css`, the Tailwind source PR1 adds (§13.1), and silently stop it deploying. The four are root-only dev artefacts, so the root-only form is the correct one. |
+| 2026-10-03 | PR0 | §27 (O16) | The CI guard also asserts that `index.php`, `includes/db.php` and `webhook/.htaccess` **would** be copied, on top of the excluded-path checks PR0 lists. | A pattern broad enough to exclude the whole tree would otherwise pass a guard that only looks for paths that must be absent. `webhook/.htaccess` is the regression test for the root-anchored `./.htaccess` entry (§21.3). |
 
 ---
 

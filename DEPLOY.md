@@ -11,9 +11,15 @@ Every push to `main` triggers `.github/workflows/deploy.yml`, which:
 4. `bin/deploy.sh` (held under a `flock` so two deploys can't collide):
    a. `git fetch origin main && git reset --hard origin/main` on
       `/home/smartqaq/repositories/hodlekki`.
-   b. `rsync -a --delete` the repo → `/home/smartqaq/public_html/hodlc.lpc.cm/`,
-      applying `.deployignore` so `.env`, root `.htaccess`, `.user.ini`,
-      `uploads/`, `assets/uploads/`, and every `error_log` file survive.
+   b. Copies the repo → `/home/smartqaq/public_html/hodlc.lpc.cm/` by
+      streaming through `tar` (rsync is not installed on this host),
+      applying `--exclude-from=.deployignore` so `.env`, root
+      `.htaccess`, `.user.ini`, `php.ini`, `uploads/`, `assets/uploads/`,
+      and every `error_log` file survive. **The copy never deletes:**
+      files removed or renamed in the repo stay in the docroot until
+      someone deletes them by hand. `.deployignore` is in tar's pattern
+      format, not rsync's — see the comment at the top of that file, and
+      the lint job step that verifies it.
    c. `composer install --no-dev --optimize-autoloader`.
    d. `php db/migrate.php` — applies any new files in `db/migrations/`.
    e. `php db/backfill_embrace_sunday_checkins.php` — reconciliation pass,
@@ -110,7 +116,7 @@ Push any small change to `main` (or in GitHub → Actions → the last run
 → Re-run all jobs). Watch:
 
 - Actions → CI + Deploy — the `Deploy via webhook` job should stream
-  `[deploy] pre-pull HEAD: ...`, rsync output, composer output, and
+  `[deploy] pre-pull HEAD: ...`, the `[deploy] tar -> ...` line, composer output, and
   finish with `[webhook] DEPLOY OK` + HTTP 200.
 - The live site — new commit should be reflected.
 - cPanel → Terminal:

@@ -41,6 +41,48 @@ jobs:
             exit 1
           fi
 
+      - name: Deploy exclusions must hold under tar (.deployignore)
+        run: |
+          set -euo pipefail
+
+          # bin/deploy.sh copies the repo into the public docroot with
+          #   tar cf - --exclude-from="$REPO/.deployignore" -C "$REPO" .
+          # Same invocation here, to a temp archive so we can list it. tar
+          # silently ignores patterns that start or end with "/", so a single
+          # stale rsync-style entry puts .git or tests/ on the public web
+          # with no error anywhere (open item O16 in docs/engineering_guide.md).
+          tarball=$(mktemp)
+          members=$(mktemp)
+          trap 'rm -f "$tarball" "$members"' EXIT
+          tar cf "$tarball" --exclude-from=.deployignore -C . .
+          tar tf "$tarball" > "$members"
+
+          fail=0
+
+          # Nothing in this list may ever reach the docroot.
+          for path in .git .github .cpanel.yml .deployignore php.ini \
+                      tests docs AGENTS.md DEPLOY.md; do
+            if grep -qE "^\./${path//./\\.}(/|\$)" "$members"; then
+              echo "::error file=.deployignore::'${path}' would be copied into the public docroot — the .deployignore entry for it does not match under tar (patterns must not start or end with '/'; root-only entries look like './${path}')"
+              fail=1
+            fi
+          done
+
+          # And the copy must still be a real deploy: a pattern that excludes
+          # everything would otherwise pass the checks above. webhook/.htaccess
+          # proves the root-anchored './.htaccess' entry leaves nested files alone.
+          for path in index.php includes/db.php webhook/.htaccess; do
+            if ! grep -qxF "./${path}" "$members"; then
+              echo "::error file=.deployignore::'${path}' would NOT be copied to the docroot — a .deployignore pattern is too broad"
+              fail=1
+            fi
+          done
+
+          if [ "$fail" -eq 0 ]; then
+            echo "OK: $(wc -l < "$members") members would be copied; none of the excluded paths among them."
+          fi
+          exit $fail
+
       - name: Set up PHP 8.3
         uses: shivammathur/setup-php@v2
         with:
