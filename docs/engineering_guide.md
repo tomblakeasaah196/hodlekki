@@ -8,8 +8,8 @@
 | **First event** | **Chara 2026** — Envision's karaoke & games night (*chara*, χαρά, is Greek for "joy"). Target: last week of October 2026, date to be confirmed. |
 | **Organiser** | Envision, the creative department of Household of David Lekki Centre |
 | **Owner** | Tom-Blake Asaah |
-| **Status** | Approved design — ready for implementation |
-| **Version / date** | 1.0 · 2026-10-03 |
+| **Status** | Approved design — being built (plan and progress: §28) |
+| **Version / date** | 1.1 · 2026-10-03 |
 | **Sources** | Meeting of 2026-09-30 (Tom-Blake Asaah, Odun-Ayo Funmilola, Chidera) · 20-question design interview of 2026-10-03 · codebase audit at commit `bd1094b` |
 
 ---
@@ -44,6 +44,7 @@
 25. [Delivery plan for Chara](#25-delivery-plan-for-chara)
 26. [Roadmap and idea bank](#26-roadmap-and-idea-bank)
 27. [Open items and inputs needed](#27-open-items-and-inputs-needed)
+28. [Build plan: pull requests and progress](#28-build-plan-pull-requests-and-progress)
 - [Appendix A — Complete SQL migrations](#appendix-a--complete-sql-migrations)
 - [Appendix B — Live snapshot examples](#appendix-b--live-snapshot-examples)
 - [Appendix C — Deck item payload schemas and samples](#appendix-c--deck-item-payload-schemas-and-samples)
@@ -64,6 +65,8 @@
 **Where this sits among the repo docs.** `AGENTS.md` still governs every file in the repository. Where this guide sets a module-specific rule that differs from `AGENTS.md` (for example, using Preact in this module only), the rule is listed in §21 and `AGENTS.md` MUST be updated in the same pull request that first relies on it.
 
 **Reading order for implementers.** Start with §3 (decisions), §8 (architecture), §9 (data) and §10–§11 (logic), then the API (§12) and front-end (§13) for the surface you are building. Appendix A is the source of truth for the schema; Appendix E is the source of truth for per-event settings.
+
+**Building it?** The module is built in pull requests PR0–PR7. Start with §28 (the PR map, the progress tracker and the deviations log) and your PR's prompt in [`docs/build_prompts.md`](build_prompts.md).
 
 **Conventions used below.**
 - Times are West Africa Time (WAT, UTC+01:00). PHP runs in `Africa/Lagos`, MySQL with `time_zone = '+01:00'` (both set in `includes/db.php`).
@@ -799,6 +802,7 @@ tests/special_events/
   load/quiz.k6.js                   # load test script
 docs/
   engineering_guide.md              # this file
+  build_prompts.md                  # one build prompt per pull request (§28)
 ```
 
 Existing files changed: see §21.
@@ -978,11 +982,11 @@ Migrations ship **with the phase that first needs them** (§25). The timestamps 
 |---|---|---|
 | A (registration) | `20261006090000_se_core.sql` | `se_settings`, `se_series`, `se_events`, `se_slugs`, `se_event_days` |
 | A | `20261006090100_se_people.sql` | `se_contacts`, `se_registrations`, `se_access_tokens`, `se_devices`, `se_form_fields` |
-| A | `20261006090200_se_ops.sql` | `se_crew`, `se_assets`, `se_audit_log`, `se_rate_limits`, `se_metrics_daily`, `se_ai_jobs`, `se_ai_requests` |
+| A | `20261006090200_se_ops.sql` | `se_crew`, `se_assets`, `se_audit_log`, `se_rate_limits`, `se_metrics_daily`, `se_ai_jobs`, `se_ai_requests`, `se_message_runs` (waitlist promotions and on-demand links already send SMS in Phase A) |
 | A | `20261006090300_se_seed_settings.sql` | default rows in `se_settings` |
 | B (check-in & live) | `20261013090000_se_checkin_teams.sql` | `se_teams`, `se_checkins`, `se_team_moves`, `se_event_verses`, `se_bible_cache` |
 | B | `20261013090100_se_program_karaoke.sql` | `se_program_items`, `se_songs`, `se_event_songs`, `se_karaoke_entries` |
-| B | `20261013090200_se_live_messages.sql` | `se_live_state`, `se_message_runs` |
+| B | `20261013090200_se_live_state.sql` | `se_live_state` |
 | C (games) | `20261020090000_se_games.sql` | `se_decks`, `se_deck_items`, `se_games`, `se_game_items`, `se_rounds`, `se_answers`, `se_buzzes`, `se_survey_responses`, `se_feud_answers`, `se_score_events` |
 | D (after) | `20261027090000_se_post_event.sql` | `se_feedback`, `se_handoffs`, `se_handoff_items` |
 | D | `20261027090100_se_reach_campaign_type.sql` | `INSERT … ON DUPLICATE KEY UPDATE` of Reach campaign type `Special_Event` |
@@ -1650,7 +1654,7 @@ Each game's `weight` (default 1.00) multiplies its **team** points at write time
 
 ### 11.13 Test mode and resets
 
-- **Test mode** (Studio → Games → **Rehearse**) sets `settings.test_mode = true` on the event itself (there is no separate copy). While it is on:
+- **Test mode** (Studio → Live → **Rehearse**, also offered in Studio → Games and the host console) sets `settings.test_mode = true` on the event itself (there is no separate copy). It arrives with check-in (PR3), so the doors can be rehearsed before the games exist. While it is on:
   - check-in is allowed outside the check-in window, for crew devices only (ERP session present);
   - registrations, check-ins, rounds, karaoke entries and survey responses created during the rehearsal are flagged `is_test = 1`;
   - every ledger row gets `reason = 'TEST'`;
@@ -3007,6 +3011,8 @@ The script is CLI-only (`PHP_SAPI !== 'cli'` → 403), sets `$_SERVER['DOCUMENT_
 
 **Constraint:** the event is 3–4 weeks away (target last week of October 2026), and registration was promised "by Sunday" to align with the flyer. Each phase is shippable, deployed behind its own migrations, and smoke-tested.
 
+The phases are built as pull requests: Phase A = PR1–PR2, Phase B = PR3–PR4, Phase C = PR5–PR6, Phase D = PR7 (plus PR0, the deploy fix). The PR map and the progress tracker are in §28.
+
 ### Phase A — Registration live (days 1–5)
 
 **Scope:** migrations A; `e/` router + shell (portal, privacy, ICS, 404); theme engine (PHP + JS) + Marquee portal (hero, intro, chapters, venue, FAQ, sticky bar); registration sheet (phone-first, member/returning/new, consent) with capacity engine (all 4 behaviours), manage link (status, cancel, cards), "I'm going" card with photo circle; Studio (Home, Overview, Details incl. days and slug, Brand incl. AI palettes, Registration, Crew, Attendees list + export, Assets kit); `{{link}}`; rate limits; audit; metrics beacons; nav link; AGENTS.md/README/.env.example updates; how_to_use.md v1.
@@ -3022,7 +3028,7 @@ The script is CLI-only (`PHP_SAPI !== 'cli'` → 403), sets `$_SERVER['DOCUMENT_
 
 ### Phase B — Check-in, teams and the live backbone (week 2)
 
-**Scope:** migrations B; check-in (`/in`, self, walk-in, gender prompt, reveal, welcome card, verses with KJV lookup); team engine + Teams tab (paste hex, labels, names, captains); desk mode (+ offline queue); lobby display; live state + snapshots + tick + clock sync; stage display (standby, welcome, program, teams, leaderboard, karaoke, announcement, break, blank, recap); host console (show tab, scenes, program run-of-show, announcements, sound board, awards); programme builder + AI import; karaoke library + import + pre-pick + queue + DJ console; reminders (`reminder_1`/`reminder_2`) + Messages tab + cron.
+**Scope:** migrations B; check-in (`/in`, self, walk-in, gender prompt, reveal, welcome card, verses with KJV lookup); team engine + Teams tab (paste hex, labels, names, captains); desk mode (+ offline queue); lobby display; live state + snapshots + tick + clock sync; stage display (standby, welcome, program, teams, leaderboard, karaoke, announcement, break, blank, recap); host console (show tab, scenes, program run-of-show, announcements, sound board, awards); programme builder + AI import; karaoke library + import + pre-pick + queue + DJ console; reminders (`reminder_1`/`reminder_2`) + Messages tab + cron; test mode + Reset rehearsal for check-in (§11.13).
 
 **Acceptance:** the check-in race test passes; team sizes within ±1 and gender within ±1 in a 60-person rehearsal; the lobby animates arrivals; host actions reach phones in ≤ 1.5 s p95; reminders schedule and send correctly in test.
 
@@ -3126,7 +3132,85 @@ Planned design so v1 does not paint us into a corner:
 | O13 | SMS: sender ID confirmed, units budget for ~300 reminders + ~150 thank-yous | Tom-Blake / Finance | Phase B |
 | O14 | Reach/Embrace HODs agree to the hand-off rules (§17.2) | Chidera / Odun-Ayo | Phase D |
 | O15 | Whether `/e/` hub should be public | Envision | Phase D (optional) |
-| O16 | **Deploy exclusions do not work under tar.** `.deployignore` was written for rsync. tar ignores entries that start or end with `/`, so `.git/`, `.github/`, `tests/`, `/AGENTS.md`, `/DEPLOY.md` and `/php.ini` are copied into the docroot on every deploy. Check that `https://hodlc.lpc.cm/.git/config` returns 403/404, rewrite the entries in tar form (`./.git`, `./.github`, `./tests`, `./AGENTS.md`, `./DEPLOY.md`, `./php.ini`, …) in a separate PR, and test it with a manual cPanel deploy (AGENTS.md). Remove any copies already in the docroot, because tar never deletes. | Tom-Blake | Before the Phase A deploy |
+| O16 | **Deploy exclusions do not work under tar.** `.deployignore` was written for rsync. tar ignores entries that start or end with `/`, so `.git/`, `.github/`, `tests/`, `/AGENTS.md`, `/DEPLOY.md` and `/php.ini` are copied into the docroot on every deploy. Check that `https://hodlc.lpc.cm/.git/config` returns 403/404, rewrite the entries in tar form (`./.git`, `./.github`, `./tests`, `./AGENTS.md`, `./DEPLOY.md`, `./php.ini`, …) in a separate PR, and test it with a manual cPanel deploy (AGENTS.md). Remove any copies already in the docroot, because tar never deletes. Scheduled as **PR0** (§28). | Tom-Blake | Before the Phase A deploy |
+
+---
+
+## 28. Build plan: pull requests and progress
+
+The module is built in **eight pull requests**. PR0 fixes the deploy exclusions (O16), and PR1–PR7 build the module. Each PR is built in its own chat from its prompt in [`docs/build_prompts.md`](build_prompts.md), then reviewed and merged before the next one starts. The §25 phases map onto them: Phase A = PR1–PR2, Phase B = PR3–PR4, Phase C = PR5–PR6, Phase D = PR7.
+
+### 28.1 The pull requests
+
+| PR | Name | What it delivers | Migrations | Needs |
+|---|---|---|---|---|
+| PR0 | Deploy exclusions fix | `.deployignore` rewritten for tar, plus a CI guard and cleanup steps. `.git`, tests and repo docs stop reaching the docroot (O16). | — | — |
+| PR1 | Foundation & Studio core | Core libraries; the Studio (create, edit, clone, brand with hex codes and AI palettes, registration settings, crew, assets, publish checklist); the `/e/<slug>` router and branded shell; front-end tooling; CI; the ERP nav link | A.1–A.4 | the guide on `main` (PR0 recommended) |
+| PR2 | Public portal & registration | The Marquee portal; phone-first registration; the capacity engine with every behaviour and the waitlist; the manage link; SMS links; the "I'm going" card with the photo circle; Attendees with Excel export; the share kit. **Registration can open after this PR.** | — | PR1 |
+| PR3 | Check-in, teams & live backbone | Poster-QR check-in (self, walk-in, desk); the team engine and Teams tab; welcome verses; live snapshots with the tick; lobby, stage and host console; check-in posters; the live monitor; test mode with Reset rehearsal | A.5, A.7 | PR2 |
+| PR4 | Programme, karaoke & reminders | Programme builder with AI import and live ETAs; karaoke library, pre-pick, queue and DJ console; reminder SMS, the Messages tab and the cron; the Format Studio | A.6 | PR3 |
+| PR5 | Games I: engine, decks & quiz games | Decks (with AI and KJV); the round engine; `/play`; Live Quiz, Bible Trivia and the Buzzer family; the score ledger and awards; test mode for games; the load test | A.8 | PR4 |
+| PR6 | Games II: party games & finale | Who Am I?, Charades and Family Feud (survey and clustering); leaderboards, MVP and the finale; dress-rehearsal fixes | — | PR5 |
+| PR7 | After the event | Thank-you SMS, recap with the My Night card, feedback; insights, PDF and Excel; hand-off to Reach and Embrace; archive, slug reclaim, retention | A.9–A.10 | PR6 (or alongside PR6 once PR5 is merged) |
+
+Each PR's full scope, reading list, tests and acceptance checks are in `docs/build_prompts.md`.
+
+**Order and parallel work.** Build in order, and merge each PR before starting the next. Only two overlaps are safe: PR0 alongside anything, and PR7 alongside PR6 once PR5 is merged. Parallel branches conflict in shared files (constants, the Studio tab list, `how_to_use.md`, this section). Rebuild `se.css` instead of merging it by hand.
+
+**Timing for Chara.**
+- Registration opens after PR2.
+- PR3 and PR4 should be merged about ten days before the event, so posters can be printed and reminders scheduled.
+- PR5 and PR6 should be merged before the dress rehearsal (§22.5).
+- If time runs short, apply the §25 cut line: the Format Studio (PR4) and Who Am I? (PR6) go first.
+
+### 28.2 Rules for every build PR
+
+The full rules are in `docs/build_prompts.md` under "Shared rules". In short:
+- Start from the latest `main`. Confirm in §28.3, and with `git log`, that the PRs yours depends on are merged.
+- Build only your PR's scope. Code that runs before a later migration must degrade safely (§9.4).
+- This guide is the spec. When the build has to differ, update the affected section and log the change in §28.4, in the same PR.
+- Every PR updates:
+  - its row in §28.3;
+  - `modules/special_events/how_to_use.md` (CI-enforced from PR1);
+  - its tests;
+  - the compiled `se.css`, when classes change;
+  - `AGENTS.md` or `README.md`, when conventions, cron lines or env keys change.
+- **Done** means:
+  - every Build item is done, or deferred in §28.4;
+  - every acceptance check passed, with evidence in the PR description;
+  - the migrations were applied twice on MySQL 8 and on MariaDB;
+  - the manual smoke test (Appendix H.2) was done;
+  - CI is green, and the diff had a security review.
+
+  The owner merges.
+
+### 28.3 Progress tracker
+
+Status: ⬜ not started · 🟡 in progress · 🔵 in review · ✅ merged · ⛔ blocked.
+
+Each PR sets its **own** row to ✅, with the PR link, the date and notes for the next PR. The row reaches `main` only when the PR merges, so `main` is always accurate.
+
+| PR | Status | Pull request | Merged | Notes for the next PR |
+|---|---|---|---|---|
+| Guide | ✅ | [#28](https://github.com/tomblakeasaah196/hodlekki/pull/28) | 2026-10-03 | Design, build plan and prompts. The Appendix A SQL was tested on MySQL 8.0.46 and MariaDB 10.11.14. |
+| PR0 | ⬜ | — | — | — |
+| PR1 | ⬜ | — | — | — |
+| PR2 | ⬜ | — | — | — |
+| PR3 | ⬜ | — | — | — |
+| PR4 | ⬜ | — | — | — |
+| PR5 | ⬜ | — | — | — |
+| PR6 | ⬜ | — | — | — |
+| PR7 | ⬜ | — | — | — |
+
+### 28.4 Deviations and decisions log
+
+Every design change made during the build is logged here (newest last), and the affected section is updated in the same PR.
+
+| Date | PR | Sections | Change | Why |
+|---|---|---|---|---|
+| 2026-10-03 | Guide | §9.4, A.3, A.7 | `se_message_runs` moved from the Phase B migration into `se_ops` (Phase A). A.7 renamed `20261013090200_se_live_state.sql`. | Waitlist promotions and on-demand link SMS ship with registration (PR2). |
+| 2026-10-03 | Guide | Appendix A rules, §9.5 | `fk_se_karaoke_reg` is `ON DELETE RESTRICT`, and deleting a draft removes karaoke rows first. | MySQL 8 rejects `CASCADE` on a column that feeds a stored generated column. |
+| 2026-10-03 | Guide | §11.13 | Test mode and Reset rehearsal start in PR3, with the toggle in Studio → Live and the host console. PR4–PR6 extend the reset to their tables. | The check-in rehearsal (PR3) needs test mode before any game exists. |
 
 ---
 
@@ -3406,7 +3490,7 @@ CREATE TABLE IF NOT EXISTS se_form_fields (
 
 ```sql
 -- 20261006090200_se_ops.sql
--- Crew, assets, audit log, rate limits, daily metrics, AI jobs and AI usage log.
+-- Crew, assets, audit log, rate limits, daily metrics, AI jobs, AI usage log and SMS message runs.
 
 CREATE TABLE IF NOT EXISTS se_crew (
     id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -3517,7 +3601,30 @@ CREATE TABLE IF NOT EXISTS se_ai_requests (
     KEY idx_se_ai_req_user (user_id, created_at),
     KEY idx_se_ai_req_event (event_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- SMS runs are needed from Phase A: waitlist promotions and on-demand links.
+CREATE TABLE IF NOT EXISTS se_message_runs (
+    id               INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    event_id         INT UNSIGNED NOT NULL,
+    kind             VARCHAR(30)  NOT NULL,
+    run_key          VARCHAR(80)  NOT NULL,
+    scheduled_for    DATETIME     NULL,
+    status           ENUM('scheduled','queued','skipped','failed') NOT NULL,
+    sms_campaign_id  INT          NULL,
+    recipients       INT UNSIGNED NOT NULL DEFAULT 0,
+    est_units        INT UNSIGNED NOT NULL DEFAULT 0,
+    detail           VARCHAR(255) NULL,
+    created_by       INT UNSIGNED NULL,
+    created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_se_message_run (event_id, run_key),
+    KEY idx_se_message_runs_kind (event_id, kind),
+    CONSTRAINT fk_se_message_runs_event FOREIGN KEY (event_id) REFERENCES se_events (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
+
+Delivery progress (sent/delivered) is read from SMS Studio (`sms_campaigns.sent_count`/`failed_count`, `sms_log`) through `sms_campaign_id`. It is never copied.
 
 ### A.4 `20261006090300_se_seed_settings.sql` (Phase A)
 
@@ -3719,11 +3826,11 @@ CREATE TABLE IF NOT EXISTS se_karaoke_entries (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
-### A.7 `20261013090200_se_live_messages.sql` (Phase B)
+### A.7 `20261013090200_se_live_state.sql` (Phase B)
 
 ```sql
--- 20261013090200_se_live_messages.sql
--- Live control state per event, and the SMS message-run log.
+-- 20261013090200_se_live_state.sql
+-- Live control state per event (scene, active round, display keys, version).
 
 CREATE TABLE IF NOT EXISTS se_live_state (
     event_id            INT UNSIGNED    NOT NULL,
@@ -3745,29 +3852,7 @@ CREATE TABLE IF NOT EXISTS se_live_state (
     PRIMARY KEY (event_id),
     CONSTRAINT fk_se_live_event FOREIGN KEY (event_id) REFERENCES se_events (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS se_message_runs (
-    id               INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    event_id         INT UNSIGNED NOT NULL,
-    kind             VARCHAR(30)  NOT NULL,
-    run_key          VARCHAR(80)  NOT NULL,
-    scheduled_for    DATETIME     NULL,
-    status           ENUM('scheduled','queued','skipped','failed') NOT NULL,
-    sms_campaign_id  INT          NULL,
-    recipients       INT UNSIGNED NOT NULL DEFAULT 0,
-    est_units        INT UNSIGNED NOT NULL DEFAULT 0,
-    detail           VARCHAR(255) NULL,
-    created_by       INT UNSIGNED NULL,
-    created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uniq_se_message_run (event_id, run_key),
-    KEY idx_se_message_runs_kind (event_id, kind),
-    CONSTRAINT fk_se_message_runs_event FOREIGN KEY (event_id) REFERENCES se_events (id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
-
-Delivery progress (sent/delivered) is read from SMS Studio (`sms_campaigns.sent_count`/`failed_count`, `sms_log`) through `sms_campaign_id`. It is never copied.
 
 ### A.8 `20261020090000_se_games.sql` (Phase C)
 
