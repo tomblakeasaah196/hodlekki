@@ -140,6 +140,10 @@ function se_studio_event_payload(PDO $pdo, array $event, int $userId, string $ac
         'row_version'   => (int) $event['row_version'],
         'online_capacity' => $event['online_capacity'] !== null ? (int) $event['online_capacity'] : null,
         'counts'        => se_event_counts($pdo, $eventId),
+        // The live registration state, so Overview can colour the capacity
+        // KPI and Attendees can explain why nobody new is coming in (§10.4.2).
+        'reg_state'     => se_registration_state($event, $phase, se_capacity_counts($pdo, $eventId)),
+        'seats_left'    => se_seats_left($event, se_capacity_counts($pdo, $eventId)),
         'brand'         => [
             'primary'   => $event['brand_primary'],
             'secondary' => $event['brand_secondary'],
@@ -725,6 +729,268 @@ try {
         se_audit($pdo, $eventId, 'event_update:form_fields', ['count' => count($rows)], 'event', $eventId, $userId);
 
         se_api_success('Questions saved.', ['form_fields' => se_form_fields_list($pdo, $eventId)]);
+    }
+
+    // ====================================================================
+    // Attendees (§12.5)
+    // ====================================================================
+
+    case 'attendees_list': {
+        $event = se_studio_event($pdo, $body, 'attendee.search');
+        $pii   = se_has_capability($pdo, (int) $event['id'], 'attendee.pii', $userId);
+
+        $data = se_attendees_list(
+            $pdo,
+            (int) $event['id'],
+            is_array($body['filters'] ?? null) ? $body['filters'] : [],
+            se_str($body['q'] ?? '', 80),
+            se_int($body['page'] ?? 1, 1),
+            se_int($body['per_page'] ?? 50, 1),
+            $pii
+        );
+
+        se_api_success('OK', $data + [
+            'counts' => se_event_counts($pdo, (int) $event['id']),
+            'pii'    => $pii,
+        ]);
+    }
+
+    case 'attendee_get': {
+        $event = se_studio_event($pdo, $body, 'attendee.search');
+        $pii   = se_has_capability($pdo, (int) $event['id'], 'attendee.pii', $userId);
+
+        $row = se_attendee_get($pdo, (int) $event['id'], se_int($body['attendee_id'] ?? 0, 1), $pii);
+        if (!$row) {
+            se_api_error('That person is not on this list.', 'EVENT_NOT_FOUND');
+        }
+
+        se_api_success('OK', ['attendee' => $row]);
+    }
+
+    case 'attendee_update': {
+        $event = se_studio_event($pdo, $body, 'attendee.pii');
+        $row   = se_attendee_update(
+            $pdo, $event, se_int($body['attendee_id'] ?? 0, 1),
+            is_array($body['fields'] ?? null) ? $body['fields'] : [],
+            $userId
+        );
+
+        se_api_success('Saved.', ['attendee' => $row]);
+    }
+
+    case 'attendee_cancel': {
+        $event = se_studio_event($pdo, $body, 'desk.checkin');
+        $days  = se_event_days($pdo, (int) $event['id']);
+
+        $reg = se_registration_by_id($pdo, se_int($body['attendee_id'] ?? 0, 1), (int) $event['id']);
+        if (!$reg) {
+            se_api_error('That person is not on this list.', 'EVENT_NOT_FOUND');
+        }
+
+        $result = se_registration_cancel($pdo, $event, $days, $reg, 'crew', se_line($body['reason'] ?? '', 160));
+
+        se_api_success($result['status'] === 'cancelled' ? 'Seat released.' : 'Nothing to cancel.', [
+            'status'   => $result['status'],
+            'promoted' => $result['promoted'],
+            'counts'   => se_event_counts($pdo, (int) $event['id']),
+        ]);
+    }
+
+    case 'attendee_restore': {
+        $event  = se_studio_event($pdo, $body, 'desk.checkin');
+        $days   = se_event_days($pdo, (int) $event['id']);
+        $result = se_attendee_restore($pdo, $event, $days, se_int($body['attendee_id'] ?? 0, 1), $userId);
+
+        se_api_success($result['status'] === 'confirmed' ? 'Back on the list.' : 'Back on, as a waitlist place.', [
+            'status' => $result['status'],
+            'counts' => se_event_counts($pdo, (int) $event['id']),
+        ]);
+    }
+
+    case 'attendee_promote': {
+        $event  = se_studio_event($pdo, $body, 'event.capacity_override');
+        $days   = se_event_days($pdo, (int) $event['id']);
+        $result = se_attendee_promote($pdo, $event, $days, se_int($body['attendee_id'] ?? 0, 1), $userId);
+
+        se_api_success($result['promoted'] ? 'Promoted off the waitlist.' : 'Nothing to promote.', [
+            'promoted' => $result['promoted'],
+            'counts'   => se_event_counts($pdo, (int) $event['id']),
+        ]);
+    }
+
+    case 'attendee_remove': {
+        $event  = se_studio_event($pdo, $body, 'attendee.pii');
+        $days   = se_event_days($pdo, (int) $event['id']);
+        $reason = se_line($body['reason'] ?? '', 160);
+        if ($reason === '') {
+            throw new SeValidationException(['reason' => 'Say why, so the next person reading the log understands.']);
+        }
+
+        $result = se_attendee_remove($pdo, $event, $days, se_int($body['attendee_id'] ?? 0, 1), $reason, $userId);
+
+        se_api_success('Removed from the event.', $result + ['counts' => se_event_counts($pdo, (int) $event['id'])]);
+    }
+
+    case 'attendee_add': {
+        $event = se_studio_event($pdo, $body, 'desk.checkin');
+        $days  = se_event_days($pdo, (int) $event['id']);
+        $settings = se_event_settings($event);
+
+        $phone = se_phone_normalize($body['phone'] ?? '');
+        if ($phone === null) {
+            se_api_error('Please enter a mobile number, e.g. 0803 123 4567.', 'INVALID_PHONE');
+        }
+
+        $first = se_name_case(se_clean_name($body['first_name'] ?? ''));
+        if ($first === '') {
+            throw new SeValidationException(['first_name' => 'A first name is required.']);
+        }
+
+        $result = se_register($pdo, $event, $settings, $days, [
+            'phone'            => $phone,
+            'first_name'       => $first,
+            'last_name'        => se_name_case(se_clean_name($body['last_name'] ?? '')),
+            'gender'           => se_normalize_gender($body['gender'] ?? null),
+            'email'            => se_contact_clean_email($body['email'] ?? null),
+            'consent'          => se_bool($body['consent'] ?? false),
+            'consent_text'     => (string) ($settings['registration']['consent_text'] ?? ''),
+            'karaoke_interest' => se_bool($body['karaoke_interest'] ?? false),
+            'answers'          => [],
+            'src'              => null,
+            'channel'          => 'studio',
+            'is_test'          => se_bool($settings['test_mode'] ?? false),
+            // A desk entry may be made after registration has closed: that
+            // is the whole point of adding someone by hand (§10.4.5).
+            'ignore_state'     => se_bool($body['force'] ?? true),
+        ], ['now' => se_now(), 'ip_hash' => se_ip_hash(), 'device' => null, 'actor_user_id' => $userId]);
+
+        if ($result['outcome'] === 'closed') {
+            se_api_error(se_registration_state_message((string) $result['state'], $event), 'REG_CLOSED', ['state' => $result['state']]);
+        }
+        if ($result['outcome'] === 'blocked') {
+            se_api_error('That person was removed from this event. Restore them instead.', 'BLOCKED');
+        }
+
+        se_api_success($result['outcome'] === 'already' ? 'Already on the list.' : 'Added.', [
+            'outcome'  => $result['outcome'],
+            'attendee' => se_attendee_get($pdo, (int) $event['id'], (int) $result['registration']['id'], true),
+            'counts'   => se_event_counts($pdo, (int) $event['id']),
+        ]);
+    }
+
+    case 'attendee_reset_links': {
+        $event = se_studio_event($pdo, $body, 'attendee.pii');
+        $days  = se_event_days($pdo, (int) $event['id']);
+        $url   = se_attendee_reset_links($pdo, $event, $days, se_int($body['attendee_id'] ?? 0, 1), $userId);
+
+        se_api_success('Old links are dead. Here is the new one.', ['manage_url' => $url]);
+    }
+
+    case 'attendee_erase': {
+        // Irreversible, so it is a manager action, not a desk one (§19.9).
+        se_require_manager($pdo);
+        $event  = se_studio_event($pdo, $body, 'attendee.pii');
+        $reason = se_line($body['reason'] ?? '', 160);
+        if ($reason === '') {
+            throw new SeValidationException(['reason' => 'Record why this erasure was requested.']);
+        }
+
+        se_attendee_erase($pdo, $event, se_int($body['attendee_id'] ?? 0, 1), $reason, $userId);
+
+        se_api_success('Erased. Only the anonymous counts remain.', ['erased' => true]);
+    }
+
+    case 'attendees_export': {
+        // The file itself is a separate GET endpoint: a spreadsheet cannot
+        // travel inside the {status, message, data} envelope (§28.4).
+        $event = se_studio_event($pdo, $body, 'attendee.export');
+
+        se_api_success('OK', [
+            'url'      => '/api/special_events_export.php?event=' . rawurlencode((string) $event['public_id']),
+            'filename' => $event['slug'] . '-attendees-' . se_now()->format('Ymd-Hi') . '.xlsx',
+        ]);
+    }
+
+    case 'possible_duplicates': {
+        $event = se_studio_event($pdo, $body, 'attendee.search');
+
+        se_api_success('OK', ['items' => se_attendee_duplicates($pdo, (int) $event['id'])]);
+    }
+
+    case 'possible_members': {
+        $event = se_studio_event($pdo, $body, 'attendee.search');
+
+        se_api_success('OK', ['items' => se_attendee_possible_members($pdo, (int) $event['id'])]);
+    }
+
+    // ====================================================================
+    // Share kit (§18.2) and copywriting (§15.8)
+    // ====================================================================
+
+    case 'share_kit': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+        $base  = se_event_url((string) $event['slug']);
+
+        $links = [['code' => '', 'label' => 'Plain link', 'url' => $base]];
+        foreach (SE_SOURCE_CODES as $code => $label) {
+            $links[] = ['code' => $code, 'label' => $label, 'url' => $base . '?s=' . $code];
+        }
+        $links[] = ['code' => 'checkin', 'label' => 'Check-in poster QR', 'url' => se_event_url((string) $event['slug'], 'in')];
+
+        se_api_success('OK', ['links' => $links, 'views' => se_share_kit_views($pdo, (int) $event['id'])]);
+    }
+
+    case 'copywrite': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        $purpose = se_enum($body['purpose'] ?? '', SE_COPYWRITE_PURPOSES, '');
+        if ($purpose === '') {
+            throw new SeValidationException(['purpose' => 'Choose what to write.']);
+        }
+
+        $days     = se_event_days($pdo, (int) $event['id']);
+        $first    = $days[0] ?? null;
+        $settings = se_event_settings($event);
+
+        // Facts only, and never a single attendee's name, phone or email —
+        // the AI privacy rule in §15.1.
+        $facts = array_filter([
+            $first !== null ? 'date ' . se_format_day(se_parse_datetime($first['starts_at'])) : null,
+            ($event['venue_name'] ?? '') !== '' ? 'venue ' . $event['venue_name'] : null,
+            ($event['tagline'] ?? '') !== '' ? 'tagline "' . $event['tagline'] . '"' : null,
+            se_settings_path($settings, 'karaoke.enabled', true) ? 'karaoke' : null,
+            se_settings_path($settings, 'games.enabled', true) ? 'Bible games and teams' : null,
+            'tone words: ' . implode(', ', array_slice(array_map(
+                static fn($w) => se_line($w, 24),
+                is_array($body['tone'] ?? null) ? $body['tone'] : ['joyful', 'warm']
+            ), 0, 4)),
+            se_line($body['brief'] ?? '', 240) !== '' ? 'brief: ' . se_line($body['brief'], 240) : null,
+        ]);
+
+        $result = se_ai($pdo, 'copywrite', [
+            'count'     => 3,
+            'purpose'   => SE_COPYWRITE_LABELS[$purpose],
+            'limit'     => SE_COPYWRITE_LIMITS[$purpose],
+            'title'     => (string) $event['title'],
+            'edition'   => (string) ($event['edition_label'] ?? ''),
+            'organizer' => (string) ($event['organizer_label'] ?? 'Envision'),
+            'facts'     => implode('; ', $facts),
+        ], ['event_id' => (int) $event['id'], 'user_id' => $userId]);
+
+        // SMS copy must survive sms_segments() before anyone can apply it.
+        $variants = array_values(array_filter(array_map(
+            static fn($v) => se_line($v, 600),
+            (array) ($result['variants'] ?? [])
+        )));
+
+        if (str_starts_with($purpose, 'sms_') && function_exists('sms_segments')) {
+            $variants = array_values(array_filter($variants, static function (string $text): bool {
+                $info = sms_segments(str_replace('{{link}}', str_repeat('x', 53), $text));
+                return ((int) ($info['pages'] ?? 1)) <= 2 && ($info['encoding'] ?? '') === 'GSM-7';
+            }));
+        }
+
+        se_api_success('Here are three.', ['variants' => array_slice($variants, 0, 3), 'purpose' => $purpose]);
     }
 
     // ====================================================================

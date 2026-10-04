@@ -17,7 +17,7 @@ if (defined('SE_BOOTSTRAPPED')) {
 define('SE_BOOTSTRAPPED', true);
 
 /** The module's own version, shown in Studio → Settings → Health. */
-const SE_MODULE_VERSION = '1.0.0-pr1';
+const SE_MODULE_VERSION = '1.1.0-pr2';
 
 // Session: db.php starts it, but a CLI script (cron, tests) may not have one.
 if (PHP_SAPI !== 'cli' && session_status() === PHP_SESSION_NONE) {
@@ -33,6 +33,20 @@ require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/events.php';
 require_once __DIR__ . '/assets.php';
 require_once __DIR__ . '/ai.php';
+require_once __DIR__ . '/identity.php';
+require_once __DIR__ . '/capacity.php';
+require_once __DIR__ . '/registration.php';
+require_once __DIR__ . '/messages.php';
+require_once __DIR__ . '/attendees.php';
+require_once __DIR__ . '/cards.php';
+require_once __DIR__ . '/portal.php';
+
+// SMS goes out through SMS Studio's tables and worker (§16.1). Loading its
+// helpers here keeps sms_render(), sms_segments() and sms_health() available
+// to se_messages_*() without each caller remembering the include.
+if (!function_exists('sms_render') && is_file(__DIR__ . '/../sms_functions.php')) {
+    require_once __DIR__ . '/../sms_functions.php';
+}
 
 // security_client_ip() lives in the platform's security helpers. The module
 // only ever stores an HMAC of it (§9.1), never the address itself.
@@ -147,67 +161,9 @@ function se_api_fail(Throwable $e, string $context): never
 // --------------------------------------------------------------------------
 // URLs
 // --------------------------------------------------------------------------
+//
+// se_site_origin(), se_event_url(), se_import_map() and se_studio_url() now
+// live in util.php. They are pure string builders with no database and no
+// session, and the CLI test harness loads util.php without this file — so
+// keeping them here made them untestable for no benefit.
 
-/** The site's origin, e.g. https://hodlc.lpc.cm (no trailing slash). */
-function se_site_origin(): string
-{
-    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'hodlc.lpc.cm');
-    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
-        || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
-
-    return ($https ? 'https://' : 'http://') . $host;
-}
-
-/** `/e/<slug>` plus an optional sub-path, as an absolute URL. */
-function se_event_url(string $slug, string $path = '', bool $absolute = true): string
-{
-    $url = '/e/' . rawurlencode($slug);
-    if ($path !== '') {
-        $url .= '/' . ltrim($path, '/');
-    }
-
-    return $absolute ? se_site_origin() . $url : $url;
-}
-
-/**
- * The ES module import map (§8.6.1), emitted by every page that loads module
- * JavaScript. Defined once here so the portal and the Studio can never drift.
- *
- * The version is part of each vendored path, which is what makes the
- * `immutable` cache header in assets/se/.htaccess honest (see VENDOR.md).
- *
- * @param bool $withConfetti false for the Studio, which never fires confetti.
- */
-function se_import_map(bool $withConfetti = true): array
-{
-    $imports = [
-        'preact'               => '/assets/se/vendor/preact-10.27.2/preact.module.js',
-        'preact/hooks'         => '/assets/se/vendor/preact-10.27.2/hooks.module.js',
-        '@preact/signals-core' => '/assets/se/vendor/preact-10.27.2/signals-core.module.js',
-        '@preact/signals'      => '/assets/se/vendor/preact-10.27.2/signals.module.js',
-        'htm'                  => '/assets/se/vendor/htm-3.1.1/htm.module.js',
-        'qrcode-generator'     => '/assets/se/vendor/qrcode-generator-1.5.0/qrcode.mjs',
-    ];
-
-    if ($withConfetti) {
-        $imports['canvas-confetti'] = '/assets/se/vendor/canvas-confetti-1.9.3/confetti.module.mjs';
-    }
-
-    // The trailing-slash mapping must come last for readability only; the
-    // browser resolves longest-prefix-first regardless of order.
-    $imports['@se/'] = '/assets/se/js/';
-
-    return ['imports' => $imports];
-}
-
-/** The Studio URL for one event and tab. */
-function se_studio_url(?int $eventId = null, string $tab = 'overview'): string
-{
-    $url = '/modules/special_events/index.php';
-    if ($eventId !== null) {
-        $url .= '?event=' . $eventId;
-    }
-
-    return $url . '#tab=' . rawurlencode($tab);
-}

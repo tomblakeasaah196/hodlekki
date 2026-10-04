@@ -4,14 +4,15 @@
 // The public router and HTML shell for every Special Events surface
 // (guide §8.8, §19.7). e/.htaccess rewrites /e/<slug>/<path> to here.
 //
-// PR1 delivers: slug resolution with lowercase and alias redirects, the
+// PR1 delivered: slug resolution with lowercase and alias redirects, the
 // draft gate, the security headers with a CSP nonce, the theme <style nonce>,
 // the boot JSON, a server-rendered first-paint hero, a branded 404, the
 // privacy notice, calendar.ics and the hub at /e/.
 //
-// The Marquee portal and registration are PR2; the sub-paths they own resolve
-// here already and render the shell with a "coming soon" panel, so a printed
-// QR code made today keeps working.
+// PR2 adds the Marquee portal (§13.3) and the manage page (§13.5), both
+// server-rendered first and enhanced by @se/portal/main.js. Check-in, games
+// and the crew consoles still resolve here and render the PR1 placeholder, so
+// a printed QR code made today keeps working.
 
 $_SERVER['DOCUMENT_ROOT'] = $_SERVER['DOCUMENT_ROOT'] ?: dirname(__DIR__);
 
@@ -307,6 +308,16 @@ function se_render_shell(
     // is readable before (and without) JavaScript (§8.8 step 5, §13.15).
     if ($view === 'privacy') {
         se_render_privacy($pdo, $event, $settings);
+    } elseif ($view === 'manage') {
+        se_portal_manage($event, $days, $settings);
+    } elseif ($view === 'home') {
+        se_portal_render(
+            $pdo, $event, $days, $settings, $phase,
+            se_capacity_counts($pdo, (int) $event['id']),
+            $heroAsset,
+            se_shell_asset($pdo, $event, 'hero_video'),
+            se_shell_registration($pdo, $event)
+        );
     } else {
         se_render_hero($event, $days, $phase, $heroAsset, $view);
     }
@@ -337,6 +348,11 @@ if (!(HTMLScriptElement.supports && HTMLScriptElement.supports('importmap'))) {
     document.head.appendChild(s);
 }
 </script>
+<?php if (in_array($surface, ['portal', 'stage', 'lobby'], true)): ?>
+<?php foreach (SE_GSAP_SCRIPTS as $gsapScript): ?>
+<script src="<?= se_h($gsapScript) ?>" defer nonce="<?= se_h($nonce) ?>"></script>
+<?php endforeach; ?>
+<?php endif; ?>
 <script type="module" src="<?= se_h($entry) ?>" nonce="<?= se_h($nonce) ?>"></script>
 </body>
 </html>
@@ -403,13 +419,21 @@ function se_boot_payload(
             'min_age_note' => se_settings_path($settings, 'registration.min_age_note', ''),
             'intro_line'   => se_settings_path($settings, 'portal.intro_line'),
             'faq'          => se_settings_path($settings, 'portal.faq', []),
+            'consent'      => se_settings_path($settings, 'registration.consent_text', ''),
+            'optin'        => se_settings_path($settings, 'registration.optin_text', ''),
         ],
         'flags'   => [
             'show_countdown'  => (bool) se_settings_path($settings, 'portal.show_countdown', true),
             'karaoke_enabled' => (bool) se_settings_path($settings, 'karaoke.enabled', true),
             'games_enabled'   => (bool) se_settings_path($settings, 'games.enabled', true),
-            // PR2 turns this on when registration ships.
-            'registration_ready' => false,
+            'hero_video'      => (bool) se_settings_path($settings, 'portal.hero_video_enabled', true),
+            // Registration shipped in PR2. It still needs its table: code is
+            // copied to production before migrations run (§9.4).
+            'registration_ready' => se_table_exists($pdo, 'se_registrations'),
+            'im_going_card'      => (bool) se_settings_path($settings, 'share_cards.im_going', true),
+            'ask_wants_visit'    => (bool) se_settings_path($settings, 'registration.ask_wants_visit_after_submit', true),
+            'link_on_demand'     => (bool) se_settings_path($settings, 'registration.link_on_demand_enabled', true),
+            'self_cancel'        => (bool) $event['self_cancel_enabled'],
         ],
         'realtime' => [
             'driver'      => se_settings_path($settings, 'realtime.driver', 'poll'),
@@ -417,6 +441,43 @@ function se_boot_payload(
         ],
         'server_ms' => se_epoch_ms(),
     ];
+
+    // Registration (§13.4). Everything the sheet needs to build itself
+    // without a round trip: which fields to ask for, the consent wording,
+    // the custom questions and the live state of the seats.
+    if ($surface === 'portal' && se_table_exists($pdo, 'se_registrations')) {
+        $counts = se_capacity_counts($pdo, (int) $event['id']);
+        $state  = se_registration_state($event, $phase, $counts);
+
+        $payload['reg'] = [
+            'state'      => $state,
+            'message'    => se_registration_state_message($state, $event),
+            'seats_left' => se_seats_left($event, $counts),
+            'opens_at'   => se_iso($event['reg_opens_at']),
+            'closes_at'  => se_iso($event['reg_closes_at'] ?? ($phase['first_day']['starts_at'] ?? null)),
+        ];
+
+        $payload['form'] = [
+            'consent_mode' => se_settings_path($settings, 'registration.consent_mode', 'required_followup'),
+            'fields'       => [
+                'gender'    => se_settings_path($settings, 'registration.fields.gender', 'required'),
+                'email'     => se_settings_path($settings, 'registration.fields.email', 'optional'),
+                'how_heard' => se_settings_path($settings, 'registration.fields.how_heard', 'optional'),
+                'karaoke'   => (bool) se_settings_path($settings, 'registration.fields.karaoke_interest', true),
+            ],
+            'how_heard'  => SE_HOW_HEARD,
+            'questions'  => array_map('se_form_field_public', se_form_fields($pdo, (int) $event['id'])),
+            'min_t_ms'   => SE_REGISTER_MIN_FILL_MS,
+        ];
+
+        // ?s=<source> and ?r=<ref_code> ride along with the submission (§18.2).
+        $src = (string) ($_GET['s'] ?? '');
+        $ref = (string) ($_GET['r'] ?? '');
+        $payload['attribution'] = [
+            'src' => preg_match('/^[A-Za-z0-9_-]{1,20}$/', $src) ? strtolower($src) : null,
+            'ref' => preg_match('/^[0-9A-Za-z]{' . SE_REF_CODE_LENGTH . '}$/', $ref) ? strtoupper($ref) : null,
+        ];
+    }
 
     if ($token !== null) {
         // The manage token is this viewer's own secret, already in their URL.
@@ -429,6 +490,32 @@ function se_boot_payload(
     }
 
     return $payload;
+}
+
+/**
+ * This device's own registration, for the first paint.
+ *
+ * The server already knows, from the device cookie, whether the person
+ * looking at the page has a seat — so the hero can say "You're registered ✓"
+ * in the first byte rather than flashing "Register" and correcting itself.
+ */
+function se_shell_registration(PDO $pdo, array $event): ?array
+{
+    if (!se_table_exists($pdo, 'se_devices') || !se_table_exists($pdo, 'se_registrations')) {
+        return null;
+    }
+
+    try {
+        $device = se_device_load($pdo, $event, se_device_cookie_value((string) $event['public_id']));
+        if (!$device || $device['registration_id'] === null) {
+            return null;
+        }
+
+        return se_registration_by_id($pdo, (int) $device['registration_id'], (int) $event['id']);
+    } catch (Throwable $e) {
+        error_log('SE shell/registration: ' . $e->getMessage());
+        return null;
+    }
 }
 
 /** An event's logo/hero/og asset row, or null. */

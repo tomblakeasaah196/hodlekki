@@ -9,6 +9,8 @@ import { studio } from '@se/core/api.js';
 import { formatDateTime } from '@se/core/boot.js';
 import { current, can, toast, applyEvent, openEvent } from '../state.js';
 import { Card, Button, StatusPill, Spinner } from '../ui.js';
+import { ShareKit } from '../share_kit.js';
+import { Copywriter } from '../copywriter.js';
 
 function ReadinessRing({ pct }) {
     const r = 52;
@@ -144,7 +146,8 @@ export function OverviewTab() {
                             <${Kpi} label="Registered" value=${counts.confirmed ?? 0} />
                             <${Kpi} label="Waitlist" value=${counts.waitlisted ?? 0} />
                             <${Kpi} label="Checked in" value=${counts.checked_in ?? 0} tone="text-emerald-600" />
-                            <${Kpi} label="Capacity" value=${event.online_capacity ?? '∞'} />
+                            <${Kpi} label="Capacity" value=${event.online_capacity ?? '∞'}
+                                tone=${event.reg_state === 'full' ? 'text-hodRed' : 'text-gray-900'} />
                         </div>
 
                         <div class="flex flex-wrap gap-2 mt-5">
@@ -220,6 +223,16 @@ export function OverviewTab() {
                         <${CopyLink} label="Privacy notice" url=${event.portal_url + '/privacy'} />
                     <//>
                 </div>
+            </div>
+
+            <div class="grid lg:grid-cols-2 gap-6">
+                <${ShareKit} />
+
+                ${can('event.edit') ? html`
+                <${Card} title="Need words?"
+                         subtitle="A starting point for a tagline, a description or a text message — never applied on its own.">
+                    <${Copywriter} />
+                <//>` : null}
             </div>
 
             ${can('audit.view') ? html`

@@ -552,3 +552,71 @@ function se_write_file_atomic(string $path, string $contents): bool
 
     return true;
 }
+
+// --------------------------------------------------------------------------
+// URLs (§8.6.1)
+// --------------------------------------------------------------------------
+
+/** The site's origin, e.g. https://hodlc.lpc.cm (no trailing slash). */
+function se_site_origin(): string
+{
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'hodlc.lpc.cm');
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+        || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
+
+    return ($https ? 'https://' : 'http://') . $host;
+}
+
+/** `/e/<slug>` plus an optional sub-path, as an absolute URL. */
+function se_event_url(string $slug, string $path = '', bool $absolute = true): string
+{
+    $url = '/e/' . rawurlencode($slug);
+    if ($path !== '') {
+        $url .= '/' . ltrim($path, '/');
+    }
+
+    return $absolute ? se_site_origin() . $url : $url;
+}
+
+/**
+ * The ES module import map (§8.6.1), emitted by every page that loads module
+ * JavaScript. Defined once here so the portal and the Studio can never drift.
+ *
+ * The version is part of each vendored path, which is what makes the
+ * `immutable` cache header in assets/se/.htaccess honest (see VENDOR.md).
+ *
+ * @param bool $withConfetti false for the Studio, which never fires confetti.
+ */
+function se_import_map(bool $withConfetti = true): array
+{
+    $imports = [
+        'preact'               => '/assets/se/vendor/preact-10.27.2/preact.module.js',
+        'preact/hooks'         => '/assets/se/vendor/preact-10.27.2/hooks.module.js',
+        '@preact/signals-core' => '/assets/se/vendor/preact-10.27.2/signals-core.module.js',
+        '@preact/signals'      => '/assets/se/vendor/preact-10.27.2/signals.module.js',
+        'htm'                  => '/assets/se/vendor/htm-3.1.1/htm.module.js',
+        'qrcode-generator'     => '/assets/se/vendor/qrcode-generator-1.5.0/qrcode.mjs',
+    ];
+
+    if ($withConfetti) {
+        $imports['canvas-confetti'] = '/assets/se/vendor/canvas-confetti-1.9.3/confetti.module.mjs';
+    }
+
+    // The trailing-slash mapping must come last for readability only; the
+    // browser resolves longest-prefix-first regardless of order.
+    $imports['@se/'] = '/assets/se/js/';
+
+    return ['imports' => $imports];
+}
+
+/** The Studio URL for one event and tab. */
+function se_studio_url(?int $eventId = null, string $tab = 'overview'): string
+{
+    $url = '/modules/special_events/index.php';
+    if ($eventId !== null) {
+        $url .= '?event=' . $eventId;
+    }
+
+    return $url . '#tab=' . rawurlencode($tab);
+}

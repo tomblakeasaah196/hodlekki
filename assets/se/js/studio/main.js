@@ -20,6 +20,7 @@ import { OverviewTab } from './tabs/overview.js';
 import { DetailsTab } from './tabs/details.js';
 import { BrandTab } from './tabs/brand.js';
 import { RegistrationTab } from './tabs/registration.js';
+import { AttendeesTab } from './tabs/attendees.js';
 import { AssetsTab } from './tabs/assets.js';
 import { CrewTab } from './tabs/crew.js';
 import { SettingsTab } from './tabs/settings.js';
@@ -29,6 +30,7 @@ const TABS = {
     details: DetailsTab,
     brand: BrandTab,
     registration: RegistrationTab,
+    attendees: AttendeesTab,
     assets: AssetsTab,
     crew: CrewTab,
     settings: SettingsTab,
