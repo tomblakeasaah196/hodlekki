@@ -89,7 +89,52 @@ function stepPhone(prefill = '') {
             "The same number you registered with. New here? We'll sign you in at the door."),
         el('button', { type: 'submit', class: 'se-btn se-btn-primary se-btn-wide' }, 'Continue'));
 
-    show(card(form));
+    show(card(form, button('I have a code from the desk', () => stepTransfer(), 'ghost')));
+}
+
+// --------------------------------------------------------------------------
+// A code from the desk: move a checked-in guest to this phone (§10.3.5)
+// --------------------------------------------------------------------------
+
+/**
+ * The desk's "Move someone to a new phone" gives a 6-digit code; this is
+ * where the guest types it. Without it the code had nowhere to go — the
+ * API existed, but no page called it.
+ */
+function stepTransfer() {
+    const input = el('input', {
+        type: 'text',
+        inputmode: 'numeric',
+        autocomplete: 'one-time-code',
+        maxlength: '7',
+        id: 'se-transfer-code',
+        class: 'se-input',
+        placeholder: '123 456',
+        'aria-describedby': 'se-transfer-hint',
+    });
+
+    const form = el('form', {
+        class: 'se-stack',
+        onsubmit: async (event) => {
+            event.preventDefault();
+            busy(true);
+            try {
+                await call('public', 'transfer', { event: config.event.public_id, code: input.value });
+                toast('This phone is now yours for tonight.', 'success');
+                window.location.href = config.urls?.play || config.urls?.portal || '/';
+            } catch (error) {
+                busy(false);
+                toast(error.message || 'That code did not work. Ask the desk for a new one.', 'error');
+            }
+        },
+    },
+        el('label', { class: 'se-label', for: 'se-transfer-code' }, 'Code from the desk'),
+        input,
+        el('p', { class: 'se-small se-muted', id: 'se-transfer-hint' },
+            'The desk gives you a 6-digit code when you switch phones. It works once, for a few minutes.'),
+        el('button', { type: 'submit', class: 'se-btn se-btn-primary se-btn-wide' }, 'Move my ticket to this phone'));
+
+    show(card(form, button('Back', () => stepPhone(''), 'ghost')));
 }
 
 async function submitPhone(raw) {
@@ -247,6 +292,7 @@ function stepReveal(data) {
     if (data.already_elsewhere) {
         nodes.push(el('p', { class: 'se-glass se-pad se-small' },
             "You're already checked in on another phone. To play here, ask the desk for a transfer code."));
+        nodes.push(button('I have a code from the desk', () => stepTransfer(), 'secondary'));
     } else if (data.for === 'other') {
         nodes.push(el('p', { class: 'se-label' }, 'Already checked in'));
     }

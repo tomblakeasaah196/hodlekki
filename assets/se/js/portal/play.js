@@ -328,6 +328,37 @@ function Survey({ eventId, questions, onSaved }) {
         </section>`;
 }
 
+/** The desk's 6-digit code moves a checked-in guest to this phone. */
+function TransferCode({ eventId }) {
+    const [code, setCode] = useState('');
+    const [error, setError] = useState(null);
+    const [busy, setBusy] = useState(false);
+
+    const submit = async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError(null);
+        try {
+            await call('public', 'transfer', { event: eventId, code });
+            window.location.reload();
+        } catch (err) {
+            setBusy(false);
+            setError(err.message || 'That code did not work. Ask the desk for a new one.');
+        }
+    };
+
+    return html`
+        <form class="se-play-survey-q" onSubmit=${submit}>
+            <label class="se-play-survey-label" for="se-play-transfer">Code from the desk</label>
+            <div class="se-phone-row">
+                <input class="se-input" id="se-play-transfer" inputMode="numeric" autocomplete="one-time-code" maxLength="7"
+                    placeholder="123 456" value=${code} onInput=${(e) => setCode(e.currentTarget.value)} />
+                <button type="submit" class="se-btn se-btn-primary" disabled=${busy || code.replace(/\D/g, '').length !== 6}>Use it</button>
+            </div>
+            ${error ? html`<span class="se-error" role="alert">${error}</span>` : null}
+        </form>`;
+}
+
 // --------------------------------------------------------------------------
 // The screen
 // --------------------------------------------------------------------------
@@ -473,6 +504,7 @@ function Play({ config }) {
             <section class="se-card se-play-card">
                 <h1 class="se-h1">Join the games</h1>
                 <p>${join.error}</p>
+                ${join.code === 'DEVICE_READONLY' ? html`<${TransferCode} eventId=${eventId} />` : null}
                 ${join.code === 'NOT_CHECKED_IN' && config.urls?.checkin
                     ? html`<a class="se-btn se-btn-primary se-btn-wide" href=${config.urls.checkin}>Check in</a>`
                     : html`<a class="se-btn se-btn-ghost se-btn-wide" href=${config.urls?.portal || '/'}>Back to the event page</a>`}
