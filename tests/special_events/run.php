@@ -37,6 +37,22 @@ require_once __DIR__ . '/../../includes/special_events/db.php';
 require_once __DIR__ . '/../../includes/special_events/assets.php';
 require_once __DIR__ . '/../../includes/special_events/ai.php';
 
+// identity.php and capacity.php are the PR2 pure-logic layers: phone
+// normalisation, display names and the registration-state ladder. Neither
+// touches a database at include time either.
+//
+// identity.php delegates Nigerian numbers to sms_normalize_phone(), so the
+// SMS helpers come along. They read SMS_VAULT_KEY from the environment and
+// would otherwise pull in includes/db.php looking for it; a dummy value
+// keeps this harness database-free. It is never a real key.
+$_ENV['SMS_VAULT_KEY'] = str_repeat('ab', 32);
+require_once __DIR__ . '/../../includes/sms_functions.php';
+
+require_once __DIR__ . '/../../includes/special_events/identity.php';
+require_once __DIR__ . '/../../includes/special_events/capacity.php';
+require_once __DIR__ . '/../../includes/special_events/cards.php';
+require_once __DIR__ . '/../../includes/special_events/messages.php';
+
 $GLOBALS['se_passed'] = 0;
 $GLOBALS['se_failed'] = 0;
 $GLOBALS['se_failures'] = [];

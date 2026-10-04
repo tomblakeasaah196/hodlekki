@@ -25,9 +25,10 @@ Nobody else: the sidebar link is hidden, and every action is checked again on
 the server. Hiding a button is never the lock.
 
 > **What this version does.** Creating, branding and configuring events, the
-> crew, the brand kit, and the public page with its first screen. **Guests
-> cannot register yet** — registration arrives in the next release, together
-> with the full animated portal. Everything you set up now is waiting for it.
+> crew, the brand kit, the full public page, and **registration — guests can
+> now take a seat**. You get the attendee list, the export, the share kit and
+> the "I'm going" card. Still to come: check-in on the night, the games, the
+> karaoke queue and the hand-off to Reach and Embrace.
 
 ---
 
@@ -131,8 +132,7 @@ display font picks its matching body font automatically.
 
 ## 6. Registration
 
-Everything about how people get a seat. Set it now; it starts working when
-registration opens in the next release.
+Everything about how people get a seat.
 
 **Seats**
 
@@ -177,6 +177,39 @@ answers people already gave.
 **Override** (Producers). **Force open** or **Pause registration**, whatever
 the numbers say — useful when the Pastor says "let them all in" or when
 something has gone wrong. Every change is recorded with your reason.
+
+### Opening registration
+
+Three things decide whether the button on the public page actually takes a
+registration, and they are checked in this order:
+
+1. **Is the event published?** A draft takes nobody. Publish it (§9).
+2. **Is it inside the window?** **Opens** and **Closes** on this tab. Leave
+   **Opens** empty and it is open from the moment you publish; leave
+   **Closes** empty and it closes when the event starts.
+3. **Are there seats?** If the online seats are gone, it is the waitlist (if
+   you turned it on) or "Full".
+
+An **override** beats all three: **Force open** takes registrations even when
+the event is full or the deadline has passed, and **Pause registration** stops
+them even when everything else says yes.
+
+What a guest sees in each case:
+
+| State | The button says |
+| ----- | --------------- |
+| Before the window opens | *Registration opens soon*, with the date |
+| Open | *Register*, with the seats-left counter if you turned it on |
+| Seats gone, waitlist on | *Join the waitlist* |
+| Seats gone, no waitlist | *Fully booked* |
+| After the deadline, or paused | *Registration is closed* — and, if walk-ins are on, "come to the desk on the day" |
+| On the day | *Check in* |
+| Afterwards | *Relive the night* |
+
+**To open registration right now:** Registration → set **Opens** to today (or
+clear it) → **Save** → Overview → **Publish**. Open `/e/your-link` on your own
+phone and register yourself once, as a test, before you send the link out. You
+can delete your test registration from Attendees afterwards.
 
 ---
 
@@ -257,9 +290,14 @@ Press **Publish** and `/e/your-link` is live.
 
 ## 10. The public page
 
-`hodlc.lpc.cm/e/your-link` shows the name, tagline, date, venue, your
-description and a button that changes with the moment: *Registration opens
-soon* before, *Check in* on the night, *Relive the night* afterwards.
+`hodlc.lpc.cm/e/your-link` is the page you send people to. It opens on your
+hero image and your colours, counts down to the night, then walks down the
+page: **what it is**, **the night chapter by chapter**, **where**, and
+**good to know**. A button follows the guest down the screen and always says
+the right thing for the moment (the table in §6 lists them all).
+
+Everything on it comes from what you filled in. There is no separate "website"
+to maintain: change the tagline in Details and the page changes.
 
 It also has:
 
@@ -272,9 +310,154 @@ It also has:
 not "you are not allowed", which would tell them it exists. To show a draft to
 someone outside the crew, copy the **Draft preview** link from Overview.
 
+**When you paste the link in WhatsApp** the preview card appears: your link
+card if you rendered one in Assets, your hero image otherwise. Render the link
+card — it is the difference between a shared link people tap and one they
+scroll past.
+
+### What registering is like
+
+A guest taps the button and a sheet slides up. It asks for a **phone number
+first**, and that one number does all the work:
+
+- a **member** is recognised — "Welcome back, Ada" — and only has to confirm;
+- someone who **came last time** gets their details filled in already;
+- a **new guest** types their name, and whatever else you marked required.
+
+Then the consent wording you approved, their tick, and they are in. It is
+three taps and a phone number for most people, under half a minute on a cheap
+Android.
+
+**"I'm registering for someone else"** is a tick on the sheet — for the
+husband signing up his wife, or the leader signing up a member without a
+phone. The seat belongs to the person named, not the phone that booked it.
+
+### After they register
+
+A success screen with a bit of confetti, their **ticket**, and four things:
+
+| | |
+| --- | --- |
+| **Save my link** | A private link to their seat. It is also texted to them. |
+| **Add to calendar** | For any phone. |
+| **Share "I'm going"** | A card with the event art, their name and a QR — see §13. |
+| **Invite a friend** | Their own link, so you can see who brought whom. |
+
+If the seats were gone they are told plainly that they are **on the waitlist**
+and where they are in the queue. When a seat opens they are promoted in order
+and get one text message — nobody has to watch the page.
+
+### Their private link
+
+The link they saved is `hodlc.lpc.cm/me/<their code>`. It shows their seat,
+and lets them:
+
+- see whether they are **confirmed** or **on the waitlist**;
+- **release their seat** (if you allowed self-cancelling) — which immediately
+  promotes the next person on the waitlist;
+- share the "I'm going" card again;
+- **stop all messages** about this and future events.
+
+It works on any device, so sending it to themselves and opening it on a laptop
+is fine. **Lost it?** The page has **Text me my link**. For safety, that never
+says whether a number is registered or not — it always answers "if that number
+is registered, we have texted the link", so nobody can use it to find out who
+is coming.
+
 ---
 
-## 11. Settings and Health
+## 11. Attendees
+
+The tab that appears once registration is on: everyone who has a seat, who is
+waiting for one, and who let theirs go.
+
+Along the top: **Confirmed**, **Waitlist**, **Cancelled**, **Walk-ins**,
+**Checked in**. Below that a search box (name, phone or email), a status
+filter, and the list.
+
+Tap anyone to open them. A 🎤 beside a name means they said they would like
+to sing; a 💛 means they would like a Sunday visit.
+
+**What you can do with a person**
+
+| Action | What it does | Who |
+| ------ | ------------ | --- |
+| **Correct details** | Fix a name, gender or email. Also fixes what pre-fills for them next time. | Producer, Liaison |
+| **Release seat** | They are out, and the first person on the waitlist is confirmed. | Producer, Desk |
+| **Put back** | Undo a release, if there is still room. | Producer |
+| **Promote** | Pull one person off the waitlist now, out of turn. | Producer |
+| **Remove** | For a duplicate or a bad entry. Asks you why, and the crew log keeps it. | Producer |
+| **Reset links** | Kills every link that person holds and issues a new one. Use it when a link was forwarded to the wrong group. | Producer |
+| **Erase** | Deletes the personal details for good, keeping only the anonymous count. For "please delete my data". | Producer |
+
+**Add someone by hand** is at the top of the tab, for the desk and for the
+phone call: a phone number and a name is enough, and it works even when
+online registration is closed.
+
+**Worth a look** quietly flags two things and changes nothing on its own:
+people who look like **duplicates** (the same person registered twice on two
+numbers), and guests who look like they are **already members**.
+
+### Export
+
+**Export to Excel** gives you a spreadsheet with two sheets: every attendee
+with their answers to your own questions, and a summary of the numbers. Use it
+for the door list, for the caterer's count, and for the follow-up meeting.
+
+- Only a **Producer** or a **Follow-up liaison** can export, and every export
+  is recorded — who, when, how many rows.
+- People who **opted out** are in the count but their details are withheld.
+- The file holds real phone numbers. Treat it like the offering: do not leave
+  it in a WhatsApp group, and delete your copy when the follow-up is done.
+
+---
+
+## 12. Share kit and copy help
+
+Both live on **Overview**.
+
+**Share kit** gives you the same link once per place you are going to post it
+— WhatsApp, Instagram, the flyer, the Sunday announcement, and the rest — each
+with its own **QR code**. Copy the link, or download the QR as a PNG for the
+designer.
+
+Use the right one each time and the view count beside each code tells you
+afterwards **which place actually worked**, so next year's push goes where the
+people are. The counts are numbers only; nobody is tracked.
+
+Registrations are attributed the same way, so Attendees can tell you that the
+flyer brought 40 people and Instagram brought 4.
+
+**✨ Suggest three** is the writing helper. Pick what you need — a tagline, the
+page description, a blurb, an FAQ answer, an SMS, a card headline — add a line
+of brief if you want ("mention that it ends by 9pm"), and you get three
+options that respect the length limit. Nothing is ever applied for you: read
+them, pick one, edit it. If the button is missing, no AI key is configured on
+the server, and you simply write it yourself.
+
+---
+
+## 13. The "I'm going" card
+
+On the success screen and on their private link, a guest can make a card that
+says they are coming: your event art and colours, their name, the date, and a
+QR that brings whoever scans it straight to the page.
+
+They can **add a photo**, which drops into a circle they can drag and pinch to
+position. **The photo never leaves the phone** — the card is drawn on the
+device, so there is no copy of anyone's selfie on our server. A card without a
+photo looks just as good; it is genuinely optional.
+
+Then **Share** hands it to WhatsApp, Instagram or anywhere else, and
+**Download** saves it. Both a tall story-shaped card and a square one are
+made, so it fits wherever they post it.
+
+This is the cheapest invitation you have: it goes out in your guests' own
+voice, to people no flyer reaches.
+
+---
+
+## 14. Settings and Health
 
 **Settings** (administrators only) holds what applies to every event: the
 default colours, the privacy notice, the **privacy contact email** people
@@ -287,7 +470,7 @@ the database is up to date. Red names what is missing.
 
 ---
 
-## 12. FAQ
+## 15. FAQ
 
 **Can I change the link after the posters are printed?**
 Yes. The old link redirects to the new one, forever.
@@ -315,4 +498,24 @@ Only a Producer or a Follow-up liaison. Screens during the night show "Ada O."
 and never a phone number.
 
 **When can people register?**
-In the next release. Everything you configure now is waiting for it.
+As soon as the event is published and the registration window is open. See
+"Opening registration" in §6 for the three things that have to line up.
+
+**Someone registered twice on two numbers.**
+Attendees → **Worth a look** flags it. Open the one you want to keep, then
+**Remove** the other with a reason.
+
+**Someone wants their data deleted.**
+Attendees → open them → **Erase**. The personal details go for good and only
+the anonymous count remains. Record why when it asks.
+
+**A guest lost their link.**
+On the public page, **Text me my link**. They can also just come to the desk —
+their phone number is enough.
+
+**Can I take a registration over the phone?**
+Yes. Attendees → **Add someone by hand**. It works even when online
+registration is closed.
+
+**Does the "I'm going" photo get uploaded?**
+No. The card is drawn on the guest's own phone and the photo never leaves it.

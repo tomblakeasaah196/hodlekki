@@ -326,3 +326,71 @@ function se_schema_check(PDO $pdo): array
 
     return $result;
 }
+
+// --------------------------------------------------------------------------
+// Counters (§18.1)
+// --------------------------------------------------------------------------
+
+/**
+ * Add one to a daily counter.
+ *
+ * `se_metrics_daily` holds numbers and nothing else: no identities, no paths,
+ * no free text. The optional dimension is a short, known code — a source code
+ * for a view, a card kind for a card — never anything the visitor typed.
+ *
+ * A failure here is never allowed to break the page that triggered it.
+ */
+function se_metric_bump(PDO $pdo, int $eventId, string $metric, string $dim = '', int $by = 1): void
+{
+    $metric = substr(preg_replace('/[^a-z0-9_]/', '', strtolower($metric)) ?? '', 0, 30);
+    $dim    = substr(preg_replace('/[^a-z0-9_-]/', '', strtolower($dim)) ?? '', 0, 30);
+
+    if ($metric === '' || $eventId <= 0) {
+        return;
+    }
+
+    try {
+        if (!se_table_exists($pdo, 'se_metrics_daily')) {
+            return;
+        }
+
+        $stmt = $pdo->prepare(
+            "INSERT INTO se_metrics_daily (event_id, metric_date, metric, dim, value)
+             VALUES (?, CURDATE(), ?, ?, ?)
+             ON DUPLICATE KEY UPDATE value = value + VALUES(value)"
+        );
+        $stmt->execute([$eventId, $metric, $dim, max(1, $by)]);
+    } catch (Throwable $e) {
+        error_log('SE db/metric_bump: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Portal views per source code, for the Share kit (§18.2).
+ *
+ * @return array<string,int> dimension => views
+ */
+function se_share_kit_views(PDO $pdo, int $eventId): array
+{
+    try {
+        if (!se_table_exists($pdo, 'se_metrics_daily')) {
+            return [];
+        }
+
+        $stmt = $pdo->prepare(
+            "SELECT dim, SUM(value) AS n FROM se_metrics_daily
+              WHERE event_id = ? AND metric = 'view' GROUP BY dim"
+        );
+        $stmt->execute([$eventId]);
+
+        $out = [];
+        foreach ($stmt->fetchAll() ?: [] as $row) {
+            $out[(string) $row['dim']] = (int) $row['n'];
+        }
+
+        return $out;
+    } catch (Throwable $e) {
+        error_log('SE db/share_kit_views: ' . $e->getMessage());
+        return [];
+    }
+}

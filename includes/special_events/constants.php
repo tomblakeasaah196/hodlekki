@@ -187,6 +187,59 @@ const SE_TICK_MS = 1000;
 /** Token / code lengths (§10.3, §9.3). */
 const SE_PUBLIC_ID_LENGTH = 12;
 const SE_PREVIEW_KEY_LENGTH = 22;
+/**
+ * The shortest a human can plausibly fill the registration sheet in, in
+ * milliseconds. A faster submission is treated as a bot (§12.2, §19.4).
+ */
+/**
+ * Share-kit source codes (§18.2). `?s=<code>` on any portal link is stored on
+ * the registration and counted in the daily metrics, so Envision can see
+ * which poster, status or announcement actually brought people.
+ */
+const SE_SOURCE_CODES = [
+    'wa'     => 'WhatsApp',
+    'ig'     => 'Instagram',
+    'fb'     => 'Facebook',
+    'tt'     => 'TikTok',
+    'x'      => 'X',
+    'flyer'  => 'Flyer',
+    'poster' => 'Poster',
+    'sms'    => 'SMS',
+    'pulpit' => 'Church announcement',
+    'qr'     => 'QR code',
+    'email'  => 'Email',
+];
+
+/** What the Studio's AI copywriter can be asked for (§15.8). */
+const SE_COPYWRITE_PURPOSES = [
+    'tagline', 'description', 'activity_blurb', 'faq_answer',
+    'sms_reminder', 'sms_thanks', 'card_headline',
+];
+
+/** How each purpose is described to the model, and to the Studio's menu. */
+const SE_COPYWRITE_LABELS = [
+    'tagline'        => 'a one-line event tagline',
+    'description'    => 'a short portal description',
+    'activity_blurb' => 'a blurb for one activity',
+    'faq_answer'     => 'an answer to a frequently asked question',
+    'sms_reminder'   => 'an SMS reminder',
+    'sms_thanks'     => 'an SMS thank-you after the event',
+    'card_headline'  => 'a headline for a share card',
+];
+
+/** The length each purpose must respect (§15.8). */
+const SE_COPYWRITE_LIMITS = [
+    'tagline'        => 'at most 12 words',
+    'description'    => 'at most 120 words',
+    'activity_blurb' => 'at most 25 words',
+    'faq_answer'     => 'at most 60 words',
+    'sms_reminder'   => 'at most 150 characters excluding {{link}}',
+    'sms_thanks'     => 'at most 150 characters excluding {{link}}',
+    'card_headline'  => 'at most 6 words',
+];
+
+const SE_REGISTER_MIN_FILL_MS = 1500;
+
 const SE_MANAGE_TOKEN_LENGTH = 22;
 const SE_REG_CODE_LENGTH = 8;
 const SE_REF_CODE_LENGTH = 6;
@@ -292,7 +345,7 @@ const SE_STUDIO_TABS = [
  * (build_prompts.md PR1: "Tabs belonging to later PRs stay hidden").
  */
 const SE_STUDIO_TABS_READY = [
-    'overview', 'details', 'brand', 'registration', 'assets', 'crew', 'settings',
+    'overview', 'details', 'brand', 'registration', 'attendees', 'assets', 'crew', 'settings',
 ];
 
 // --------------------------------------------------------------------------
@@ -304,12 +357,26 @@ const SE_STUDIO_TABS_READY = [
  * MUST stay in sync with each entry module's static import graph — the
  * preload test walks the imports and fails on a mismatch.
  */
+/**
+ * GSAP and its plugins, loaded as deferred UMD globals on the animated
+ * surfaces (§13.1.4). They are not ES modules in the vendored build, so they
+ * cannot go in the import map; @se/core/motion.js reads window.gsap and
+ * degrades to no animation when it is absent.
+ */
+const SE_GSAP_SCRIPTS = [
+    '/assets/se/vendor/gsap-3.13.0/gsap.min.js',
+    '/assets/se/vendor/gsap-3.13.0/ScrollTrigger.min.js',
+    '/assets/se/vendor/gsap-3.13.0/SplitText.min.js',
+];
+
 const SE_PRELOAD = [
     'portal' => [
         '/assets/se/js/portal/main.js',
         '/assets/se/js/core/store.js',
         '/assets/se/js/core/motion.js',
         '/assets/se/js/core/boot.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/phone.js',
     ],
     'studio' => [
         '/assets/se/js/studio/main.js',

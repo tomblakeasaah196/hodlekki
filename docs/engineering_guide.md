@@ -751,19 +751,24 @@ api/
   special_events_public_api.php     # public
   special_events_live_api.php       # crew live ops
   special_events_display_api.php    # stage/lobby
+  special_events_export.php         # streams the .xlsx (binary, so not an action)
 modules/special_events/
   index.php                         # Studio page (requires header.php on line 3)
   how_to_use.md                     # user guide (CI-enforced, §21)
 includes/special_events/
   bootstrap.php                     # require_once of all files below + constants
   constants.php                     # enums, limits, reserved slugs, defaults
-  util.php                          # ids, base32, json, hashing, time helpers, se_markdown() renderer
+  util.php                          # ids, base32, json, hashing, time helpers, se_markdown() renderer, URL builders
+  db.php                            # se_table_exists(), se_lock_event(), se_schema_check(), se_audit(), exceptions
   security.php                      # access levels, capabilities, CSRF, rate limits, masking, headers
   settings.php                      # module settings + per-event settings normaliser (Appendix E)
   events.php                        # load/save/publish/archive, phases, days, slugs, clone
   identity.php                      # phone normalisation, contacts, member lookup, devices, tokens
   capacity.php                      # registration state, seat allocation, waitlist, walk-in pools
   registration.php                  # register, cancel, manage, link SMS
+  attendees.php                     # the crew's view: list, correct, promote, erase
+  portal.php                        # server-rendered Marquee portal (§13.3)
+  cards.php                         # share-card payloads and colours (§14.3)
   checkin.php                       # check-in, player numbers, verses, transfer codes, desk ops
   teams.php                         # assignment algorithm, moves, naming, captains
   program.php                       # items, ETA engine, AI import apply
@@ -799,6 +804,11 @@ db/migrations/
 tests/special_events/
   run.php                           # CLI unit tests (no DB)
   …_test.php
+  js/*.test.mjs                     # node --test unit tests (no DB)
+  fixtures/phones.json              # the phone vectors PHP and JS both read
+  db_setup.php  smoke_seed.php      # build a disposable MySQL + a /e/smoke event
+  dev_router.php                    # serves /e/ under `php -S`
+  integration/run.php               # §22.2, needs a real MySQL
   load/quiz.k6.js                   # load test script
 docs/
   engineering_guide.md              # this file
@@ -2071,7 +2081,7 @@ Mobile-first; desktop enhances. Sections in order:
 - *The Night*: a programme timeline that draws itself (SVG stroke) with approximate times (§10.7.2).
 - *Desktop*: each chapter pins for one viewport height while its content animates (scrubbed). *Mobile*: no pin; content reveals on enter.
 
-**S4 · Watch / listen.** "Lite" YouTube embed (thumbnail + play; the `youtube-nocookie.com` iframe loads on tap) and an optional voice-over audio card ("Hear from the team").
+**S4 · Watch / listen.** "Lite" YouTube embed (thumbnail + play; the `youtube-nocookie.com` iframe loads on tap) and an optional voice-over audio card ("Hear from the team"). **Not built in PR2** — no per-event setting holds the URL yet, so the portal simply skips this screen (§28.4).
 
 **S5 · Venue.** Glass card: venue name, address, notes ("Check-in is downstairs"), **Open in Maps**, **Add to calendar** (`/e/<slug>/calendar.ics`).
 
@@ -2843,7 +2853,7 @@ There is still no full test suite in the repo. This module adds focused automate
 | `phone_test.php` + `js/phone.test.mjs` | Shared fixture `fixtures/phones.json` (≥ 40 vectors: `0803…`, `803…`, `+234 (0) 803…`, `00234…`, spaces/dashes, landlines → null, `+44…` international, garbage). PHP and JS must agree. |
 | `slug_test.php` | format, reserved words, case folding, suggestions |
 | `display_name_test.php` | casing, unicode, missing last name, length cap |
-| `capacity_state_test.php` | table-driven `se_registration_state()` over phases × overrides × counts × waitlist settings |
+| `capacity_state_test.php` | table-driven `se_registration_state()` over phases × overrides × counts × waitlist settings; `se_walkin_pool()`, seats-left modes, `se_can_self_cancel()` |
 | `team_algorithm_test.php` | I1–I3 over 100 000 random sequences (k = 2…8); deterministic replay; pointer rotation |
 | `eta_test.php` | planned timeline, live drift, skips, explicit start times, overlaps |
 | `scoring_test.php` | Kahoot formula bounds; team normalisation; weights; idempotency keys; Who-Am-I clue points; Feud bank × multipliers |
@@ -2859,7 +2869,16 @@ There is still no full test suite in the repo. This module adds focused automate
 
 ### 22.2 Integration tests (local MySQL)
 
-`tests/special_events/integration/` (run locally with a disposable database; not in CI until a DB service is added):
+`tests/special_events/integration/run.php` (run locally with a disposable database; not in CI until a DB service is added). Build the database first, then run it:
+
+```bash
+php tests/special_events/db_setup.php --fresh --seed \
+    --host=127.0.0.1 --port=3306 --user=root --pass=secret --db=se_test
+SE_TEST_DB_NAME=se_test SE_TEST_DB_USER=root SE_TEST_DB_PASS=secret \
+    php tests/special_events/integration/run.php
+```
+
+The cases:
 - **Seat race**: 60 parallel PHP CLI processes register distinct phones against capacity 20 → exactly 20 `confirmed`, 40 `waitlisted` (waitlist on) or `full` responses.
 - **Check-in race**: 40 parallel check-ins → team sizes within ±1; player numbers 1…40 unique.
 - **Karaoke race**: 10 parallel picks of the same song with unique songs on → exactly 1 success.
@@ -3199,7 +3218,7 @@ Each PR sets its **own** row to ✅, with the PR link, the date and notes for th
 | Guide | ✅ | [#28](https://github.com/tomblakeasaah196/hodlekki/pull/28) | 2026-10-03 | Design, build plan and prompts. The Appendix A SQL was tested on MySQL 8.0.46 and MariaDB 10.11.14. |
 | PR0 | ✅ | [#29](https://github.com/tomblakeasaah196/hodlekki/pull/29) | 2026-10-03 | `.deployignore` is now in **tar** pattern format: root-only entries are `./name`, bare names match at any depth, and a pattern starting or ending with `/` is silently ignored (that was O16). Read the header comment in the file before adding entries. The lint job step "Deploy exclusions must hold under tar" re-runs the deploy's tar pipeline on every push and pull request and fails if `.git`, `.github`, `.cpanel.yml`, `.deployignore`, `php.ini`, `tests`, `docs`, `AGENTS.md` or `DEPLOY.md` would be copied, or if `index.php`, `includes/db.php` or `webhook/.htaccess` would not be — so PR1 must add `./live` in `./name` form and keep `assets/se/**` copyable. The deploy copy **never deletes**: a renamed or removed public file lingers in the docroot (§5 risk table). Owner cleanup of the already-published `.git/`, `.github/`, `tests/`, `docs/`, `AGENTS.md`, `DEPLOY.md` is tracked in §27 (O16). |
 | PR1 | ✅ | [#30](https://github.com/tomblakeasaah196/hodlekki/pull/30) | 2026-10-04 | Foundations are in. **`includes/special_events/bootstrap.php` is the only entry point** — require it after `includes/db.php`, never instead of it. `includes/special_events/db.php` is a PR1 addition to the §8.7 layout and holds `se_table_exists()`, `se_lock_event()`, `se_schema_check()`, `se_audit()` and the module's exception types (`SeValidationException`, `SeStaleVersionException`, `SeNotFoundException`, `SeRuleException`) — throw those and let `se_api_fail()` map them to the §12.1 envelope. **No `style="…"` attributes in server HTML**: the CSP nonce does not cover style attributes and Chromium drops them; per-team colours go through `se_theme_css_vars($theme, $teams)` into the nonced `<style>` block (§13.1.2 corrected). **Asset and crew actions name their own row in `id`** and derive the event from it, so a caller cannot pair someone else's row with their own event. Vendored libraries live at `assets/se/vendor/<name>-<version>/`; add a new one with a new versioned directory and update `se_import_map()` in bootstrap.php — the one place both the portal and the Studio read. Add a Studio tab by listing it in `SE_STUDIO_TABS` **and** `SE_STUDIO_TABS_READY`; until then it stays hidden. `tests/special_events/db_setup.php --fresh --seed` builds a local database (stand-ins + migrations, applied exactly as `db/migrate.php` does), and `dev_router.php` serves `/e/` under `php -S`. Run the suite with `php tests/special_events/run.php` and `node --test "tests/special_events/js/*.test.mjs"`. |
-| PR2 | ⬜ | — | — | — |
+| PR2 | ✅ | [#31](https://github.com/tomblakeasaah196/hodlekki/pull/31) | 2026-10-04 | Registration is live. **`includes/special_events/db.php` aside, every new library is required by `bootstrap.php`** — `identity.php`, `capacity.php`, `registration.php`, `messages.php`, `attendees.php`, `cards.php`, `export.php`, `portal.php`. **All seat allocation must go through `se_lock_event()`**: call `se_register()` / `se_registration_cancel()` / `se_promote_registration()` rather than touching `se_registrations.status` yourself, and call `se_after_capacity_change($pdo, $event)` (two arguments) after anything that frees or takes a seat — it recomputes the counters and auto-closes. `se_promote_waitlist_force($pdo, $event, $seats)` takes a **seat count**, not an id. **Every Studio action takes the event in `id`**, so attendee actions name the person in `attendee_id`; keep that for check-in, teams and karaoke (a check-in action should take `attendee_id` or `reg_code`, never `id`). The public API is `api/special_events_public_api.php`: new actions go after `se_require_request_integrity()` and use `se_public_event()`, `se_public_require_writable()`, `se_public_actor()` and `se_public_limit()` — copy an existing case. `GET ?action=time` is the only GET. The portal is **server-rendered** in `includes/special_events/portal.php` and `e/index.php`; `/in`, `/play`, `/stage` must follow the same rule — no `style="…"` attributes, classes in `se.input.css`, and a new entry module needs an `SE_PRELOAD` entry or `preload_test.php` fails. The SVG engine is `assets/se/js/core/svg.js` with templates in `assets/se/templates/`; a new card kind adds a template, a `SE_CARD_KINDS_READY` entry and a `card` payload branch. SMS goes out through `se_message_runs` run keys (`waitlist:<reg_id>:<n>`, `link:<reg_id>:<YYYYMMDDHH>`) into the SMS Studio tables — never write `sms_log`. The §22.2 integration tests exist (`tests/special_events/integration/run.php`) but are **not** in CI: run them with `db_setup.php --fresh --seed` against a scratch MySQL, and use `smoke_seed.php` + `dev_router.php` for the manual smoke. |
 | PR3 | ⬜ | — | — | — |
 | PR4 | ⬜ | — | — | — |
 | PR5 | ⬜ | — | — | — |
@@ -3225,6 +3244,12 @@ Every design change made during the build is logged here (newest last), and the 
 | 2026-10-04 | PR1 | §21.3 | `.gitignore`'s `vendor/` is now root-anchored (`/vendor/`), and `live/*` plus its two exceptions were added. `./live` was **not** added to `.deployignore`. | The unanchored `vendor/` also matched `assets/se/vendor/`, hiding the very files that must be committed because the host has no Node (§8.6.1). The §28.3 note on PR0 asked PR1 to exclude `./live` from the deploy, but §23.1 requires `live/.htaccess` and `live/.keep` to **reach** the docroot so the directory exists; runtime snapshots are never in the repo, and tar never deletes, so there is nothing to exclude. Verified against the tar guard. |
 | 2026-10-04 | PR1 | §22.1 | CI runs the Node tests as `node --test "tests/special_events/js/*.test.mjs"`, not against a bare directory. | `node --test <dir>` is unsupported on Node 22, which resolves the path as a module and fails with "Cannot find module". |
 | 2026-10-04 | PR1 | §28.3 (PR0 note) | The PR0 note asking PR1 to add `./live` to `.deployignore` is superseded; see the §21.3 row above. | Kept here so the next PR does not re-apply it. |
+| 2026-10-04 | PR2 | §8.7, §12.5, §18.6 | The attendee workbook is built in a new `includes/special_events/export.php` and streamed by a new `api/special_events_export.php?event=<public_id>` (GET, ERP session + `attendee.export`). The Studio's `attendees_export` action returns `{url, filename}` instead of a file. | A binary `.xlsx` cannot travel inside the `{status, message, data}` envelope §12.1 requires of every action. Splitting the builder from the endpoint keeps the §8.7 `export.php` entry honest and lets later phases reuse it. |
+| 2026-10-04 | PR2 | §12.5 | Attendee actions name the person in **`attendee_id`**; `id` stays the event, as it is for every other Studio action. | §12.5 writes `id` for both. PR1 already resolved the same clash for assets and crew by naming the row; attendees cannot use that form because almost every attendee action also needs the event for its capability check, so the person gets the second key. |
+| 2026-10-04 | PR2 | §8.7 | `se_site_origin()`, `se_event_url()`, `se_studio_url()` and `se_import_map()` moved from `bootstrap.php` to `util.php`. | The portal, the share kit and the card payloads all build URLs, and the CLI unit tests build them with no database. `util.php` is the database-free file the harness can load; `bootstrap.php` is not. |
+| 2026-10-04 | PR2 | §10.3 | A bare international number with no `+` and no `00` (for example `447911123456`) is **rejected**, not guessed. Only Nigerian forms (`0803…`, `803…`, `234…`, `+234…`) are normalised without a prefix. | `0803…` and a nine-digit foreign subscriber number are indistinguishable, and silently inventing a country code would send the welcome SMS to a stranger. The fixtures in `tests/special_events/fixtures/phones.json` state the idempotence invariant over `'+'.$e164` and the display form for that reason. |
+| 2026-10-04 | PR2 | §13.3 | Marquee screen **S4 (the YouTube trailer / voice-over)** is deferred. S0–S3 and S5–S7 are built. | No per-event setting holds a video URL (Appendix E has no key for it), and inventing one here would clash with the brand-kit work. PR3 adds `portal.trailer_url` alongside the other portal settings, or it is dropped. |
+| 2026-10-04 | PR2 | §22.1, §22.2 | The §22.2 integration tests are committed at `tests/special_events/integration/run.php` but are **not** run by the CI job, and were **not** executed before merge. `tests/special_events/smoke_seed.php` was added so the portal smoke can be run by hand. | The shared runner has no MySQL service, and the GitHub App used for this branch cannot push workflow files, so the temporary job that would have added one could not be created. The seat race and the cancel/promotion test must be run against a scratch MySQL before Phase A is declared done (Appendix H.2). |
 
 ---
 
