@@ -39,6 +39,7 @@ require_once __DIR__ . '/registration.php';
 require_once __DIR__ . '/messages.php';
 require_once __DIR__ . '/attendees.php';
 require_once __DIR__ . '/cards.php';
+require_once __DIR__ . '/export.php';
 require_once __DIR__ . '/portal.php';
 
 // SMS goes out through SMS Studio's tables and worker (§16.1). Loading its

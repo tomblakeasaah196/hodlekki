@@ -905,9 +905,13 @@ try {
         // travel inside the {status, message, data} envelope (§28.4).
         $event = se_studio_event($pdo, $body, 'attendee.export');
 
+        if (!se_export_available()) {
+            se_api_error('Spreadsheet support is not installed on this server.', 'FEATURE_NOT_READY');
+        }
+
         se_api_success('OK', [
             'url'      => '/api/special_events_export.php?event=' . rawurlencode((string) $event['public_id']),
-            'filename' => $event['slug'] . '-attendees-' . se_now()->format('Ymd-Hi') . '.xlsx',
+            'filename' => se_export_attendees_filename($event),
         ]);
     }
 
