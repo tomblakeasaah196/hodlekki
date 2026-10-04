@@ -49,6 +49,14 @@ The internal ERP is organised as one directory per module under
 - `envision`, `river_of_life`, `idi`, `mobilization` — ministry-specific
   workflows.
 
+**Events & experiences**
+- `special_events` — the Special Events Studio: create, brand and run a
+  one-off event (Chara, karaoke and games nights) end to end. Standalone
+  `se_*` tables, a public portal at `/e/<slug>`, poster-QR check-in, colour
+  teams, live games and a guided hand-off to Reach and Embrace. Design and
+  build plan: [`docs/engineering_guide.md`](docs/engineering_guide.md); user
+  guide: [`modules/special_events/how_to_use.md`](modules/special_events/how_to_use.md).
+
 **Finance & operations**
 - `finance` — offerings, tithes, and ledger.
 - `requisition` — internal purchase requests with PDF export.
@@ -204,6 +212,24 @@ the untracked `.env` file.
 | `SMS_VAULT_KEY`    | 64-hex AES-256-GCM key for the SMS Studio vault.     |
 | `SMS_WEBHOOK_SECRET` | Shared secret for BulkSMS delivery callbacks (`api/sms_webhook.php?token=…`). Optional; without it the worker polls for delivery reports. |
 | `GEOAPIFY_API_KEY` | Client-side address-autocomplete key (domain-lock in the Geoapify dashboard). |
+
+
+### Special Events (`se_*`)
+
+| Key | Required | Default | Purpose |
+|---|---|---|---|
+| `SE_HASH_PEPPER` | **yes** | — | HMAC key for manage-link tokens, device cookies and IP/UA hashing. 64 hex characters. Without it the module refuses to issue tokens. |
+| `SE_AI_MODEL_TEXT` | no | `gemini-2.5-flash` | Model for text AI tasks (`se_ai()`); the key is the existing `GEMINI_API_KEY`. |
+| `SE_AI_MODEL_VISION` | no | `gemini-2.5-flash` | Model for image and PDF AI tasks. |
+| `SE_REALTIME_DRIVER` | no | `poll` | `poll` (static JSON snapshots) or `ably` (reserved). |
+| `ABLY_API_KEY` | only for `ably` | — | Push driver; unused in v1. |
+| `SE_BIBLE_API_BASE` | no | `https://bible-api.com` | KJV verse lookup for welcome cards and game content. |
+
+Generate the pepper with:
+
+```bash
+php -r "echo bin2hex(random_bytes(32));"
+```
 
 ## Directory structure
 

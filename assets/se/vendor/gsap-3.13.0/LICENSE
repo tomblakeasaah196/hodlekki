@@ -1,0 +1,11 @@
+GSAP 3.13.0 — Standard 'no charge' license.
+Full terms: https://gsap.com/standard-license/
+As of 2025 every GSAP plugin (including ScrollTrigger and SplitText) is
+included at no charge under that license.
+
+Extract from the package README:
+
+## License
+GreenSock's standard "no charge" license can be viewed at <a href="https://gsap.com/standard-license">https://gsap.com/standard-license</a>.
+
+Copyright (c) 2008-2025, GreenSock. All rights reserved.

@@ -24,6 +24,12 @@ Anyone in the Reach department can capture, claim and follow up leads. **HODs, D
 
 Renaming a campaign changes its link, so share the new one. A campaign with captures cannot be deleted — it is marked *Cancelled* instead so the record stays intact.
 
+> **Campaigns you did not create.** A campaign of type **Special Event** is
+> made for you by the Special Events hand-off after an event such as Chara.
+> Its leads are the guests who came and agreed to be contacted, and each one
+> arrives with a note naming the event. Work them exactly like any other
+> campaign — they are simply people who already met us once.
+
 **Campaign settings** (the gear button next to New Campaign, for HODs, Directors and pastors) — also holds the **overdue days** and the **evangelism guide**:
 
 - **Event types** — add your own (for example *Market Storm*) or remove ones you don't use. Removing a type keeps it on campaigns that already use it.

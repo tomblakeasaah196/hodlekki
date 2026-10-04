@@ -1,0 +1,21 @@
+# /live/.htaccess — Special Events realtime snapshots (guide §23.1).
+#
+# Phones poll these JSON files about once a second. LiteSpeed serves them as
+# static files without starting PHP, which is the whole point of the polling
+# design (§8.5) on a shared host with a cap on PHP entry processes.
+#
+# Only *.json is reachable. Everything else in this tree — including anything
+# an attacker might manage to drop here — is denied.
+Options -Indexes
+
+<FilesMatch "^(?!.*\.json$).*$">
+  Require all denied
+</FilesMatch>
+
+<FilesMatch "\.json$">
+  <IfModule mod_headers.c>
+    Header set Cache-Control "no-cache"
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Robots-Tag "noindex, nofollow"
+  </IfModule>
+</FilesMatch>

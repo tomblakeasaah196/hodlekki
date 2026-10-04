@@ -231,6 +231,15 @@ try {
     // Set the final destination based on their access
     $target_redirect = $has_dashboard_access ? '/index.php' : '/modules/member_portal/index.php';
 
+    // A "return to" path stored by auth/login.php?next=… wins (guide §21.4).
+    // It was validated there as a same-origin /e/ or /modules/ path; it is
+    // consumed once, and never applies when a password change is forced
+    // (that branch returns earlier).
+    if (!empty($_SESSION['post_login_next'])) {
+        $target_redirect = (string) $_SESSION['post_login_next'];
+        unset($_SESSION['post_login_next']);
+    }
+
     // 17. Return success payload with dynamic redirect
     echo json_encode([
         'status' => 'success',

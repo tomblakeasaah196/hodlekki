@@ -1,0 +1,350 @@
+/* /assets/se/css/se.input.css
+ *
+ * Tailwind v4 source for the Special Events public surfaces (guide §13.1.2).
+ * Compiled to se.css by bin/build_se_css.sh, which is committed because the
+ * cPanel host has no Node (§2.3). CI checks the committed file is fresh.
+ *
+ * Every colour is a CSS variable set per event by the theme engine
+ * (includes/special_events/theme.php), so one stylesheet serves every event.
+ */
+
+@import "tailwindcss";
+
+@source "../js";
+@source "../../../e";
+
+@theme inline {
+  --color-bg: var(--se-bg);            --color-bg-2: var(--se-bg-2);
+  --color-surface: var(--se-surface);  --color-surface-2: var(--se-surface-2);
+  --color-line: var(--se-border);
+  --color-ink: var(--se-text);         --color-ink-muted: var(--se-text-muted);
+  --color-primary: var(--se-primary);  --color-on-primary: var(--se-on-primary);
+  --color-secondary: var(--se-secondary); --color-on-secondary: var(--se-on-secondary);
+  --color-accent: var(--se-accent);
+  --color-success: var(--se-success);  --color-danger: var(--se-danger);  --color-warning: var(--se-warning);
+  --font-display: var(--se-font-display), ui-sans-serif, system-ui;
+  --font-body: var(--se-font-body), ui-sans-serif, system-ui;
+  --font-script: "Great Vibes", cursive;
+  --radius-input: 12px; --radius-card: 20px; --radius-sheet: 28px;
+}
+
+/* ---------------------------------------------------------------------- *
+ * Fallback token values.
+ *
+ * e/index.php writes the real palette into a <style nonce> block, but these
+ * defaults mean a surface still renders if that block is ever missing — and
+ * they give the Tailwind utilities something to resolve against at build
+ * time. HOD blue and red (§20.2).
+ * ---------------------------------------------------------------------- */
+:root {
+  --se-bg: #050913;
+  --se-bg-2: #020309;
+  --se-surface: #0D1421;
+  --se-surface-2: #181F2D;
+  --se-border: rgb(255 255 255 / 0.14);
+  --se-text: #F2F5FC;
+  --se-text-muted: #B7BECB;
+  --se-primary: #415C95;
+  --se-primary-raw: #1D356A;
+  --se-on-primary: #FFFFFF;
+  --se-secondary: #D11920;
+  --se-secondary-raw: #D11920;
+  --se-on-secondary: #FFFFFF;
+  --se-accent: #F3A16B;
+  --se-glow: #34559C;
+  --se-glow-2: #FF4A44;
+  --se-focus: #D11920;
+  --se-success: #56D57B;
+  --se-danger: #FF645F;
+  --se-warning: #FDC436;
+
+  --se-font-display: "Unbounded";
+  --se-font-body: "Inter";
+
+  --se-gutter: 20px;
+  --se-container: 1200px;
+  --se-section-pad: clamp(4rem, 12vh, 8rem);
+}
+
+/* ---------------------------------------------------------------------- *
+ * Base
+ * ---------------------------------------------------------------------- */
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--se-bg);
+    color: var(--se-text);
+    font-family: var(--se-font-body), ui-sans-serif, system-ui, sans-serif;
+    line-height: 1.6;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, .se-display {
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+  }
+
+  /* A visible focus ring on every interactive element (§13.14). */
+  :focus-visible {
+    outline: 3px solid var(--se-focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Inputs at 16px or larger, so iOS never zooms on focus (§13.14). */
+  input, select, textarea, button {
+    font: inherit;
+    font-size: max(1rem, 16px);
+  }
+
+  ::selection {
+    background: var(--se-primary);
+    color: var(--se-on-primary);
+  }
+}
+
+/* ---------------------------------------------------------------------- *
+ * Components (§13.1.7)
+ * ---------------------------------------------------------------------- */
+
+@layer components {
+
+  .se-container {
+    width: 100%;
+    max-width: var(--se-container);
+    margin-inline: auto;
+    padding-inline: var(--se-gutter);
+  }
+
+  /* Glass: the elevation token from §13.1.2. */
+  .se-glass {
+    background: color-mix(in oklab, var(--se-surface) 70%, transparent);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid var(--se-border);
+    border-radius: var(--radius-sheet);
+    box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.6);
+  }
+
+  .se-glow {
+    box-shadow:
+      0 0 24px var(--se-glow),
+      0 0 64px color-mix(in oklab, var(--se-glow) 40%, transparent);
+  }
+
+  /* Targets are at least 48x48 (§13.14). */
+  .se-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 48px;
+    padding: 0.75rem 1.5rem;
+    border-radius: 999px;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1), filter 150ms;
+    will-change: transform;
+  }
+  .se-btn:active { transform: scale(0.97); }
+
+  .se-btn-primary {
+    background: var(--se-primary);
+    color: var(--se-on-primary);
+    box-shadow: 0 0 24px color-mix(in oklab, var(--se-glow) 55%, transparent);
+  }
+  .se-btn-primary:hover { filter: brightness(1.08); }
+
+  .se-btn-secondary {
+    background: var(--se-secondary);
+    color: var(--se-on-secondary);
+  }
+
+  .se-btn-ghost {
+    background: transparent;
+    color: var(--se-text);
+    border: 1px solid var(--se-border);
+  }
+
+  .se-card {
+    background: var(--se-surface);
+    border: 1px solid var(--se-border);
+    border-radius: var(--radius-card);
+  }
+
+  .se-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--se-text-muted);
+    font-weight: 700;
+  }
+
+  .se-display-xl { font-size: clamp(3.5rem, 12vw, 9rem);    line-height: 0.9; }
+  .se-display-lg { font-size: clamp(2.25rem, 7vw, 4.5rem);  line-height: 0.95; }
+  .se-h1         { font-size: clamp(1.75rem, 5vw, 3rem);    line-height: 1.05; }
+  .se-h2         { font-size: clamp(1.375rem, 3.6vw, 2rem); line-height: 1.15; }
+  .se-small      { font-size: 0.875rem; line-height: 1.5; }
+
+  .se-section { padding-block: var(--se-section-pad); }
+
+  /* A team chip always carries its name as text, never colour alone
+   * (§13.2.4), and gets a ring when its colour does not read on the stage. */
+  .se-team-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.875rem;
+    border-radius: 999px;
+    background: var(--t, var(--se-surface-2));
+    color: var(--t-on, var(--se-text));
+    box-shadow: 0 0 0 2px var(--t-ring, transparent), 0 0 18px var(--t-glow, transparent);
+    font-weight: 700;
+  }
+
+  /* Skip link: visible only once focused (§13.14). */
+  .se-skip {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 100;
+  }
+  .se-skip:focus {
+    left: var(--se-gutter);
+    top: var(--se-gutter);
+    padding: 0.75rem 1.25rem;
+    background: var(--se-surface-2);
+    color: var(--se-text);
+    border-radius: 12px;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Server-rendered layout (e/index.php).
+   *
+   * These exist as CLASSES, not style attributes, because the §19.7 CSP
+   * sets style-src to 'self' plus a nonce — and a nonce does not cover
+   * `style="..."` attributes. Chromium drops every one of them, so any
+   * inline style in server HTML is simply lost.
+   * ------------------------------------------------------------------ */
+
+  .se-stack-sm > * + * { margin-top: 0.5rem; }
+  .se-stack    > * + * { margin-top: 1rem; }
+  .se-stack-lg > * + * { margin-top: 2rem; }
+
+  .se-measure      { max-width: 68ch; }
+  .se-measure-tight { max-width: 48ch; }
+  .se-measure-hero { max-width: 40ch; }
+
+  .se-muted { color: var(--se-text-muted); }
+  .se-accent-text { color: var(--se-secondary); }
+
+  .se-notice {
+    padding: 0.75rem 1rem;
+    margin: 0;
+  }
+  .se-notice-top { padding-top: 1rem; }
+  .se-notice-danger { border-color: var(--se-danger); }
+
+  .se-hero-title { margin-block: 0.5rem 1rem; }
+  .se-hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-block: 2rem;
+  }
+  .se-hero-meta dd { margin: 0; font-weight: 700; }
+  .se-hero-figure { margin: 3rem 0 0; }
+  .se-hero-figure img {
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-card);
+  }
+  .se-hero-body { margin-top: 3rem; }
+  .se-hero-foot { margin-top: 3rem; }
+
+  .se-page-title { margin-block: 0.5rem 1.5rem; }
+
+  .se-card-grid {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  }
+  .se-card-grid > li { padding: 1.5rem; }
+  .se-card-title { font-size: 1.25rem; margin: 0 0 0.5rem; }
+
+  .se-list-plain { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
+
+  .se-pad { padding: 1rem; }
+  .se-pad-lg { padding: 2rem; }
+
+  /* Markdown produced by se_markdown() (§19.5). */
+  .se-md       { color: var(--se-text-muted); }
+  .se-md p     { margin-block: 0.75em; }
+  .se-md-h2    { font-size: 1.5rem; margin-block: 1.25em 0.5em; color: var(--se-text); }
+  .se-md-h3    { font-size: 1.25rem; margin-block: 1em 0.4em; color: var(--se-text); }
+  .se-md-h4    { font-size: 1.05rem; margin-block: 1em 0.4em; color: var(--se-text); }
+  .se-md-list  { padding-left: 1.5rem; margin-block: 0.75em; list-style: disc; }
+  .se-md-list li { margin-block: 0.25em; }
+  .se-md ol.se-md-list { list-style: decimal; }
+  .se-md-link  { color: var(--se-secondary); text-decoration: underline; text-underline-offset: 2px; }
+  .se-md-code  { background: var(--se-surface-2); padding: 0.1em 0.4em; border-radius: 6px; font-size: 0.9em; }
+  .se-md-quote { border-left: 3px solid var(--se-primary); padding-left: 1rem; margin-block: 1em; color: var(--se-text); }
+  .se-md-rule  { border: 0; border-top: 1px solid var(--se-border); margin-block: 2em; }
+}
+
+/* ---------------------------------------------------------------------- *
+ * Motion and accessibility preferences (§13.1.2, §13.1.4)
+ * ---------------------------------------------------------------------- */
+
+@layer utilities {
+
+  /* Spotlights, glow breathing and the equaliser. GSAP pauses these when
+   * off-screen; the CSS only has to stop them for reduced motion. */
+  .se-animate-float { animation: se-float 6s ease-in-out infinite; }
+  .se-animate-pulse { animation: se-pulse 3.5s ease-in-out infinite; }
+
+  @keyframes se-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+  }
+  @keyframes se-pulse {
+    0%, 100% { opacity: 0.55; }
+    50%      { opacity: 1; }
+  }
+}
+
+/* Low-power fallback: no backdrop-filter, opaque surfaces (§13.1.2). */
+@media (prefers-reduced-transparency: reduce) {
+  .se-glass {
+    background: var(--se-surface-2);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Reduced motion: no spotlights, flicker, parallax or confetti; fades only
+ * (§13.1.4). GSAP checks the same preference in @se/core/motion.js. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 200ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .se-animate-float, .se-animate-pulse { animation: none !important; }
+}

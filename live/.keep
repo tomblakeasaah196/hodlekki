@@ -1,0 +1,5 @@
+This file keeps /live/ in git so the deploy creates the directory.
+
+Event snapshots are written here by PHP at runtime as live/<public_id>/*.json
+(guide §8.5). They are git-ignored: see the live/* rules in .gitignore.
+Do not commit snapshots, and do not delete this file or live/.htaccess.

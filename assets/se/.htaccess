@@ -1,0 +1,38 @@
+# /assets/se/.htaccess — Special Events static assets (guide §8.6.1).
+Options -Indexes
+
+# Nothing here is ever executed. The module serves only static files from
+# this tree, so denying scripts outright removes a whole class of mistake.
+<FilesMatch "\.(php|phtml|phar|pl|py|cgi|sh)$">
+  Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+
+  # App code and data revalidate on every request: the deploy never changes a
+  # file name, so a hard cache here would serve yesterday's JavaScript.
+  # "no-cache" still allows a 304, so unchanged files cost one empty round trip.
+  <FilesMatch "\.(js|mjs|css|json|svg)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+
+  # vendor/** is immutable: the version is part of the path (see VENDOR.md),
+  # so a given URL's bytes never change and a year-long cache is safe.
+  <FilesMatch "^.*$">
+    <If "%{REQUEST_URI} =~ m#^/assets/se/vendor/#">
+      Header set Cache-Control "public, max-age=31536000, immutable"
+    </If>
+  </FilesMatch>
+
+  # Sound sprite and images are content-addressed by their upload name.
+  <FilesMatch "\.(mp3|m4a|woff2|png|jpg|jpeg|webp|avif)$">
+    Header set Cache-Control "public, max-age=604800"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_mime.c>
+  AddType text/javascript .js .mjs
+  AddType application/json .json
+  AddType image/svg+xml .svg
+</IfModule>

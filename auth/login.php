@@ -11,6 +11,22 @@ if (isset($_SESSION['user_id'])) {
 // Constants only — this file has no DB work to do.
 require_once __DIR__ . '/../includes/security_helpers.php';
 
+// "Return to" (guide §21.4). Crew open a console link such as /e/chara/host on
+// a fresh device and must land back there after signing in.
+//
+// Open-redirect safe by construction: the value must be a same-origin path
+// under /e/ or /modules/, with no protocol-relative "//" and no backslash, so
+// it can never point at another host. Anything else is ignored silently.
+if (isset($_GET['next'])) {
+    $next = (string) $_GET['next'];
+    if (strlen($next) <= 200
+        && preg_match('#^/(e|modules)/[A-Za-z0-9/_\-.?=&\#]{0,200}$#', $next)
+        && !str_contains($next, '//')
+        && !str_contains($next, '\\')) {
+        $_SESSION['post_login_next'] = $next;
+    }
+}
+
 // When the security gate tears a session down (suspension, revoke, "sign out
 // everywhere"), it leaves a short-lived cookie explaining why. Show it once,
 // then clear it.
