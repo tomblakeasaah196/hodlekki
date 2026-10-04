@@ -44,7 +44,7 @@ export function TextInput({ name, value, onInput, placeholder, type = 'text', ma
                 + (disabled ? ' bg-gray-50 text-gray-400' : '')} />`;
 }
 
-export function TextArea({ name, value, onInput, rows = 5, placeholder, maxLength }) {
+export function TextArea({ name, value, onInput, rows = 5, placeholder, maxLength, disabled }) {
     const error = fieldErrors.value[name];
 
     return html`
@@ -54,6 +54,7 @@ export function TextArea({ name, value, onInput, rows = 5, placeholder, maxLengt
             rows=${rows}
             placeholder=${placeholder || ''}
             maxLength=${maxLength}
+            disabled=${disabled}
             aria-invalid=${error ? 'true' : undefined}
             aria-describedby=${error ? `se-err-${name}` : undefined}
             onInput=${(e) => onInput?.(e.currentTarget.value)}
