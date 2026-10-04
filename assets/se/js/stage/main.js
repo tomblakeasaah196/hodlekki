@@ -17,7 +17,8 @@
 // break, blank) plus placeholders. PR4 makes the programme scene real —
 // now and next, off the live timeline — and adds the karaoke scene, which
 // reads the room snapshot because it says singers' names and public.json
-// is world-readable (§8.5.2). Game, feud and finale arrive with PR5.
+// is world-readable (§8.5.2). PR6 adds the party-game boards, leaderboard
+// and finale.
 
 import { call } from '@se/core/api.js';
 import { boot, live, room } from '@se/core/store.js';
@@ -232,7 +233,50 @@ function sceneBlank() {
     return [node('h1', 'se-scene-title', display.event.title)];
 }
 
-/** PR5 owns these; until then the room sees something intentional. */
+function sceneLeaderboard(data) {
+    const board = node('ol', 'se-stage-leaderboard');
+    [...(data.teams || [])].sort((a, b) => b.score - a.score).forEach((team, index) => {
+        const row = node('li', 'se-stage-leader-row');
+        row.style.setProperty('--team-color', team.hex);
+        row.append(node('strong', '', `${index + 1}. ${team.name || team.label}`), node('span', '', `${team.score} pts`));
+        board.appendChild(row);
+    });
+    const out = [node('p', 'se-scene-sub', 'Championship'), node('h1', 'se-scene-title', 'Leaderboard'), board];
+    const mvp = room.value?.data?.mvp || [];
+    if (mvp.length) out.push(node('p', 'se-scene-body', `MVP · ${mvp[0].display_name} · ${mvp[0].points} pts`));
+    return out;
+}
+
+function sceneGame(data) {
+    const game = data.game || {};
+    const round = game.round || {};
+    if (game.type === 'charades') {
+        const presenter = room.value?.data?.presenter;
+        return [node('p', 'se-scene-sub', game.title || 'Bible Charades'), node('h1', 'se-scene-title', presenter?.display_name ? `${presenter.display_name} is acting!` : 'Choose your presenter'), node('p', 'se-scene-counter', `${round.words_done || presenter?.words_done || 0} guessed`)];
+    }
+    if (game.type === 'feud') {
+        const board = node('div', 'se-feud-board');
+        for (const answer of round.board || []) board.appendChild(node('div', 'se-feud-tile', answer.revealed ? `${answer.label} · ${answer.points}` : '—'));
+        return [node('p', 'se-scene-sub', 'Family Feud'), node('h1', 'se-scene-title', round.question || 'Survey says…'), board];
+    }
+    const out = [node('p', 'se-scene-sub', game.title || 'Game')];
+    if (round.clues) for (const clue of round.clues) out.push(node('h2', 'se-scene-body', clue));
+    out.push(node('h1', 'se-scene-title', round.prompt || round.lead || round.emojis || 'Get ready'));
+    const buzz = room.value?.data?.buzz_winner;
+    if (buzz) out.push(node('p', 'se-scene-counter', `${buzz.display_name} buzzed!`));
+    return out;
+}
+
+function sceneFinale(scene) {
+    const finale = scene?.payload || {};
+    const champion = finale.champion;
+    const out = [node('p', 'se-scene-sub', 'Your champions'), node('h1', 'se-scene-title', champion?.name || 'What a night!')];
+    if (champion) out.push(node('p', 'se-scene-counter', `${champion.points} points`));
+    if (finale.mvp_winner) out.push(node('p', 'se-scene-body', `MVP · ${finale.mvp_winner.display_name} · ${finale.mvp_winner.points} points`));
+    return out;
+}
+
+/** Fallback for an unknown scene. */
 function scenePlaceholder(label) {
     return [
         node('p', 'se-scene-sub', label),
@@ -260,11 +304,11 @@ function render() {
         program: () => sceneProgram(scene, data),
         break: () => sceneBreak(scene),
         blank: () => sceneBlank(),
-        leaderboard: () => scenePlaceholder('Leaderboard'),
+        leaderboard: () => sceneLeaderboard(data),
         recap: () => scenePlaceholder('Recap'),
-        game: () => scenePlaceholder('Game'),
+        game: () => sceneGame(data),
         karaoke: () => sceneKaraoke(),
-        finale: () => scenePlaceholder('Finale'),
+        finale: () => sceneFinale(scene),
     };
 
     paint((builders[key] || builders.standby)());

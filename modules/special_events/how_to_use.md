@@ -24,11 +24,10 @@ hand over to Reach and Embrace afterwards.
 Nobody else: the sidebar link is hidden, and every action is checked again on
 the server. Hiding a button is never the lock.
 
-> **What this version does.** Creating, branding and configuring events, the
-> crew, the brand kit, the full public page, and **registration — guests can
-> now take a seat**. You get the attendee list, the export, the share kit and
-> the "I'm going" card. Still to come: check-in on the night, the games, the
-> karaoke queue and the hand-off to Reach and Embrace.
+> **What this version does.** Everything from event setup through registration,
+> check-in, programme, karaoke and the full games night: quizzes, party games,
+> scoreboards, awards and the finale. The after-event report and hand-off to
+> Reach and Embrace arrive in the next release.
 
 ---
 
@@ -610,10 +609,9 @@ moment on the website cannot blank the screen. A dot in the corner goes amber
 and then red if it stops hearing anything, and the last scene stays up.
 
 Scenes in this release: standby, welcome, teams, announcement, break, blank,
-the programme (what is on now and what is next, with the times corrected for
-how the night is actually running) and karaoke (who is singing, who is up
-next). Games, leaderboard and the recap arrive with the next release and
-currently show the standby frame rather than an empty screen.
+the programme, karaoke, every game, leaderboard and finale. The Feud board,
+Who Am I? clues and charades timer all update from the same live state as the
+host console.
 
 ---
 
@@ -928,3 +926,81 @@ Game rows marked `TEST` are removed by Reset rehearsal; real scores and
 registrations are left alone. Before the event, run the quiz load profile from
 `tests/special_events/load/quiz.k6.js` and check the static snapshot and answer
 thresholds in the engineering guide.
+
+
+## 22. Party games, awards and the finale (PR6)
+
+### Who Am I?
+
+Use a **clues** deck. Each item needs three to five clues ordered hardest to
+easier and one short answer. The host arms the round, reads the visible clue,
+and presses **Next clue** after a wrong answer or no buzz. A correct answer is
+worth 500 on clue one, then 400, 300, 200 and 100. A wrong team is locked out
+until the next clue. Judge the winning buzz with ✓ or ✕ in the Host console.
+
+### Bible Charades
+
+Use a **charade** deck. In the Host console choose the acting team, then type a
+player number or leave it blank for a random checked-in player with an active
+phone. Press **Pick presenter**, then **Start timer**. The phrase appears only
+on that presenter's phone and the private host console — never in a public,
+room or team snapshot. The presenter can hide it immediately if somebody
+looks over their shoulder.
+
+Press **Got it** for +200 and the next phrase, **Pass** (normally twice per
+turn), or **End turn**. The stage shows the presenter, team colour, timer and
+number guessed, but not the phrase. If a selected player has no recently seen
+phone, pick another or use the host tablet fallback.
+
+### Bible Family Feud
+
+Add a **survey** deck and attach it to a Feud game before sharing the event.
+Registered guests see **Play ahead** on their game/manage experience. Answers
+are one short line, can be changed until the Feud starts, and are anonymous
+when sent to AI.
+
+In **Studio → Games → Family Feud board**, enter the survey item ID and press
+**Build from survey answers**. With enough answers, AI groups spelling and
+synonym variants. With fewer answers, exact normalised groups are shown and
+the crew can make the board manually. In both cases, read every label and
+count, merge or rename as needed, then **Approve board**. AI output is never
+played without this approval.
+
+On the Host console choose Team A and Team B and start the face-off. Give the
+winning team control, reveal a matching slot when they guess it, or add a
+strike. Three strikes opens one steal. Mark whether the steal worked and
+press **Bank**; the revealed survey counts are multiplied for that round and
+written once to the score ledger.
+
+### Leaderboards, MVP, awards and finale
+
+**Leaderboard** shows team totals in score order and the individual MVP list.
+Manual awards and penalties require a reason and remain in score history; undo
+voids the ledger row instead of editing points. The MVP is the checked-in
+player with the greatest individual total (ties follow the games rules).
+
+At the end, press **Run finale**. The stage reveals the champion and MVP with
+the event colours and fanfare cue. The same champion, MVP, named awards and
+team totals are retained as recap data for the after-event release.
+
+### Chara starters and rehearsal
+
+**Add Chara starters** is idempotent: it adds Appendix G decks for Who Am I?,
+Bible Charades and five Family Feud survey questions, already reviewed. Read
+them anyway and tailor them to the room.
+
+One week before the event:
+
+1. Live → turn **Test mode** on. Confirm the red ribbon on stage and console.
+2. Put the lobby on its TV and stage on the projector. Start sound once.
+3. Use at least 20 phones on venue Wi-Fi. Register five new people; check in
+   20 using self, desk and walk-in routes.
+4. Run one round of every game, three karaoke singers, leaderboard and finale.
+   Confirm snapshots stay under three seconds old and charades phrases appear
+   only on the selected phone and host console.
+5. Test a score correction, award and undo. Confirm the MVP and champion by
+   adding the ledger totals independently.
+6. Press **Reset rehearsal**. Confirm test registrations, rounds, answers,
+   buzzes, survey answers and karaoke entries are gone, and TEST scores are
+   voided. Real rows must remain.
+7. Write the fix list, repeat the failed step, and turn test mode off.

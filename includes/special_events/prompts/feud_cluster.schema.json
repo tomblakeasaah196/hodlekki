@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "required": ["clusters", "junk_ids"],
+  "properties": {
+    "clusters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "response_ids"],
+        "properties": {
+          "label": {"type": "string"},
+          "response_ids": {"type": "array", "items": {"type": "integer"}}
+        }
+      }
+    },
+    "junk_ids": {"type": "array", "items": {"type": "integer"}}
+  }
+}

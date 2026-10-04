@@ -12,9 +12,8 @@
 //
 // Implemented so far: time, bootstrap, lookup, register, wants_visit,
 // request_link, claim_link, me, cancel, optout, card, beacon (PR2),
-// check-in and transfer (PR3), and songs / pick_song / release_song (PR4).
-// Game and feedback actions belong to later PRs and are simply not routed,
-// so they answer BAD_REQUEST rather than half-working.
+// check-in and transfer (PR3), songs and karaoke (PR4), and games, buzzing,
+// suggestions and Family Feud surveys (PR5–PR6). Feedback belongs to PR7.
 
 require_once '../includes/db.php';
 require_once '../includes/special_events/bootstrap.php';
@@ -577,10 +576,25 @@ try {
             se_api_success('Done — we will not contact you again.', ['opted_out' => true]);
         }
 
+        case 'survey': {
+            $event = se_public_event($pdo, $body);
+            se_public_require_writable($event);
+            se_public_limit($pdo, $event, 'survey', 30, 1500, 600);
+            [$reg] = se_public_actor($pdo, $event, $body);
+            se_api_success('Answer saved.', se_survey_save(
+                $pdo,
+                $event,
+                $reg,
+                se_int($body['item_id'] ?? 0, 0),
+                se_line($body['text'] ?? '', 80)
+            ));
+        }
+
         // Games player actions (§12.2)
         case 'join_games': case 'answer': case 'suggest': case 'buzz': {
-            $event=se_public_event($pdo,$body); se_public_require_writable($event); se_public_limit($pdo,$event,'games',60,3000,600); [$reg,$device]=se_public_actor($pdo,$event,$body);
-            if($action==='join_games') $out=se_game_join($pdo,$event,$reg);
+            $event=se_public_event($pdo,$body); se_public_require_writable($event); se_public_limit($pdo,$event,$action,120,6000,60); [$reg,$device]=se_public_actor($pdo,$event,$body);
+            if($action!=='join_games') se_game_require_player($pdo,$event,$reg,$device);
+            if($action==='join_games') $out=se_game_join($pdo,$event,$reg,$device);
             elseif($action==='answer') $out=se_game_answer($pdo,$event,$reg,$body);
             elseif($action==='suggest') $out=se_game_suggest($pdo,$event,$reg,$body);
             else $out=se_game_buzz($pdo,$event,$reg,$body);

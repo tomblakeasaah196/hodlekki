@@ -66,6 +66,12 @@ require_once __DIR__ . '/../../includes/special_events/live.php';
 require_once __DIR__ . '/../../includes/special_events/program.php';
 require_once __DIR__ . '/../../includes/special_events/karaoke.php';
 
+// PR5/PR6 pure scoring and party-game formulae.
+require_once __DIR__ . '/../../includes/special_events/games.php';
+require_once __DIR__ . '/../../includes/special_events/games_engine.php';
+require_once __DIR__ . '/../../includes/special_events/scoring.php';
+require_once __DIR__ . '/../../includes/special_events/party_games.php';
+
 $GLOBALS['se_passed'] = 0;
 $GLOBALS['se_failed'] = 0;
 $GLOBALS['se_failures'] = [];

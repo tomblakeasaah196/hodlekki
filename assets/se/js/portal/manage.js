@@ -130,6 +130,10 @@ function render(host, data, config, reload) {
             nodes.push(karaokeBlock(data, reload));
         }
 
+        if (data.games?.survey?.length) {
+            nodes.push(surveyBlock(data, reload));
+        }
+
         if (data.can?.cancel) {
             nodes.push(cancelBlock(host, data, config));
         }
@@ -150,6 +154,29 @@ function render(host, data, config, reload) {
     }
 
     host.replaceChildren(...nodes);
+}
+
+function surveyBlock(data, reload) {
+    const block = el('section', { class: 'se-glass se-pad se-stack-sm' },
+        el('p', { class: 'se-label', text: 'Play ahead · Family Feud' }),
+        el('h2', { class: 'se-h2', text: 'Quick survey' }),
+        el('p', { class: 'se-small se-muted', text: 'One short answer each. You can change it until the game starts.' }));
+    for (const question of data.games.survey) {
+        const input = el('input', { class: 'se-input', maxlength: '60', value: question.answer || '', 'aria-label': question.question });
+        const save = el('button', { class: 'se-btn se-btn-secondary', type: 'button', text: question.answer ? 'Update answer' : 'Save answer', onclick: async () => {
+            save.disabled = true;
+            try {
+                await call('public', 'survey', { ...eventRef(), item_id: question.id, text: input.value });
+                toast('Survey answer saved.', 'success');
+                reload?.();
+            } catch (error) {
+                toast(error.message, 'error');
+                save.disabled = false;
+            }
+        }});
+        block.append(el('label', { class: 'se-label', text: question.question }), input, save);
+    }
+    return block;
 }
 
 function cancelBlock(host, data, config) {

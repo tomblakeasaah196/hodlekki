@@ -1865,6 +1865,37 @@ try {
 
     // ====================================================================
 
+    case 'chara_starter_content': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_api_success('Chara starter decks are ready.', se_chara_starter_content($pdo, $event, $userId));
+    }
+
+    case 'feud_build_board': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_api_success('Board draft ready for review.', se_feud_build_board(
+            $pdo,
+            $event,
+            se_int($body['item_id'] ?? 0, 0),
+            $userId
+        ));
+    }
+
+    case 'feud_board_save': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $answers = $body['answers'] ?? [];
+        if (!is_array($answers)) {
+            throw new SeValidationException('Answers must be a list.', ['answers']);
+        }
+        se_api_success('Feud board saved.', se_feud_board_save(
+            $pdo,
+            $event,
+            se_int($body['item_id'] ?? 0, 0),
+            $answers,
+            se_bool($body['approved'] ?? false),
+            $userId
+        ));
+    }
+
     case 'decks_list': case 'deck_list': case 'deck_save': case 'deck_item_save': case 'deck_items_review': case 'deck_generate': case 'deck_generate_apply': case 'game_list': case 'games_list': case 'games_save': case 'game_save': case 'game_items_save': {
         $event=se_studio_event($pdo,$body,'event.edit');
         if($action==='deck_list'||$action==='decks_list') se_api_success('OK',['decks'=>se_deck_list($pdo,(int)$event['id'],$body['content_type']??null)]);

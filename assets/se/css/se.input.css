@@ -68,6 +68,21 @@
 }
 
 /* ---------------------------------------------------------------------- *
+ * PR6 party games
+ * ---------------------------------------------------------------------- */
+@layer components {
+  .se-game-phone-header { display: flex; justify-content: space-between; gap: .75rem; align-items: center; padding: .75rem 1rem; border-radius: 999px; background: color-mix(in oklab, var(--se-primary) 25%, var(--se-surface)); }
+  .se-answer-tile { min-height: 64px; width: 100%; border: 1px solid var(--se-border); border-radius: 16px; padding: 1rem; text-align: left; font-weight: 700; background: var(--se-surface-2); color: var(--se-text); }
+  .se-buzz-button { width: 100%; min-height: 40vh; border-radius: 28px; border: 4px solid var(--se-on-primary); background: var(--se-primary); color: var(--se-on-primary); font: 800 clamp(2rem, 12vw, 5rem)/1 var(--se-font-display); box-shadow: 0 0 40px var(--se-glow); }
+  .se-charades-secret { padding: 2rem 1rem; text-align: center; font: 800 clamp(2rem, 11vw, 4.5rem)/1.05 var(--se-font-display); overflow-wrap: anywhere; }
+  .se-private-answer { padding: .75rem; border: 1px solid var(--se-warning); border-radius: 12px; color: var(--se-warning); }
+  .se-stage-leaderboard { width: min(80%, 70cqw); display: grid; gap: 1.4cqh; list-style: none; }
+  .se-stage-leader-row { display: flex; justify-content: space-between; gap: 2cqw; padding: 1.3cqh 2cqw; border-left: 1.2cqw solid var(--team-color); border-radius: 1cqw; background: var(--se-surface); font-size: 2.2cqw; }
+  .se-feud-board { width: min(90%, 80cqw); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5cqw; }
+  .se-feud-tile { min-height: 8cqh; display: grid; place-items: center; border: .25cqw solid var(--se-primary); border-radius: 1cqw; background: var(--se-surface-2); font: 700 2.2cqw/1.2 var(--se-font-display); }
+}
+
+/* ---------------------------------------------------------------------- *
  * Base
  * ---------------------------------------------------------------------- */
 
