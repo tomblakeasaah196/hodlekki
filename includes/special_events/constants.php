@@ -307,15 +307,17 @@ const SE_STUDIO_TABS_READY = [
 const SE_PRELOAD = [
     'portal' => [
         '/assets/se/js/portal/main.js',
-        '/assets/se/js/core/boot.js',
-        '/assets/se/js/core/html.js',
         '/assets/se/js/core/store.js',
+        '/assets/se/js/core/motion.js',
+        '/assets/se/js/core/boot.js',
     ],
     'studio' => [
         '/assets/se/js/studio/main.js',
-        '/assets/se/js/core/api.js',
         '/assets/se/js/core/html.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/boot.js',
         '/assets/se/js/core/theme.js',
+        '/assets/se/js/core/store.js',
     ],
 ];
 

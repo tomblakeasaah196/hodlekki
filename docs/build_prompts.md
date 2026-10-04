@@ -77,7 +77,7 @@ This file holds the full instructions for building the Special Events module in 
 
 ### 7. Testing
 
-- `php -l` every changed PHP file. Run `php tests/special_events/run.php` and `node --test tests/special_events/js/`, and add the tests your PR lists (§22.1).
+- `php -l` every changed PHP file. Run `php tests/special_events/run.php` and `node --test "tests/special_events/js/*.test.mjs"`, and add the tests your PR lists (§22.1).
 - Run the integration tests your PR lists (§22.2) against a local database. PR1 creates the local harness (`tests/special_events/db_setup.php`). It creates minimal stand-ins for the existing tables the module reads (`users`, `user_roles`, `user_departments`, `departments`, `system_notifications`, `sms_campaigns`, `sms_queue`, `reach_*` …), derived from how the code uses them, then applies `db/migrations/*`.
 - Do a manual smoke test of every surface you touched (Appendix H.2), with a throwaway local `.env` that points to your local database. Never commit that `.env`. Put the steps you ran, and their results, in the PR description. Add screenshots of new UI (Chromium and Playwright are available in Claude Code cloud sessions).
 - Run a security review of your diff before opening the PR (for example `/security-review`).

@@ -2804,7 +2804,7 @@ Crew open `/e/chara/host` on a fresh device, so they need to land back there aft
 Add steps:
 1. **Special Events guide rule** (pull requests): if the diff touches `modules/special_events/`, `api/special_events_`, `includes/special_events/`, `e/` or `assets/se/js/`, it must also touch `modules/special_events/how_to_use.md`. Same pattern as the Reach/Assimilation steps.
 2. **CSS freshness**: download the pinned Tailwind standalone CLI (version in `assets/se/css/TAILWIND_VERSION`), run `bin/build_se_css.sh --check`; fail if `assets/se/css/se.css` differs from a fresh build.
-3. **Unit tests**: `php tests/special_events/run.php` and `node --test tests/special_events/js/` (GitHub runners ship Node; these tests never run on the server).
+3. **Unit tests**: `php tests/special_events/run.php` and `node --test "tests/special_events/js/*.test.mjs"` (GitHub runners ship Node; these tests never run on the server).
 4. **Secret sweep**: fail on a hard-coded `SE_HASH_PEPPER` or `ABLY_API_KEY` value in PHP/JS.
 
 ### 21.6 `AGENTS.md`: new section "Special Events module (added 2026-10)"

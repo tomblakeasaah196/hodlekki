@@ -109,6 +109,12 @@ function se_svg_root_is_svg(string $xml): bool
  */
 function se_svg_load(string $xml): ?DOMDocument
 {
+    // PHP 8 raises a ValueError rather than returning false for an empty
+    // document, and a sanitiser must never throw on hostile input.
+    if (trim($xml) === '') {
+        return null;
+    }
+
     $previous = libxml_use_internal_errors(true);
     // PHP 8 disables entity substitution by default; LIBXML_NONET and the
     // explicit NOENT absence keep it that way regardless of php.ini.

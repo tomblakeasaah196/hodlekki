@@ -134,7 +134,10 @@ jobs:
         run: |
           set -euo pipefail
           php tests/special_events/run.php
-          node --test tests/special_events/js/
+
+          # The glob form, not a bare directory: `node --test <dir>` is not
+          # supported on Node 22, which resolves it as a module path.
+          node --test "tests/special_events/js/*.test.mjs"
 
       - name: Secret sweep (block obvious leaks)
         run: |

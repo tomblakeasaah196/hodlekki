@@ -412,7 +412,10 @@ function se_markdown(string $md): string
         return preg_replace_callback('/\[([^\]]+)\]\(([^)\s]+)\)/', static function (array $m): string {
             // $m[2] is already HTML-escaped; decode only to test the scheme.
             $target = html_entity_decode($m[2], ENT_QUOTES, 'UTF-8');
-            if (!preg_match('#^(https?://|/|\#)[^\s]*$#i', $target)) {
+            // A protocol-relative "//host" starts with "/" but leaves the
+            // site, so it is rejected before the scheme test.
+            if (str_starts_with($target, '//')
+                || !preg_match('#^(https?://|/|\#)[^\s]*$#i', $target)) {
                 return $m[1];
             }
             $external = str_starts_with(strtolower($target), 'http');
@@ -474,7 +477,12 @@ function se_markdown(string $md): string
 /** Plain text from Markdown, for meta descriptions and SMS. */
 function se_markdown_excerpt(string $md, int $maxLength = 160): string
 {
+    // strip_tags removes the real markup; decoding then turns escaped text
+    // such as "&lt;b&gt;" back into "<b>", so the angle brackets are dropped
+    // afterwards. Callers escape on output anyway, but an excerpt feeds meta
+    // descriptions and SMS, where a stray bracket is only ever noise.
     $text = html_entity_decode(strip_tags(se_markdown($md)), ENT_QUOTES, 'UTF-8');
+    $text = str_replace(['<', '>'], '', $text);
     $text = se_line($text, $maxLength * 3);
     if (mb_strlen($text, 'UTF-8') <= $maxLength) {
         return $text;
