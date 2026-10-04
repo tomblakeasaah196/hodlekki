@@ -379,6 +379,28 @@ function se_epoch_ms(?DateTimeImmutable $when = null): int
 }
 
 /**
+ * Epoch milliseconds → a DATETIME(3) value in WAT.
+ *
+ * Built on se_tz() rather than date(), whose output depends on the process's
+ * default timezone: the CLI and the web server need not agree on it, and a
+ * round stored an hour out never opens.
+ */
+function se_ms_to_sql(int $ms): string
+{
+    $when = DateTimeImmutable::createFromFormat('U.u', sprintf('%d.%03d', intdiv($ms, 1000), $ms % 1000));
+
+    return ($when ?: new DateTimeImmutable('@' . intdiv($ms, 1000)))->setTimezone(se_tz())->format('Y-m-d H:i:s.v');
+}
+
+/** A stored DATETIME(3) → epoch milliseconds, or null. */
+function se_sql_to_ms(?string $value): ?int
+{
+    $when = se_parse_datetime($value);
+
+    return $when !== null ? se_epoch_ms($when) : null;
+}
+
+/**
  * A human date range for one event ("Sat 24 Oct, 5:00 PM" or
  * "24-26 Oct 2026"), used in the shell, cards and SMS.
  */

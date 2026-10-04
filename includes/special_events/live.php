@@ -237,6 +237,10 @@ function se_snapshot_public(PDO $pdo, array $event, array $state, array $context
     $teamCounts = se_team_counts($pdo, $eventId);
     $bg         = se_event_theme($event)['tokens']['--se-bg'] ?? '#0B0D13';
 
+    // Team totals come from the ledger (one query for all teams), with dense
+    // ranks; a night with no scores yet ranks everybody first.
+    $scores = function_exists('se_team_scores') && se_game_ready($pdo) ? se_team_scores($pdo, $event) : [];
+
     $teamRows = [];
     foreach ($teams as $i => $team) {
         $tokens = se_team_tokens((string) $team['color_hex'], (string) $bg, $i);
@@ -248,10 +252,8 @@ function se_snapshot_public(PDO $pdo, array $event, array $state, array $context
             'on'    => $tokens['on'],
             'ring'  => (bool) $tokens['needs_ring'],
             'n'     => (int) ($teamCounts[(int) $team['id']]['n'] ?? 0),
-            // Scores are a PR5 ledger; the field exists now so the stage and
-            // the phones never have to branch on its absence.
-            'score' => function_exists('se_leaderboards') ? (int) (array_column(se_leaderboards($pdo, $event)['teams'], 'points', 'team_id')[(int) $team['id']] ?? 0) : 0,
-            'rank'  => $i + 1,
+            'score' => (int) ($scores[(int) $team['id']]['points'] ?? 0),
+            'rank'  => (int) ($scores[(int) $team['id']]['rank'] ?? 1),
         ];
     }
 
@@ -280,7 +282,7 @@ function se_snapshot_public(PDO $pdo, array $event, array $state, array $context
         // Songs, never singers: public.json is world-readable (§8.5.2).
         'karaoke' => se_karaoke_ready($pdo) ? se_karaoke_public($pdo, $event) : null,
         'scene'   => se_scene_payload($state),
-        'game'    => function_exists('se_live_game_payload') ? se_live_game_payload($pdo, $event) : null,
+        'game'    => function_exists('se_live_game_payload') ? se_live_game_payload($pdo, $event, $state) : null,
         'announcement' => se_announcement_payload($state),
         'sfx'     => ['seq' => (int) $state['sfx_seq'], 'cue' => $state['sfx_cue']],
     ];
@@ -303,49 +305,109 @@ function se_snapshot_room(PDO $pdo, array $event, array $state, array $context =
         }
     }
 
-    $finale = function_exists('se_finale_payload') && se_game_ready($pdo)
-        ? se_finale_payload($pdo, $event)
-        : ['mvp' => []];
-    $presenter = null;
-    $buzzWinner = null;
-    if (se_game_ready($pdo)) {
-        $stmt = $pdo->prepare("SELECT r.id,r.presenter_registration_id,r.team_id,r.state_json FROM se_rounds r JOIN se_games g ON g.id=r.game_id WHERE r.event_id=? AND g.type='charades' AND r.state IN ('armed','open') ORDER BY r.id DESC LIMIT 1");
-        $stmt->execute([$eventId]);
-        $round = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($round && $round['presenter_registration_id']) {
-            $reg = se_registration_by_id($pdo, (int)$round['presenter_registration_id'], $eventId);
-            $stateData = se_json_decode($round['state_json'] ?? null) ?: [];
-            $presenter = ['round_id'=>(int)$round['id'],'display_name'=>(string)($reg['display_name'] ?? ''),'team_id'=>(int)$round['team_id'],'words_done'=>count(array_filter($stateData['words'] ?? [], static fn(array $word): bool => ($word['result'] ?? '') === 'correct'))];
-        }
-        $stmt = $pdo->prepare("SELECT b.team_id,r.display_name FROM se_buzzes b JOIN se_registrations r ON r.id=b.registration_id WHERE b.event_id=? AND b.judged IN ('pending','correct') ORDER BY b.id DESC LIMIT 1");
-        $stmt->execute([$eventId]);
-        $winner = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($winner) $buzzWinner = ['team_id'=>(int)$winner['team_id'],'display_name'=>(string)$winner['display_name']];
-    }
-
-    return [
-        'mvp'         => $finale['mvp'] ?? [],
+    $out = [
+        'mvp'         => [],
         'karaoke'     => se_karaoke_ready($pdo) ? se_snapshot_karaoke_room($pdo, $event) : null,
-        'presenter'   => $presenter,
-        'buzz_winner' => $buzzWinner,
+        'presenter'   => null,
+        'buzz_winner' => null,
+        'faceoff'     => null,
         'captains'    => $captains,
     ];
+
+    if (!function_exists('se_game_active') || !se_game_ready($pdo)) {
+        return $out;
+    }
+
+    $out['mvp'] = array_map(static fn(array $m): array => [
+        'display_name' => $m['display_name'], 'team_id' => $m['team_id'], 'points' => $m['points'],
+    ], se_finale_payload($pdo, $event)['mvp']);
+
+    // Names for the round on screen now — never a previous round's.
+    ['round' => $round] = se_game_active($pdo, $event, $state);
+    if (!$round || in_array((string) $round['state'], ['void'], true)) {
+        return $out;
+    }
+
+    $data = se_round_state_data($round);
+    switch ((string) $round['game_type']) {
+        case 'charades':
+            if (!empty($round['presenter_registration_id']) && in_array((string) $round['state'], ['armed', 'open', 'locked'], true)) {
+                $reg = se_registration_by_id($pdo, (int) $round['presenter_registration_id'], $eventId);
+                $out['presenter'] = [
+                    'display_name' => (string) ($reg['display_name'] ?? ''),
+                    'player_no'    => isset($reg['player_no']) ? (int) $reg['player_no'] : null,
+                    'team_id'      => (int) $round['team_id'],
+                ];
+            }
+            break;
+
+        case 'buzzer':
+        case 'who_am_i':
+            $leader = null;
+            foreach (se_round_buzzes($pdo, $round) as $buzz) {
+                if (in_array((string) $buzz['judged'], ['pending', 'correct'], true)) {
+                    $leader = $buzz;
+                    break;
+                }
+            }
+            if ($leader) {
+                $out['buzz_winner'] = [
+                    'round_id'     => (int) $round['id'],
+                    'attempt'      => (int) $leader['attempt'],
+                    'team_id'      => (int) $leader['team_id'],
+                    'display_name' => (string) $leader['display_name'],
+                    'judged'       => (string) $leader['judged'],
+                ];
+            }
+            break;
+
+        case 'feud':
+            if (!empty($data['rep_a']) && !empty($data['rep_b'])) {
+                $a = se_registration_by_id($pdo, (int) $data['rep_a'], $eventId);
+                $b = se_registration_by_id($pdo, (int) $data['rep_b'], $eventId);
+                $first = null;
+                foreach (se_round_buzzes($pdo, $round) as $buzz) {
+                    $first = ['team_id' => (int) $buzz['team_id'], 'display_name' => (string) $buzz['display_name']];
+                    break;
+                }
+                $out['faceoff'] = [
+                    'round_id' => (int) $round['id'],
+                    'rep_a'    => ['team_id' => (int) $data['team_a'], 'display_name' => (string) ($a['display_name'] ?? '')],
+                    'rep_b'    => ['team_id' => (int) $data['team_b'], 'display_name' => (string) ($b['display_name'] ?? '')],
+                    'first_buzz' => $first,
+                ];
+            }
+            break;
+    }
+
+    return $out;
 }
 
-/** `team-<team_key>.json` — one per team. */
+/**
+ * `team-<team_key>.json` — one per team (Appendix B.3).
+ *
+ * The captain is named (team members may see each other) and tagged with
+ * se_registration_hash(), so the captain's own phone recognises itself
+ * without an id ever being published. During a Trivia round it also carries
+ * the team's suggestion tally and the captain's locked-in choice (§11.5).
+ */
 function se_snapshot_team(PDO $pdo, array $event, array $state, array $team): array
 {
     $eventId = (int) $event['id'];
+    $teamId  = (int) $team['id'];
+
+    $captainId = function_exists('se_game_captain_id') && se_game_ready($pdo)
+        ? se_game_captain_id($pdo, $event, $teamId)
+        : (!empty($team['captain_registration_id']) ? (int) $team['captain_registration_id'] : null);
 
     $captain = null;
-    if (!empty($team['captain_registration_id'])) {
-        $reg = se_registration_by_id($pdo, (int) $team['captain_registration_id'], $eventId);
+    if ($captainId) {
+        $reg = se_registration_by_id($pdo, $captainId, $eventId);
         if ($reg) {
             $captain = [
-                'name' => (string) $reg['display_name'],
-                // An HMAC, so the captain's own phone can recognise itself
-                // without the id ever being readable (Appendix B.3).
-                'registration_id_hash' => substr(se_hmac('reg', (string) $reg['id']), 0, 16),
+                'name'                 => (string) $reg['display_name'],
+                'registration_id_hash' => se_registration_hash((int) $reg['id']),
+                'chosen_by_crew'       => (int) ($team['captain_registration_id'] ?? 0) === (int) $reg['id'],
             ];
         }
     }
@@ -353,30 +415,50 @@ function se_snapshot_team(PDO $pdo, array $event, array $state, array $team): ar
     $members = 0;
     $joined  = 0;
     try {
-        $stmt = $pdo->prepare(
-            "SELECT COUNT(*) FROM se_registrations
-             WHERE event_id = ? AND team_id = ? AND status = 'confirmed'"
-        );
-        $stmt->execute([$eventId, (int) $team['id']]);
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM se_registrations WHERE event_id = ? AND team_id = ? AND status = 'confirmed'");
+        $stmt->execute([$eventId, $teamId]);
         $members = (int) $stmt->fetchColumn();
 
         $stmt = $pdo->prepare(
             "SELECT COUNT(DISTINCT d.registration_id)
-             FROM se_devices d
-             JOIN se_registrations r ON r.id = d.registration_id
-             WHERE d.event_id = ? AND r.team_id = ? AND d.joined_games_at IS NOT NULL"
+               FROM se_devices d JOIN se_registrations r ON r.id = d.registration_id
+              WHERE d.event_id = ? AND r.team_id = ? AND d.joined_games_at IS NOT NULL"
         );
-        $stmt->execute([$eventId, (int) $team['id']]);
+        $stmt->execute([$eventId, $teamId]);
         $joined = (int) $stmt->fetchColumn();
     } catch (Throwable $e) {
         error_log('SE live/team snapshot: ' . $e->getMessage());
     }
 
+    $suggestions   = null;
+    $captainChoice = null;
+    if (function_exists('se_game_active') && se_game_ready($pdo)) {
+        ['round' => $round] = se_game_active($pdo, $event, $state);
+        if ($round && (string) $round['game_type'] === 'trivia' && (string) $round['state'] !== 'pending') {
+            $stmt = $pdo->prepare(
+                "SELECT choice_index, COUNT(*) AS n FROM se_answers
+                  WHERE round_id = ? AND team_id = ? AND role = 'suggestion' GROUP BY choice_index"
+            );
+            $stmt->execute([(int) $round['id'], $teamId]);
+            $suggestions = ['round_id' => (int) $round['id'], 'counts' => []];
+            foreach ($stmt->fetchAll() as $row) {
+                $suggestions['counts'][(string) $row['choice_index']] = (int) $row['n'];
+            }
+
+            $stmt = $pdo->prepare("SELECT choice_index FROM se_answers WHERE round_id = ? AND team_id = ? AND role = 'captain' LIMIT 1");
+            $stmt->execute([(int) $round['id'], $teamId]);
+            $choice = $stmt->fetchColumn();
+            if ($choice !== false) {
+                $captainChoice = ['round_id' => (int) $round['id'], 'choice_index' => (int) $choice];
+            }
+        }
+    }
+
     return [
-        'team_id'        => (int) $team['id'],
+        'team_id'        => $teamId,
         'captain'        => $captain,
-        'suggestions'    => null,
-        'captain_choice' => null,
+        'suggestions'    => $suggestions,
+        'captain_choice' => $captainChoice,
         'members'        => $members,
         'joined'         => $joined,
     ];
@@ -647,15 +729,16 @@ function se_live_tick(PDO $pdo, array $event, ?int $actorId = null): array
             error_log('SE live/tick karaoke: ' . $e->getMessage());
         }
 
-        // 4. Round deadlines. Correctness is still checked lazily by every
-        //    answer/buzz request; this transition only keeps screens fresh.
-        if (se_table_exists($pdo, 'se_rounds')) {
-            $stmt = $pdo->prepare("UPDATE se_rounds SET state='locked',locked_at=NOW(3) WHERE event_id=? AND state IN ('armed','open') AND closes_at IS NOT NULL AND closes_at<=NOW(3)");
-            $stmt->execute([$eventId]);
-            if ($stmt->rowCount() > 0) {
-                $pdo->prepare("UPDATE se_live_state SET version=version+1,dirty=1 WHERE event_id=?")->execute([$eventId]);
+        // 4. Round deadlines (§8.5.6). Correctness is still checked by every
+        //    answer and buzz; this only keeps the screens in step, honouring
+        //    each game's grace period and leaving pending buzzes to the host.
+        try {
+            if (function_exists('se_games_tick') && se_games_tick($pdo, $event)) {
+                $pdo->prepare("UPDATE se_live_state SET version = version + 1, dirty = 1 WHERE event_id = ?")->execute([$eventId]);
                 $dirty = true;
             }
+        } catch (Throwable $e) {
+            error_log('SE live/tick games: ' . $e->getMessage());
         }
 
         if ($dirty) {
@@ -1178,16 +1261,14 @@ function se_live_console(PDO $pdo, array $event): array
         'program'  => se_program_ready($pdo) ? se_program_payload($pdo, $event, $days) : null,
         'karaoke'  => se_karaoke_ready($pdo) ? se_karaoke_queue($pdo, $event) : null,
 
-        // PR5 fills these in; the shape is fixed so the console can be
-        // written once (§28.3).
-        'game'     => function_exists('se_live_game_private') ? se_live_game_private($pdo, $event) : se_live_game_payload($pdo, $event),
-        'round'    => null,
-        'finale'   => function_exists('se_finale_payload') && se_game_ready($pdo) ? se_finale_payload($pdo, $event) : null,
-        'score_history' => se_game_ready($pdo) ? (static function () use ($pdo, $eventId): array {
-            $stmt = $pdo->prepare("SELECT id,scope,team_id,registration_id,points,reason,kind,created_at FROM se_score_events WHERE event_id=? AND voided_at IS NULL ORDER BY id DESC LIMIT 30");
-            $stmt->execute([$eventId]);
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        })() : [],
+        // The game runner: every game (to start one), the active game with
+        // its private view (answers, buzz queue, board, phrase), the finale
+        // standings and the ledger history. Names are fine here — this
+        // endpoint is capability-gated and never becomes a snapshot.
+        'games'    => se_game_ready($pdo) ? se_game_list($pdo, $eventId) : [],
+        'game'     => se_game_ready($pdo) ? se_live_game_private($pdo, $event) : null,
+        'finale'   => se_game_ready($pdo) ? se_finale_payload($pdo, $event) : null,
+        'score_history' => se_game_ready($pdo) ? se_score_history($pdo, $event) : [],
     ];
 }
 

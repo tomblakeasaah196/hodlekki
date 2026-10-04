@@ -184,7 +184,10 @@ export function field(id, labelText, control, hint) {
         ? el('label', { class: 'se-field', for: id }, nodes)
         : el('div', { class: 'se-field', role: 'group', 'aria-labelledby': `${id}-label` }, nodes);
 
-    wrapper.control = control;
+    // Not `wrapper.control`: on a <label> that is a read-only DOM property,
+    // and assigning it throws in a module (strict mode). It did, on every
+    // text field, so the registration sheet died before the phone step.
+    wrapper.seControl = control;
     wrapper.setError = (message) => {
         error.textContent = message || '';
         error.hidden = !message;
@@ -196,9 +199,14 @@ export function field(id, labelText, control, hint) {
 
 /** Swap a field's control for a decorated wrapper (e.g. the +234 prefix). */
 export function decorate(wrapper, build) {
-    const control = wrapper.control;
-    const replacement = build(control);
-    control.replaceWith(replacement);
+    const control = wrapper.seControl;
+
+    // build() moves the control INTO the replacement, so the control cannot
+    // then be asked to replace itself with it ("the new child element
+    // contains the parent"). Hold its place with a marker first.
+    const marker = document.createComment('');
+    control.replaceWith(marker);
+    marker.replaceWith(build(control));
 
     return wrapper;
 }

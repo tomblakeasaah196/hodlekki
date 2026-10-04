@@ -90,6 +90,17 @@ function se_portal_cta(array $event, array $phase, string $state, ?array $regist
 {
     $slug = (string) $event['slug'];
 
+    // On the night a registered guest needs the next step, not a reminder
+    // that they registered: check in at the door, then join the games.
+    if ($registration && (string) $registration['status'] === 'confirmed' && ($phase['phase'] ?? '') === 'live') {
+        if (empty($registration['first_checkin_at']) && ($phase['checkin_open'] ?? false)) {
+            return ['Check in', se_event_url($slug, 'in', false), "You're registered ✓", null];
+        }
+        if (se_bool(se_settings_path(se_event_settings($event), 'games.enabled', true))) {
+            return ['Join the games', se_event_url($slug, 'play', false), "You're registered ✓", null];
+        }
+    }
+
     if ($registration && in_array((string) $registration['status'], ['confirmed', 'waitlisted'], true)) {
         $isWait = (string) $registration['status'] === 'waitlisted';
 
@@ -376,6 +387,64 @@ function se_portal_chapter_art(string $key): string
             . '<circle cx="120" cy="72" r="4" fill="currentColor" stroke="none"/>'
             . '</svg>',
     };
+}
+
+// --------------------------------------------------------------------------
+// S4 · Programme
+// --------------------------------------------------------------------------
+
+/**
+ * The public run of show, when the event has one (§10.7.2).
+ *
+ * Only public items, never a crew note, and times in the event's chosen mode
+ * (se_program_public() does all three). Before PR4's table exists, or while
+ * the programme is empty, the section is simply left out.
+ */
+function se_portal_program(PDO $pdo, array $event, array $days, array $settings): void
+{
+    if (!function_exists('se_program_ready') || !se_program_ready($pdo)) {
+        return;
+    }
+
+    try {
+        $program = se_program_public($pdo, $event, $days, $settings);
+    } catch (Throwable $e) {
+        error_log('SE portal/program: ' . $e->getMessage());
+        return;
+    }
+    if (!$program['days']) {
+        return;
+    }
+
+    $multiDay = count($program['days']) > 1;
+    ?>
+<section class="se-section" id="se-programme" aria-labelledby="se-programme-title">
+  <div class="se-container">
+    <h2 class="se-label" id="se-programme-title">The programme</h2>
+    <?php foreach ($program['days'] as $day): ?>
+    <?php if ($multiDay): ?>
+    <h3 class="se-h2"><?= se_h($day['label'] ?? (se_parse_datetime((string) $day['day_date'])?->format('l j F') ?? '')) ?></h3>
+    <?php endif; ?>
+    <ol class="se-programme se-measure">
+      <?php foreach ($day['items'] as $item): ?>
+      <li class="se-programme-item" data-featured="<?= $item['featured'] ? '1' : '0' ?>" data-status="<?= se_h($item['status']) ?>">
+        <span class="se-programme-time"><?= $item['time'] !== null ? se_h($item['time']) : '' ?></span>
+        <span class="se-programme-body">
+          <span class="se-programme-title"><?= se_h($item['title']) ?></span>
+          <?php if ($item['blurb'] !== null && $item['blurb'] !== ''): ?>
+          <span class="se-programme-blurb"><?= se_h($item['blurb']) ?></span>
+          <?php endif; ?>
+        </span>
+      </li>
+      <?php endforeach; ?>
+    </ol>
+    <?php endforeach; ?>
+    <?php if ($program['time_mode'] === 'approximate'): ?>
+    <p class="se-small se-muted">Times are approximate — the night runs on joy, not a stopwatch.</p>
+    <?php endif; ?>
+  </div>
+</section>
+    <?php
 }
 
 // --------------------------------------------------------------------------

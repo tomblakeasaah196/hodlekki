@@ -127,6 +127,11 @@ if ($path === '') {
 } elseif (preg_match('#^me/([A-Za-z0-9_-]{22})$#', $path, $m)) {
     $view  = 'manage';
     $token = $m[1];
+} elseif ($path === 'me') {
+    // The same page for a phone that already holds a ticket (the device
+    // cookie identifies it): walk-ins, moved phones and anyone who lost the
+    // texted link still reach their place and the karaoke picker.
+    $view = 'manage';
 } elseif ($path === 'stage' || $path === 'lobby') {
     $surface = $path;
     $view    = $path;
@@ -415,6 +420,7 @@ function se_boot_payload(
             'portal'   => se_event_url($slug, '', false),
             'checkin'  => se_event_url($slug, 'in', false),
             'play'     => se_event_url($slug, 'play', false),
+            'me'       => se_event_url($slug, 'me', false),
             'privacy'  => se_event_url($slug, 'privacy', false),
             'calendar' => se_event_url($slug, 'calendar.ics', false),
             'live'     => '/live/' . $event['public_id'] . '/',

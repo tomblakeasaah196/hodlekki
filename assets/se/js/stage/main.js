@@ -17,8 +17,9 @@
 // break, blank) plus placeholders. PR4 makes the programme scene real —
 // now and next, off the live timeline — and adds the karaoke scene, which
 // reads the room snapshot because it says singers' names and public.json
-// is world-readable (§8.5.2). PR6 adds the party-game boards, leaderboard
-// and finale.
+// is world-readable (§8.5.2). PR5/PR6 add the game scenes — every game
+// type, with countdowns, the answer spread at the reveal, the buzz winner,
+// the charades actor and the Feud board — the leaderboard and the finale.
 
 import { call } from '@se/core/api.js';
 import { boot, live, room } from '@se/core/store.js';
@@ -66,8 +67,18 @@ function node(tag, className, text) {
     return element;
 }
 
-/** Swap the scene with a 400 ms crossfade (§13.8). */
-function paint(children) {
+/**
+ * Show a scene: a 400 ms crossfade for a new scene (§13.8), an instant swap
+ * for new numbers in the same one — a projector that fades every second
+ * while answers come in looks broken.
+ */
+function paint(children, inPlace = false) {
+    const current = frame.querySelector('.se-scene:last-of-type');
+    if (inPlace && current) {
+        current.replaceChildren(...children.filter(Boolean));
+        return;
+    }
+
     const next = node('div', 'se-scene');
     for (const child of children) if (child) next.appendChild(child);
 
@@ -214,65 +225,320 @@ function sceneKaraoke() {
 function sceneBreak(scene) {
     const payload = scene?.payload || {};
     const back = node('p', 'se-scene-counter', '');
+    // se_scene_payload_clean() writes `label` and `ends_ms`.
+    const until = payload.ends_ms || payload.until_ms || 0;
 
-    if (payload.until_ms) {
+    if (until) {
         const tick = () => {
-            const left = Math.max(0, payload.until_ms - serverNow());
+            const left = Math.max(0, until - serverNow());
             const m = Math.floor(left / 60000);
             const s = Math.floor((left % 60000) / 1000);
-            back.textContent = m + ':' + String(s).padStart(2, '0');
-            if (left > 0) requestAnimationFrame(tick);
+            const text = m + ':' + String(s).padStart(2, '0');
+            if (back.textContent !== text) back.textContent = text;
+            if (left > 0 && (back.isConnected || !back.dataset.started)) {
+                back.dataset.started = '1';
+                requestAnimationFrame(tick);
+            }
         };
         tick();
     }
 
-    return [node('h1', 'se-scene-title', payload.title || 'Back shortly'), back];
+    return [node('h1', 'se-scene-title', payload.label || payload.title || 'Back shortly'), back];
 }
 
 function sceneBlank() {
     return [node('h1', 'se-scene-title', display.event.title)];
 }
 
-function sceneLeaderboard(data) {
-    const board = node('ol', 'se-stage-leaderboard');
-    [...(data.teams || [])].sort((a, b) => b.score - a.score).forEach((team, index) => {
-        const row = node('li', 'se-stage-leader-row');
-        row.style.setProperty('--team-color', team.hex);
-        row.append(node('strong', '', `${index + 1}. ${team.name || team.label}`), node('span', '', `${team.score} pts`));
-        board.appendChild(row);
+const teamName = (team) => (team ? (team.name || 'Team ' + team.label) : '');
+const LETTERS = ['A', 'B', 'C', 'D'];
+const HOW_TO = {
+    live_quiz: 'Answer on your phone — right and fast scores the most.',
+    trivia: 'Captains lock in one answer for the team. Everyone else, suggest!',
+    buzzer: 'Buzz on your phone, then answer out loud.',
+    who_am_i: 'Clues one at a time. Buzz the moment you know.',
+    charades: 'One actor, no words. Shout your guesses!',
+    feud: 'Survey says! Name the most popular answers.',
+};
+
+function teamBadge(team, className = 'se-stage-team') {
+    const badge = node('span', className, teamName(team));
+    if (team) {
+        badge.style.setProperty('--team-color', team.hex);
+        badge.style.setProperty('--team-on', team.on);
+    }
+    return badge;
+}
+
+/**
+ * A countdown that keeps itself up to date: "3… 2… 1…" before a window
+ * opens, then the seconds left. It stops on its own once its scene is gone.
+ */
+function countdown(round, { open = 'left', className = 'se-stage-timer' } = {}) {
+    const el = node('p', className, '');
+    if (!round?.opens_ms || !round?.closes_ms) return null;
+
+    let shown = '';
+    const tick = () => {
+        const now = serverNow();
+        let text;
+        if (now < round.opens_ms) {
+            el.dataset.phase = 'ready';
+            text = String(Math.ceil((round.opens_ms - now) / 1000));
+        } else if (now < round.closes_ms) {
+            el.dataset.phase = 'open';
+            text = Math.ceil((round.closes_ms - now) / 1000) + (open ? ' ' + open : '');
+        } else {
+            el.dataset.phase = 'over';
+            text = "Time's up";
+        }
+        if (text !== shown) { el.textContent = text; shown = text; }
+        if (el.dataset.phase !== 'over' && (el.isConnected || !el.dataset.started)) {
+            el.dataset.started = '1';
+            requestAnimationFrame(tick);
+        }
+    };
+    tick();
+    return el;
+}
+
+function teamPoints(round, teams) {
+    const rows = Object.entries(round.team_points || {}).filter(([, p]) => p > 0);
+    if (!rows.length) return null;
+    const list = node('div', 'se-stage-points');
+    for (const [id, points] of rows.sort((a, b) => b[1] - a[1])) {
+        const row = node('p', 'se-stage-points-row');
+        row.append(teamBadge(teams[id]), node('strong', '', '+' + points));
+        list.appendChild(row);
+    }
+    return list;
+}
+
+function quizScene(game, round, teams) {
+    const revealed = ['revealed', 'scored'].includes(round.state);
+    const result = round.result || {};
+    const counts = result.distribution || [];
+    const total = counts.reduce((a, b) => a + b, 0);
+
+    const grid = node('ol', 'se-stage-choices');
+    (round.choices || []).forEach((choice, i) => {
+        const tile = node('li', 'se-stage-choice');
+        tile.dataset.i = String(i);
+        if (revealed) tile.dataset.state = i === result.correct_index ? 'correct' : 'wrong';
+        tile.append(node('span', 'se-stage-choice-letter', LETTERS[i]), node('span', 'se-stage-choice-text', choice));
+        if (revealed) {
+            const n = counts[i] || 0;
+            const bar = node('span', 'se-stage-choice-bar');
+            bar.style.setProperty('--share', total ? (n / total) : 0);
+            tile.append(bar, node('span', 'se-stage-choice-n', String(n)));
+        }
+        grid.appendChild(tile);
     });
-    const out = [node('p', 'se-scene-sub', 'Championship'), node('h1', 'se-scene-title', 'Leaderboard'), board];
-    const mvp = room.value?.data?.mvp || [];
-    if (mvp.length) out.push(node('p', 'se-scene-body', `MVP · ${mvp[0].display_name} · ${mvp[0].points} pts`));
+
+    const top = node('div', 'se-stage-row');
+    top.append(node('p', 'se-scene-sub', game.title + ' · Question ' + round.round_no));
+    if (!revealed && round.state !== 'locked') {
+        const timer = countdown(round, { open: '' });
+        if (timer) top.appendChild(timer);
+    }
+
+    const out = [top, node('h1', 'se-stage-q', round.prompt || '')];
+    const before = round.opens_ms && serverNow() < round.opens_ms && round.state === 'armed';
+    if (!before || revealed) out.push(grid);
+
+    if (revealed) {
+        if (result.explanation || result.ref) {
+            out.push(node('p', 'se-scene-body', [result.explanation, result.ref].filter(Boolean).join(' — ')));
+        }
+        if (round.state === 'scored') out.push(teamPoints(round, teams));
+    } else {
+        out.push(node('p', 'se-stage-meta', (round.answered || 0) + (game.type === 'trivia' ? ' teams locked in' : ' answered')));
+    }
+    return out;
+}
+
+function buzzScene(game, round, teams) {
+    const revealed = ['revealed', 'scored'].includes(round.state);
+    const winner = room.value?.data?.buzz_winner;
+    const out = [node('p', 'se-scene-sub', game.title + ' · ' + (game.type === 'who_am_i' ? 'Person ' : 'Question ') + round.round_no)];
+
+    if (game.type === 'who_am_i') {
+        const clues = node('ol', 'se-stage-clues');
+        (round.clues || []).forEach((clue, i, all) => {
+            const li = node('li', '', clue);
+            li.dataset.new = i === all.length - 1 && !revealed ? '1' : '0';
+            clues.appendChild(li);
+        });
+        out.push(clues);
+        if (!revealed) out.push(node('p', 'se-stage-meta', 'Clue ' + ((round.clue_index ?? 0) + 1) + ' of ' + (round.clues_total || '?')));
+    } else {
+        out.push(node('h1', 'se-stage-q', round.prompt || ''));
+    }
+
+    if (revealed) {
+        const result = round.result || {};
+        out.push(node('p', 'se-stage-answer', '✓ ' + (result.answer || '')));
+        if (result.winner_team_id && teams[result.winner_team_id]) {
+            const banner = node('p', 'se-stage-buzz');
+            banner.append(teamBadge(teams[result.winner_team_id]), node('span', '', ' +' + (round.team_points?.[String(result.winner_team_id)] || 0)));
+            out.push(banner);
+        }
+        return out;
+    }
+
+    if (winner && winner.round_id === round.id && winner.attempt === round.attempt) {
+        const banner = node('p', 'se-stage-buzz');
+        banner.style.setProperty('--team-color', teams[winner.team_id]?.hex || '');
+        banner.append(node('span', 'se-stage-buzz-name', '🔔 ' + winner.display_name), teamBadge(teams[winner.team_id]));
+        out.push(banner);
+    } else if (['armed', 'open'].includes(round.state)) {
+        const timer = countdown(round, { open: 'seconds to buzz' });
+        if (timer) out.push(timer);
+    }
+
+    const out_ = (round.locked_out || []).map((id) => teamName(teams[id])).filter(Boolean);
+    if (out_.length) out.push(node('p', 'se-stage-meta', 'Out: ' + out_.join(', ')));
+    return out;
+}
+
+function charadesScene(game, round, teams) {
+    const presenter = room.value?.data?.presenter;
+    const acting = teams[round.team_id];
+    const out = [node('p', 'se-scene-sub', game.title)];
+
+    if (round.state === 'scored') {
+        out.push(node('h1', 'se-scene-title', teamName(acting) + ': ' + (round.words_done || 0)));
+        out.push(node('p', 'se-scene-body', (round.words_done === 1 ? 'phrase' : 'phrases') + ' guessed'));
+        return out;
+    }
+    if (!acting) {
+        out.push(node('h1', 'se-scene-title', 'Who is acting next?'), node('p', 'se-scene-body', HOW_TO.charades));
+        return out;
+    }
+
+    out.push(teamBadge(acting, 'se-stage-team se-stage-team-lg'));
+    out.push(node('h1', 'se-scene-title', presenter?.display_name ? presenter.display_name + ' is acting' : 'Get ready…'));
+    if (round.opens_ms) {
+        const timer = countdown(round, { open: '', className: 'se-stage-timer se-stage-timer-lg' });
+        if (timer) out.push(timer);
+    }
+    out.push(node('p', 'se-scene-counter', (round.words_done || 0) + ' guessed'));
+    return out;
+}
+
+function feudScene(game, round, teams) {
+    const out = [node('p', 'se-scene-sub', game.title + (round.multiplier > 1 ? ' · double points ×' + round.multiplier : '')), node('h1', 'se-stage-q', round.question || '')];
+
+    const board = node('ol', 'se-stage-board');
+    board.style.setProperty('--rows', String(Math.max(1, Math.ceil((round.board || []).length / 2))));
+    for (const slot of round.board || []) {
+        const li = node('li', 'se-stage-slot');
+        li.dataset.revealed = slot.revealed ? '1' : '0';
+        li.append(node('span', '', slot.revealed ? slot.label : String(slot.slot)), node('strong', '', slot.revealed ? String(slot.points) : ''));
+        board.appendChild(li);
+    }
+    out.push(board);
+
+    const status = node('div', 'se-stage-row');
+    const faceoff = room.value?.data?.faceoff;
+    if (round.phase === 'faceoff') {
+        const text = faceoff && faceoff.round_id === round.id
+            ? faceoff.rep_a.display_name + ' vs ' + faceoff.rep_b.display_name
+            : teamName(teams[round.team_a]) + ' vs ' + teamName(teams[round.team_b]);
+        status.append(node('p', 'se-stage-meta', 'Face-off: ' + text));
+        if (faceoff?.first_buzz) status.append(node('p', 'se-stage-meta', '🔔 ' + faceoff.first_buzz.display_name));
+    } else if (round.phase === 'control' || round.phase === 'steal') {
+        status.append(teamBadge(teams[round.phase === 'steal' ? round.steal_team : round.control_team]));
+        status.append(node('p', 'se-stage-meta', round.phase === 'steal' ? 'can steal!' : 'is playing'));
+        const strikes = node('p', 'se-stage-strikes');
+        for (let i = 0; i < 3; i++) {
+            const x = node('span', '', '✕');
+            x.dataset.on = i < round.strikes ? '1' : '0';
+            strikes.appendChild(x);
+        }
+        status.append(strikes);
+    } else if (round.phase === 'done' && round.winner_team) {
+        status.append(teamBadge(teams[round.winner_team]), node('p', 'se-stage-meta', 'banks ' + (round.team_points?.[String(round.winner_team)] ?? round.bank)));
+    }
+    status.append(node('p', 'se-stage-meta se-stage-bank', 'Bank ' + (round.bank * (round.multiplier || 1))));
+    out.push(status);
     return out;
 }
 
 function sceneGame(data) {
-    const game = data.game || {};
-    const round = game.round || {};
-    if (game.type === 'charades') {
-        const presenter = room.value?.data?.presenter;
-        return [node('p', 'se-scene-sub', game.title || 'Bible Charades'), node('h1', 'se-scene-title', presenter?.display_name ? `${presenter.display_name} is acting!` : 'Choose your presenter'), node('p', 'se-scene-counter', `${round.words_done || presenter?.words_done || 0} guessed`)];
+    const game = data.game || null;
+    const round = game?.round || null;
+    const teams = Object.fromEntries((data.teams || []).map((t) => [t.id, t]));
+
+    if (!game) {
+        return [node('p', 'se-scene-sub', display.event.title), node('h1', 'se-scene-title', 'Game time'), node('p', 'se-scene-body', 'Get your phones ready.')];
     }
-    if (game.type === 'feud') {
-        const board = node('div', 'se-feud-board');
-        for (const answer of round.board || []) board.appendChild(node('div', 'se-feud-tile', answer.revealed ? `${answer.label} · ${answer.points}` : '—'));
-        return [node('p', 'se-scene-sub', 'Family Feud'), node('h1', 'se-scene-title', round.question || 'Survey says…'), board];
+    if (!round || round.state === 'pending' || round.state === 'void' || game.status !== 'live') {
+        const out = [node('p', 'se-scene-sub', round ? 'Up next' : 'Next game'), node('h1', 'se-scene-title', game.title)];
+        out.push(node('p', 'se-scene-body', HOW_TO[game.type] || ''));
+        return out;
     }
-    const out = [node('p', 'se-scene-sub', game.title || 'Game')];
-    if (round.clues) for (const clue of round.clues) out.push(node('h2', 'se-scene-body', clue));
-    out.push(node('h1', 'se-scene-title', round.prompt || round.lead || round.emojis || 'Get ready'));
-    const buzz = room.value?.data?.buzz_winner;
-    if (buzz) out.push(node('p', 'se-scene-counter', `${buzz.display_name} buzzed!`));
+
+    if (game.type === 'live_quiz' || game.type === 'trivia') return quizScene(game, round, teams);
+    if (game.type === 'buzzer' || game.type === 'who_am_i') return buzzScene(game, round, teams);
+    if (game.type === 'charades') return charadesScene(game, round, teams);
+    if (game.type === 'feud') return feudScene(game, round, teams);
+    return [node('h1', 'se-scene-title', game.title)];
+}
+
+function sceneLeaderboard(data, scene) {
+    const board = node('ol', 'se-stage-leaderboard');
+    [...(data.teams || [])].sort((a, b) => b.score - a.score).forEach((team, index) => {
+        const row = node('li', 'se-stage-leader-row');
+        row.style.setProperty('--team-color', team.hex);
+        row.append(node('strong', '', (index + 1) + '. ' + teamName(team)), node('span', '', team.score + ' pts'));
+        board.appendChild(row);
+    });
+    const out = [node('p', 'se-scene-sub', 'Championship'), node('h1', 'se-scene-title', 'Leaderboard'), board];
+    const mvp = room.value?.data?.mvp || [];
+    if (mvp.length && scene?.payload?.show_mvp !== false) out.push(node('p', 'se-scene-body', 'MVP · ' + mvp[0].display_name + ' · ' + mvp[0].points + ' pts'));
     return out;
 }
 
+/**
+ * The finale (§11.11): the teams count up from last place, the champions
+ * land last with the fanfare, then the MVP — whose name comes from the room
+ * snapshot, because public.json never carries a person.
+ */
 function sceneFinale(scene) {
     const finale = scene?.payload || {};
+    const teams = [...(finale.teams || [])].sort((a, b) => b.points - a.points);
     const champion = finale.champion;
-    const out = [node('p', 'se-scene-sub', 'Your champions'), node('h1', 'se-scene-title', champion?.name || 'What a night!')];
-    if (champion) out.push(node('p', 'se-scene-counter', `${champion.points} points`));
-    if (finale.mvp_winner) out.push(node('p', 'se-scene-body', `MVP · ${finale.mvp_winner.display_name} · ${finale.mvp_winner.points} points`));
+    const step = 1.4;
+
+    const out = [node('p', 'se-scene-sub', 'And the champions are…')];
+    const list = node('ol', 'se-stage-finale');
+    teams.slice(1).reverse().forEach((team, i) => {
+        const row = node('li', 'se-stage-leader-row se-stage-finale-row');
+        row.style.setProperty('--team-color', team.hex);
+        row.style.setProperty('--delay', (i * step) + 's');
+        row.append(node('strong', '', (team.rank ?? '') + (team.rank ? '. ' : '') + team.name), node('span', '', team.points + ' pts'));
+        list.appendChild(row);
+    });
+    out.push(list);
+
+    const win = node('h1', 'se-scene-title se-stage-champion', champion ? '🏆 ' + champion.name : 'What a night!');
+    win.style.setProperty('--delay', (Math.max(0, teams.length - 1) * step + 0.6) + 's');
+    if (champion) win.style.setProperty('--team-color', champion.hex);
+    out.push(win);
+
+    if (champion) {
+        const points = node('p', 'se-scene-counter se-stage-finale-row', champion.points + ' points');
+        points.style.setProperty('--delay', (Math.max(0, teams.length - 1) * step + 1.2) + 's');
+        out.push(points);
+    }
+
+    const mvp = room.value?.data?.mvp?.[0];
+    if (finale.has_mvp && mvp) {
+        const line = node('p', 'se-scene-body se-stage-finale-row', 'MVP · ' + mvp.display_name + ' · ' + mvp.points + ' pts');
+        line.style.setProperty('--delay', (Math.max(0, teams.length - 1) * step + 2.2) + 's');
+        out.push(line);
+    }
     return out;
 }
 
@@ -283,6 +549,27 @@ function scenePlaceholder(label) {
         node('h1', 'se-scene-title', display.event.title + ' ' + (display.event.edition || '')),
         node('p', 'se-scene-body', 'Coming right up.'),
     ];
+}
+
+let lastKey = null;
+let lastSig = null;
+let repaintTimer = null;
+
+/** What a scene shows, so an unchanged snapshot never repaints it. */
+function signature(key, data, scene) {
+    const r = room.value?.data || {};
+    const teams = (data.teams || []).map((t) => [t.id, t.name, t.score, t.n]);
+    switch (key) {
+        case 'game': return [data.game, teams, r.buzz_winner, r.presenter, r.faceoff];
+        case 'leaderboard': return [teams, r.mvp?.[0], scene.payload];
+        case 'finale': return [scene.since_ms, scene.payload, r.mvp?.[0]];
+        case 'karaoke': return [r.karaoke];
+        case 'teams': return [teams];
+        case 'standby': return [data.counts?.checked_in_today, scene];
+        case 'program': return [data.program, scene];
+        case 'announcement': return [data.announcement];
+        default: return [scene];
+    }
 }
 
 function render() {
@@ -296,6 +583,17 @@ function render() {
     // be said right now.
     const key = data.announcement ? 'announcement' : scene.key;
 
+    // A new round is a new scene (a crossfade); new numbers in the same
+    // round are an instant update.
+    const sceneId = key === 'game'
+        ? 'game:' + (data.game?.id ?? 0) + ':' + (data.game?.round?.id ?? 0)
+        : key + ':' + (scene.since_ms ?? '');
+    const sig = JSON.stringify(signature(key, data, scene));
+    if (sceneId === lastKey && sig === lastSig) {
+        playCueFromSnapshot(data.sfx);
+        return;
+    }
+
     const builders = {
         standby: () => sceneStandby(data),
         welcome: () => sceneWelcome(scene),
@@ -304,15 +602,25 @@ function render() {
         program: () => sceneProgram(scene, data),
         break: () => sceneBreak(scene),
         blank: () => sceneBlank(),
-        leaderboard: () => sceneLeaderboard(data),
+        leaderboard: () => sceneLeaderboard(data, scene),
         recap: () => scenePlaceholder('Recap'),
         game: () => sceneGame(data),
         karaoke: () => sceneKaraoke(),
         finale: () => sceneFinale(scene),
     };
 
-    paint((builders[key] || builders.standby)());
+    paint((builders[key] || builders.standby)(), sceneId === lastKey);
+    lastKey = sceneId;
+    lastSig = sig;
     playCueFromSnapshot(data.sfx);
+
+    // The answer tiles appear when the window opens, which no snapshot
+    // announces: repaint at that moment.
+    const round = key === 'game' ? data.game?.round : null;
+    clearTimeout(repaintTimer);
+    if (round?.opens_ms && round.state === 'armed' && round.opens_ms > serverNow()) {
+        repaintTimer = setTimeout(() => { lastSig = null; render(); }, round.opens_ms - serverNow() + 50);
+    }
 }
 
 function shortUrl(url) {
@@ -403,7 +711,7 @@ async function start() {
     const channels = { public: (envelope) => { live.value = envelope; render(); updateDot(); } };
     if (display.snapshots.room) {
         const roomChannel = display.snapshots.room.split('/').pop().replace(/\.json$/, '');
-        channels[roomChannel] = (envelope) => { room.value = envelope; };
+        channels[roomChannel] = (envelope) => { room.value = envelope; render(); };
     }
 
     driver = new PollDriver({

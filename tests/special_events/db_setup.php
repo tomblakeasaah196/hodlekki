@@ -146,52 +146,12 @@ $standIns = [
         KEY idx_notif_user (user_id, is_read)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
-// SMS Studio: the module enqueues campaigns and never writes sms_log (§16.1).
-'sms_campaigns' => "
-    CREATE TABLE IF NOT EXISTS sms_campaigns (
-        id            INT NOT NULL AUTO_INCREMENT,
-        name          VARCHAR(190) NOT NULL,
-        message       TEXT         NULL,
-        status        VARCHAR(20)  NOT NULL DEFAULT 'draft',
-        scheduled_at  DATETIME     NULL,
-        created_by    INT UNSIGNED NULL,
-        created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-
-'sms_queue' => "
-    CREATE TABLE IF NOT EXISTS sms_queue (
-        id           INT NOT NULL AUTO_INCREMENT,
-        campaign_id  INT          NULL,
-        phone        VARCHAR(32)  NOT NULL,
-        message      TEXT         NULL,
-        status       VARCHAR(20)  NOT NULL DEFAULT 'pending',
-        created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        KEY idx_queue_campaign (campaign_id, status)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-
-// Reach: only the hand-off (PR7) writes these; the stand-in exists so the
-// hand-off can be developed and tested locally.
-'reach_campaigns' => "
-    CREATE TABLE IF NOT EXISTS reach_campaigns (
-        id INT UNSIGNED NOT NULL AUTO_INCREMENT, slug VARCHAR(120) NOT NULL, title VARCHAR(200) NOT NULL,
-        campaign_type VARCHAR(60) NOT NULL DEFAULT 'Other', campaign_date DATE NULL, start_time TIME NULL, end_time TIME NULL,
-        location VARCHAR(255) NULL, meta_description TEXT NULL, share_scripture TEXT NULL,
-        payload_tier ENUM('Rapid','Standard','Rich') NOT NULL DEFAULT 'Rich', status ENUM('Active','Completed','Cancelled') NOT NULL DEFAULT 'Active',
-        created_by INT UNSIGNED NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY(id), UNIQUE KEY uniq_reach_campaign_slug(slug)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-
-'reach_leads' => "
-    CREATE TABLE IF NOT EXISTS reach_leads (
-        id INT UNSIGNED NOT NULL AUTO_INCREMENT, campaign_id INT UNSIGNED NULL, first_name VARCHAR(100) NOT NULL,
-        last_name VARCHAR(100) NULL, phone VARCHAR(40) NULL, category ENUM('New_Convert','Unsaved','Saved','Broken','Dechurched','Other') NOT NULL DEFAULT 'Other',
-        willing_for_visit TINYINT(1) NOT NULL DEFAULT 0, notes TEXT NULL,
-        status ENUM('Not_Spoken_To','Spoken_To','Cold','Converted','Declined') NOT NULL DEFAULT 'Not_Spoken_To',
-        assigned_to INT UNSIGNED NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY(id), KEY idx_reach_leads_campaign(campaign_id), KEY idx_reach_leads_phone(phone)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+// sms_campaigns, sms_queue, reach_campaigns and reach_leads are NOT stood in:
+// their real DDL is in db/migrations (20261004090000_sms_baseline_tables.sql
+// and the 202609261201xx Reach files), which step 2 applies. A stand-in here
+// used to pre-empt that DDL (CREATE TABLE IF NOT EXISTS became a no-op), so
+// the module's SMS and hand-off code was tested against columns production
+// does not have and failed on the ones it does.
 
 'schema_migrations' => "
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -250,6 +210,7 @@ foreach ($files as $file) {
             fwrite(STDERR, "  FAILED   {$name}: " . $e->getMessage() . "\n");
             exit(1);
         }
+        echo "  skipped  {$name}: " . $e->getMessage() . "\n";
         $skipped++;
     }
 }

@@ -181,6 +181,9 @@ function se_studio_event_payload(PDO $pdo, array $event, int $userId, string $ac
             'checkin_closes_at' => $d['checkin_closes_at'],
         ], $days),
         'registration'   => [
+            // The Registration tab reads every capacity field from this block;
+            // without this key the seats box always showed empty.
+            'online_capacity'          => $event['online_capacity'] !== null ? (int) $event['online_capacity'] : null,
             'reg_opens_at'             => $event['reg_opens_at'],
             'reg_closes_at'            => $event['reg_closes_at'],
             'reg_override'             => $event['reg_override'],
@@ -1868,7 +1871,13 @@ try {
 
     case 'chara_starter_content': {
         $event = se_studio_event($pdo, $body, 'event.edit');
-        se_api_success('Chara starter decks are ready.', se_chara_starter_content($pdo, $event, $userId));
+        $out   = se_chara_starter_content($pdo, $event, $userId);
+        se_api_success(
+            $out['items'] || $out['games']
+                ? 'Starter pack added: ' . $out['items'] . ' questions and ' . $out['games'] . ' games.'
+                : 'The starter pack is already here.',
+            $out
+        );
     }
 
     case 'feud_build_board': {
@@ -1885,7 +1894,7 @@ try {
         $event = se_studio_event($pdo, $body, 'event.edit');
         $answers = $body['answers'] ?? [];
         if (!is_array($answers)) {
-            throw new SeValidationException('Answers must be a list.', ['answers']);
+            throw new SeValidationException(['answers' => 'Answers must be a list.'], 'Answers must be a list.');
         }
         se_api_success('Feud board saved.', se_feud_board_save(
             $pdo,
@@ -1929,17 +1938,124 @@ try {
         ]);
     }
 
-    case 'decks_list': case 'deck_list': case 'deck_save': case 'deck_item_save': case 'deck_items_review': case 'deck_generate': case 'deck_generate_apply': case 'game_list': case 'games_list': case 'games_save': case 'game_save': case 'game_items_save': {
-        $event=se_studio_event($pdo,$body,'event.edit');
-        if($action==='deck_list'||$action==='decks_list') se_api_success('OK',['decks'=>se_deck_list($pdo,(int)$event['id'],$body['content_type']??null)]);
-        if($action==='game_list'||$action==='games_list') se_api_success('OK',['games'=>se_game_list($pdo,(int)$event['id'])]);
-        if($action==='deck_save') se_api_success('Saved.',se_deck_save($pdo,$event,$body,$userId));
-        if($action==='deck_item_save') se_api_success('Saved.',se_deck_item_save($pdo,$event,$body,$userId));
-        if($action==='deck_items_review') se_api_success('Reviewed.',se_deck_items_review($pdo,$event,$body,$userId));
-        if($action==='deck_generate') se_api_success('Deck generation is ready for review.',se_deck_generate($pdo,$event,$body,$userId));
-        if($action==='deck_generate_apply') se_api_success('Reviewed deck items added.',se_deck_generate_apply($pdo,$event,se_int($body['job_id']??0,0),se_int($body['deck_id']??0,0),$userId));
-        if($action==='game_items_save') se_api_success('Items attached.',se_game_items_save($pdo,$event,$body,$userId));
-        se_api_success('Saved.',se_game_save($pdo,$event,$body,$userId));
+    // ====================================================================
+    // Games: decks, questions, games (§11.1, §11.14, §12.5)
+    // ====================================================================
+
+    case 'games_overview': {
+        // Everything the Games tab draws in one round trip.
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_api_success('OK', [
+            'games'         => se_game_list($pdo, (int) $event['id']),
+            'decks'         => se_deck_list($pdo, (int) $event['id']),
+            'feud'          => se_feud_items($pdo, $event),
+            'game_types'    => SE_GAME_TYPE_LABELS,
+            'content_types' => SE_CONTENT_TYPE_LABELS,
+            'compatible'    => SE_GAME_CONTENT_TYPES,
+            'defaults'      => SE_GAME_DEFAULTS,
+            'charade_categories' => SE_CHARADE_CATEGORIES,
+            'test_mode'     => se_bool(se_event_settings($event)['test_mode'] ?? false),
+            'ai'            => se_ai_available(),
+        ]);
+    }
+
+    case 'decks_list':
+    case 'deck_list': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $type  = se_enum($body['content_type'] ?? '', SE_CONTENT_TYPES, '');
+        se_api_success('OK', ['decks' => se_deck_list($pdo, (int) $event['id'], $type !== '' ? $type : null)]);
+    }
+
+    case 'deck_save': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_api_success('Deck saved.', ['deck' => se_deck_save($pdo, $event, $body, $userId)]);
+    }
+
+    case 'deck_delete': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_deck_delete($pdo, $event, se_int($body['deck_id'] ?? 0, 0), $userId);
+        se_api_success('Deck deleted.', ['deleted' => true]);
+    }
+
+    case 'deck_items': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $deck  = se_deck_find($pdo, (int) $event['id'], se_int($body['deck_id'] ?? 0, 0));
+        if (!$deck) {
+            throw new SeNotFoundException('We could not find that deck.');
+        }
+        se_api_success('OK', ['deck' => se_deck_public($deck), 'items' => se_deck_items($pdo, (int) $deck['id'])]);
+    }
+
+    case 'deck_item_save': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_api_success('Question saved.', ['item' => se_deck_item_save($pdo, $event, $body, $userId)]);
+    }
+
+    case 'deck_item_delete': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_deck_item_delete($pdo, $event, se_int($body['item_id'] ?? 0, 0), $userId);
+        se_api_success('Question deleted.', ['deleted' => true]);
+    }
+
+    case 'deck_items_review': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $out   = se_deck_items_review($pdo, $event, $body, $userId);
+        se_api_success($out['updated'] . ' question' . ($out['updated'] === 1 ? '' : 's') . ' updated.', $out);
+    }
+
+    case 'deck_generate': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_api_success('Here are the drafts — keep the ones you like.', se_deck_generate($pdo, $event, $body, $userId));
+    }
+
+    case 'deck_generate_apply': {
+        $event   = se_studio_event($pdo, $body, 'event.edit');
+        $indexes = is_array($body['indexes'] ?? null) ? $body['indexes'] : null;
+        $out     = se_deck_generate_apply($pdo, $event, se_int($body['job_id'] ?? 0, 0), se_int($body['deck_id'] ?? 0, 0), $userId, $indexes);
+        se_api_success($out['created'] . ' question' . ($out['created'] === 1 ? '' : 's') . ' added.', $out);
+    }
+
+    case 'games_list':
+    case 'game_list': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_api_success('OK', ['games' => se_game_list($pdo, (int) $event['id'])]);
+    }
+
+    case 'game_save':
+    case 'games_save': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_api_success('Game saved.', ['game' => se_game_save($pdo, $event, $body, $userId)]);
+    }
+
+    case 'game_delete': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_game_delete($pdo, $event, se_int($body['game_id'] ?? 0, 0), $userId);
+        se_api_success('Game deleted.', ['deleted' => true]);
+    }
+
+    case 'game_order': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $ids   = is_array($body['game_ids'] ?? null) ? $body['game_ids'] : [];
+        se_api_success('Running order saved.', ['games' => se_game_order($pdo, $event, $ids, $userId)]);
+    }
+
+    case 'game_items': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $game  = se_game_find($pdo, (int) $event['id'], se_int($body['game_id'] ?? 0, 0));
+        if (!$game) {
+            throw new SeNotFoundException('We could not find that game.');
+        }
+        se_api_success('OK', ['items' => se_game_items($pdo, (int) $game['id'])]);
+    }
+
+    case 'game_items_save': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_api_success('Questions saved for this game.', se_game_items_save($pdo, $event, $body, $userId));
+    }
+
+    case 'feud_items': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_api_success('OK', ['items' => se_feud_items($pdo, $event)]);
     }
 
     case '':

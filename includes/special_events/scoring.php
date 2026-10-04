@@ -1,74 +1,331 @@
 <?php
 // /includes/special_events/scoring.php
-// Append-only scoring ledger and leaderboards.
+//
+// The score ledger and leaderboards (guide §11.6, §11.11).
+//
+// Scores are a LEDGER (AGENTS.md): every point awarded or removed is a row in
+// se_score_events, totals are sums, and a mistake is fixed by voiding the row
+// and writing a new one — never by updating points in place. Automatic rows
+// carry an idempotency key (§11.6.2), so scoring a round twice, or two
+// consoles scoring it at once, can never double-count: the unique key on
+// (event_id, idempotency_key) absorbs the second write.
 
-function se_quiz_points(int $base,int $elapsed,int $duration):int { if($base<=0)return 0;return max(0,(int)round($base*(1-(min($duration,max(0,$elapsed))/(float)max(1,$duration))/2))); }
-function se_team_normalized_points(int $base,int $correct,int $eligible):int { return (int)round($base*$correct/max(1,$eligible)); }
-function se_score_key(string $kind,int $round,int $subject,int $attempt=0):string { $scope=$kind==='q'?'p':'t'; return $kind.':'.$round.':'.$scope.':'.$subject.($attempt?':a:'.$attempt:''); }
-function se_score_insert(PDO $pdo,array $event,array $in,int $actor):array { $scope=se_enum($in['scope']??'', ['team','individual'],'');if($scope==='')throw new SeValidationException('Score scope is required.',['scope']);$points=(int)($in['points']??0);$key=se_line($in['idempotency_key']??'',80)?:null;$s=$pdo->prepare('INSERT INTO se_score_events(event_id,scope,team_id,registration_id,game_id,round_id,kind,points,reason,idempotency_key,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE id=id');$s->execute([(int)$event['id'],$scope,$in['team_id']??null,$in['registration_id']??null,$in['game_id']??null,$in['round_id']??null,se_enum($in['kind']??'award',['auto','award','penalty','correction'],'award'),$points,se_line($in['reason']??'',160)?:null,$key,$actor]);$id=(int)$pdo->lastInsertId();if(!$id&&$key){$q=$pdo->prepare('SELECT id FROM se_score_events WHERE event_id=? AND idempotency_key=?');$q->execute([(int)$event['id'],$key]);$id=(int)$q->fetchColumn();}return ['id'=>$id,'points'=>$points,'idempotency_key'=>$key];}
-function se_score_void(PDO $pdo,array $event,int $id,string $reason,int $actor):void {if(mb_strlen(trim($reason))<3)throw new SeValidationException('Give a reason for voiding a score.',['reason']);$s=$pdo->prepare('UPDATE se_score_events SET voided_at=NOW(),voided_by=?,void_reason=? WHERE id=? AND event_id=? AND voided_at IS NULL');$s->execute([$actor,$reason,$id,(int)$event['id']]);}
-function se_leaderboards(PDO $pdo,array $event):array {if(!se_table_exists($pdo,'se_score_events'))return ['teams'=>[],'mvp'=>[]];$id=(int)$event['id'];$s=$pdo->prepare("SELECT team_id,SUM(points) points FROM se_score_events WHERE event_id=? AND scope='team' AND voided_at IS NULL GROUP BY team_id ORDER BY points DESC,team_id");$s->execute([$id]);$teams=$s->fetchAll(PDO::FETCH_ASSOC);$s=$pdo->prepare("SELECT s.registration_id,SUM(s.points) points,COALESCE(a.correct_count,0) correct_count,MAX(s.created_at) last_scoring_at FROM se_score_events s LEFT JOIN (SELECT registration_id,SUM(CASE WHEN is_correct=1 THEN 1 ELSE 0 END) correct_count FROM se_answers WHERE event_id=? GROUP BY registration_id) a ON a.registration_id=s.registration_id WHERE s.event_id=? AND s.scope='individual' AND s.voided_at IS NULL GROUP BY s.registration_id,a.correct_count ORDER BY points DESC,correct_count DESC,last_scoring_at ASC,s.registration_id LIMIT 5");$s->execute([$id,$id]);return ['teams'=>$teams,'mvp'=>$s->fetchAll(PDO::FETCH_ASSOC)];}
-function se_round_score(PDO $pdo, array $event, int $roundId, int $actor): array
+// --------------------------------------------------------------------------
+// Formulas (§11.6.1) — pure, unit-tested
+// --------------------------------------------------------------------------
+
+/** Live Quiz speed points: round(base × (1 − (elapsed / duration) / 2)). */
+function se_quiz_points(int $base, int $elapsed, int $duration): int
 {
-    $stmt = $pdo->prepare('SELECT r.*,g.type game_type,g.settings_json,g.weight FROM se_rounds r JOIN se_games g ON g.id=r.game_id WHERE r.id=? AND r.event_id=?');
-    $stmt->execute([$roundId,(int)$event['id']]);
-    $round = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$round) throw new SeNotFoundException('Round not found.');
-    if ($round['state'] !== 'revealed') throw new SeRuleException('Reveal the round before scoring.', 'ROUND_NOT_REVEALED');
-    $item = se_round_item($pdo,$round); $payload = $item['payload'] ?? []; $correct = (int)($payload['answer_index'] ?? -1);
-    $stmt = $pdo->prepare("SELECT * FROM se_answers WHERE round_id=? AND role IN ('player','captain')");
-    $stmt->execute([$roundId]); $answers = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $settings = se_game_settings($round); $testReason = !empty($round['is_test']) ? 'TEST' : null;
-    $correctByTeam = [];
-    foreach ($answers as $answer) {
-        $ok = $correct >= 0 && (int)$answer['choice_index'] === $correct;
-        $pdo->prepare('UPDATE se_answers SET is_correct=? WHERE id=?')->execute([$ok?1:0,(int)$answer['id']]);
-        if ($round['game_type'] === 'live_quiz') {
-            $points = $ok ? se_quiz_points((int)($settings['base'] ?? 1000),(int)$answer['elapsed_ms'],(int)($settings['duration_ms'] ?? 20000)) : 0;
-            se_score_insert($pdo,$event,['scope'=>'individual','registration_id'=>(int)$answer['registration_id'],'game_id'=>(int)$round['game_id'],'round_id'=>$roundId,'kind'=>'auto','points'=>$points,'reason'=>$testReason,'idempotency_key'=>'q:'.$roundId.':p:'.$answer['registration_id']],$actor);
-            if ($ok && $answer['team_id']) $correctByTeam[(int)$answer['team_id']] = ($correctByTeam[(int)$answer['team_id']] ?? 0) + 1;
-        } elseif ($round['game_type'] === 'trivia' && $ok && $answer['team_id']) {
-            se_score_insert($pdo,$event,['scope'=>'team','team_id'=>(int)$answer['team_id'],'game_id'=>(int)$round['game_id'],'round_id'=>$roundId,'kind'=>'auto','points'=>(int)($settings['points_correct']??300),'reason'=>$testReason,'idempotency_key'=>'r:'.$roundId.':t:'.$answer['team_id']],$actor);
-        }
+    if ($base <= 0) {
+        return 0;
     }
-    if ($round['game_type'] === 'live_quiz') {
-        $eligible = json_decode((string)($round['eligible_json'] ?? '{}'),true) ?: [];
-        foreach ($eligible as $teamId => $number) {
-            $points = se_team_normalized_points((int)($settings['team_base']??1000),(int)($correctByTeam[(int)$teamId]??0),(int)$number);
-            se_score_insert($pdo,$event,['scope'=>'team','team_id'=>(int)$teamId,'game_id'=>(int)$round['game_id'],'round_id'=>$roundId,'kind'=>'auto','points'=>(int)round($points*(float)$round['weight']),'reason'=>$testReason,'idempotency_key'=>'q:'.$roundId.':t:'.$teamId],$actor);
-        }
-    }
-    $stmt = $pdo->prepare("UPDATE se_rounds SET state='scored' WHERE id=? AND state='revealed'"); $stmt->execute([$roundId]);
-    if (!$stmt->rowCount()) throw new SeRuleException('That round was already scored.', 'STALE_STATE');
-    return ['answers'=>count($answers),'leaderboard'=>se_leaderboards($pdo,$event)];
+    $fraction = min($duration, max(0, $elapsed)) / (float) max(1, $duration);
+
+    return max(0, (int) round($base * (1 - $fraction / 2)));
 }
 
+/** A team's share of a quiz question: base × correct members / eligible members. */
+function se_team_normalized_points(int $base, int $correct, int $eligible): int
+{
+    return (int) round($base * $correct / max(1, $eligible));
+}
+
+/** A game's weight multiplies its TEAM points at write time (§11.6.1). */
+function se_weighted_points(int $points, mixed $weight): int
+{
+    $weight = is_numeric($weight) ? (float) $weight : 1.0;
+
+    return (int) round($points * max(0.0, $weight));
+}
+
+/** The base points of a Live Quiz question for its points_mode. */
+function se_quiz_base(array $settings): int
+{
+    return match ($settings['points_mode'] ?? 'standard') {
+        'double' => 2000,
+        'none'   => 0,
+        default  => 1000,
+    };
+}
+
+/** Idempotency key of an automatic row (§11.6.2). */
+function se_score_key(string $kind, int $round, int $subject, int $attempt = 0): string
+{
+    $scope = $kind === 'q' ? 'p' : 't';
+
+    return $kind . ':' . $round . ':' . $scope . ':' . $subject . ($attempt ? ':a:' . $attempt : '');
+}
+
+/**
+ * The reason stored on a rehearsal row. Reset rehearsal voids `TEST` and
+ * `TEST: …` rows (§11.13), so an award named during a rehearsal is cleared
+ * along with the automatic points.
+ */
+function se_score_test_reason(?string $label = null): string
+{
+    $label = trim((string) $label);
+
+    return $label === '' ? 'TEST' : mb_substr('TEST: ' . $label, 0, 160, 'UTF-8');
+}
+
+// --------------------------------------------------------------------------
+// The ledger
+// --------------------------------------------------------------------------
+
+/**
+ * Write one ledger row. With an idempotency key, a repeat is a no-op that
+ * returns the original row's id.
+ *
+ * @return array{id: int, points: int, idempotency_key: ?string, duplicate: bool}
+ */
+function se_score_insert(PDO $pdo, array $event, array $in, int $actor): array
+{
+    $scope = se_enum($in['scope'] ?? '', ['team', 'individual'], '');
+    if ($scope === '') {
+        throw new SeValidationException(['scope' => 'Choose a team or a player.']);
+    }
+
+    $eventId = (int) $event['id'];
+    $points  = (int) ($in['points'] ?? 0);
+    $key     = se_line($in['idempotency_key'] ?? '', 80) ?: null;
+    $teamId  = isset($in['team_id']) && $in['team_id'] !== null ? (int) $in['team_id'] : null;
+    $regId   = isset($in['registration_id']) && $in['registration_id'] !== null ? (int) $in['registration_id'] : null;
+
+    if ($scope === 'team' && !$teamId) {
+        throw new SeValidationException(['team_id' => 'Choose the team.']);
+    }
+    if ($scope === 'individual' && !$regId) {
+        throw new SeValidationException(['registration_id' => 'Choose the player.']);
+    }
+
+    $stmt = $pdo->prepare(
+        "INSERT INTO se_score_events
+            (event_id, scope, team_id, registration_id, game_id, round_id, kind, points, reason, idempotency_key, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+
+    try {
+        $stmt->execute([
+            $eventId,
+            $scope,
+            $teamId,
+            $regId,
+            isset($in['game_id']) ? (int) $in['game_id'] : null,
+            isset($in['round_id']) ? (int) $in['round_id'] : null,
+            se_enum($in['kind'] ?? 'award', ['auto', 'award', 'penalty', 'correction'], 'award'),
+            $points,
+            se_line($in['reason'] ?? '', 160) ?: null,
+            $key,
+            $actor ?: null,
+        ]);
+    } catch (PDOException $e) {
+        if ($key !== null && se_is_duplicate_key($e)) {
+            $q = $pdo->prepare("SELECT id, points FROM se_score_events WHERE event_id = ? AND idempotency_key = ?");
+            $q->execute([$eventId, $key]);
+            $row = $q->fetch() ?: ['id' => 0, 'points' => $points];
+
+            return ['id' => (int) $row['id'], 'points' => (int) $row['points'], 'idempotency_key' => $key, 'duplicate' => true];
+        }
+        throw $e;
+    }
+
+    return ['id' => (int) $pdo->lastInsertId(), 'points' => $points, 'idempotency_key' => $key, 'duplicate' => false];
+}
+
+/** Void one row (the ledger's "undo"). A reason is required and kept. */
+function se_score_void(PDO $pdo, array $event, int $id, string $reason, int $actor): bool
+{
+    $reason = se_line($reason, 160);
+    if (mb_strlen($reason) < 3) {
+        throw new SeValidationException(['reason' => 'Give a reason for undoing this score.']);
+    }
+
+    $stmt = $pdo->prepare(
+        "UPDATE se_score_events SET voided_at = NOW(), voided_by = ?, void_reason = ?
+          WHERE id = ? AND event_id = ? AND voided_at IS NULL"
+    );
+    $stmt->execute([$actor ?: null, $reason, $id, (int) $event['id']]);
+
+    return $stmt->rowCount() > 0;
+}
+
+/** Void every row a round wrote (§11.2 "void"). Returns how many. */
+function se_round_scores_void(PDO $pdo, array $event, int $roundId, string $reason, int $actor): int
+{
+    $stmt = $pdo->prepare(
+        "UPDATE se_score_events SET voided_at = NOW(), voided_by = ?, void_reason = ?
+          WHERE event_id = ? AND round_id = ? AND voided_at IS NULL"
+    );
+    $stmt->execute([$actor ?: null, se_line($reason, 160) ?: 'Round voided', (int) $event['id'], $roundId]);
+
+    return $stmt->rowCount();
+}
+
+// --------------------------------------------------------------------------
+// Leaderboards (§11.11)
+// --------------------------------------------------------------------------
+
+/**
+ * Team totals for every team (a team with no points yet is on the board
+ * with 0), dense-ranked, plus the individual MVP top five.
+ *
+ * MVP ties break on correct answers, then on who reached the score first
+ * (§11.6.2).
+ */
+function se_leaderboards(PDO $pdo, array $event, int $mvpCount = 5): array
+{
+    if (!se_table_exists($pdo, 'se_score_events')) {
+        return ['teams' => [], 'mvp' => []];
+    }
+    $eventId = (int) $event['id'];
+
+    $stmt = $pdo->prepare(
+        "SELECT team_id, SUM(points) AS points
+           FROM se_score_events
+          WHERE event_id = ? AND scope = 'team' AND voided_at IS NULL AND team_id IS NOT NULL
+          GROUP BY team_id"
+    );
+    $stmt->execute([$eventId]);
+    $totals = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $totals[(int) $row['team_id']] = (int) $row['points'];
+    }
+
+    $teams = [];
+    if (se_teams_ready($pdo)) {
+        foreach (se_teams($pdo, $eventId) as $team) {
+            $teams[] = ['team_id' => (int) $team['id'], 'points' => $totals[(int) $team['id']] ?? 0];
+        }
+    } else {
+        foreach ($totals as $teamId => $points) {
+            $teams[] = ['team_id' => $teamId, 'points' => $points];
+        }
+    }
+    usort($teams, static fn(array $a, array $b): int => [$b['points'], $a['team_id']] <=> [$a['points'], $b['team_id']]);
+
+    $rank = 0;
+    $last = null;
+    foreach ($teams as &$team) {
+        if ($team['points'] !== $last) {
+            $rank++;
+            $last = $team['points'];
+        }
+        $team['rank'] = $rank;
+    }
+    unset($team);
+
+    $stmt = $pdo->prepare(
+        "SELECT s.registration_id,
+                SUM(s.points) AS points,
+                MAX(s.created_at) AS last_scoring_at,
+                (SELECT COUNT(*) FROM se_answers a
+                  WHERE a.event_id = s.event_id AND a.registration_id = s.registration_id AND a.is_correct = 1) AS correct_count
+           FROM se_score_events s
+          WHERE s.event_id = ? AND s.scope = 'individual' AND s.voided_at IS NULL AND s.registration_id IS NOT NULL
+          GROUP BY s.event_id, s.registration_id
+         HAVING SUM(s.points) > 0
+          ORDER BY points DESC, correct_count DESC, last_scoring_at ASC, s.registration_id ASC
+          LIMIT " . max(1, min(20, $mvpCount))
+    );
+    $stmt->execute([$eventId]);
+
+    $mvp = array_map(static fn(array $row): array => [
+        'registration_id' => (int) $row['registration_id'],
+        'points'          => (int) $row['points'],
+        'correct_count'   => (int) $row['correct_count'],
+    ], $stmt->fetchAll());
+
+    return ['teams' => $teams, 'mvp' => $mvp];
+}
+
+/** Team totals keyed by team id (for snapshots). */
+function se_team_scores(PDO $pdo, array $event): array
+{
+    $out = [];
+    foreach (se_leaderboards($pdo, $event, 1)['teams'] as $row) {
+        $out[$row['team_id']] = $row;
+    }
+
+    return $out;
+}
+
+// --------------------------------------------------------------------------
+// Crew awards and penalties (§11.6.2)
+// --------------------------------------------------------------------------
+
+/** A named award or penalty from the console, under the live version check. */
 function se_score_adjust_live(PDO $pdo, array $event, array $input, ?int $expected, int $actor): array
 {
+    $reason = se_line($input['reason'] ?? '', 120);
+    if (mb_strlen($reason) < 3) {
+        throw new SeValidationException(['reason' => 'Give the award or penalty a name.']);
+    }
+    $points = se_int($input['points'] ?? 0, -5000, 5000, 0);
+    if ($points === 0) {
+        throw new SeValidationException(['points' => 'How many points?']);
+    }
+
+    $testMode = se_bool(se_event_settings($event)['test_mode'] ?? false);
+    $row = [
+        'scope'           => se_enum($input['scope'] ?? 'team', ['team', 'individual'], 'team'),
+        'team_id'         => isset($input['team_id']) ? (int) $input['team_id'] : null,
+        'registration_id' => isset($input['registration_id']) ? (int) $input['registration_id'] : null,
+        'kind'            => $points < 0 ? 'penalty' : 'award',
+        'points'          => $points,
+        'reason'          => $testMode ? se_score_test_reason($reason) : $reason,
+    ];
+
     $saved = [];
-    $state = se_live_mutate($pdo,$event,$expected,static function () use ($pdo,$event,$input,$actor,&$saved): array {
-        $reason = se_line($input['reason']??'',160);
-        if (mb_strlen($reason) < 3) throw new SeValidationException('Give the award or penalty a name.', ['reason']);
-        $saved = se_score_insert($pdo,$event,$input+['reason'=>$reason],$actor);
+    $state = se_live_mutate($pdo, $event, $expected, static function () use ($pdo, $event, $row, $actor, &$saved): array {
+        $saved = se_score_insert($pdo, $event, $row, $actor);
+
         return [];
-    },'score_adjust',['reason'=>se_line($input['reason']??'',160)],$actor);
-    return $saved+['version'=>(int)$state['version'],'leaderboard'=>se_leaderboards($pdo,$event)];
+    }, 'score_award', ['points' => $points, 'reason' => $reason], $actor);
+
+    return $saved + ['version' => (int) $state['version'], 'leaderboard' => se_leaderboards($pdo, $event)];
 }
 
+/** Undo one ledger row from the console. */
 function se_score_void_live(PDO $pdo, array $event, int $scoreId, string $reason, ?int $expected, int $actor): array
 {
-    $state = se_live_mutate($pdo,$event,$expected,static function () use ($pdo,$event,$scoreId,$reason,$actor): array {
-        se_score_void($pdo,$event,$scoreId,$reason,$actor); return [];
-    },'score_void',['score_id'=>$scoreId,'reason'=>$reason],$actor);
-    return ['version'=>(int)$state['version'],'leaderboard'=>se_leaderboards($pdo,$event)];
+    $state = se_live_mutate($pdo, $event, $expected, static function () use ($pdo, $event, $scoreId, $reason, $actor): array {
+        if (!se_score_void($pdo, $event, $scoreId, $reason, $actor)) {
+            throw new SeRuleException('STALE_STATE', 'That score was already undone.');
+        }
+
+        return [];
+    }, 'score_void', ['score_id' => $scoreId, 'reason' => $reason], $actor);
+
+    return ['version' => (int) $state['version'], 'leaderboard' => se_leaderboards($pdo, $event)];
 }
 
-function se_round_score_live(PDO $pdo, array $event, int $roundId, ?int $expected, int $actor): array
+/** The console's score history: the latest rows, named for people. */
+function se_score_history(PDO $pdo, array $event, int $limit = 30): array
 {
-    $result = [];
-    $out = se_live_mutate($pdo, $event, $expected, static function () use ($pdo, $event, $roundId, &$result, $actor): array {
-        $result = se_round_score($pdo, $event, $roundId, $actor);
-        return ['active_round_id' => $roundId];
-    }, 'round_op', ['round_id' => $roundId, 'to' => 'scored'], $actor);
-    return $out + ['result' => $result];
+    if (!se_table_exists($pdo, 'se_score_events')) {
+        return [];
+    }
+    $stmt = $pdo->prepare(
+        "SELECT s.id, s.scope, s.team_id, s.registration_id, s.points, s.reason, s.kind, s.round_id, s.created_at,
+                r.display_name
+           FROM se_score_events s
+           LEFT JOIN se_registrations r ON r.id = s.registration_id
+          WHERE s.event_id = ? AND s.voided_at IS NULL
+          ORDER BY s.id DESC
+          LIMIT " . max(1, min(100, $limit))
+    );
+    $stmt->execute([(int) $event['id']]);
+
+    return array_map(static fn(array $row): array => [
+        'id'           => (int) $row['id'],
+        'scope'        => (string) $row['scope'],
+        'team_id'      => $row['team_id'] !== null ? (int) $row['team_id'] : null,
+        'player'       => $row['display_name'] !== null ? (string) $row['display_name'] : null,
+        'points'       => (int) $row['points'],
+        'reason'       => (string) ($row['reason'] ?? ''),
+        'kind'         => (string) $row['kind'],
+        'round_id'     => $row['round_id'] !== null ? (int) $row['round_id'] : null,
+        'created_at'   => se_iso($row['created_at']),
+    ], $stmt->fetchAll());
 }

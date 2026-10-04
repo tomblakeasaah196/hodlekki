@@ -253,7 +253,7 @@ function bindCtas() {
         if (action === 'manage') {
             button.addEventListener('click', () => {
                 const cached = readLocal(config.event?.public_id);
-                location.href = cached?.manage_url || (config.urls?.portal || '/');
+                location.href = cached?.manage_url || config.urls?.me || config.urls?.portal || '/';
             });
         }
     }

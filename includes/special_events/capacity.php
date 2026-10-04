@@ -393,7 +393,9 @@ function se_after_capacity_change(PDO $pdo, array $event): void
 
     if (function_exists('se_live_publish')) {
         try {
-            se_live_publish($pdo, $event);
+            // Debounced (no force): a burst of registrations marks the state
+            // dirty and the next tick or publish writes one snapshot.
+            se_live_publish($pdo, (int) $event['id']);
         } catch (Throwable $e) {
             error_log('SE capacity/publish: ' . $e->getMessage());
         }

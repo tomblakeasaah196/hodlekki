@@ -27,17 +27,43 @@ $_ENV['SMS_VAULT_KEY']  = $_ENV['SMS_VAULT_KEY'] ?? str_repeat('ab', 32);
 
 $root = dirname(__DIR__, 3);
 
-require_once $root . '/includes/sms_functions.php';
-foreach (['constants', 'util', 'db', 'theme', 'settings', 'events', 'identity',
-          'capacity', 'registration', 'realtime', 'live', 'bible', 'verses',
-          'teams', 'checkin', 'messages', 'attendees', 'program', 'karaoke', 'after_event'] as $lib) {
-    require_once $root . '/includes/special_events/' . $lib . '.php';
-}
-
 // security.php wants the platform's client-IP helper; the module only ever
 // stores an HMAC of it, and in a test there is no request at all.
 if (!function_exists('security_client_ip')) {
     function security_client_ip(): string { return '127.0.0.1'; }
+}
+
+// The same libraries, in the same order, as includes/special_events/bootstrap.php
+// loads them. A shorter list hides real faults: without security.php every
+// se_audit() call failed on the missing se_ip_hash() and the audit assertions
+// below could never pass.
+require_once $root . '/includes/sms_functions.php';
+foreach (['constants', 'util', 'db', 'theme', 'settings', 'security', 'events', 'assets', 'ai',
+          'identity', 'capacity', 'registration', 'realtime', 'live', 'bible', 'verses',
+          'teams', 'checkin', 'program', 'karaoke', 'messages', 'attendees', 'cards', 'export',
+          'portal', 'games', 'games_engine', 'scoring', 'party_games', 'after_event'] as $lib) {
+    require_once $root . '/includes/special_events/' . $lib . '.php';
+}
+
+// Snapshots are written under <DOCUMENT_ROOT>/live/<public_id>/ (se_live_root()).
+// Point that at a scratch directory so a test run never litters the tree.
+$_SERVER['DOCUMENT_ROOT'] = sys_get_temp_dir() . '/se_it_docroot_' . getmypid();
+@mkdir($_SERVER['DOCUMENT_ROOT'] . '/live', 0775, true);
+
+/**
+ * End a forked worker WITHOUT running PHP's shutdown sequence.
+ *
+ * A child inherits the parent's open MySQL socket. A normal exit() destroys
+ * that inherited PDO, which sends COM_QUIT down the shared socket and kills
+ * the PARENT's session ("MySQL server has gone away"). Replacing the process
+ * image skips every destructor while keeping the exit code.
+ */
+function se_it_child_exit(int $code): never
+{
+    if (function_exists('pcntl_exec')) {
+        pcntl_exec('/bin/sh', ['-c', 'exit ' . $code]);
+    }
+    exit($code);
 }
 
 // --------------------------------------------------------------------------
@@ -179,6 +205,29 @@ function se_it_register(PDO $pdo, array $event, int $n): array
     ], ['now' => se_now(), 'ip_hash' => null, 'device' => null]);
 }
 
+/** Move an event's only day to "now", so its check-in window is open. */
+function se_it_open_doors(PDO $pdo, int $eventId): void
+{
+    $now = se_now();
+    $pdo->prepare(
+        "UPDATE se_event_days
+            SET day_date = ?, doors_open_at = ?, starts_at = ?, ends_at = ?, checkin_closes_at = ?
+          WHERE event_id = ?"
+    )->execute([
+        $now->format('Y-m-d'),
+        $now->modify('-30 minutes')->format('Y-m-d H:i:s'),
+        $now->modify('-10 minutes')->format('Y-m-d H:i:s'),
+        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
+        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
+        $eventId,
+    ]);
+    $pdo->prepare("UPDATE se_events SET starts_at = ?, ends_at = ? WHERE id = ?")->execute([
+        $now->modify('-10 minutes')->format('Y-m-d H:i:s'),
+        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
+        $eventId,
+    ]);
+}
+
 // ==========================================================================
 // Test 1 — the seat race (§22.2)
 // ==========================================================================
@@ -210,10 +259,10 @@ if ($canFork) {
                 $stmt  = $child->prepare("SELECT * FROM se_events WHERE id = ?");
                 $stmt->execute([$eventId]);
                 se_it_register($child, $stmt->fetch(), $i);
-                exit(0);
+                se_it_child_exit(0);
             } catch (Throwable $e) {
                 fwrite(STDERR, "    worker {$i}: " . $e->getMessage() . "\n");
-                exit(1);
+                se_it_child_exit(1);
             }
         }
         $children[] = $pid;
@@ -365,40 +414,21 @@ if (!se_checkin_ready($pdo) || !se_teams_ready($pdo)) {
     $raceEvent = se_it_event($pdo, ['online_capacity' => 60]);
     $raceId    = (int) $raceEvent['id'];
 
-    // Doors are open now, so the window lets everybody through.
-    $now = se_now();
-    $pdo->prepare(
-        "UPDATE se_event_days
-            SET day_date = ?, doors_open_at = ?, starts_at = ?, ends_at = ?, checkin_closes_at = ?
-          WHERE event_id = ?"
-    )->execute([
-        $now->format('Y-m-d'),
-        $now->modify('-30 minutes')->format('Y-m-d H:i:s'),
-        $now->modify('-10 minutes')->format('Y-m-d H:i:s'),
-        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
-        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
-        $raceId,
-    ]);
-    $pdo->prepare("UPDATE se_events SET starts_at = ?, ends_at = ? WHERE id = ?")->execute([
-        $now->modify('-10 minutes')->format('Y-m-d H:i:s'),
-        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
-        $raceId,
-    ]);
-
-    $stmt = $pdo->prepare("SELECT * FROM se_events WHERE id = ?");
-    $stmt->execute([$raceId]);
-    $raceEvent = $stmt->fetch();
-
     // Four teams, the usual Envision palette.
     se_teams_save($pdo, $raceEvent, array_map(
         static fn(string $hex): array => ['color_hex' => $hex],
         ['#D11920', '#1D356A', '#1E9E62', '#F5C518']
     ), 1);
 
+    // Register while the event is still upcoming: once it is live, online
+    // registration is closed and newcomers come in as walk-ins (§10.4.2).
     $arrivals = 40;
     for ($i = 1; $i <= $arrivals; $i++) {
         se_it_register($pdo, $raceEvent, 5000 + $i);
     }
+
+    // Then open the doors, so the window lets everybody through.
+    se_it_open_doors($pdo, $raceId);
 
     $stmt = $pdo->prepare(
         "SELECT id FROM se_registrations WHERE event_id = ? AND status = 'confirmed' ORDER BY id"
@@ -436,10 +466,10 @@ if (!se_checkin_ready($pdo) || !se_teams_ready($pdo)) {
                     // second must be absorbed, not counted.
                     $checkIn($child, $raceId, $registrationId);
                     try { $checkIn($child, $raceId, $registrationId); } catch (Throwable $e) { /* expected */ }
-                    exit(0);
+                    se_it_child_exit(0);
                 } catch (Throwable $e) {
                     fwrite(STDERR, "    check-in worker {$registrationId}: " . $e->getMessage() . "\n");
-                    exit(1);
+                    se_it_child_exit(1);
                 }
             }
             $kids[] = $pid;
@@ -567,10 +597,10 @@ if (!se_karaoke_ready($pdo)) {
             if ($pid === 0) {
                 try {
                     $child = se_it_pdo();
-                    exit($pick($child, $kId, $registration, (int) $song['id']) ? 0 : 1);
+                    se_it_child_exit($pick($child, $kId, $registration, (int) $song['id']) ? 0 : 1);
                 } catch (Throwable $e) {
                     fwrite(STDERR, "    karaoke worker: " . $e->getMessage() . "\n");
-                    exit(2);
+                    se_it_child_exit(2);
                 }
             }
             $kids[] = $pid;
@@ -614,6 +644,8 @@ if (!se_karaoke_ready($pdo)) {
         $pick($pdo, $kId, $loser, (int) $other['id']));
 
     // And holds become queue numbers in arrival order at check-in (§10.8.2).
+    // Check-in only opens on the night (§10.5), so open the doors first.
+    se_it_open_doors($pdo, $kId);
     $stmt = $pdo->prepare("SELECT * FROM se_events WHERE id = ?");
     $stmt->execute([$kId]);
     $kEvent = $stmt->fetch();
@@ -650,14 +682,22 @@ if (!se_table_exists($pdo, 'se_message_runs')) {
     $mEvent = se_it_event($pdo, ['online_capacity' => 10]);
     $mId    = (int) $mEvent['id'];
 
-    // Pull the day back so that both reminders are already due.
-    $start = se_now()->modify('+30 minutes');
+    // Register while the event is a fortnight away (registration closes when
+    // the doors open, §10.4.2)…
+    for ($i = 1; $i <= 3; $i++) {
+        se_it_register($pdo, $mEvent, 8000 + $i);
+    }
+
+    // …then pull the day in so the same-day reminder (120 minutes before the
+    // start) fell due half an hour ago, inside the 90-minute lateness window.
+    $start = se_now()->modify('+90 minutes');
     $pdo->prepare(
-        "UPDATE se_event_days SET day_date = ?, doors_open_at = ?, starts_at = ?, ends_at = ? WHERE event_id = ?"
+        "UPDATE se_event_days SET day_date = ?, doors_open_at = ?, starts_at = ?, ends_at = ?, checkin_closes_at = ? WHERE event_id = ?"
     )->execute([
         $start->format('Y-m-d'),
         $start->modify('-30 minutes')->format('Y-m-d H:i:s'),
         $start->format('Y-m-d H:i:s'),
+        $start->modify('+3 hours')->format('Y-m-d H:i:s'),
         $start->modify('+3 hours')->format('Y-m-d H:i:s'),
         $mId,
     ]);
@@ -665,7 +705,6 @@ if (!se_table_exists($pdo, 'se_message_runs')) {
         $start->format('Y-m-d H:i:s'),
         se_json_encode(se_settings_normalize([
             'messages' => [
-                'max_lateness_min' => 10000,
                 'reminder_1' => ['enabled' => true, 'at' => '18:00'],
                 'reminder_2' => ['enabled' => true, 'minutes_before' => 120],
             ],
@@ -675,10 +714,6 @@ if (!se_table_exists($pdo, 'se_message_runs')) {
     $stmt = $pdo->prepare("SELECT * FROM se_events WHERE id = ?");
     $stmt->execute([$mId]);
     $mEvent = $stmt->fetch();
-
-    for ($i = 1; $i <= 3; $i++) {
-        se_it_register($pdo, $mEvent, 8000 + $i);
-    }
 
     $first  = se_messages_run_due($pdo, $mEvent, se_now(), null);
     $second = se_messages_run_due($pdo, $mEvent, se_now(), null);
@@ -695,12 +730,23 @@ if (!se_table_exists($pdo, 'se_message_runs')) {
     $stmt->execute([$mId]);
     is_same('…and every key is distinct', count($first), (int) $stmt->fetchColumn());
 
+    $queued = count(array_filter($first, static fn(array $r): bool => $r['status'] === 'queued'));
+    ok('the same-day reminder was queued for the three guests', $queued >= 1,
+        'statuses: ' . implode(', ', array_map(static fn(array $r): string => $r['status'] . ' (' . ($r['detail'] ?? '') . ')', $first)));
+
     if (se_table_exists($pdo, 'sms_campaigns')) {
         $stmt = $pdo->prepare(
             "SELECT COUNT(*) FROM sms_campaigns WHERE filters_json LIKE ?"
         );
         $stmt->execute(['%"se_event_id":' . $mId . '%']);
-        is_same('one SMS campaign per run, never two', count($first), (int) $stmt->fetchColumn());
+        // A skipped run (missed, or nobody to text) creates no campaign.
+        is_same('one SMS campaign per queued run, never two', $queued, (int) $stmt->fetchColumn());
+
+        $stmt = $pdo->prepare(
+            "SELECT COUNT(*) FROM sms_queue q JOIN sms_campaigns c ON c.id = q.campaign_id WHERE c.filters_json LIKE ?"
+        );
+        $stmt->execute(['%"se_event_id":' . $mId . '%']);
+        is_same('…holding one queued text per guest', 3 * $queued, (int) $stmt->fetchColumn());
     }
 }
 
@@ -724,6 +770,413 @@ if (!se_table_exists($pdo, 'se_handoffs')) {
     $q=$pdo->prepare("SELECT COUNT(*) FROM se_handoff_items WHERE event_id=? AND outcome IN ('created','linked_existing')"); $q->execute([(int)$hEvent['id']]);
     is_same('one successful hand-off item after rerun', 1, (int)$q->fetchColumn());
     ok('rerun records the already-handed-off outcome', (int)($second['counts']['already_handed_off']??0) >= 1);
+
+    // An override may hold a ready person back, never push someone who did
+    // not consent (or opted out, or is a member) — that is the whole point
+    // of reviewing before anything leaves Envision.
+    $noConsent = se_it_register($pdo, $hEvent, 9902);
+    $noConsentId = (int) ($noConsent['registration']['id'] ?? 0);
+    $pdo->prepare("UPDATE se_registrations SET first_checkin_at=NOW() WHERE id=?")->execute([$noConsentId]);
+    $pdo->prepare("UPDATE se_contacts c JOIN se_registrations r ON r.contact_id=c.id SET c.consent_followup=0 WHERE r.id=?")->execute([$noConsentId]);
+    $held = se_it_register($pdo, $hEvent, 9903);
+    $heldId = (int) ($held['registration']['id'] ?? 0);
+    $pdo->prepare("UPDATE se_registrations SET first_checkin_at=NOW() WHERE id=?")->execute([$heldId]);
+
+    $third = se_handoff_push($pdo, $hEvent, [], [
+        ['registration_id' => $noConsentId, 'destination' => 'reach'],
+        ['registration_id' => $heldId, 'destination' => 'none', 'reason' => 'Asked us not to'],
+    ], 1);
+    $outcome = static function (int $regId) use ($pdo, $third): ?string {
+        $q = $pdo->prepare("SELECT outcome FROM se_handoff_items WHERE handoff_id=? AND registration_id=?");
+        $q->execute([(int) $third['handoff_id'], $regId]);
+        return $q->fetchColumn() ?: null;
+    };
+    is_same('an override cannot hand off someone without consent', 'skipped_no_consent', $outcome($noConsentId));
+    is_same('…but can hold a ready person back', 'skipped_excluded', $outcome($heldId));
+    $q=$pdo->prepare("SELECT COUNT(*) FROM reach_leads WHERE campaign_id=?"); $q->execute([(int)$first['reach_campaign_id']]);
+    is_same('…and no Reach lead was created for either', 1, (int)$q->fetchColumn());
+}
+
+// ==========================================================================
+// Test 9 — a whole game night (§11, Appendix H.3)
+// ==========================================================================
+//
+// Eight checked-in players on four teams play every game type the way the
+// host console and the phones drive them, against the real schema. Along the
+// way it checks the rules the guide makes non-negotiable: no answer and no
+// name in public.json, the ledger never double-counts, a void undoes points,
+// the charades phrase reaches only the presenter, and Reset rehearsal leaves
+// nothing behind.
+
+echo "\n  game night\n";
+
+/** Expect a SeRuleException with this code. */
+function se_it_expect_rule(string $label, string $code, callable $fn): void
+{
+    try {
+        $fn();
+        ok($label, false, 'no exception');
+    } catch (SeRuleException $e) {
+        is_same($label, $code, $e->errorCode);
+    } catch (Throwable $e) {
+        ok($label, false, get_class($e) . ': ' . $e->getMessage());
+    }
+}
+
+/** The event row, fresh. */
+function se_it_event_row(PDO $pdo, int $id): array
+{
+    $stmt = $pdo->prepare("SELECT * FROM se_events WHERE id = ?");
+    $stmt->execute([$id]);
+
+    return $stmt->fetch();
+}
+
+/** Open a round's answer window now, instead of sleeping through the preroll. */
+function se_it_open_now(PDO $pdo, int $roundId, int $closesInMs = 20000): void
+{
+    $pdo->prepare("UPDATE se_rounds SET opens_at = ?, closes_at = ? WHERE id = ?")
+        ->execute([se_ms_to_sql(se_epoch_ms() - 500), se_ms_to_sql(se_epoch_ms() + $closesInMs), $roundId]);
+}
+
+if (!se_game_ready($pdo) || !se_teams_ready($pdo)) {
+    echo "    (games tables are not in this database — skipped)\n";
+} else {
+    $gEvent = se_it_event($pdo, ['online_capacity' => 40]);
+    $gId    = (int) $gEvent['id'];
+    se_teams_save($pdo, $gEvent, array_map(static fn(string $hex): array => ['color_hex' => $hex],
+        ['#000000', '#D11920', '#F5C518', '#1D356A']), 1);
+
+    $players = [];
+    for ($i = 1; $i <= 8; $i++) {
+        $players[] = (int) se_it_register($pdo, $gEvent, 9100 + $i)['registration']['id'];
+    }
+    se_it_open_doors($pdo, $gId);
+    $gEvent = se_it_event_row($pdo, $gId);
+
+    foreach ($players as $regId) {
+        se_checkin($pdo, $gEvent, se_event_days($pdo, $gId), ['registration_id' => $regId], [
+            'method' => 'desk', 'device' => null, 'actor_user_id' => 1, 'ip_hash' => null, 'is_crew' => true,
+        ]);
+    }
+
+    // One phone per player, joined to the games and seen just now.
+    $devices = [];
+    $regs    = [];
+    foreach ($players as $regId) {
+        $pdo->prepare(
+            "INSERT INTO se_devices (event_id, registration_id, token_hash, mode, joined_games_at, last_seen_at)
+             VALUES (?, ?, ?, 'full', NOW(), NOW())"
+        )->execute([$gId, $regId, hash('sha256', 'it-device-' . $regId . '-' . random_bytes(4))]);
+        $stmt = $pdo->prepare("SELECT * FROM se_devices WHERE id = ?");
+        $stmt->execute([(int) $pdo->lastInsertId()]);
+        $devices[$regId] = $stmt->fetch();
+        $regs[$regId]    = se_registration_by_id($pdo, $regId, $gId);
+    }
+
+    $byTeam = [];
+    foreach ($regs as $regId => $reg) {
+        $byTeam[(int) $reg['team_id']][] = $regId;
+    }
+    ksort($byTeam);
+    $teamIds = array_keys($byTeam);
+    is_same('eight players on four teams of two', [2, 2, 2, 2], array_map('count', array_values($byTeam)));
+
+    $starter = se_chara_starter_content($pdo, $gEvent, 1);
+    is_same('the starter pack creates the six suggested games', 6, $starter['games']);
+    $again = se_chara_starter_content($pdo, $gEvent, 1);
+    is_same('pressing it again adds nothing', [0, 0], [$again['items'], $again['games']]);
+
+    $games = [];
+    foreach (se_game_list($pdo, $gId) as $g) {
+        $games[$g['type']] = $g;
+    }
+    ok('every starter game has questions and is ready', count(array_filter($games, static fn(array $g): bool => $g['items_total'] > 0 && $g['status'] === 'ready')) === 6);
+
+    $live    = static fn(): int => (int) se_live_state($pdo, $gId)['version'];
+    $publicJson = static function () use ($pdo, $gId): string {
+        $event = se_it_event_row($pdo, $gId);
+        return se_json_encode(se_snapshot_public($pdo, $event, se_live_state($pdo, $gId)));
+    };
+    $names = array_map(static fn(array $r): string => (string) $r['display_name'], $regs);
+    $noNames = static function (string $json) use ($names): bool {
+        foreach ($names as $name) {
+            if ($name !== '' && str_contains($json, $name)) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    // ---- Live Quiz -------------------------------------------------------
+    $quiz = $games['live_quiz'];
+    se_it_expect_rule('a round cannot start before its game', 'GAME_NOT_LIVE',
+        fn() => se_round_next_live($pdo, $gEvent, se_game_find($pdo, $gId, $quiz['id']), false, null, 1));
+    se_game_status_set($pdo, $gEvent, $quiz['id'], 'live', null, 1);
+    $round = se_round_next_live($pdo, $gEvent, se_game_find($pdo, $gId, $quiz['id']), false, $live(), 1);
+    se_it_expect_rule('a stale console version is refused', 'STALE_VERSION', static function () use ($pdo, $gEvent, $round): void {
+        try {
+            se_round_arm_live($pdo, $gEvent, $round['id'], null, null, 1, 1);
+        } catch (SeStaleVersionException $e) {
+            throw new SeRuleException('STALE_VERSION', $e->getMessage());
+        }
+    });
+    se_round_arm_live($pdo, $gEvent, $round['id'], null, null, $live(), 1);
+
+    $first = $players[0];
+    se_it_expect_rule('answering during the preroll is too early', 'TOO_EARLY',
+        fn() => se_game_answer($pdo, $gEvent, $regs[$first], ['round_id' => $round['id'], 'choice_index' => 0], $devices[$first]));
+    se_it_open_now($pdo, $round['id']);
+
+    $roundRow = se_round_find($pdo, $gId, $round['id']);
+    $correct  = (int) se_round_item($pdo, $roundRow)['payload']['answer_index'];
+    foreach ($players as $n => $regId) {
+        $choice = $n < 5 ? $correct : ($correct + 1) % 4;
+        se_game_answer($pdo, $gEvent, $regs[$regId], ['round_id' => $round['id'], 'choice_index' => $choice, 'client_elapsed_ms' => 1000 * $n], $devices[$regId]);
+    }
+    se_it_expect_rule('a second answer is refused, not counted', 'ALREADY_ANSWERED',
+        fn() => se_game_answer($pdo, $gEvent, $regs[$first], ['round_id' => $round['id'], 'choice_index' => 1], $devices[$first]));
+
+    $json = $publicJson();
+    $pub  = json_decode($json, true)['game']['round'];
+    is_same('public.json counts the answers', 8, $pub['answered'] ?? null);
+    ok('…but carries no correct answer before the reveal', !isset($pub['result']) && !str_contains($json, 'answer_index') && !str_contains($json, 'correct_index'));
+    ok('…and no names', $noNames($json));
+
+    $out = se_round_transition_live($pdo, $gEvent, $round['id'], 'revealed', $live(), 1);
+    is_same('reveal locks, reveals and auto-scores the quiz', 'scored', $out['state']);
+    $pub = json_decode($publicJson(), true)['game']['round'];
+    is_same('the reveal shows the correct answer', $correct, $pub['result']['correct_index'] ?? null);
+    is_same('…and how the room answered', 8, array_sum($pub['result']['distribution'] ?? []));
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM se_score_events WHERE round_id = ? AND scope = 'individual' AND voided_at IS NULL");
+    $stmt->execute([$round['id']]);
+    is_same('five correct players earned individual points', 5, (int) $stmt->fetchColumn());
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM se_score_events WHERE round_id = ?");
+    $stmt->execute([$round['id']]);
+    $rows = (int) $stmt->fetchColumn();
+
+    se_it_expect_rule('scoring the same round again is refused', 'ROUND_NOT_REVEALED',
+        fn() => se_round_score_live($pdo, $gEvent, $round['id'], $live(), 1));
+    $stmt->execute([$round['id']]);
+    is_same('…and wrote nothing new', $rows, (int) $stmt->fetchColumn());
+
+    $me = se_game_me_payload($pdo, $gEvent, $regs[$first], $devices[$first]);
+    ok('a correct player sees ✓ and their points', ($me['round']['my_answer']['is_correct'] ?? null) === true && ($me['score']['points'] ?? 0) > 0);
+
+    se_it_expect_rule('voiding needs a reason', 'VALIDATION', static function () use ($pdo, $gEvent, $round, $live): void {
+        try {
+            se_round_transition_live($pdo, $gEvent, $round['id'], 'void', $live(), 1, '');
+        } catch (SeValidationException $e) {
+            throw new SeRuleException('VALIDATION', 'x');
+        }
+    });
+    $void = se_round_transition_live($pdo, $gEvent, $round['id'], 'void', $live(), 1, 'Wrong question shown');
+    ok('a void undoes every point the round gave', $void['voided_scores'] === $rows);
+    $replay = se_round_next_live($pdo, $gEvent, se_game_find($pdo, $gId, $quiz['id']), false, $live(), 1);
+    is_same('…and the next round replays the same question', (int) $roundRow['deck_item_id'], (int) se_round_find($pdo, $gId, $replay['id'])['deck_item_id']);
+    // Play the replay properly, so the night has an MVP.
+    se_round_arm_live($pdo, $gEvent, $replay['id'], null, null, $live(), 1);
+    se_it_open_now($pdo, $replay['id']);
+    foreach ($players as $n => $regId) {
+        se_game_answer($pdo, $gEvent, $regs[$regId], ['round_id' => $replay['id'], 'choice_index' => $n < 3 ? $correct : ($correct + 1) % 4, 'client_elapsed_ms' => 500 * $n], $devices[$regId]);
+    }
+    se_round_transition_live($pdo, $gEvent, $replay['id'], 'revealed', $live(), 1);
+
+    // ---- Trivia (captain mode) -------------------------------------------
+    $trivia = $games['trivia'];
+    se_game_status_set($pdo, $gEvent, $trivia['id'], 'live', null, 1);
+    $round = se_round_next_live($pdo, $gEvent, se_game_find($pdo, $gId, $trivia['id']), false, $live(), 1);
+    se_round_arm_live($pdo, $gEvent, $round['id'], null, null, $live(), 1);
+    se_it_open_now($pdo, $round['id']);
+    $correct = (int) se_round_item($pdo, se_round_find($pdo, $gId, $round['id']))['payload']['answer_index'];
+
+    [$capA, $memberA] = $byTeam[$teamIds[0]];
+    se_captain_set($pdo, $gEvent, $teamIds[0], $capA, 1);
+    se_it_expect_rule('a non-captain cannot lock in the team answer', 'NOT_CAPTAIN',
+        fn() => se_game_answer($pdo, $gEvent, $regs[$memberA], ['round_id' => $round['id'], 'choice_index' => $correct], $devices[$memberA]));
+    se_game_suggest($pdo, $gEvent, $regs[$memberA], ['round_id' => $round['id'], 'choice_index' => $correct]);
+    se_game_answer($pdo, $gEvent, $regs[$capA], ['round_id' => $round['id'], 'choice_index' => $correct], $devices[$capA]);
+
+    // Team B has no captain answer: its members' suggestions decide.
+    foreach ($byTeam[$teamIds[1]] as $regId) {
+        se_game_suggest($pdo, $gEvent, $regs[$regId], ['round_id' => $round['id'], 'choice_index' => ($correct + 1) % 4]);
+    }
+
+    $teamSnap = se_snapshot_team($pdo, $gEvent, se_live_state($pdo, $gId), se_team_find($pdo, $gId, $teamIds[0]));
+    is_same('the team snapshot shows the captain’s locked-in choice', $correct, $teamSnap['captain_choice']['choice_index'] ?? null);
+    is_same('…and the captain as a hash the phone can recognise', se_registration_hash($capA), $teamSnap['captain']['registration_id_hash'] ?? null);
+
+    se_round_transition_live($pdo, $gEvent, $round['id'], 'revealed', $live(), 1);
+    $result = se_round_result(se_round_find($pdo, $gId, $round['id']));
+    is_same('the captain’s team scores', 300, $result['team_points'][(string) $teamIds[0]] ?? null);
+    is_same('…a team decided by vote is marked so', 'vote', $result['team_choices'][(string) $teamIds[1]]['by'] ?? null);
+    is_same('…and scores nothing when the vote was wrong', 0, $result['team_points'][(string) $teamIds[1]] ?? null);
+
+    // ---- Buzzer ----------------------------------------------------------
+    $buzzer = $games['buzzer'];
+    se_game_status_set($pdo, $gEvent, $buzzer['id'], 'live', null, 1);
+    $round = se_round_next_live($pdo, $gEvent, se_game_find($pdo, $gId, $buzzer['id']), false, $live(), 1);
+    se_round_arm_live($pdo, $gEvent, $round['id'], null, null, $live(), 1);
+    se_it_open_now($pdo, $round['id'], 15000);
+
+    $buzzA = $byTeam[$teamIds[0]][0];
+    $buzzB = $byTeam[$teamIds[1]][0];
+    se_game_buzz($pdo, $gEvent, $regs[$buzzA], ['round_id' => $round['id'], 'attempt' => 1, 'client_ms' => se_epoch_ms()]);
+    se_it_expect_rule('a teammate cannot buzz again in the same attempt', 'ALREADY_BUZZED',
+        fn() => se_game_buzz($pdo, $gEvent, $regs[$byTeam[$teamIds[0]][1]], ['round_id' => $round['id'], 'attempt' => 1, 'client_ms' => se_epoch_ms()]));
+
+    $room = se_snapshot_room($pdo, se_it_event_row($pdo, $gId), se_live_state($pdo, $gId));
+    is_same('the room snapshot names who buzzed first', (string) $regs[$buzzA]['display_name'], $room['buzz_winner']['display_name'] ?? null);
+    ok('…which public.json does not', $noNames($publicJson()));
+
+    $leader = se_round_buzz_leader($pdo, se_round_find($pdo, $gId, $round['id']));
+    $judged = se_buzz_judge_party($pdo, $gEvent, $round['id'], (int) $leader['id'], false, $live(), 1);
+    ok('a wrong answer reopens the buzzers for the others', $judged['reopened'] === true);
+    $roundRow = se_round_find($pdo, $gId, $round['id']);
+    is_same('…as attempt two', 2, (int) $roundRow['attempt']);
+    se_it_open_now($pdo, $round['id'], 10000);
+    se_it_expect_rule('the wrong team is locked out', 'LOCKED_OUT',
+        fn() => se_game_buzz($pdo, $gEvent, $regs[$buzzA], ['round_id' => $round['id'], 'attempt' => 2, 'client_ms' => se_epoch_ms()]));
+    se_game_buzz($pdo, $gEvent, $regs[$buzzB], ['round_id' => $round['id'], 'attempt' => 2, 'client_ms' => se_epoch_ms()]);
+    $leader = se_round_buzz_leader($pdo, se_round_find($pdo, $gId, $round['id']));
+    $judged = se_buzz_judge_party($pdo, $gEvent, $round['id'], (int) $leader['id'], true, $live(), 1);
+    is_same('a correct buzz scores the team', 300, $judged['points']);
+    is_same('…and closes the round', 'scored', se_round_find($pdo, $gId, $round['id'])['state']);
+
+    // ---- Who Am I? -------------------------------------------------------
+    $who = $games['who_am_i'];
+    se_game_status_set($pdo, $gEvent, $who['id'], 'live', null, 1);
+    $round = se_round_next_live($pdo, $gEvent, se_game_find($pdo, $gId, $who['id']), false, $live(), 1);
+    se_round_arm_live($pdo, $gEvent, $round['id'], null, null, $live(), 1);
+    $pub = json_decode($publicJson(), true)['game']['round'];
+    is_same('only the first clue is public', 1, count($pub['clues'] ?? []));
+
+    // The window runs out with nobody buzzing: the tick locks the round,
+    // and Next clue must still work (it used to be refused).
+    $pdo->prepare("UPDATE se_rounds SET opens_at = ?, closes_at = ? WHERE id = ?")
+        ->execute([se_ms_to_sql(se_epoch_ms() - 30000), se_ms_to_sql(se_epoch_ms() - 1000), $round['id']]);
+    ok('the tick locks a buzz window nobody used', se_games_tick($pdo, $gEvent));
+    se_clue_next($pdo, $gEvent, $round['id'], $live(), 1);
+    $pub = json_decode($publicJson(), true)['game']['round'];
+    is_same('…and the next clue reopens it', [2, 'armed'], [count($pub['clues'] ?? []), $pub['state'] ?? null]);
+    se_it_open_now($pdo, $round['id']);
+    $buzzC = $byTeam[$teamIds[2]][0];
+    se_game_buzz($pdo, $gEvent, $regs[$buzzC], ['round_id' => $round['id'], 'attempt' => 2, 'client_ms' => se_epoch_ms()]);
+    $leader = se_round_buzz_leader($pdo, se_round_find($pdo, $gId, $round['id']));
+    $judged = se_buzz_judge_party($pdo, $gEvent, $round['id'], (int) $leader['id'], true, $live(), 1);
+    is_same('a right answer on the second clue is worth 400', 400, $judged['points']);
+
+    // ---- Charades --------------------------------------------------------
+    $charades = $games['charades'];
+    se_game_status_set($pdo, $gEvent, $charades['id'], 'live', null, 1);
+    $turn = se_round_next_live($pdo, $gEvent, se_game_find($pdo, $gId, $charades['id']), false, $live(), 1);
+    $presenterId = $byTeam[$teamIds[0]][0];
+    $pick = se_charades_turn($pdo, $gEvent, $turn['id'], $teamIds[0], '#' . $regs[$presenterId]['player_no'], false, $live(), 1);
+    is_same('the presenter is found by player number', $presenterId, $pick['presenter']['registration_id']);
+
+    $secret = se_charades_presenter_payload($pdo, $gEvent, $presenterId, $devices[$presenterId]);
+    ok('the presenter’s phone gets the phrase', ($secret['phrase'] ?? '') !== '');
+    is_same('…a teammate’s phone does not', null, se_charades_presenter_payload($pdo, $gEvent, $byTeam[$teamIds[0]][1], $devices[$byTeam[$teamIds[0]][1]]));
+    ok('…and no snapshot carries it', !str_contains($publicJson(), (string) $secret['phrase'])
+        && !str_contains(se_json_encode(se_snapshot_room($pdo, se_it_event_row($pdo, $gId), se_live_state($pdo, $gId))), (string) $secret['phrase']));
+
+    $seen = [(string) $secret['phrase']];
+    se_charades_start($pdo, $gEvent, $turn['id'], $live(), 1);
+    se_it_open_now($pdo, $turn['id'], 60000);
+    foreach (['correct', 'pass', 'correct'] as $mark) {
+        se_charades_mark($pdo, $gEvent, $turn['id'], $mark, $live(), 1);
+        $next = se_charades_presenter_payload($pdo, $gEvent, $presenterId, $devices[$presenterId]);
+        if (!empty($next['phrase'])) {
+            $seen[] = (string) $next['phrase'];
+        }
+    }
+    se_charades_end($pdo, $gEvent, $turn['id'], $live(), 1);
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(points), 0) FROM se_score_events WHERE round_id = ? AND voided_at IS NULL");
+    $stmt->execute([$turn['id']]);
+    is_same('two words guessed is 400 points', 400, (int) $stmt->fetchColumn());
+
+    $turn2 = se_round_next_live($pdo, $gEvent, se_game_find($pdo, $gId, $charades['id']), false, $live(), 1);
+    $presenter2 = $byTeam[$teamIds[1]][0];
+    se_charades_turn($pdo, $gEvent, $turn2['id'], $teamIds[1], (string) $regs[$presenter2]['player_no'], false, $live(), 1);
+    $secret2 = se_charades_presenter_payload($pdo, $gEvent, $presenter2, $devices[$presenter2]);
+    ok('the next team gets a phrase nobody has seen yet', ($secret2['phrase'] ?? '') !== '' && !in_array($secret2['phrase'], $seen, true),
+        'seen: ' . implode(' | ', $seen) . ' — got: ' . ($secret2['phrase'] ?? 'none'));
+    se_charades_end($pdo, $gEvent, $turn2['id'], $live(), 1);
+
+    // ---- Family Feud -----------------------------------------------------
+    $feud  = $games['feud'];
+    $items = se_feud_items($pdo, $gEvent);
+    $first = $items[0]['item_id'];
+    foreach ($players as $n => $regId) {
+        se_survey_save($pdo, $gEvent, $regs[$regId], $first, ['Lions', 'the lion', 'Giraffe', 'Elephants'][$n % 4]);
+    }
+    $draft = se_feud_build_board($pdo, $gEvent, $first, 1);
+    is_same('too few answers for AI: the exact groups are offered', 'manual', $draft['mode']);
+    is_same('…"Lions" and "the lion" are one answer', 4, $draft['answers'][0]['points'] ?? null);
+    se_feud_board_save($pdo, $gEvent, $first, $draft['answers'], true, 1);
+    foreach (array_slice($items, 1) as $other) {
+        se_feud_board_save($pdo, $gEvent, $other['item_id'], [['label' => 'One', 'points' => 5]], true, 1);
+    }
+
+    se_game_status_set($pdo, $gEvent, $feud['id'], 'live', null, 1);
+    se_it_expect_rule('the survey closes when the Feud starts', 'ROUND_CLOSED',
+        fn() => se_survey_save($pdo, $gEvent, $regs[$players[0]], $first, 'Doves'));
+    $round = se_round_next_live($pdo, $gEvent, se_game_find($pdo, $gId, $feud['id']), false, $live(), 1);
+    se_feud_update($pdo, $gEvent, $round['id'], 'faceoff', ['team_a' => $teamIds[0], 'team_b' => $teamIds[1]], $live(), 1);
+    $board = se_feud_board($pdo, $gEvent, $first, true);
+    se_feud_update($pdo, $gEvent, $round['id'], 'reveal', ['answer_id' => (int) $board[0]['id']], $live(), 1);
+    se_feud_update($pdo, $gEvent, $round['id'], 'control', ['team_id' => $teamIds[0]], $live(), 1);
+    se_feud_update($pdo, $gEvent, $round['id'], 'reveal', ['answer_id' => (int) $board[1]['id']], $live(), 1);
+    for ($k = 0; $k < 3; $k++) {
+        se_feud_update($pdo, $gEvent, $round['id'], 'strike', [], $live(), 1);
+    }
+    $state = se_feud_update($pdo, $gEvent, $round['id'], 'steal', ['success' => false], $live(), 1);
+    is_same('three strikes and a failed steal go to the bank', 'bank', $state['feud']['phase']);
+    $bank = $state['feud']['bank'];
+    se_feud_update($pdo, $gEvent, $round['id'], 'bank', [], $live(), 1);
+    $stmt = $pdo->prepare("SELECT team_id, points FROM se_score_events WHERE idempotency_key = ? AND event_id = ?");
+    $stmt->execute(['f:' . $round['id'] . ':bank', $gId]);
+    $banked = $stmt->fetch();
+    is_same('the controlling team banks the revealed points', [$teamIds[0], $bank], [(int) $banked['team_id'], (int) $banked['points']]);
+    $pubFeud = json_decode($publicJson(), true)['game']['round'];
+    ok('the public board never shows unrevealed answers', count(array_filter($pubFeud['board'] ?? [], static fn(array $s): bool => !$s['revealed'] && $s['label'] !== null)) === 0);
+
+    // ---- Leaderboard and finale ------------------------------------------
+    se_score_adjust_live($pdo, se_it_event_row($pdo, $gId), ['scope' => 'team', 'team_id' => $teamIds[3], 'points' => 100, 'reason' => 'Best team spirit'], $live(), 1);
+    $finale = se_finale_start($pdo, se_it_event_row($pdo, $gId), $live(), 1);
+    ok('the finale has a champion', ($finale['finale']['champion']['points'] ?? 0) > 0);
+    $json = $publicJson();
+    ok('public.json during the finale names teams, never people', $noNames($json));
+    $room = se_snapshot_room($pdo, se_it_event_row($pdo, $gId), se_live_state($pdo, $gId));
+    ok('the MVP name travels in the room snapshot', ($room['mvp'][0]['display_name'] ?? '') !== '');
+    ok('named awards are listed', in_array('Best team spirit', array_column($finale['finale']['awards'], 'reason'), true));
+
+    // ---- Rehearsal: test mode, then Reset --------------------------------
+    $testEvent = se_test_mode_set($pdo, se_it_event_row($pdo, $gId), true, 1);
+    $quizRow = se_game_find($pdo, $gId, $quiz['id']);
+    se_game_status_set($pdo, $testEvent, $quiz['id'], 'live', null, 1);
+    $round = se_round_next_live($pdo, $testEvent, $quizRow, true, $live(), 1);
+    se_round_arm_live($pdo, $testEvent, $round['id'], null, null, $live(), 1);
+    se_it_open_now($pdo, $round['id']);
+    $correct = (int) se_round_item($pdo, se_round_find($pdo, $gId, $round['id']))['payload']['answer_index'];
+    se_game_answer($pdo, $testEvent, $regs[$players[1]], ['round_id' => $round['id'], 'choice_index' => $correct], $devices[$players[1]]);
+    se_round_transition_live($pdo, $testEvent, $round['id'], 'revealed', $live(), 1);
+    se_score_adjust_live($pdo, $testEvent, ['scope' => 'team', 'team_id' => $teamIds[2], 'points' => 50, 'reason' => 'Rehearsal bonus'], $live(), 1);
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM se_score_events WHERE event_id = ? AND voided_at IS NULL AND (reason = 'TEST' OR reason LIKE 'TEST: %')");
+    $stmt->execute([$gId]);
+    ok('rehearsal points are marked TEST, awards included', (int) $stmt->fetchColumn() >= 3);
+
+    se_reset_rehearsal($pdo, se_it_event_row($pdo, $gId), 1);
+    $stmt->execute([$gId]);
+    is_same('Reset rehearsal voids every TEST row', 0, (int) $stmt->fetchColumn());
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM se_rounds WHERE event_id = ? AND is_test = 1");
+    $stmt->execute([$gId]);
+    is_same('…and deletes the rehearsal rounds', 0, (int) $stmt->fetchColumn());
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM se_score_events WHERE event_id = ? AND voided_at IS NULL AND reason = 'Best team spirit'");
+    $stmt->execute([$gId]);
+    is_same('…while real awards stay', 1, (int) $stmt->fetchColumn());
 }
 
 // ==========================================================================

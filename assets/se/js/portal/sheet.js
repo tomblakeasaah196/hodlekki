@@ -561,7 +561,11 @@ async function burstConfetti() {
             .filter(Boolean);
 
         const { default: confetti } = await import('canvas-confetti');
-        confetti({ particleCount: 110, spread: 75, origin: { y: 0.3 }, colors: colors.length ? colors : undefined, disableForReducedMotion: true });
+        // The default instance draws in a Worker built from a blob: URL,
+        // which the §19.7 CSP (script-src 'self' + nonce) refuses. A
+        // main-thread instance needs nothing the policy does not allow.
+        const burst = confetti.create(null, { resize: true, useWorker: false });
+        burst({ particleCount: 110, spread: 75, origin: { y: 0.3 }, colors: colors.length ? colors : undefined, disableForReducedMotion: true });
     } catch (e) {
         /* a missing confetti module must never break the ticket */
     }
