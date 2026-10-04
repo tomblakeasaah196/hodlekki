@@ -250,7 +250,7 @@ function se_snapshot_public(PDO $pdo, array $event, array $state, array $context
             'n'     => (int) ($teamCounts[(int) $team['id']]['n'] ?? 0),
             // Scores are a PR5 ledger; the field exists now so the stage and
             // the phones never have to branch on its absence.
-            'score' => 0,
+            'score' => function_exists('se_leaderboards') ? (int) (array_column(se_leaderboards($pdo, $event)['teams'], 'points', 'team_id')[(int) $team['id']] ?? 0) : 0,
             'rank'  => $i + 1,
         ];
     }
@@ -280,7 +280,7 @@ function se_snapshot_public(PDO $pdo, array $event, array $state, array $context
         // Songs, never singers: public.json is world-readable (§8.5.2).
         'karaoke' => se_karaoke_ready($pdo) ? se_karaoke_public($pdo, $event) : null,
         'scene'   => se_scene_payload($state),
-        'game'    => null,
+        'game'    => function_exists('se_live_game_payload') ? se_live_game_payload($pdo, $event) : null,
         'announcement' => se_announcement_payload($state),
         'sfx'     => ['seq' => (int) $state['sfx_seq'], 'cue' => $state['sfx_cue']],
     ];
@@ -914,9 +914,9 @@ function se_test_mode_due_off(PDO $pdo, array $event, ?DateTimeImmutable $now = 
 function se_reset_rehearsal(PDO $pdo, array $event, ?int $actorId): array
 {
     $eventId = (int) $event['id'];
-    $removed = ['checkins' => 0, 'karaoke_entries' => 0, 'registrations' => 0, 'contacts' => 0, 'team_moves' => 0];
+    $removed = ['checkins' => 0, 'karaoke_entries' => 0, 'registrations' => 0, 'contacts' => 0, 'team_moves' => 0, 'game_rows' => 0];
 
-    se_lock_event($pdo, $eventId, static function (array $locked, PDO $pdo) use ($eventId, &$removed): void {
+    se_lock_event($pdo, $eventId, static function (array $locked, PDO $pdo) use ($eventId, $event, $actorId, &$removed): void {
         // The registrations we are about to delete, captured before the rows
         // disappear so the contact cleanup below has something to work with.
         $regIds = [];
@@ -939,6 +939,11 @@ function se_reset_rehearsal(PDO $pdo, array $event, ?int $actorId): array
             $stmt = $pdo->prepare("DELETE FROM se_karaoke_entries WHERE event_id = ? AND is_test = 1");
             $stmt->execute([$eventId]);
             $removed['karaoke_entries'] = $stmt->rowCount();
+        }
+
+        // Games are removed before their test registrations, preserving all foreign keys.
+        if (function_exists('se_games_reset')) {
+            $removed['game_rows'] = se_games_reset($pdo, $event, $actorId);
         }
 
         if ($regIds) {
@@ -1150,7 +1155,7 @@ function se_live_console(PDO $pdo, array $event): array
 
         // PR5 fills these in; the shape is fixed so the console can be
         // written once (§28.3).
-        'game'     => null,
+        'game'     => se_live_game_payload($pdo, $event),
         'round'    => null,
     ];
 }

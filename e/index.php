@@ -441,6 +441,7 @@ function se_boot_payload(
             // Karaoke needs both the tables and a published list before a
             // phone offers the picker at all (§10.8.1).
             'karaoke_ready'      => se_table_exists($pdo, 'se_karaoke_entries'),
+            'games_ready'        => se_table_exists($pdo, 'se_games'),
             'karaoke_list_published' => (bool) se_settings_path($settings, 'karaoke.list_published', false),
             'karaoke_prepick'    => (bool) se_settings_path($settings, 'karaoke.prepick_enabled', true),
         ],

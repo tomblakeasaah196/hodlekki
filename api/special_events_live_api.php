@@ -28,14 +28,7 @@ $body   = se_request_body();
 $action = se_str($body['action'] ?? '', 40);
 
 /** Actions whose tables arrive with PR4/PR5. Routed, but honest about it. */
-const SE_LIVE_LATER_ACTIONS = [
-    'game_start', 'game_pause', 'game_finish', 'round_next', 'round_arm',
-    'round_lock', 'round_reveal', 'round_score', 'round_void',
-    'charades_turn', 'charades_start', 'charades_mark', 'buzz_judge', 'clue_next',
-    'feud_faceoff', 'feud_control', 'feud_reveal', 'feud_strike', 'feud_steal',
-    'feud_bank', 'feud_reveal_all',
-    'score_adjust', 'score_void',
-];
+const SE_LIVE_LATER_ACTIONS = [];
 
 /** The event this request is about. Crew actions always name it by public id. */
 function se_live_event(PDO $pdo, array $body): array
@@ -434,6 +427,14 @@ try {
 
             se_api_success('Added to the queue.', $out);
         }
+
+        case 'game_start': case 'game_pause': case 'game_finish': { $event=se_live_event($pdo,$body);se_require_capability($pdo,(int)$event['id'],'game.control');$status=['game_start'=>'live','game_pause'=>'paused','game_finish'=>'finished'][$action];$st=$pdo->prepare('UPDATE se_games SET status=?,started_at=IF(?="live",NOW(),started_at),finished_at=IF(?="finished",NOW(),finished_at) WHERE id=? AND event_id=?');$st->execute([$status,$status,$status,se_int($body['game_id']??0,0),(int)$event['id']]);if(!$st->rowCount())se_api_error('Game not found.','EVENT_NOT_FOUND');se_api_success('Game updated.',['status'=>$status]); }
+        // Games engine and scoring (PR5)
+        case 'round_next': { $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control'); $g=se_game_list($pdo,(int)$event['id']); $game=null; foreach($g as $candidate){ if((int)$candidate['id']===(int)($body['game_id']??0)){ $game=$candidate; break; } } if(!$game) se_api_error('Game not found.','EVENT_NOT_FOUND'); se_api_success('Round ready.',se_round_next($pdo,$event,$game,se_live_actor(),se_bool($body['is_test']??false))); }
+        case 'round_arm': { $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control'); $s=$pdo->prepare('SELECT * FROM se_games WHERE id=? AND event_id=?');$s->execute([se_int($body['game_id']??0,0),(int)$event['id']]);$game=$s->fetch(PDO::FETCH_ASSOC)?:[];$settings=se_game_settings($game); se_api_success('Round armed.',se_round_arm($pdo,$event,se_int($body['round_id']??0,0),se_int($body['preroll_ms']??($settings['preroll_ms']??3000),2500),se_int($body['duration_ms']??($settings['duration_ms']??20000),1),se_live_expected($body),se_live_actor())); }
+        case 'round_lock': case 'round_reveal': case 'round_score': case 'round_void': { $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control'); $to=['round_lock'=>'locked','round_reveal'=>'revealed','round_score'=>'scored','round_void'=>'void'][$action]; if($action==='round_score') se_api_success('Scored.',se_round_score($pdo,$event,se_int($body['round_id']??0,0),se_live_actor())); se_api_success('Round updated.',se_round_transition($pdo,se_int($body['round_id']??0,0),$to,se_live_actor(),se_line($body['reason']??'',160))); }
+        case 'score_adjust': { $event=se_live_event($pdo,$body);se_require_capability($pdo,(int)$event['id'],'score.manage');se_api_success('Score saved.',se_score_insert($pdo,$event,$body,se_live_actor())); }
+        case 'score_void': { $event=se_live_event($pdo,$body);se_require_capability($pdo,(int)$event['id'],'score.manage');se_score_void($pdo,$event,se_int($body['score_id']??0,0),se_line($body['reason']??'',160),se_live_actor());se_api_success('Score voided.'); }
 
         // ------------------------------------------------------------------
         // Test mode (§11.13) — producer only

@@ -30,6 +30,7 @@ import { AttendeesTab } from './tabs/attendees.js';
 import { AssetsTab } from './tabs/assets.js';
 import { CrewTab } from './tabs/crew.js';
 import { SettingsTab } from './tabs/settings.js';
+import { GamesTab } from './tabs/games.js';
 
 const TABS = {
     overview: OverviewTab,
@@ -40,6 +41,7 @@ const TABS = {
     teams: TeamsTab,
     program: ProgramTab,
     karaoke: KaraokeTab,
+    games: GamesTab,
     messages: MessagesTab,
     live: LiveTab,
     attendees: AttendeesTab,

@@ -301,6 +301,8 @@ function start() {
 
     if (config.view === 'manage') {
         startManage();
+    } else if (config.view === 'play') {
+        import('./play.js').then((module) => module.startPlay(config)).catch(() => toast('Games could not load.', 'error'));
     } else if (config.view === 'checkin') {
         // Loaded on demand: the portal's own critical path must not carry
         // the check-in flow, and /in never needs the hero machinery.

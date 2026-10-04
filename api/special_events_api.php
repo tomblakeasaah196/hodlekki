@@ -1865,6 +1865,17 @@ try {
 
     // ====================================================================
 
+    case 'decks_list': case 'deck_list': case 'deck_save': case 'deck_item_save': case 'deck_items_review': case 'game_list': case 'games_save': case 'game_save': case 'game_items_save': {
+        $event=se_studio_event($pdo,$body,'event.edit');
+        if($action==='deck_list'||$action==='decks_list') se_api_success('OK',['decks'=>se_deck_list($pdo,(int)$event['id'],$body['content_type']??null)]);
+        if($action==='game_list') se_api_success('OK',['games'=>se_game_list($pdo,(int)$event['id'])]);
+        if($action==='deck_save') se_api_success('Saved.',se_deck_save($pdo,$event,$body,$userId));
+        if($action==='deck_item_save') se_api_success('Saved.',se_deck_item_save($pdo,$event,$body,$userId));
+        if($action==='deck_items_review') se_api_success('Reviewed.',se_deck_items_review($pdo,$event,$body,$userId));
+        if($action==='game_items_save') se_api_success('Items attached.',se_game_items_save($pdo,$event,$body,$userId));
+        se_api_success('Saved.',se_game_save($pdo,$event,$body,$userId));
+    }
+
     case '':
         se_api_error('No action given.', 'BAD_REQUEST');
 
