@@ -61,7 +61,7 @@ function build() {
     left.appendChild(countdownNode);
 
     // Right: who has just walked in.
-    const right = node('div', 'se-stack');
+    const right = node('div', 'se-lobby-right');
     totalNode = node('p', 'se-scene-counter', '0 checked in');
     arrivalsNode = node('div', 'se-arrivals');
     barsNode = node('div', 'se-bars');
@@ -113,7 +113,7 @@ function renderBars(data) {
     const max = Math.max(1, ...teams.map((team) => team.n || 0));
 
     barsNode.replaceChildren(...teams.map((team) => {
-        const row = node('div', 'se-stack');
+        const row = node('div', 'se-bar-row');
         const bar = node('div', 'se-bar');
         bar.style.setProperty('--team-color', team.hex);
         // The goal line is "all teams equal", so widths are relative to the

@@ -1055,9 +1055,15 @@
   .se-team-panel-name { font-size: 4cqw; font-weight: 800; line-height: 1; }
   .se-team-panel-n { font-size: 2.4cqw; opacity: 0.9; }
 
-  .se-lobby { display: grid; grid-template-columns: 45fr 55fr; gap: 4cqw; height: 100%; align-content: center; padding: 5cqw; }
+  .se-lobby { display: grid; grid-template-columns: 45fr 55fr; gap: 4cqw; height: 100%; padding: 5cqw; }
+  /* The right column fits the frame: count on top, team bars at the
+   * bottom, and the arrivals take what is left (older cards are clipped,
+   * never pushed off the screen with the count and the bars). */
+  .se-lobby-right { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 2cqh; min-height: 0; }
+  .se-bar-row { display: grid; gap: 0.4cqh; }
+  .se-bar-row .se-scene-body { font-size: 1.9cqw; font-weight: 700; }
   .se-lobby-qr { display: grid; gap: 2cqh; justify-items: center; align-content: center; }
-  .se-lobby-qr svg { width: 28cqw; height: 28cqw; background: #fff; padding: 1cqw; border-radius: 1.5cqw; }
+  .se-lobby-qr svg { width: 25cqw; height: 25cqw; background: #fff; padding: 1cqw; border-radius: 1.5cqw; }
   .se-arrivals { display: grid; align-content: start; gap: 1.2cqh; overflow: hidden; }
   .se-arrival {
     display: flex;
@@ -1075,7 +1081,7 @@
   .se-arrival[data-rank="3"], .se-arrival[data-rank="4"], .se-arrival[data-rank="5"] { opacity: 0.6; font-size: 2.1cqw; }
   @keyframes se-arrive { from { opacity: 0; transform: translateY(2cqh); } to { opacity: 1; transform: none; } }
 
-  .se-bars { display: grid; gap: 0.8cqh; }
+  .se-bars { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2cqh 2.4cqw; }
   .se-bar { height: 1.6cqh; border-radius: 999px; background: var(--team-color, var(--se-primary)); min-width: 0.6cqw; }
 
   /* --- Crew consoles (§13.10, §13.11) -------------------------------- */

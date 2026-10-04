@@ -90,6 +90,17 @@ function se_portal_cta(array $event, array $phase, string $state, ?array $regist
 {
     $slug = (string) $event['slug'];
 
+    // On the night a registered guest needs the next step, not a reminder
+    // that they registered: check in at the door, then join the games.
+    if ($registration && (string) $registration['status'] === 'confirmed' && ($phase['phase'] ?? '') === 'live') {
+        if (empty($registration['first_checkin_at']) && ($phase['checkin_open'] ?? false)) {
+            return ['Check in', se_event_url($slug, 'in', false), "You're registered ✓", null];
+        }
+        if (se_bool(se_settings_path(se_event_settings($event), 'games.enabled', true))) {
+            return ['Join the games', se_event_url($slug, 'play', false), "You're registered ✓", null];
+        }
+    }
+
     if ($registration && in_array((string) $registration['status'], ['confirmed', 'waitlisted'], true)) {
         $isWait = (string) $registration['status'] === 'waitlisted';
 
