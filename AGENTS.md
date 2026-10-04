@@ -316,6 +316,16 @@ runs it with `--check` and fails on a stale file. If two branches both changed
 - Code shipped before a later migration MUST degrade safely: ask
   `se_table_exists()` first and return `FEATURE_NOT_READY`, never a fatal.
   The tree is copied to production *before* migrations run.
+- Hand-off overrides (`se_handoff_push()`) may only send a person the rules
+  marked **ready** to the other team or hold them back. Consent, opt-outs,
+  membership and an earlier hand-off are never overridable.
+- Public API calls take the phone number as a **string**
+  (`normalizePhone(raw).e164`), never the `{e164, sms, display}` object —
+  sending the object made every self check-in fail with `INVALID_PHONE`.
+- A game round moves only through the engine in `games_engine.php` /
+  `party_games.php` (`se_round_*_live`, `se_feud_update`, `se_charades_*`,
+  `se_buzz_judge_party`). Correct a result by voiding the round (with a
+  reason); the next round replays the same question.
 
 **Requirements and operations**
 
@@ -330,6 +340,22 @@ runs it with `--check` and fails on a stale file. If two branches both changed
 `includes/special_events/`, `e/` or `assets/se/js/` MUST update
 `modules/special_events/how_to_use.md` in the same PR — CI enforces it, as it
 does for Reach and Assimilation.
+
+**Checks CI runs for this module** (run them before pushing):
+
+- `php tests/special_events/run.php` — unit tests, including
+  `function_calls_test.php`: every plain function call in the module must be a
+  PHP built-in or defined in the repo (`php -l` cannot see a missing function).
+- `node --check` over every file in `assets/se/js` (CI copies each to a temp
+  `.mjs`); locally `node --experimental-default-type=module --check <file>`.
+  A stray backtick inside an ``html`…` `` template blanks the whole surface.
+- `node --test "tests/special_events/js/*.test.mjs"` and
+  `bin/build_se_css.sh --check`.
+- The integration suite on **MySQL 8.0 and MariaDB 10.11** (the production
+  engine is unconfirmed): `php tests/special_events/db_setup.php --host=… --db=se_it --fresh --seed`,
+  then `SE_TEST_DB_HOST=… SE_TEST_DB_NAME=se_it php tests/special_events/integration/run.php`.
+  MariaDB rejects `GROUP BY t.id` when other `t` columns are selected — list
+  them in the `GROUP BY`.
 
 ## Common pitfalls spotted during onboarding
 

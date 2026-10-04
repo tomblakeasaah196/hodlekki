@@ -25,9 +25,16 @@ Nobody else: the sidebar link is hidden, and every action is checked again on
 the server. Hiding a button is never the lock.
 
 > **What this version does.** Everything from event setup through registration,
-> check-in, programme, karaoke and the full games night: quizzes, party games,
-> scoreboards, awards and the finale. The after-event report and hand-off to
-> Reach and Embrace arrive in the next release.
+> check-in, programme, karaoke and the full games night — quizzes, party games,
+> scoreboards, awards and the finale — and afterwards the insights report and
+> the hand-off to Reach and Embrace.
+
+**Finding your way around an event.** The sections sit down the left, grouped
+in the order you meet them: **Set up** (Overview, Details, Brand,
+Registration, Programme, Teams), **The night** (Check-in, Karaoke, Games, Live,
+Crew, Assets), **People** (Attendees, Messages), **Afterwards** (Insights,
+Hand-off) and **Settings**. On a phone they are in the **Section** list at the
+top.
 
 ---
 
@@ -360,7 +367,10 @@ and lets them:
 - **stop all messages** about this and future events.
 
 It works on any device, so sending it to themselves and opening it on a laptop
-is fine. **Lost it?** The page has **Text me my link**. For safety, that never
+is fine. On a phone that already holds their ticket — the one they registered
+or checked in on, or one the desk moved them to — `/e/<your-link>/me` opens
+the same page without the link, and the **You're registered** button on the
+event page goes there. **Lost it?** The page has **Text me my link**. For safety, that never
 says whether a number is registered or not — it always answers "if that number
 is registered, we have texted the link", so nobody can use it to find out who
 is coming.
@@ -510,8 +520,10 @@ minutes" — rather than a dead end. Both times are set per day in **Details**.
 
 ### On their own phone
 
-The QR on the posters goes to `/e/<your-link>/in`. They type their phone
-number, see their name, and tap **Yes, that's me**.
+The QR on the posters goes to `/e/<your-link>/in`, and on the night the main
+button on the event page says **Check in** (then **Join the games** once they
+are in). They type their phone number, see their name, and tap **Yes, check me
+in**. A number we do not know gets the walk-in questions instead (below).
 
 What happens next, in about a second:
 
@@ -524,7 +536,9 @@ If they have already checked in tonight **on that phone**, they just see their
 card again. If they are already checked in but this is a **different** phone —
 a borrowed one, or a new handset — the page opens **read-only**: they can see
 their team and number but cannot play from it. To move the night to the new
-phone, ask the desk for a **transfer code**.
+phone, ask the desk for a **transfer code** and type it under **I have a code
+from the desk** (on the check-in page, and on the games page of a read-only
+phone).
 
 If we do not know whether they are male or female, we ask once. It is the only
 thing teams are balanced on besides size, so it is not optional — but it is one
@@ -655,21 +669,25 @@ host console.
 
 ## 18. The host console
 
-`/e/<your-link>/host`, crew sign-in. One person runs the night from here.
+`/e/<your-link>/host`, crew sign-in. One person runs the night from here. It
+is laid out in three columns, with the games in the widest one:
 
-- **Scene** — what the stage is showing. Tap a scene; it changes in about a
-  second.
-- **Announcement** — up to 160 characters on every screen and every phone, for
-  as many seconds as you choose. "The bus leaves at 9:30."
-- **Sound board** — the cues: fanfare, applause, drumroll, ding.
-- **Run of show** — the programme, with the next few items and their times.
-  **Start** when a thing really begins and **Finish** when it really ends;
-  everything after it moves, here and on everyone's phone. **Skip** drops an
-  item, **Undo** takes back the last press.
-- **Karaoke** — who is on stage and who is next, with one button to send the
-  next singer up. The full queue lives on the DJ screen.
-- **Teams** — rename, set captains.
-- **Blackout** — the big red one. Also the `B` key.
+- **Left — Run of show, Karaoke, Announcement.** The programme with the next
+  few items and their times: **Start** when a thing really begins and
+  **Finish** when it really ends; everything after it moves, here and on
+  everyone's phone. **Skip** drops an item, **Undo** takes back the last
+  press. Karaoke shows who is on stage and who is next, with one button to
+  send the next singer up (the full queue lives on the DJ screen). An
+  announcement is up to 160 characters on every screen and phone for as many
+  seconds as you choose — "The bus leaves at 9:30."
+- **Middle — Games, and what is on the big screen.** See **Running the games**
+  in section 22. Below it, the scenes (Standby, Welcome, Programme, Teams,
+  Game, Leaderboard, Karaoke, Announcement, Break, Blank, Recap, Finale).
+- **Right — Scores, Teams, Sound board, Screen links.** The team standings,
+  **Give points or a penalty** (choose the team, the amount and what it is
+  for), and **Recent points**, each with **Undo** (it asks why). Teams open to
+  rename them or set a captain. The sound board plays a cue on the stage.
+- **Blackout** — the red button at the top. Also the `B` key.
 
 Keyboard, when you are on a laptop: `W` welcome · `T` teams · `S` leaderboard ·
 `K` karaoke · `B` blackout.
@@ -938,127 +956,138 @@ Not if test mode was on. **Live → Reset rehearsal** removes every test row.
 Check the red ribbon was showing during the rehearsal — if it was not, the
 rows are real and have to be removed one by one from Attendees.
 
-## 13. Games: decks, rounds and scoring (PR5)
+## 22. Games
 
-The **Games** tab is where the Producer prepares the night. A deck is a
-reusable library of reviewed questions; event decks are private to one event.
-Choose `mcq`, open answer, emoji, verse, charade, clues or survey content.
-Every item is saved as **Draft** until a crew reviewer approves it. AI can
-suggest Bible content, but it never supplies Bible text: references are
-looked up from KJV in the Studio, and a person reviews the result before it
-can be used. If AI or the Bible service is unavailable, enter and review an
-item by hand.
+Six kinds of game, all prepared in **Studio → Games** and run from the host
+console:
 
-Add games in the order they will run and attach approved deck items. The three
-PR5 game families are:
+| Game | How it plays | Questions it uses |
+| ---- | ------------ | ----------------- |
+| **Live Quiz** | Everyone answers on their own phone; right and fast scores most. | Multiple choice, Emoji puzzle, Finish the verse |
+| **Bible Trivia** | One answer per team, locked in by the captain while teammates suggest. | Multiple choice, Finish the verse |
+| **Buzzer** | First team to buzz answers out loud; you judge it. | Question and answer, Multiple choice, Emoji puzzle, Finish the verse |
+| **Who Am I?** | Clues one at a time; the earlier the right answer, the more it scores. | Who am I? clues |
+| **Bible Charades** | One player acts out phrases only their phone shows. | Charades phrase |
+| **Family Feud** | Teams guess the most popular answers from the guests' survey. | Feud survey question |
 
-- **Live Quiz** — every checked-in player answers on their phone. It uses a
-  shared countdown and scheduled reveal; the earlier a correct answer arrives,
-  the more points it earns.
-- **Bible Trivia** — each team captain submits for the team while teammates
-  send suggestions. Suggestions are private to that team. If a captain does
-  not answer, the configured team vote can be used.
-- **Buzzer** — Bible Buzzer, Finish the Verse and Emoji Bible use the same
-  buzzer round. A team can buzz once per attempt; effective times are clamped
-  to the server clock, and the host judges the winner.
+### Setting up (Studio → Games)
 
-The `/e/<slug>/play` page is available only to a checked-in device. Guests tap
-**Join the games**, then wait for the host. The stage and phones use the same
-server `opens_at` clock, so polling delay does not change the scoring window.
-The question, choices and public reveal never contain a charades phrase or
-private answer before the host reveals it.
+**Lineup.** The games of the night in running order. The quickest start is
+**Add the Chara starter pack**: six ready games with questions you can edit
+or replace. Or **Build my own** / **+ Add a game** and choose a type. Move a
+game earlier or later with the arrows on its card. **Edit** opens it:
 
-### Running and rehearsing
+- **Name on screen** and **Weight in the championship** (2 doubles that game's
+  team points);
+- the settings in plain units — answer time and countdown in seconds, points,
+  passes — with sensible defaults already filled in;
+- its questions: **In this game** on the left (reorder with ↑ ↓, remove with
+  ✕) and **Available** on the right (tap to add, or **Add all**). Only
+  **approved** questions the game can play are offered, so a multiple-choice
+  game never picks up an open question.
 
-In the Host console, use **Next round**, **Arm**, **Lock**, **Reveal** and
-**Score**. A round is never scored twice: its ledger rows have idempotency
-keys. To correct a result, void the round or an individual ledger row with a
-reason, then award a new entry; points are never edited in place. Awards and
-penalties are visible in score history and in the team and MVP leaderboards.
+**Question banks.** Questions live in banks, one kind per bank (create one
+with **New bank**). **Add a question** shows the right form for the kind —
+four answers with a tick for the right one, five clues, a phrase, a survey
+question. For **Finish the verse**, type the reference and press **Fetch the
+KJV text**: the text comes from the KJV, never from AI, and the slider chooses
+where the room takes over. Questions you type are approved straight away;
+drafts (from AI) need **Approve**, or **Approve all** for the lot. With AI
+switched on, **✨ Draft with AI** suggests up to fifteen; tick the ones to keep
+and they arrive as drafts for you to read and approve. A question that is in
+a game cannot be deleted until you take it out of the game.
 
-Turn on **Test mode** before rehearsal and use **Studio → Games → Rehearse**.
-Game rows marked `TEST` are removed by Reset rehearsal; real scores and
-registrations are left alone. Before the event, run the quiz load profile from
-`tests/special_events/load/quiz.k6.js` and check the static snapshot and answer
-thresholds in the engineering guide.
+**Family Feud boards.** Guests answer the survey questions on their phones
+before the night (**Play ahead**). When the answers are in, **Edit board** →
+**Build from N answers**: with enough answers AI groups spellings and synonyms
+("Lions", "the lion"); with few, the exact groups are offered. Tidy the
+labels and points, then **Save and approve**. The host cannot open a board
+that is not approved.
 
+### Running the games (host console)
 
-## 22. Party games, awards and the finale (PR6)
+The middle column lists the lineup. **Start** a game (starting another pauses
+the one before; **Resume** carries on). While a game is live, the panel shows
+one big next step at a time, and the answer the host must not read out is in
+amber, marked **Only you see this**.
 
-### Who Am I?
+- **Live Quiz / Bible Trivia.** **Next question ▶** → **Show the question ▶**
+  (phones get a short countdown, then the answer time) → watch the answers
+  come in and how they are spreading → **Reveal the answer** (or **Stop
+  answers** first). Points go on as it is revealed, unless you switched that
+  off in the game's settings, in which case press **Give out the points**.
+- **Buzzer / Who Am I?** **Open the buzzers ▶** (or **Show the first clue ▶**)
+  → the first buzz appears with the player's name and team → **✓ Right** or
+  **✕ Wrong**. A wrong team is out for that question (or clue); the buzzer
+  reopens for the others, or press **Next clue**. If nobody gets it, **Reveal
+  the answer**.
+- **Bible Charades.** **Next turn ▶** → choose the acting team and type the
+  presenter's player number (leave it empty for someone on that team whose
+  phone is active) → **Choose the presenter** → **Start the 60-second timer ▶**
+  (or whatever turn length the game has) → **✓ Got it** for each phrase, **Pass** (twice a turn by default), **End the turn**.
+  The phrase shows only on the presenter's phone, and on the console only if
+  you tick **Show the phrases on this console too**.
+- **Family Feud.** **Next board ▶** → choose the two face-off teams (and
+  player numbers, or leave them random) → **Start the face-off ▶** → tap each
+  answer as it is said → **<Team> plays** → **✕ Strike** for a wrong guess;
+  three strikes give the other team one steal (**✓ Stolen** / **✕ Not on the
+  board**) → **Bank** → **Turn over the rest of the board**.
 
-Use a **clues** deck. Each item needs three to five clues ordered hardest to
-easier and one short answer. The host arms the round, reads the visible clue,
-and presses **Next clue** after a wrong answer or no buzz. A correct answer is
-worth 500 on clue one, then 400, 300, 200 and 100. A wrong team is locked out
-until the next clue. Judge the winning buzz with ✓ or ✕ in the Host console.
+When the last question is played the panel says so and offers **Finish**.
+**Void this round** (it asks why) removes every point the round gave; the next
+round then replays the same question, which is how a mistake is corrected.
+Points are never edited in place — awards, penalties and undos are all rows
+in the score history. **Leaderboard on screen** and **Run the finale 🏆** sit
+at the bottom of the panel.
 
-### Bible Charades
+### On the phones
 
-Use a **charade** deck. In the Host console choose the acting team, then type a
-player number or leave it blank for a random checked-in player with an active
-phone. Press **Pick presenter**, then **Start timer**. The phrase appears only
-on that presenter's phone and the private host console — never in a public,
-room or team snapshot. The presenter can hide it immediately if somebody
-looks over their shoulder.
+Guests open `/e/<your-link>/play` (**Join the games** on the event page once
+they have checked in). The page follows the stage by itself: a countdown,
+then the answer tiles; **Locked in** after they answer; ✓ or ✕ and their
+points at the reveal. In Trivia the captain's tiles show how many teammates
+suggested each answer, and teammates see what the captain locked in. Only
+the two face-off players get a buzzer in the Feud. The charades phrase shows
+only on the presenter's phone, with **Hide the phrase** for nosy neighbours.
+Between games the page shows the team scores and the **Play ahead** survey.
 
-Press **Got it** for +200 and the next phrase, **Pass** (normally twice per
-turn), or **End turn**. The stage shows the presenter, team colour, timer and
-number guessed, but not the phrase. If a selected player has no recently seen
-phone, pick another or use the host tablet fallback.
+The phones and the stage read the same published state, so a slow website
+never changes a scoring window, and nothing public ever carries an answer
+before the reveal, a name, or a charades phrase.
 
-### Bible Family Feud
+### On the stage
 
-Add a **survey** deck and attach it to a Feud game before sharing the event.
-Registered guests see **Play ahead** on their game/manage experience. Answers
-are one short line, can be changed until the Feud starts, and are anonymous
-when sent to AI.
+**Game** scene: the question with the four answer tiles and a countdown; at
+the reveal, the right answer lights up with how the room answered; the buzz
+winner's name in their team colour; the Who Am I? clues; the charades actor
+and timer; the Feud board with its strikes and bank. **Leaderboard** shows
+the teams and the MVP; **Finale** counts up from last place to the champions,
+then the MVP.
 
-In **Studio → Games → Family Feud board**, enter the survey item ID and press
-**Build from survey answers**. With enough answers, AI groups spelling and
-synonym variants. With fewer answers, exact normalised groups are shown and
-the crew can make the board manually. In both cases, read every label and
-count, merge or rename as needed, then **Approve board**. AI output is never
-played without this approval.
+### Rehearse it
 
-On the Host console choose Team A and Team B and start the face-off. Give the
-winning team control, reveal a matching slot when they guess it, or add a
-strike. Three strikes opens one steal. Mark whether the steal worked and
-press **Bank**; the revealed survey counts are multiplied for that round and
-written once to the score ledger.
+**Studio → Games → Turn test mode on** (or **Live → Rehearsal**). Everything
+scored while it is on is marked TEST; **Reset rehearsal** clears the test
+rounds, answers, buzzes, survey answers and TEST points, and leaves real rows
+alone. One week before the event:
 
-### Leaderboards, MVP, awards and finale
+1. Turn **Test mode** on. Confirm the red ribbon on the stage and the console.
+2. Put the lobby on its TV and the stage on the projector. Press **Start** on
+   the stage once.
+3. Use at least 20 phones on the venue Wi-Fi. Register five new people; check
+   in twenty using the phone, the desk and a walk-in; move one guest to a new
+   phone with a desk code.
+4. Run one round of every game, three karaoke singers, the leaderboard and the
+   finale. Watch the **Screens** dot stay green, and check the charades phrase
+   appears only on the presenter's phone.
+5. Give an award, undo it, and void a round. Add the points up by hand and
+   compare with the leaderboard.
+6. Press **Reset rehearsal** and check the test rows are gone and real ones
+   remain. Write the fix list, repeat what failed, and turn test mode off (it
+   also switches itself off fifteen minutes before doors open).
 
-**Leaderboard** shows team totals in score order and the individual MVP list.
-Manual awards and penalties require a reason and remain in score history; undo
-voids the ledger row instead of editing points. The MVP is the checked-in
-player with the greatest individual total (ties follow the games rules).
-
-At the end, press **Run finale**. The stage reveals the champion and MVP with
-the event colours and fanfare cue. The same champion, MVP, named awards and
-team totals are retained as recap data for the after-event release.
-
-### Chara starters and rehearsal
-
-**Add Chara starters** is idempotent: it adds Appendix G decks for Who Am I?,
-Bible Charades and five Family Feud survey questions, already reviewed. Read
-them anyway and tailor them to the room.
-
-One week before the event:
-
-1. Live → turn **Test mode** on. Confirm the red ribbon on stage and console.
-2. Put the lobby on its TV and stage on the projector. Start sound once.
-3. Use at least 20 phones on venue Wi-Fi. Register five new people; check in
-   20 using self, desk and walk-in routes.
-4. Run one round of every game, three karaoke singers, leaderboard and finale.
-   Confirm snapshots stay under three seconds old and charades phrases appear
-   only on the selected phone and host console.
-5. Test a score correction, award and undo. Confirm the MVP and champion by
-   adding the ledger totals independently.
-6. Press **Reset rehearsal**. Confirm test registrations, rounds, answers,
-   buzzes, survey answers and karaoke entries are gone, and TEST scores are
-   voided. Real rows must remain.
-7. Write the fix list, repeat the failed step, and turn test mode off.
+Before a big night, the quiz load profile is in
+`tests/special_events/load/quiz.k6.js`.
 
 ## 23. After the event (PR7)
 
@@ -1068,22 +1097,31 @@ The card contains their team result, points, MVP badge when applicable and
 performed karaoke song. **Feedback** asks for NPS (0–10), a favourite moment,
 one word, a comment, visit interest and future-event consent.
 
-Open **Insights** for the registration funnel, source channels, show-up,
-members/guests, gender, games, karaoke, team and NPS totals. Every visual has
-a table. Series events include edition comparisons and the champion Hall of
-Fame. **PDF report** is aggregate and contains no phone numbers or email
+Open **Insights** for the totals: registered and checked in (with the
+show-up rate), walk-ins, church members there, how many played on their
+phones, karaoke songs, the feedback score (NPS) and the champions; then the
+journey from page view to the door, how people heard, gender, check-ins by
+team, the hand-off, and how many handed-off guests were back at a service
+within 30, 60 and 90 days. Every chart is a labelled list of numbers, so it
+reads the same on a phone and to a screen reader. Nobody is named on this
+page. Events in a series get a table comparing the editions. **PDF report** is aggregate and contains no phone numbers or email
 addresses; its AI narrative uses aggregate statistics only and falls back to
 a fixed narrative when AI is off. **Excel** is operational data: only users
 with PII permission receive unmasked contact fields, and every export is
 audited.
 
-Within 72 hours, open **Hand-off** with the Follow-up liaison. Review the rule
-summary and every row. By default, checked-in consenting guests who want a
-visit go to Embrace; other checked-in consenting guests go to the event's
-Reach campaign. Members, opt-outs, no-consent rows and no-shows are excluded.
-Only enable the no-show rule deliberately. Press **Push reviewed people**
-once the preview is right. History remains visible and a re-run safely picks
-up late opt-ins without duplicating a successful person.
+Within 72 hours, open **Hand-off** with the Follow-up liaison. The top shows
+how many are ready (and how many go to each team) and how many the rules hold
+back, and why: already a member, did not agree to follow-up, opted out, did
+not come, phone number not usable, already handed off. By default,
+checked-in consenting guests who asked for a visit go to **Embrace**
+(first-timer care) and the rest go to **Reach** (follow-up calls). In
+**Review**, any ready person can be sent to the other team or **held back**;
+the rules themselves cannot be overridden — the server refuses to hand off
+anyone who did not consent, even if asked to. Only tick **Also send people
+who registered but did not come** deliberately. Press **Push** once the list
+is right. **Earlier runs** lists each push with its counts, and pushing again
+safely picks up late opt-ins without handing anyone off twice.
 
 A manager may archive at least 24 hours after the end. Archived events are
 frozen except for exports, insights and hand-off. A manager, or a producer in
