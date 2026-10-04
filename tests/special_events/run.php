@@ -53,6 +53,13 @@ require_once __DIR__ . '/../../includes/special_events/capacity.php';
 require_once __DIR__ . '/../../includes/special_events/cards.php';
 require_once __DIR__ . '/../../includes/special_events/messages.php';
 
+// PR3's pure layers: the team chooser, the check-in window clamp and the
+// snapshot builders' privacy rules. None of them touch a database either —
+// se_team_choose() and se_checkin_window() take rows as arguments.
+require_once __DIR__ . '/../../includes/special_events/teams.php';
+require_once __DIR__ . '/../../includes/special_events/checkin.php';
+require_once __DIR__ . '/../../includes/special_events/live.php';
+
 $GLOBALS['se_passed'] = 0;
 $GLOBALS['se_failed'] = 0;
 $GLOBALS['se_failures'] = [];

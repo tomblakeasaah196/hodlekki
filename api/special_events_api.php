@@ -1017,10 +1017,42 @@ try {
             se_api_error('Teams are not available until the database is migrated.', 'FEATURE_NOT_READY');
         }
 
-        se_teams_save($pdo, $event, [
-            'hex_list' => $body['hex_list'] ?? null,
-            'teams'    => $body['teams'] ?? null,
-        ], $userId);
+        // The Studio sends a paste box of hex codes plus the names typed
+        // against each row. se_teams_save() wants one ordered list, so the
+        // two are merged here rather than giving the library two shapes.
+        $existing = se_teams($pdo, (int) $event['id']);
+        $names    = [];
+        foreach (is_array($body['teams'] ?? null) ? $body['teams'] : [] as $row) {
+            if (!empty($row['id'])) {
+                $names[(int) $row['id']] = se_line($row['name'] ?? '', 40);
+            }
+        }
+
+        $hexList = isset($body['hex_list']) && is_string($body['hex_list'])
+            ? se_parse_hex_list($body['hex_list'])
+            : array_map(static fn(array $t): string => (string) $t['color_hex'], $existing);
+
+        if (count($hexList) < SE_MIN_TEAMS || count($hexList) > SE_MAX_TEAMS) {
+            throw new SeValidationException([
+                'hex_list' => 'Between ' . SE_MIN_TEAMS . ' and ' . SE_MAX_TEAMS . ' colours, please.',
+            ]);
+        }
+
+        $rows = [];
+        foreach ($hexList as $i => $hex) {
+            $current = $existing[$i] ?? null;
+            $rows[] = [
+                'color_hex'   => $hex,
+                'color_label' => $current !== null && strcasecmp((string) $current['color_hex'], $hex) === 0
+                    ? (string) $current['color_label']
+                    : '',
+                'name' => $current !== null
+                    ? ($names[(int) $current['id']] ?? (string) ($current['name'] ?? ''))
+                    : '',
+            ];
+        }
+
+        se_teams_save($pdo, $event, $rows, $userId);
 
         se_api_success('Teams saved.', se_teams_payload($pdo, $event));
     }

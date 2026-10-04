@@ -29,7 +29,8 @@ $root = dirname(__DIR__, 3);
 
 require_once $root . '/includes/sms_functions.php';
 foreach (['constants', 'util', 'db', 'theme', 'settings', 'events', 'identity',
-          'capacity', 'registration', 'messages', 'attendees'] as $lib) {
+          'capacity', 'registration', 'realtime', 'live', 'bible', 'verses',
+          'teams', 'checkin', 'messages', 'attendees'] as $lib) {
     require_once $root . '/includes/special_events/' . $lib . '.php';
 }
 
@@ -339,6 +340,172 @@ try {
 
 $result = se_registration_cancel($pdo, $locked, se_event_days($pdo, (int) $locked['id']), $reg, 'crew');
 is_same('but the crew can always do it at the desk', 'cancelled', $result['status']);
+
+
+// ==========================================================================
+// Test 5 — the check-in race (§22.2)
+// ==========================================================================
+//
+// Forty people tap "Check in" at the same instant, from forty connections.
+// Three things must hold afterwards, and all three are things a
+// check-then-insert implementation gets wrong under load:
+//
+//   * exactly forty check-in rows, one per person — the unique key on
+//     (event_id, registration_id, day_date) is what makes a double tap a
+//     no-op rather than a second arrival;
+//   * player numbers 1…40, each used once — allocated inside the lock;
+//   * team sizes within one of each other, which is invariant I1 holding
+//     under real concurrency rather than in a unit test.
+
+echo "\n  check-in race\n";
+
+if (!se_checkin_ready($pdo) || !se_teams_ready($pdo)) {
+    echo "    (se_checkins/se_teams not migrated: skipping)\n";
+} else {
+    $raceEvent = se_it_event($pdo, ['online_capacity' => 60]);
+    $raceId    = (int) $raceEvent['id'];
+
+    // Doors are open now, so the window lets everybody through.
+    $now = se_now();
+    $pdo->prepare(
+        "UPDATE se_event_days
+            SET day_date = ?, doors_open_at = ?, starts_at = ?, ends_at = ?, checkin_closes_at = ?
+          WHERE event_id = ?"
+    )->execute([
+        $now->format('Y-m-d'),
+        $now->modify('-30 minutes')->format('Y-m-d H:i:s'),
+        $now->modify('-10 minutes')->format('Y-m-d H:i:s'),
+        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
+        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
+        $raceId,
+    ]);
+    $pdo->prepare("UPDATE se_events SET starts_at = ?, ends_at = ? WHERE id = ?")->execute([
+        $now->modify('-10 minutes')->format('Y-m-d H:i:s'),
+        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
+        $raceId,
+    ]);
+
+    $stmt = $pdo->prepare("SELECT * FROM se_events WHERE id = ?");
+    $stmt->execute([$raceId]);
+    $raceEvent = $stmt->fetch();
+
+    // Four teams, the usual Envision palette.
+    se_teams_save($pdo, $raceEvent, array_map(
+        static fn(string $hex): array => ['color_hex' => $hex],
+        ['#D11920', '#1D356A', '#1E9E62', '#F5C518']
+    ), 1);
+
+    $arrivals = 40;
+    for ($i = 1; $i <= $arrivals; $i++) {
+        se_it_register($pdo, $raceEvent, 5000 + $i);
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT id FROM se_registrations WHERE event_id = ? AND status = 'confirmed' ORDER BY id"
+    );
+    $stmt->execute([$raceId]);
+    $regIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+
+    is_same('forty people are confirmed and ready to arrive', $arrivals, count($regIds));
+
+    $checkIn = static function (PDO $db, int $eventId, int $registrationId): void {
+        $stmt = $db->prepare("SELECT * FROM se_events WHERE id = ?");
+        $stmt->execute([$eventId]);
+        $event = $stmt->fetch();
+
+        se_checkin($db, $event, se_event_days($db, $eventId), [
+            'registration_id' => $registrationId,
+        ], [
+            'method'        => 'desk',
+            'device'        => null,
+            'actor_user_id' => 1,
+            'ip_hash'       => null,
+            'is_crew'       => true,
+        ]);
+    };
+
+    if ($canFork) {
+        $kids = [];
+        foreach ($regIds as $registrationId) {
+            $pid = pcntl_fork();
+            if ($pid === 0) {
+                try {
+                    $child = se_it_pdo();
+                    // Each child checks the SAME person in twice, half a
+                    // millisecond apart: a double tap on a slow phone. The
+                    // second must be absorbed, not counted.
+                    $checkIn($child, $raceId, $registrationId);
+                    try { $checkIn($child, $raceId, $registrationId); } catch (Throwable $e) { /* expected */ }
+                    exit(0);
+                } catch (Throwable $e) {
+                    fwrite(STDERR, "    check-in worker {$registrationId}: " . $e->getMessage() . "\n");
+                    exit(1);
+                }
+            }
+            $kids[] = $pid;
+        }
+        foreach ($kids as $pid) { pcntl_waitpid($pid, $status); }
+    } else {
+        echo "    (pcntl not available: running the same 40 check-ins serially)\n";
+        foreach ($regIds as $registrationId) {
+            $checkIn($pdo, $raceId, $registrationId);
+            try { $checkIn($pdo, $raceId, $registrationId); } catch (Throwable $e) { /* expected */ }
+        }
+    }
+
+    $today = se_now()->format('Y-m-d');
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM se_checkins WHERE event_id = ? AND day_date = ?");
+    $stmt->execute([$raceId, $today]);
+    is_same('one check-in row per person, double taps absorbed', $arrivals, (int) $stmt->fetchColumn());
+
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(*) FROM se_registrations WHERE event_id = ? AND player_no IS NULL AND status = 'confirmed'"
+    );
+    $stmt->execute([$raceId]);
+    is_same('everybody got a player number', 0, (int) $stmt->fetchColumn());
+
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(DISTINCT player_no) FROM se_registrations WHERE event_id = ? AND player_no IS NOT NULL"
+    );
+    $stmt->execute([$raceId]);
+    is_same('and every player number is unique', $arrivals, (int) $stmt->fetchColumn());
+
+    $stmt = $pdo->prepare(
+        "SELECT MIN(player_no), MAX(player_no) FROM se_registrations WHERE event_id = ? AND player_no IS NOT NULL"
+    );
+    $stmt->execute([$raceId]);
+    [$minNo, $maxNo] = array_map('intval', $stmt->fetch(PDO::FETCH_NUM));
+    is_same('the numbers run from one…', 1, $minNo);
+    is_same('…to forty, with no gaps', $arrivals, $maxNo);
+
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(*) FROM se_registrations WHERE event_id = ? AND status = 'confirmed' AND team_id IS NULL"
+    );
+    $stmt->execute([$raceId]);
+    is_same('everybody is on a team', 0, (int) $stmt->fetchColumn());
+
+    $teamCounts = se_team_counts($pdo, $raceId);
+    $sizes = array_map(static fn(array $c): int => (int) $c['n'], $teamCounts);
+    is_same('the four teams hold forty people between them', $arrivals, array_sum($sizes));
+    ok('and no team is more than one person bigger than another',
+        max($sizes) - min($sizes) <= 1,
+        'sizes: ' . implode(', ', $sizes));
+
+    $spread = 0;
+    foreach (['n_Male', 'n_Female'] as $key) {
+        $column = array_map(static fn(array $c): int => (int) ($c[$key] ?? 0), $teamCounts);
+        $spread = max($spread, max($column) - min($column));
+    }
+    ok('the gender counts are within two, as §10.6.3 requires',
+        $spread <= 2, 'spread: ' . $spread);
+
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(*) FROM se_team_moves WHERE event_id = ? AND method = 'auto'"
+    );
+    $stmt->execute([$raceId]);
+    is_same('each assignment left exactly one audit row', $arrivals, (int) $stmt->fetchColumn());
+}
 
 // ==========================================================================
 

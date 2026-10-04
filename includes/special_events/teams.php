@@ -327,7 +327,10 @@ function se_parse_hex_list(string $raw): array
             continue;
         }
         $hex = se_normalize_hex($part);
-        if ($hex !== null) {
+        // The same colour twice would give two teams the same auto label,
+        // and "Team Red, the other one" is not a thing a host can say. The
+        // first occurrence keeps its position (§28.4).
+        if ($hex !== null && !in_array($hex, $out, true)) {
             $out[] = $hex;
         }
     }
