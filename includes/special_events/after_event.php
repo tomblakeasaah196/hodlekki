@@ -93,7 +93,7 @@ function se_insights(PDO $pdo, array $event): array
             FROM se_events e LEFT JOIN se_registrations r ON r.event_id=e.id AND r.is_test=0
             LEFT JOIN se_checkins c ON c.event_id=e.id AND c.registration_id=r.id AND c.is_test=0
             {$feedbackJoin}
-            WHERE e.series_id=? GROUP BY e.id ORDER BY e.starts_at");
+            WHERE e.series_id=? GROUP BY e.id, e.title, e.edition_label, e.starts_at ORDER BY e.starts_at");
         $stmt->execute([(int) $event['series_id']]);
         $series = $stmt->fetchAll() ?: [];
     }
@@ -104,12 +104,19 @@ function se_insights(PDO $pdo, array $event): array
             require_once __DIR__ . '/../assimilation_helpers.php';
         }
 
+        // The platform's attendance tables are not the module's: if they are
+        // missing or change shape, Insights loses this one block, not the tab.
         if (function_exists('assim_attendance_union_sql')) {
-            foreach ([30, 60, 90] as $daysAfter) {
-                $sql = "SELECT COUNT(DISTINCT hi.contact_id) FROM se_handoff_items hi JOIN " . assim_attendance_union_sql() . " att ON att.user_id=hi.target_id WHERE hi.event_id=? AND hi.target_table='users' AND att.attended_on>DATE(?) AND att.attended_on<=DATE_ADD(DATE(?),INTERVAL {$daysAfter} DAY)";
-                $q = $pdo->prepare($sql);
-                $q->execute([$eventId, $event['ends_at'], $event['ends_at']]);
-                $followup[] = ['label' => $daysAfter . '-day church attendance', 'value' => (int) $q->fetchColumn()];
+            try {
+                foreach ([30, 60, 90] as $daysAfter) {
+                    $sql = "SELECT COUNT(DISTINCT hi.contact_id) FROM se_handoff_items hi JOIN " . assim_attendance_union_sql() . " att ON att.user_id=hi.target_id WHERE hi.event_id=? AND hi.target_table='users' AND att.attended_on>DATE(?) AND att.attended_on<=DATE_ADD(DATE(?),INTERVAL {$daysAfter} DAY)";
+                    $q = $pdo->prepare($sql);
+                    $q->execute([$eventId, $event['ends_at'], $event['ends_at']]);
+                    $followup[] = ['label' => $daysAfter . '-day church attendance', 'value' => (int) $q->fetchColumn()];
+                }
+            } catch (Throwable $e) {
+                error_log('SE insights/followup: ' . $e->getMessage());
+                $followup = [];
             }
         }
     }
@@ -119,7 +126,7 @@ function se_insights(PDO $pdo, array $event): array
         'funnel' => [['label' => 'Portal views', 'value' => $scalar("SELECT COALESCE(SUM(value),0) FROM se_metrics_daily WHERE event_id=? AND metric='view'", [$eventId])], ['label' => 'Registration starts', 'value' => $scalar("SELECT COALESCE(SUM(value),0) FROM se_metrics_daily WHERE event_id=? AND metric='reg_start'", [$eventId])], ['label' => 'Registered', 'value' => $counts['registrations']], ['label' => 'Checked in', 'value' => $counts['checked_in']]],
         'channels' => $group("SELECT COALESCE(NULLIF(src,''),'direct') label, COUNT(*) value FROM se_registrations WHERE event_id=? AND is_test=0 GROUP BY label ORDER BY value DESC", [$eventId]),
         'gender' => $group("SELECT COALESCE(gender,'Not given') label, COUNT(*) value FROM se_registrations WHERE event_id=? AND is_test=0 GROUP BY label", [$eventId]),
-        'teams' => $group("SELECT COALESCE(t.name, CONCAT('Team ',t.color_label)) label, COUNT(DISTINCT c.registration_id) value FROM se_teams t LEFT JOIN se_registrations r ON r.team_id=t.id LEFT JOIN se_checkins c ON c.registration_id=r.id AND c.event_id=t.event_id WHERE t.event_id=? GROUP BY t.id ORDER BY t.sort_order", [$eventId]),
+        'teams' => $group("SELECT COALESCE(t.name, CONCAT('Team ',t.color_label)) label, COUNT(DISTINCT c.registration_id) value FROM se_teams t LEFT JOIN se_registrations r ON r.team_id=t.id LEFT JOIN se_checkins c ON c.registration_id=r.id AND c.event_id=t.event_id WHERE t.event_id=? GROUP BY t.id, t.name, t.color_label, t.sort_order ORDER BY t.sort_order", [$eventId]),
         'feedback' => $feedback,
         'handoff' => se_table_exists($pdo, 'se_handoff_items') ? $group("SELECT CONCAT(destination, ': ', outcome) label, COUNT(*) value FROM se_handoff_items WHERE event_id=? GROUP BY destination,outcome ORDER BY value DESC", [$eventId]) : [],
         'series' => $series,
@@ -202,10 +209,17 @@ function se_handoff_push(PDO $pdo, array $event, array $options, array $override
 
         try {
             foreach ($batch as $item) {
-                if (isset($overrideMap[$item['registration_id']])) {
+                // A reviewer may send a ready person to the other team or
+                // hold them back — never the reverse. Consent, an opt-out,
+                // membership and an earlier hand-off are not overridable:
+                // before this check a crafted request could push someone who
+                // never agreed to be contacted.
+                if (isset($overrideMap[$item['registration_id']]) && $item['reason'] === 'ready') {
                     $o = $overrideMap[$item['registration_id']];
                     $item['destination'] = se_enum($o['destination'] ?? 'none', ['reach', 'embrace', 'none'], 'none');
-                    $item['reason'] = $item['destination'] === 'none' ? 'skipped_excluded' : 'ready';
+                    if ($item['destination'] === 'none') {
+                        $item['reason'] = 'skipped_excluded';
+                    }
                 }
                 $outcome = $item['reason'];
                 $targetTable = null;

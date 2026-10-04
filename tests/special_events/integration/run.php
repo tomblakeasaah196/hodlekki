@@ -770,6 +770,31 @@ if (!se_table_exists($pdo, 'se_handoffs')) {
     $q=$pdo->prepare("SELECT COUNT(*) FROM se_handoff_items WHERE event_id=? AND outcome IN ('created','linked_existing')"); $q->execute([(int)$hEvent['id']]);
     is_same('one successful hand-off item after rerun', 1, (int)$q->fetchColumn());
     ok('rerun records the already-handed-off outcome', (int)($second['counts']['already_handed_off']??0) >= 1);
+
+    // An override may hold a ready person back, never push someone who did
+    // not consent (or opted out, or is a member) — that is the whole point
+    // of reviewing before anything leaves Envision.
+    $noConsent = se_it_register($pdo, $hEvent, 9902);
+    $noConsentId = (int) ($noConsent['registration']['id'] ?? 0);
+    $pdo->prepare("UPDATE se_registrations SET first_checkin_at=NOW() WHERE id=?")->execute([$noConsentId]);
+    $pdo->prepare("UPDATE se_contacts c JOIN se_registrations r ON r.contact_id=c.id SET c.consent_followup=0 WHERE r.id=?")->execute([$noConsentId]);
+    $held = se_it_register($pdo, $hEvent, 9903);
+    $heldId = (int) ($held['registration']['id'] ?? 0);
+    $pdo->prepare("UPDATE se_registrations SET first_checkin_at=NOW() WHERE id=?")->execute([$heldId]);
+
+    $third = se_handoff_push($pdo, $hEvent, [], [
+        ['registration_id' => $noConsentId, 'destination' => 'reach'],
+        ['registration_id' => $heldId, 'destination' => 'none', 'reason' => 'Asked us not to'],
+    ], 1);
+    $outcome = static function (int $regId) use ($pdo, $third): ?string {
+        $q = $pdo->prepare("SELECT outcome FROM se_handoff_items WHERE handoff_id=? AND registration_id=?");
+        $q->execute([(int) $third['handoff_id'], $regId]);
+        return $q->fetchColumn() ?: null;
+    };
+    is_same('an override cannot hand off someone without consent', 'skipped_no_consent', $outcome($noConsentId));
+    is_same('…but can hold a ready person back', 'skipped_excluded', $outcome($heldId));
+    $q=$pdo->prepare("SELECT COUNT(*) FROM reach_leads WHERE campaign_id=?"); $q->execute([(int)$first['reach_campaign_id']]);
+    is_same('…and no Reach lead was created for either', 1, (int)$q->fetchColumn());
 }
 
 // ==========================================================================

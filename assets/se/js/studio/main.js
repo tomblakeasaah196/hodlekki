@@ -54,6 +54,31 @@ const TABS = {
     settings: SettingsTab,
 };
 
+/**
+ * The tabs in the order a producer meets them: set the event up, run the
+ * night, look after the people, close it out. Seventeen tabs in one row
+ * scrolled off the screen — Insights, Hand-off and Settings were invisible
+ * unless you knew to scroll the tab bar sideways.
+ */
+const GROUPS = [
+    ['Set up', ['overview', 'details', 'brand', 'registration', 'program', 'teams']],
+    ['The night', ['checkin', 'karaoke', 'games', 'live', 'crew', 'assets']],
+    ['People', ['attendees', 'messages']],
+    ['Afterwards', ['insights', 'handoff']],
+    ['', ['settings']],
+];
+
+/** The groups with only the tabs this person and database can open. */
+function tabGroups(tabs) {
+    const known = new Set(GROUPS.flatMap(([, ids]) => ids));
+    const groups = GROUPS
+        .map(([label, ids]) => [label, ids.filter((id) => tabs[id])])
+        .filter(([, ids]) => ids.length);
+    const rest = Object.keys(tabs).filter((id) => !known.has(id));
+    if (rest.length) groups.push(['More', rest]);
+    return groups;
+}
+
 // --------------------------------------------------------------------------
 // Toasts
 // --------------------------------------------------------------------------
@@ -120,6 +145,7 @@ function PreviewDrawer({ open, onClose, event }) {
 function Workspace() {
     const event = current.value;
     const tabs = boot.value?.tabs || {};
+    const groups = tabGroups(tabs);
     const Active = TABS[tab.value] || OverviewTab;
 
     if (currentLoading.value || !event) return html`<${Spinner} label="Opening event…" />`;
@@ -150,21 +176,42 @@ function Workspace() {
                 <span class="text-sm font-bold text-gray-900">${event.title} ${event.edition_label || ''}</span>
             </div>
 
-            <nav class="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1" role="tablist" aria-label="Event sections">
-                ${Object.entries(tabs).map(([id, label]) => html`
-                <button key=${id} type="button" role="tab" id=${'se-tab-' + id}
-                    aria-selected=${tab.value === id} aria-controls="se-tabpanel"
-                    onClick=${() => switchTo(id)}
-                    class=${'px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors shrink-0 '
-                        + (tab.value === id
-                            ? 'bg-hodBlue text-white shadow-sm'
-                            : 'text-gray-600 hover:text-hodBlue hover:bg-blue-50')}>
-                    ${label}
-                </button>`)}
-            </nav>
+            <div class="lg:hidden">
+                <label class="block text-xs font-semibold text-gray-500 mb-1" for="se-tab-select">Section</label>
+                <select id="se-tab-select" onChange=${(e) => switchTo(e.currentTarget.value)}
+                    class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-900 focus:border-hodBlue outline-none">
+                    ${groups.map(([label, ids]) => html`
+                        <optgroup key=${label || 'end'} label=${label || 'Event'}>
+                            ${ids.map((id) => html`<option key=${id} value=${id} selected=${tab.value === id}>${tabs[id]}</option>`)}
+                        </optgroup>`)}
+                </select>
+            </div>
 
-            <div id="se-tabpanel" role="tabpanel" aria-labelledby=${'se-tab-' + tab.value}>
-                <${Active} />
+            <div class="lg:grid lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:gap-8 lg:items-start">
+                <nav class="hidden lg:block sticky top-6 space-y-5" aria-label="Event sections">
+                    ${groups.map(([label, ids]) => html`
+                        <div key=${label || 'end'} class=${label ? '' : 'pt-4 border-t border-gray-200'}>
+                            ${label ? html`<p class="px-3 mb-1.5 text-[11px] font-bold tracking-widest uppercase text-gray-400">${label}</p>` : null}
+                            <ul class="space-y-0.5" role="tablist" aria-orientation="vertical">
+                                ${ids.map((id) => html`
+                                    <li key=${id}>
+                                        <button type="button" role="tab" id=${'se-tab-' + id}
+                                            aria-selected=${tab.value === id} aria-controls="se-tabpanel"
+                                            onClick=${() => switchTo(id)}
+                                            class=${'w-full text-left px-3 py-2 rounded-xl text-sm font-semibold transition-colors '
+                                                + (tab.value === id
+                                                    ? 'bg-hodBlue text-white shadow-sm'
+                                                    : 'text-gray-600 hover:text-hodBlue hover:bg-blue-50')}>
+                                            ${tabs[id]}
+                                        </button>
+                                    </li>`)}
+                            </ul>
+                        </div>`)}
+                </nav>
+
+                <div id="se-tabpanel" role="tabpanel" aria-labelledby=${'se-tab-' + tab.value} class="min-w-0">
+                    <${Active} />
+                </div>
             </div>
         </div>`;
 }
