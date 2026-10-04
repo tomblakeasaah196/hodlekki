@@ -244,6 +244,17 @@ const SE_COPYWRITE_LIMITS = [
     'card_headline'  => 'at most 6 words',
 ];
 
+/** Maximum characters kept after AI generation for each copywriting purpose. */
+const SE_COPYWRITE_CHAR_LIMITS = [
+    'tagline'        => 180,
+    'description'    => 1200,
+    'activity_blurb' => 320,
+    'faq_answer'     => 900,
+    'sms_reminder'   => 220,
+    'sms_thanks'     => 220,
+    'card_headline'  => 120,
+];
+
 const SE_REGISTER_MIN_FILL_MS = 1500;
 
 const SE_MANAGE_TOKEN_LENGTH = 22;

@@ -983,20 +983,12 @@ try {
             'facts'     => implode('; ', $facts),
         ], ['event_id' => (int) $event['id'], 'user_id' => $userId]);
 
-        // SMS copy must survive sms_segments() before anyone can apply it.
-        $variants = array_values(array_filter(array_map(
-            static fn($v) => se_line($v, 600),
-            (array) ($result['variants'] ?? [])
-        )));
+        // Nothing is applied automatically: the Studio shows these for
+        // human review. SMS copy must survive sms_segments() before use, while
+        // portal descriptions keep enough room for the 120-word limit.
+        $variants = se_ai_copywrite_variants($result, $purpose);
 
-        if (str_starts_with($purpose, 'sms_') && function_exists('sms_segments')) {
-            $variants = array_values(array_filter($variants, static function (string $text): bool {
-                $info = sms_segments(str_replace('{{link}}', str_repeat('x', 53), $text));
-                return ((int) ($info['pages'] ?? 1)) <= 2 && ($info['encoding'] ?? '') === 'GSM-7';
-            }));
-        }
-
-        se_api_success('Here are three.', ['variants' => array_slice($variants, 0, 3), 'purpose' => $purpose]);
+        se_api_success('Here are three.', ['variants' => $variants, 'purpose' => $purpose]);
     }
 
 

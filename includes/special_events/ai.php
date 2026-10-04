@@ -24,7 +24,7 @@ interface SeAiProvider
 {
     /**
      * @param array $request {system, parts, temperature, schema, max_tokens, model, timeout, thinking_budget?}
-     * @return array{text: string, http_status: int, usage: array, model: string}
+     * @return array{text: string, http_status: int, usage: array, model: string, finish_reason?: string}
      */
     public function generate(array $request): array;
 }
@@ -51,7 +51,8 @@ class SeAiGemini implements SeAiProvider
         if (!empty($request['schema'])) {
             $generationConfig['responseSchema'] = se_schema_to_openapi($request['schema']);
         }
-        if (isset($request['thinking_budget'])) {
+        if (isset($request['thinking_budget'])
+            && se_ai_model_allows_thinking_budget($model, (int) $request['thinking_budget'])) {
             $generationConfig['thinkingConfig'] = ['thinkingBudget' => (int) $request['thinking_budget']];
         }
 
@@ -99,8 +100,9 @@ class SeAiGemini implements SeAiProvider
             );
         }
 
+        $candidate = $decoded['candidates'][0] ?? [];
         $text = '';
-        foreach ($decoded['candidates'][0]['content']['parts'] ?? [] as $part) {
+        foreach ($candidate['content']['parts'] ?? [] as $part) {
             if (isset($part['text'])) {
                 $text .= (string) $part['text'];
             }
@@ -111,9 +113,12 @@ class SeAiGemini implements SeAiProvider
             'http_status' => $status,
             'model'       => $model,
             'usage'       => [
-                'input'  => (int) ($decoded['usageMetadata']['promptTokenCount'] ?? 0),
-                'output' => (int) ($decoded['usageMetadata']['candidatesTokenCount'] ?? 0),
+                'input'    => (int) ($decoded['usageMetadata']['promptTokenCount'] ?? 0),
+                'output'   => (int) ($decoded['usageMetadata']['candidatesTokenCount'] ?? 0),
+                'thinking' => (int) ($decoded['usageMetadata']['thoughtsTokenCount'] ?? 0),
+                'total'    => (int) ($decoded['usageMetadata']['totalTokenCount'] ?? 0),
             ],
+            'finish_reason' => (string) ($candidate['finishReason'] ?? ''),
         ];
     }
 }
@@ -240,6 +245,33 @@ function se_ai_render_prompt(string $template, array $vars): string
     return strtr($template, $map);
 }
 
+/**
+ * Gemini only accepts `thinkingConfig` on the newer thinking-capable models.
+ * Default text generation is `gemini-2.5-flash`, where a zero budget disables
+ * thinking for simple copy tasks. If a site overrides the model to an older
+ * non-thinking name, omitting the field is safer than sending an unsupported
+ * generationConfig key.
+ */
+function se_ai_model_allows_thinking_budget(string $model, int $budget): bool
+{
+    $m = strtolower($model);
+    if (str_contains($m, 'thinking')) {
+        return true;
+    }
+    if (!str_contains($m, 'gemini-2.5')) {
+        return false;
+    }
+
+    // Gemini 2.5 Pro requires thinking; do not send the Flash-specific
+    // "disable thinking" budget when an administrator has overridden the
+    // model to Pro. A positive low budget is still allowed.
+    if ($budget <= 0 && str_contains($m, 'pro')) {
+        return false;
+    }
+
+    return true;
+}
+
 // --------------------------------------------------------------------------
 // Schema validation (§15.1)
 // --------------------------------------------------------------------------
@@ -358,6 +390,62 @@ function se_schema_to_openapi(array $schema): array
     return $out;
 }
 
+/** True when Gemini reports, or usage suggests, a response was cut off. */
+function se_ai_response_looks_truncated(?string $finishReason, array $usage, int $maxTokens): bool
+{
+    $reason = strtoupper(trim((string) $finishReason));
+    if (in_array($reason, ['MAX_TOKENS', 'LENGTH', 'TOKEN_LIMIT'], true)) {
+        return true;
+    }
+
+    $outputTokens = (int) ($usage['output'] ?? 0);
+    return $maxTokens > 0 && $outputTokens > 0 && $outputTokens >= max(1, $maxTokens - 8);
+}
+
+/**
+ * A retry may fail again for the same reason unless the token ceiling grows.
+ * Cap at the largest prompt currently used by the module so a malformed answer
+ * cannot accidentally turn into an unbounded, expensive loop.
+ */
+function se_ai_retry_max_tokens(int $maxTokens): int
+{
+    return min(8192, max($maxTokens + 1024, $maxTokens * 2));
+}
+
+/**
+ * Summarise bad model output without quoting any of it. The summary is safe to
+ * show to the user or send back as the retry hint: no raw prompt, response,
+ * secrets or attendee details are included.
+ */
+function se_ai_json_problem(string $text, ?string $finishReason, array $usage, int $maxTokens): string
+{
+    if (trim($text) === '') {
+        $problem = 'the model returned an empty response instead of JSON';
+    } elseif (json_last_error() !== JSON_ERROR_NONE) {
+        $problem = 'the model returned malformed JSON (' . json_last_error_msg() . ')';
+    } else {
+        $problem = 'the top-level JSON value was not an object';
+    }
+
+    if (se_ai_response_looks_truncated($finishReason, $usage, $maxTokens)) {
+        $problem .= '; it appears to have been truncated before the JSON was closed';
+    }
+
+    return $problem;
+}
+
+/** A concise, non-sensitive correction sent on the one invalid-output retry. */
+function se_ai_retry_hint(array $problems): string
+{
+    $summary = $problems
+        ? implode('; ', array_slice(array_map('strval', $problems), 0, 6))
+        : 'the response was missing, malformed or did not match the schema';
+
+    return 'Your previous output was invalid because: ' . $summary
+        . '. Return one complete JSON object only, matching the schema exactly. '
+        . 'Do not include Markdown, commentary or trailing text; close every string, array and object.';
+}
+
 // --------------------------------------------------------------------------
 // se_ai()
 // --------------------------------------------------------------------------
@@ -366,7 +454,7 @@ function se_schema_to_openapi(array $schema): array
  * Run an AI task and return validated, post-processed data.
  *
  * @param array $input Task-specific variables. MUST NOT hold attendee PII.
- * @param array $ctx   {user_id?, event_id?, parts?: extra inlineData parts, vision?: bool}
+ * @param array $ctx   {user_id?, event_id?, parts?: extra inlineData parts, vision?: bool, provider?: SeAiProvider}
  * @throws SeAiException AI_UNAVAILABLE | AI_INVALID_OUTPUT | AI_LIMIT | AI_TIMEOUT
  */
 function se_ai(PDO $pdo, string $task, array $input, array $ctx = []): array
@@ -414,24 +502,31 @@ function se_ai(PDO $pdo, string $task, array $input, array $ctx = []): array
         $request['thinking_budget'] = $prompt['thinking_budget'];
     }
 
-    $provider = new SeAiGemini($apiKey);
+    $provider = ($ctx['provider'] ?? null) instanceof SeAiProvider
+        ? $ctx['provider']
+        : new SeAiGemini($apiKey);
     $attempt  = 0;
     $lastProblems = [];
 
     while ($attempt < 2) {
         $attempt++;
         $startedAt = microtime(true);
-        $usage     = ['input' => 0, 'output' => 0];
+        $usage     = ['input' => 0, 'output' => 0, 'thinking' => 0, 'total' => 0];
         $httpStatus = null;
         $errorCode = null;
+        $retryShouldExpandTokens = false;
 
         try {
             $response   = $provider->generate($request);
-            $usage      = $response['usage'];
-            $httpStatus = $response['http_status'];
+            $usage      = is_array($response['usage'] ?? null) ? $response['usage'] : $usage;
+            $httpStatus = isset($response['http_status']) ? (int) $response['http_status'] : null;
+            $finishReason = (string) ($response['finish_reason'] ?? '');
+            $text = (string) ($response['text'] ?? '');
 
-            $decoded = json_decode($response['text'], true);
+            $decoded = json_decode($text, true);
             if (!is_array($decoded)) {
+                $lastProblems = [se_ai_json_problem($text, $finishReason, $usage, (int) $request['max_tokens'])];
+                $retryShouldExpandTokens = se_ai_response_looks_truncated($finishReason, $usage, (int) $request['max_tokens']);
                 throw new SeAiException('AI_INVALID_OUTPUT', 'The AI did not return usable JSON.');
             }
 
@@ -460,11 +555,14 @@ function se_ai(PDO $pdo, string $task, array $input, array $ctx = []): array
                 continue;
             }
             if ($errorCode === 'AI_INVALID_OUTPUT') {
-                // Retry once with a hint naming what was wrong (§15.1).
+                // Retry once with a non-sensitive hint naming what was wrong.
+                // If Gemini stopped because of MAX_TOKENS, the retry also gets
+                // a larger output budget; otherwise the same ceiling is kept.
+                if ($retryShouldExpandTokens) {
+                    $request['max_tokens'] = se_ai_retry_max_tokens((int) $request['max_tokens']);
+                }
                 $request['parts'] = array_merge($parts, [[
-                    'text' => 'Your previous output was invalid because: '
-                        . implode('; ', array_slice($lastProblems, 0, 6))
-                        . '. Return only JSON matching the schema.',
+                    'text' => se_ai_retry_hint($lastProblems),
                 ]]);
                 continue;
             }
@@ -598,6 +696,35 @@ function se_ai_job_mark_applied(PDO $pdo, int $jobId, ?int $actorId): void
     $job = se_ai_job_find($pdo, $jobId);
     se_audit($pdo, $job ? (int) $job['event_id'] : null, 'ai_job_apply',
         ['task' => $job['task'] ?? null], 'ai_job', $jobId, $actorId);
+}
+
+// --------------------------------------------------------------------------
+// Task: copywrite (§15.8)
+// --------------------------------------------------------------------------
+
+/**
+ * Clean the copywriter variants after schema validation. This deliberately
+ * keeps longer portal descriptions intact (up to the purpose-specific cap)
+ * while still enforcing the SMS GSM/page checks before a human can use one.
+ *
+ * @return string[] At most three human-review variants.
+ */
+function se_ai_copywrite_variants(array $result, string $purpose): array
+{
+    $maxChars = max(60, (int) (SE_COPYWRITE_CHAR_LIMITS[$purpose] ?? 600));
+    $variants = array_values(array_filter(array_map(
+        static fn($v) => se_line($v, $maxChars),
+        (array) ($result['variants'] ?? [])
+    )));
+
+    if (str_starts_with($purpose, 'sms_') && function_exists('sms_segments')) {
+        $variants = array_values(array_filter($variants, static function (string $text): bool {
+            $info = sms_segments(str_replace('{{link}}', str_repeat('x', 53), $text));
+            return ((int) ($info['pages'] ?? 1)) <= 2 && ($info['encoding'] ?? '') === 'GSM-7';
+        }));
+    }
+
+    return array_slice($variants, 0, 3);
 }
 
 // --------------------------------------------------------------------------

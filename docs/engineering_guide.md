@@ -2348,17 +2348,18 @@ function se_ai(PDO $pdo, string $task, array $input, array $ctx): array;
       'responseMimeType' => 'application/json',
       'responseSchema' => $prompt['schema'],               // OpenAPI-subset schema (Appendix D)
       'maxOutputTokens' => $prompt['max_tokens'],
+      'thinkingConfig' => ['thinkingBudget' => $prompt['thinking_budget']], // only when the model supports it
   ],
 ]
 ```
 
-- **Response**: concatenate `candidates[0].content.parts[*].text`, `json_decode`, then validate against the task's schema with `se_schema_validate()` (types, required keys, enums, string lengths, array bounds). Then run task post-processing (hex normalisation, KJV fetch, dedupe, mapping). Failure → one automatic retry with a "Your previous output was invalid because …" hint → then `AI_INVALID_OUTPUT`.
-- **Reasoning budget**: for extraction tasks (programme, songs, clustering) latency matters more than deep reasoning. If the configured model supports a thinking budget (`generationConfig.thinkingConfig`), set a low budget per task in the prompt front matter (`thinking_budget`). Verify support for the chosen model; omit the field otherwise.
+- **Response**: concatenate `candidates[0].content.parts[*].text`, `json_decode`, then validate against the task's schema with `se_schema_validate()` (types, required keys, enums, string lengths, array bounds). Then run task post-processing (hex normalisation, KJV fetch, dedupe, mapping). Failure → one automatic retry with a non-sensitive "Your previous output was invalid because …" hint → then `AI_INVALID_OUTPUT`. When Gemini reports `finishReason = MAX_TOKENS` or usage reaches the configured ceiling, the retry also raises the output-token budget so it is not a repeat of the same truncation.
+- **Reasoning budget**: for extraction tasks (programme, songs, clustering) latency matters more than deep reasoning. If the configured model supports a thinking budget (`generationConfig.thinkingConfig`), set a low budget per task in the prompt front matter (`thinking_budget`). Simple copywriting uses `thinking_budget: 0` on Gemini 2.5 Flash so visible output tokens are spent on the reviewed variants, not hidden reasoning. Verify support for the chosen model; omit the field otherwise.
 - **Timeouts/retries**: text 30 s, vision 60 s (cURL `CURLOPT_TIMEOUT`). One retry on HTTP 429/500/503 after 1.5 s. Missing key or cURL → `AI_UNAVAILABLE`, and the UI hides the AI buttons with a tooltip.
 - **Limits**: per user 30 calls/hour, per event 300/day (`se_ai_requests` counts). Images are downscaled client-side to ≤ 2048 px (JPEG 0.85) before upload. PDFs ≤ 10 MB. Total request ≤ 18 MB.
-- **Logging**: every call writes `se_ai_requests` (user, event, task, model, prompt version, input/output tokens from `usageMetadata`, latency, ok/error). The prompt text and outputs are kept in `se_ai_jobs.result_json` for review, never in PHP logs.
+- **Logging**: every call writes `se_ai_requests` (user, event, task, model, prompt version, token counts from `usageMetadata`, latency, ok/error). This request log never stores raw prompts, raw outputs, secrets or attendee data. Review jobs may store the already-validated result needed for a human Apply step, but PHP/error logs must never include prompt text or model output.
 - **Privacy rule (MUST)**: AI inputs never contain names, phones or emails of attendees. Feud clustering sends anonymous answer strings only. The report narrative sends aggregates only.
-- **Prompts**: `includes/special_events/prompts/<task>.md` with front matter (`version`, `temperature`, `max_tokens`) and a system prompt. Schemas live next to them as `<task>.schema.json`. Changing a prompt bumps its version (logged per call).
+- **Prompts**: `includes/special_events/prompts/<task>.md` with front matter (`version`, `temperature`, `max_tokens`, optional `thinking_budget`) and a system prompt. Schemas live next to them as `<task>.schema.json`. Changing a prompt bumps its version (logged per call).
 - **Human in the loop**: AI output is **never applied automatically**. Every task ends in a review UI (diff/preview, edit, then Apply), and applied rows are marked `source = 'ai'`.
 
 ### 15.2 Palette suggestions (`palette_suggest`)
@@ -2405,7 +2406,7 @@ function se_ai(PDO $pdo, string $task, array $input, array $ctx): array;
 ### 15.8 Copywriting (`copywrite`)
 
 - Purposes: `tagline` (≤ 12 words), `description` (≤ 120 words), `activity_blurb` (≤ 25 words), `faq_answer`, `sms_reminder`/`sms_thanks` (GSM-7 only, ≤ 150 chars excluding `{{link}}`), `card_headline`.
-- Input: event facts (title, edition, date, venue, activities, tone words). Output: `{variants: [3 strings]}`. SMS variants are checked with `sms_segments()` and must be GSM-7 and ≤ 2 pages including a typical link.
+- Input: event facts (title, edition, date, venue, activities, tone words). Output: `{variants: [3 strings]}`. The schema requires exactly three strings and permits enough characters for a full 120-word portal description; the prompt budgets 4096 visible output tokens and disables Gemini 2.5 Flash thinking for this simple task. SMS variants are checked with `sms_segments()` and must be GSM-7 and ≤ 2 pages including a typical link.
 
 ### 15.9 Bible lookup (not AI)
 
@@ -3280,6 +3281,7 @@ Every design change made during the build is logged here (newest last), and the 
 | 2026-10-04 | PR6 | H.3 | The automated party-game scoring/privacy checks were run, but the physical dress rehearsal (20 phones on venue Wi-Fi, projector and sound) could not be performed in the build environment. Its step-by-step runbook is in `how_to_use.md` §22 and remains required before Chara. | H.3 depends on the venue, crew, projector, licensed sound and 20 real devices; claiming it passed in a headless repository runner would be false. |
 | 2026-10-04 | PR6 | §13.1.6, §14.2 | The licensed SFX sprite and the PR4-deferred Format Studio remain deferred. Party games continue to degrade silently without the sprite; PR3's poster/card renderer is unchanged. | Neither item is in PR6's Build list. The sprite still requires an owner-approved licensed source, and absorbing the separate Format Studio delivery into the games/finale PR would violate the scope rule. |
 | 2026-10-04 | PR7 | §22.2, Appendix H.5 | The hand-off idempotency, report privacy and insight-count tests were added/reviewed, but the database-backed migration and integration suite and browser smoke could not be executed in the build runner. | The runner has no PHP or database runtime, Debian package mirrors are unreachable, and the pinned Tailwind binary host was also unreachable. JavaScript tests (118 checks) and `git diff --check` passed; CI supplies repository PHP lint. Run A.9–A.10 twice on scratch MySQL 8 and MariaDB and perform H.5 before merge. |
+| 2026-10-04 | AI copywriter hotfix | §15.1, §15.8, Appendix D.7 | `copywrite` moved to prompt version 2 with `max_tokens: 4096`, `thinking_budget: 0` for Gemini 2.5 Flash, an exact-three-variants schema and a 1200-character description post-processing cap. Invalid JSON retries now name parse/truncation problems without echoing model output and raise the output-token budget when `MAX_TOKENS` is reported. | Production showed portal-description generation failing with “The AI did not return usable JSON” while shorter taglines worked. The old 1024-token ceiling could be consumed by hidden thinking and truncate the JSON before it closed; the 600-character API clamp also left less room than a 120-word description. |
 
 ---
 
@@ -4539,14 +4541,19 @@ Output JSON only, matching the schema.
 
 ```text
 ---
-version: 1
+version: 2
 temperature: 0.9
-max_tokens: 1024
+max_tokens: 4096
+thinking_budget: 0
 ---
-Write {{count}} options of {{purpose}} for {{title}} {{edition}} by {{organizer}}: {{facts}}.
+Write exactly {{count}} distinct options of {{purpose}} for {{title}} {{edition}} by {{organizer}}: {{facts}}.
 Tone: joyful, warm, inclusive of guests who don't attend church yet, Nigerian-English friendly, no clichés, no hashtags unless asked.
-Length limit: {{limit}}. For SMS: plain GSM-7 characters only (no emoji, no curly quotes) and keep the literal token {{link}} if provided.
-Output JSON only: {"variants": ["…", "…", "…"]}.
+Length limit for each option: {{limit}}. For SMS: plain GSM-7 characters only (no emoji, no curly quotes) and keep the literal token {{link}} if provided.
+Output one complete JSON object only, matching this shape exactly: {"variants": ["…", "…", "…"]}.
+```
+
+```json
+{ "type": "object", "required": ["variants"], "properties": { "variants": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "string", "minLength": 2, "maxLength": 1200 } } } }
 ```
 
 ### D.8 `report_summary.md`
