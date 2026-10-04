@@ -6,20 +6,30 @@
 // inert: the browser never executes it, so the CSP in §19.7 needs no
 // 'unsafe-inline' for script and a hostile value cannot become code.
 
-/** @returns {object} the parsed boot payload, or {} when it is missing. */
-export function readBoot(id = 'se-boot') {
-    const node = document.getElementById(id);
-    if (!node) {
-        console.warn('[se] boot payload #' + id + ' is missing');
-        return {};
+/**
+ * The boot payload for whichever surface is loaded.
+ *
+ * Public surfaces emit #se-boot (e/index.php); the Studio emits
+ * #se-studio-boot (modules/special_events/index.php). Both are read here so
+ * that shared code — above all the CSRF token @se/core/api.js attaches to
+ * every crew and Studio call — works on either page.
+ *
+ * @returns {object} the parsed payload, or {} when there is none.
+ */
+export function readBoot(ids = ['se-boot', 'se-studio-boot']) {
+    for (const id of [].concat(ids)) {
+        const node = document.getElementById(id);
+        if (!node) continue;
+
+        try {
+            return JSON.parse(node.textContent || '{}');
+        } catch (e) {
+            console.error('[se] boot payload #' + id + ' is not valid JSON', e);
+            return {};
+        }
     }
 
-    try {
-        return JSON.parse(node.textContent || '{}');
-    } catch (e) {
-        console.error('[se] boot payload is not valid JSON', e);
-        return {};
-    }
+    return {};
 }
 
 /** Honour the viewer's motion preference once, at boot (§13.1.4). */

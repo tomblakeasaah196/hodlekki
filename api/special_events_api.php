@@ -60,6 +60,35 @@ function se_studio_event(PDO $pdo, array $body, string $capability): array
     return $event;
 }
 
+/**
+ * Resolve an asset by its own id (§12.5 `asset_update {id, …}`) and check a
+ * capability on the event that owns it.
+ *
+ * Asset actions name the ASSET in `id`, unlike every other Studio action, so
+ * the event is derived here rather than taken from the request — which also
+ * means a caller cannot pass someone else's asset with their own event id.
+ *
+ * @return array{0: array, 1: array} [asset, event]
+ */
+function se_studio_asset(PDO $pdo, array $body, string $capability): array
+{
+    $assetId = se_int($body['id'] ?? 0, 1);
+    $asset   = $assetId > 0 ? se_asset_find($pdo, $assetId) : null;
+
+    if (!$asset || $asset['deleted_at'] !== null || empty($asset['event_id'])) {
+        se_api_error('That file is no longer in this event.', 'EVENT_NOT_FOUND');
+    }
+
+    $event = se_event_find($pdo, (int) $asset['event_id']);
+    if (!$event) {
+        se_api_error('That event no longer exists.', 'EVENT_NOT_FOUND');
+    }
+
+    se_require_capability($pdo, (int) $event['id'], $capability);
+
+    return [$asset, $event];
+}
+
 /** The expected_row_version an update must carry. */
 function se_studio_version(array $body): int
 {
@@ -738,23 +767,26 @@ try {
     }
 
     case 'asset_update': {
-        $event = se_studio_event($pdo, $body, 'assets.manage');
-        $asset = se_asset_update($pdo, (int) $event['id'], se_int($body['id'] ?? 0, 1), [
+        [$asset, $event] = se_studio_asset($pdo, $body, 'assets.manage');
+
+        $updated = se_asset_update($pdo, (int) $event['id'], (int) $asset['id'], [
             'title'    => $body['title'] ?? null,
             'alt_text' => $body['alt_text'] ?? null,
             'role'     => $body['role'] ?? null,
         ], $userId);
 
-        se_api_success('Saved.', ['asset' => se_studio_asset_payload($asset)]);
+        se_api_success('Saved.', ['asset' => se_studio_asset_payload($updated)]);
     }
 
     case 'asset_delete': {
-        $event = se_studio_event($pdo, $body, 'assets.manage');
-        se_asset_delete($pdo, (int) $event['id'], se_int($body['id'] ?? 0, 1), $userId);
+        [$asset, $event] = se_studio_asset($pdo, $body, 'assets.manage');
+        $eventId = (int) $event['id'];
+
+        se_asset_delete($pdo, $eventId, (int) $asset['id'], $userId);
 
         se_api_success('File removed.', [
-            'assets' => array_map('se_studio_asset_payload', se_asset_list($pdo, (int) $event['id'])),
-            'event'  => se_studio_event_payload($pdo, se_event_find($pdo, (int) $event['id']) ?? [], $userId, $accessLevel, true),
+            'assets' => array_map('se_studio_asset_payload', se_asset_list($pdo, $eventId)),
+            'event'  => se_studio_event_payload($pdo, se_event_find($pdo, $eventId) ?? [], $userId, $accessLevel, true),
         ]);
     }
 
@@ -843,16 +875,24 @@ try {
     }
 
     case 'crew_revoke': {
-        $event   = se_studio_event($pdo, $body, 'event.crew');
-        $eventId = (int) $event['id'];
-        $crewId  = se_int($body['id'] ?? 0, 1);
+        // §12.5 names the CREW ROW in `id`, so the event is derived from it
+        // rather than taken from the request — a caller cannot pair someone
+        // else's crew row with an event they happen to control.
+        $crewId = se_int($body['id'] ?? 0, 1);
 
-        $stmt = $pdo->prepare("SELECT * FROM se_crew WHERE id = ? AND event_id = ?");
-        $stmt->execute([$crewId, $eventId]);
+        $stmt = $pdo->prepare("SELECT * FROM se_crew WHERE id = ?");
+        $stmt->execute([$crewId]);
         $row = $stmt->fetch();
         if (!$row) {
             se_api_error('That crew member is no longer on this event.', 'EVENT_NOT_FOUND');
         }
+
+        $eventId = (int) $row['event_id'];
+        $event   = se_event_find($pdo, $eventId);
+        if (!$event) {
+            se_api_error('That event no longer exists.', 'EVENT_NOT_FOUND');
+        }
+        se_require_capability($pdo, $eventId, 'event.crew');
 
         // The last Producer must not be removed: H.1 requires one, and
         // without it nobody could edit the event again.
