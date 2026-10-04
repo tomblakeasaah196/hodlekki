@@ -800,6 +800,231 @@
   .se-status-pill[data-status="waitlisted"] { background: color-mix(in oklab, var(--se-warning) 22%, transparent); color: var(--se-warning); }
   .se-status-pill[data-status="cancelled"] { background: color-mix(in oklab, var(--se-danger) 22%, transparent); color: var(--se-danger); }
 
+
+  /* ------------------------------------------------------------------ *
+   * Check-in, teams and the live surfaces (§13.6, §13.8–§13.11)
+   * ------------------------------------------------------------------ */
+
+  .se-btn-wide { width: 100%; justify-content: center; }
+
+  .se-team-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1.25rem;
+    border-radius: 999px;
+    background: var(--team-color, var(--se-primary));
+    color: var(--team-on, var(--se-on-primary));
+    font-weight: 800;
+    line-height: 1.1;
+  }
+  /* A black team on a near-black stage needs an outline to exist at all
+   * (§13.2.4). The name is always present too: colour is never the only cue. */
+  .se-team-badge-ring {
+    box-shadow:
+      0 0 0 2px rgb(255 255 255 / 0.85),
+      0 0 24px color-mix(in oklab, var(--team-color, var(--se-primary)) 70%, transparent);
+  }
+
+  .se-player-no {
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: clamp(2.5rem, 12vw, 5rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  .se-verse {
+    margin: 0;
+    padding: 1.25rem;
+    border-inline-start: 3px solid var(--se-accent);
+    border-radius: 0 var(--radius-card) var(--radius-card) 0;
+    background: var(--se-surface-2);
+    display: grid;
+    gap: 0.75rem;
+  }
+  .se-script { font-family: var(--font-script, "Great Vibes", cursive); font-size: 1.375rem; }
+
+  /* A transfer code read out loud across a noisy foyer: big, spaced, and
+   * tabular so 1 and 7 cannot be confused. */
+  .se-code-big {
+    font-size: clamp(2rem, 9vw, 3.25rem);
+    font-weight: 800;
+    letter-spacing: 0.3em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The check-in reveal: a circle of team colour that swallows the screen
+   * and fades. Purely decorative, and removed by reduced motion below. */
+  .se-team-wipe {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    pointer-events: none;
+    background: radial-gradient(circle at 50% 55%,
+      color-mix(in oklab, var(--team-color, var(--se-primary)) 85%, transparent) 0%,
+      transparent 70%);
+    animation: se-wipe 900ms ease-out forwards;
+  }
+  @keyframes se-wipe {
+    from { opacity: 0; transform: scale(0.2); }
+    40%  { opacity: 0.9; }
+    to   { opacity: 0; transform: scale(2.2); }
+  }
+
+  /* --- Displays (§13.8, §13.9) -------------------------------------- */
+
+  .se-display {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: var(--se-bg);
+    overflow: hidden;
+  }
+  /* A fixed 16:9 frame scaled to the screen: every size inside is in cqw/cqh,
+   * so one layout is correct on a 1080p projector and a 4K TV alike. */
+  .se-frame {
+    aspect-ratio: 16 / 9;
+    width: min(100vw, calc(100vh * 16 / 9));
+    height: min(100vh, calc(100vw * 9 / 16));
+    container-type: size;
+    position: relative;
+  }
+  .se-scene {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    align-content: center;
+    gap: 2cqh;
+    padding: 6cqw;
+    opacity: 0;
+    transition: opacity 400ms ease;
+  }
+  .se-scene[data-on="1"] { opacity: 1; }
+  .se-scene-title {
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: 9cqw;
+    font-weight: 800;
+    line-height: 0.95;
+    color: var(--se-text);
+    text-shadow: 0 0 6cqw color-mix(in oklab, var(--se-glow) 60%, transparent);
+  }
+  .se-scene-sub { font-size: 3.2cqw; color: var(--se-text-muted); }
+  .se-scene-body { font-size: 2.6cqw; }
+  .se-scene-counter { font-size: 6cqw; font-weight: 800; }
+
+  .se-start-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: grid;
+    place-items: center;
+    background: var(--se-bg);
+    text-align: center;
+  }
+
+  .se-dot-live {
+    position: absolute;
+    inset-block-start: 2cqh;
+    inset-inline-end: 2cqw;
+    width: 1.2cqw;
+    height: 1.2cqw;
+    border-radius: 999px;
+    background: var(--se-success);
+  }
+  .se-dot-live[data-health="warn"] { background: var(--se-warning); }
+  .se-dot-live[data-health="bad"]  { background: var(--se-danger); }
+
+  .se-team-panels { display: grid; grid-auto-flow: column; gap: 1.5cqw; height: 62cqh; }
+  .se-team-panel {
+    display: grid;
+    align-content: end;
+    gap: 1cqh;
+    padding: 2cqw;
+    border-radius: 2cqw;
+    background: color-mix(in oklab, var(--team-color, var(--se-primary)) 70%, transparent);
+    color: var(--team-on, #fff);
+  }
+  .se-team-panel[data-ring="1"] { box-shadow: inset 0 0 0 0.3cqw rgb(255 255 255 / 0.85); }
+  .se-team-panel-name { font-size: 4cqw; font-weight: 800; line-height: 1; }
+  .se-team-panel-n { font-size: 2.4cqw; opacity: 0.9; }
+
+  .se-lobby { display: grid; grid-template-columns: 45fr 55fr; gap: 4cqw; height: 100%; align-content: center; padding: 5cqw; }
+  .se-lobby-qr { display: grid; gap: 2cqh; justify-items: center; align-content: center; }
+  .se-lobby-qr svg { width: 28cqw; height: 28cqw; background: #fff; padding: 1cqw; border-radius: 1.5cqw; }
+  .se-arrivals { display: grid; align-content: start; gap: 1.2cqh; overflow: hidden; }
+  .se-arrival {
+    display: flex;
+    align-items: center;
+    gap: 1.5cqw;
+    padding: 1.6cqh 2cqw;
+    border-radius: 1.5cqw;
+    background: var(--se-surface);
+    border-inline-start: 0.8cqw solid var(--team-color, var(--se-primary));
+    font-size: 2.6cqw;
+    font-weight: 700;
+    animation: se-arrive 600ms ease-out both;
+  }
+  .se-arrival[data-rank="0"] { font-size: 3.6cqw; }
+  .se-arrival[data-rank="3"], .se-arrival[data-rank="4"], .se-arrival[data-rank="5"] { opacity: 0.6; font-size: 2.1cqw; }
+  @keyframes se-arrive { from { opacity: 0; transform: translateY(2cqh); } to { opacity: 1; transform: none; } }
+
+  .se-bars { display: grid; gap: 0.8cqh; }
+  .se-bar { height: 1.6cqh; border-radius: 999px; background: var(--team-color, var(--se-primary)); min-width: 0.6cqw; }
+
+  /* --- Crew consoles (§13.10, §13.11) -------------------------------- */
+
+  .se-console { display: grid; gap: 1rem; padding: 1rem; }
+  @media (min-width: 1024px) { .se-console-cols { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 1rem; align-items: start; } }
+  .se-panel { background: var(--se-surface); border: 1px solid var(--se-border); border-radius: var(--radius-card); padding: 1rem; display: grid; gap: 0.75rem; }
+  .se-panel h2 { font-size: 0.8125rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--se-text-muted); }
+  .se-grid-buttons { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: 0.5rem; }
+  .se-tap { min-height: 48px; border-radius: var(--radius-input); border: 1px solid var(--se-border); background: var(--se-surface-2); color: var(--se-text); font-weight: 700; cursor: pointer; padding: 0.5rem 0.75rem; }
+  .se-tap[aria-pressed="true"], .se-tap[data-on="1"] { border-color: var(--se-secondary); background: color-mix(in oklab, var(--se-secondary) 24%, var(--se-surface-2)); }
+  .se-tap-danger { border-color: var(--se-danger); color: var(--se-danger); }
+
+  .se-health { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; font-size: 0.8125rem; }
+  .se-health-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--se-success); display: inline-block; margin-inline-end: 0.375rem; }
+  .se-health-dot[data-health="warn"] { background: var(--se-warning); }
+  .se-health-dot[data-health="bad"]  { background: var(--se-danger); }
+  .se-health-dot[data-health="off"]  { background: var(--se-border); }
+
+  /* Test mode must be impossible to miss: nothing done in it counts (§11.13). */
+  .se-test-ribbon {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: var(--se-danger);
+    color: #fff;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-align: center;
+    padding: 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .se-rows { display: grid; gap: 0.5rem; }
+  .se-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem 0.75rem;
+    align-items: center;
+    padding: 0.75rem;
+    border-radius: var(--radius-input);
+    background: var(--se-surface-2);
+    border: 1px solid var(--se-border);
+  }
+  .se-row-sub { grid-column: 1 / -1; font-size: 0.8125rem; color: var(--se-text-muted); }
+  .se-pending {
+    background: color-mix(in oklab, var(--se-warning) 24%, var(--se-surface));
+    border-radius: var(--radius-input);
+    padding: 0.625rem 0.875rem;
+    font-weight: 700;
+    font-size: 0.875rem;
+  }
+
   /* Toasts (§13.1.7) */
   .se-toast-wrap {
     position: fixed;
@@ -867,4 +1092,8 @@
 
   .se-animate-float, .se-animate-pulse, .se-eq-bar { animation: none !important; }
   .se-eq-bar { transform: scaleY(0.4); }
+
+  /* The team wipe is pure celebration; reduced motion gets the words only. */
+  .se-team-wipe { display: none !important; }
+  .se-arrival { animation: none !important; }
 }

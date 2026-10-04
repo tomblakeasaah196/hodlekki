@@ -122,7 +122,12 @@ try {
                     ],
                 ],
                 'snapshots'   => $snapshots,
-                'sfx'         => ['cues' => SE_SFX_CUES, 'sprite' => '/assets/se/audio/sfx.mp3', 'map' => '/assets/se/audio/sfx.json'],
+                'sfx'         => [
+                    'cues'   => SE_SFX_CUES,
+                    'sprite' => '/assets/se/sfx/se-sfx.mp3',
+                    'map'    => '/assets/se/sfx/se-sfx.json',
+                    'volume' => (float) se_settings_path($settings, 'stage.volume', 0.8),
+                ],
                 'checkin_url' => se_event_url((string) $event['slug'], 'in'),
                 'show_names'  => se_bool(se_settings_path($settings, 'lobby.show_names', true)),
                 'test_mode'   => se_bool($settings['test_mode'] ?? false),

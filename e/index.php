@@ -310,6 +310,10 @@ function se_render_shell(
         se_render_privacy($pdo, $event, $settings);
     } elseif ($view === 'manage') {
         se_portal_manage($event, $days, $settings);
+    } elseif ($view === 'checkin') {
+        se_portal_checkin($event, $days, $settings, se_checkin_window($event, $days));
+    } elseif (in_array($view, ['stage', 'lobby', 'host', 'desk', 'dj'], true)) {
+        se_render_crew_frame($event, $view);
     } elseif ($view === 'home') {
         se_portal_render(
             $pdo, $event, $days, $settings, $phase,
@@ -489,6 +493,31 @@ function se_boot_payload(
         $payload['csrf'] = se_csrf_token();
     }
 
+    // Check-in (§13.6): the window, so the page can count down to the doors
+    // without a round trip, and the flag that keeps the form honest before
+    // the migration lands (§9.4).
+    if ($view === 'checkin') {
+        $payload['checkin'] = se_checkin_window($event, $days);
+        $payload['flags']['checkin_ready'] = se_table_exists($pdo, 'se_checkins');
+        $payload['form'] = [
+            'consent_mode' => se_settings_path($settings, 'registration.consent_mode', 'required_followup'),
+        ];
+
+        // If this phone already has a registration, the page can open with
+        // "Check in as Ada O." instead of an empty number field (§13.6).
+        $mine = se_shell_registration($pdo, $event);
+        $payload['me'] = $mine
+            ? ['registration' => ['display_name' => (string) $mine['display_name']]]
+            : null;
+    }
+
+    // Displays authenticate with the key in their own URL (§12.3). It is a
+    // secret the crew pasted in, so it never leaves this page.
+    if (in_array($surface, ['stage', 'lobby'], true)) {
+        $key = (string) ($_GET['k'] ?? '');
+        $payload['display_key'] = preg_match('/^[A-Za-z0-9_-]{1,32}$/', $key) ? $key : null;
+    }
+
     return $payload;
 }
 
@@ -648,6 +677,34 @@ function se_render_hero(array $event, array $days, array $phase, ?array $heroAss
   </div>
 </section>
 <?php
+}
+
+/**
+ * The first paint for a display or a crew console.
+ *
+ * These surfaces are built entirely in JavaScript — a projector with no JS
+ * is a broken projector either way — so the server renders only enough to
+ * say the page is alive and which screen this is.
+ */
+function se_render_crew_frame(array $event, string $view): void
+{
+    $labels = [
+        'stage' => ['Stage display', 'Starting the show…'],
+        'lobby' => ['Lobby display', 'Waking up the welcome screen…'],
+        'host'  => ['Host console', 'Loading tonight…'],
+        'desk'  => ['Desk', 'Loading the guest list…'],
+        'dj'    => ['Karaoke DJ', 'Loading the queue…'],
+    ];
+    [$label, $loading] = $labels[$view] ?? ['Crew', 'Loading…'];
+    ?>
+<section class="se-section" id="se-crew-frame" aria-labelledby="se-crew-title">
+  <div class="se-container">
+    <p class="se-label"><?= se_h(mb_strtoupper((string) $event['title'], 'UTF-8')) ?></p>
+    <h1 class="se-h1 se-page-title" id="se-crew-title"><?= se_h($label) ?></h1>
+    <p class="se-glass se-pad se-small" role="status"><?= se_h($loading) ?></p>
+  </div>
+</section>
+    <?php
 }
 
 /** The privacy notice, rendered server-side from Markdown (§19.8). */

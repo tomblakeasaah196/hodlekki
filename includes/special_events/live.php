@@ -1025,3 +1025,151 @@ function se_joined_games_count(PDO $pdo, int $eventId): int
         return 0;
     }
 }
+
+// --------------------------------------------------------------------------
+// The crew payloads (§13.10, §13.11)
+// --------------------------------------------------------------------------
+
+/**
+ * Everything the host console draws, in one round trip (§13.10).
+ *
+ * The console polls this once a second, so it has to be cheap and it has to
+ * be complete: a half-loaded console in a dark room is worse than a slow
+ * one. PR4's programme, game, round and karaoke blocks are present as null
+ * so the client can ship its columns now and light them up later without a
+ * shape change.
+ */
+function se_live_console(PDO $pdo, array $event): array
+{
+    $eventId  = (int) $event['id'];
+    $state    = se_live_state($pdo, $eventId);
+    $days     = se_event_days($pdo, $eventId);
+    $settings = se_event_settings($event);
+    $theme    = se_event_theme($event);
+
+    $window = se_checkin_ready($pdo)
+        ? se_checkin_window($event, $days)
+        : ['open' => false, 'reason' => 'FEATURE_NOT_READY'];
+
+    $teams  = [];
+    $roster = [];
+    if (se_teams_ready($pdo)) {
+        $counts = se_team_counts($pdo, $eventId);
+        foreach (se_teams($pdo, $eventId) as $team) {
+            $public = se_team_public($team, $theme);
+            $public['n'] = (int) ($counts[(int) $team['id']]['n'] ?? 0);
+            $public['captain_registration_id'] = $team['captain_registration_id'] !== null
+                ? (int) $team['captain_registration_id']
+                : null;
+            $teams[] = $public;
+        }
+
+        // The roster carries names, which is why this endpoint is behind a
+        // capability check and never becomes a snapshot (§8.5.4).
+        foreach (se_teams_roster($pdo, $eventId) as $person) {
+            $roster[] = [
+                'registration_id' => (int) $person['registration_id'],
+                'team_id'         => (int) $person['team_id'],
+                'display_name'    => (string) $person['display_name'],
+                'player_no'       => $person['player_no'] !== null ? (int) $person['player_no'] : null,
+            ];
+        }
+    }
+
+    $confirmed = 0;
+    try {
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM se_registrations WHERE event_id = ? AND status = 'confirmed'");
+        $stmt->execute([$eventId]);
+        $confirmed = (int) $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        error_log('SE live/console counts: ' . $e->getMessage());
+    }
+
+    $phase = se_event_phase($event, $days);
+
+    return [
+        'server_ms' => (int) round(microtime(true) * 1000),
+        'event'     => [
+            'public_id' => (string) $event['public_id'],
+            'slug'      => (string) $event['slug'],
+            'title'     => (string) $event['title'],
+            'edition'   => (string) ($event['edition_label'] ?? ''),
+            'phase'     => (string) $phase['phase'],
+            'test_mode' => se_bool($settings['test_mode'] ?? false),
+        ],
+        'state' => $state ? [
+            'version'       => (int) $state['version'],
+            'scene'         => (string) $state['scene'],
+            'scene_payload' => se_scene_payload($state),
+            'announcement'  => se_announcement_payload($state),
+            'sfx'           => ['seq' => (int) $state['sfx_seq'], 'cue' => $state['sfx_cue']],
+        ] : null,
+        'scenes' => SE_SCENES,
+        'cues'   => SE_SFX_CUES,
+        'teams'  => $teams,
+        'roster' => $roster,
+        'counts' => [
+            'confirmed'        => $confirmed,
+            'checked_in'       => se_checkin_total($pdo, $eventId),
+            'checked_in_today' => se_checkin_ready($pdo)
+                ? se_checkin_total($pdo, $eventId, se_checkin_day($phase))
+                : 0,
+            'joined_games'     => se_joined_games_count($pdo, $eventId),
+        ],
+        'checkin'  => $window,
+        'health'   => se_live_health($pdo, $event, $state),
+        'displays' => se_display_links($event, $state),
+
+        // PR4 and PR5 fill these in; the shape is fixed now so the console
+        // can be written once (§28.3).
+        'program'  => null,
+        'game'     => null,
+        'round'    => null,
+        'karaoke'  => null,
+    ];
+}
+
+/**
+ * The much smaller payload desk mode polls (§13.11).
+ *
+ * The desk never shows the show, so it never gets the scene, the cues or
+ * the announcement — only the door: how many are in, how many walk-in
+ * places are left, and whether the window is open.
+ */
+function se_desk_state(PDO $pdo, array $event): array
+{
+    $eventId  = (int) $event['id'];
+    $days     = se_event_days($pdo, $eventId);
+    $settings = se_event_settings($event);
+    $counts   = se_capacity_counts($pdo, $eventId);
+    $phase    = se_event_phase($event, $days);
+
+    $teams = [];
+    if (se_teams_ready($pdo)) {
+        $theme      = se_event_theme($event);
+        $teamCounts = se_team_counts($pdo, $eventId);
+        foreach (se_teams($pdo, $eventId) as $team) {
+            $public = se_team_public($team, $theme);
+            $public['n'] = (int) ($teamCounts[(int) $team['id']]['n'] ?? 0);
+            $teams[] = $public;
+        }
+    }
+
+    return [
+        'server_ms' => (int) round(microtime(true) * 1000),
+        'test_mode' => se_bool($settings['test_mode'] ?? false),
+        'checkin'   => se_checkin_ready($pdo)
+            ? se_checkin_window($event, $days)
+            : ['open' => false, 'reason' => 'FEATURE_NOT_READY'],
+        'counts' => [
+            'confirmed'        => (int) $counts['confirmed'],
+            'checked_in_today' => se_checkin_ready($pdo)
+                ? se_checkin_total($pdo, $eventId, se_checkin_day($phase))
+                : 0,
+            'walkin_taken'     => (int) $counts['walkin_taken'],
+            'walkin_left'      => se_walkin_free($event, $counts),
+        ],
+        'teams'  => $teams,
+        'health' => se_live_health($pdo, $event),
+    ];
+}

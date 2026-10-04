@@ -405,6 +405,52 @@ const SE_PRELOAD = [
         '/assets/se/js/core/theme.js',
         '/assets/se/js/core/store.js',
     ],
+
+    // The displays are unattended all evening, so everything they need is
+    // on the first paint — there is nobody standing there to reload them.
+    'stage' => [
+        '/assets/se/js/stage/main.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/store.js',
+        '/assets/se/js/core/clock.js',
+        '/assets/se/js/core/realtime.js',
+        '/assets/se/js/core/sfx.js',
+        '/assets/se/js/core/qr.js',
+        '/assets/se/js/core/boot.js',
+        '/assets/se/js/core/svg.js',
+    ],
+    'lobby' => [
+        '/assets/se/js/lobby/main.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/store.js',
+        '/assets/se/js/core/clock.js',
+        '/assets/se/js/core/realtime.js',
+        '/assets/se/js/core/qr.js',
+        '/assets/se/js/core/boot.js',
+        '/assets/se/js/core/svg.js',
+    ],
+    'host' => [
+        '/assets/se/js/host/main.js',
+        '/assets/se/js/core/html.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/store.js',
+        '/assets/se/js/core/clock.js',
+        '/assets/se/js/core/boot.js',
+    ],
+    'desk' => [
+        '/assets/se/js/desk/main.js',
+        '/assets/se/js/core/html.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/store.js',
+        '/assets/se/js/core/phone.js',
+        '/assets/se/js/core/boot.js',
+    ],
+    'dj' => [
+        '/assets/se/js/dj/main.js',
+        '/assets/se/js/core/store.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/boot.js',
+    ],
 ];
 
 // --------------------------------------------------------------------------
