@@ -422,6 +422,12 @@ Both live on **Overview**.
 with its own **QR code**. Copy the link, or download the QR as a PNG for the
 designer.
 
+It opens on the two you need most: the **Plain link** and the **Check-in
+poster QR**. Press **View more** to see the rest (WhatsApp, Instagram,
+Facebook, TikTok, X, flyer, poster, SMS, church announcement, generic QR,
+email), and **Show fewer** to tuck them away again. Tap any QR to enlarge it
+before showing it on a screen.
+
 Use the right one each time and the view count beside each code tells you
 afterwards **which place actually worked**, so next year's push goes where the
 people are. The counts are numbers only; nobody is tracked.

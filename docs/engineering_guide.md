@@ -2584,7 +2584,7 @@ Plus one `reach_lead_captures` row: `captured_by_user_id = actor`, `captured_by_
 ### 18.2 Attribution
 
 - `?s=<code>` on any portal link is stored on the registration (`src`) and in view metrics. Default codes (editable): `wa` WhatsApp, `ig` Instagram, `fb` Facebook, `tt` TikTok, `x` X, `flyer`, `poster`, `sms`, `pulpit` (church announcement), `qr` (generic QR), `email`.
-- The Studio's **Share kit** (Overview) generates the link + QR for each code.
+- The Studio's **Share kit** (Overview) generates the link + QR for each code. The whole kit is fetched in one `share_kit` call, but the panel opens showing only the two rows the crew reaches for every time — the plain link and the check-in poster QR (`PRIMARY_CODES` in `assets/se/js/studio/share_kit.js`) — with the rest behind **View more**. `splitShareLinks()` is pure and forgiving: a primary row the server did not send is skipped, and any code added later falls into the "more" group rather than disappearing.
 - `?r=<ref_code>` stores `referred_by_registration_id` (top inviters are visible to crew only).
 
 ### 18.3 Live monitor (Studio → Live)
