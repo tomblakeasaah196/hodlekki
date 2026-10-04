@@ -12,6 +12,12 @@ import {
 } from '../state.js';
 import { Card, Field, TextInput, TextArea, Select, Button, SaveBar, Spinner } from '../ui.js';
 
+// Kept out of the template below: a backtick inside an html`` literal ends
+// the literal, and a syntax error in this module blanks the whole Studio.
+const MARKDOWN_HELP = 'Markdown: # headings, **bold**, *italic*, `inline code`, [links](https://…), '
+    + '- bullet lists, 1. numbered lists, > quotes, --- dividers, blank-line paragraphs. '
+    + 'Raw HTML and images are not allowed.';
+
 /** Live slug check, debounced, with the reclaim path for an archived holder. */
 function SlugField({ event }) {
     const value = fieldValue('slug', event.slug);
@@ -255,7 +261,7 @@ export function DetailsTab() {
             <//>
 
             <${Card} title="About this event"
-                     subtitle="Markdown: # headings, **bold**, *italic*, `inline code`, [links](https://…), - bullet lists, 1. numbered lists, > quotes, --- dividers, blank-line paragraphs. Raw HTML and images are not allowed.">
+                     subtitle=${MARKDOWN_HELP}>
                 <${Field} label="Description" name="description_md">
                     <${TextArea} name="description_md" rows="10" maxLength="20000"
                         value=${fieldValue('description_md', event.description_md || '')}

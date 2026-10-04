@@ -81,6 +81,11 @@ $pdo->prepare(
 
 $eventId = (int) $pdo->lastInsertId();
 
+// /e/<slug> resolves through se_slugs, exactly as an event created in the
+// Studio does (se_event_create()); without this row the portal is a 404.
+$pdo->prepare("INSERT INTO se_slugs (slug, event_id, is_canonical) VALUES (?, ?, 1)")
+    ->execute([$slug, $eventId]);
+
 $pdo->prepare(
     "INSERT INTO se_event_days (event_id, day_date, doors_open_at, starts_at, ends_at, checkin_closes_at)
      VALUES (?, ?, ?, ?, ?, ?)"

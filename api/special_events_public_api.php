@@ -53,7 +53,9 @@ function se_public_event(PDO $pdo, array $body): array
     if (!$event) {
         $slug = se_str($body['slug'] ?? '', SE_SLUG_MAX_LENGTH);
         if ($slug !== '') {
-            $event = se_event_find_by_slug($pdo, $slug);
+            // se_event_find_by_slug() returns {event, canonical, is_alias},
+            // not the row itself.
+            $event = se_event_find_by_slug($pdo, $slug)['event'] ?? null;
         }
     }
 
