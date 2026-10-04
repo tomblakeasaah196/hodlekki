@@ -65,8 +65,6 @@ require_once __DIR__ . '/../../includes/special_events/live.php';
 // talk to a PDO elsewhere, but nothing runs at include time.
 require_once __DIR__ . '/../../includes/special_events/program.php';
 require_once __DIR__ . '/../../includes/special_events/karaoke.php';
-require_once __DIR__ . '/../../includes/special_events/games_engine.php';
-require_once __DIR__ . '/../../includes/special_events/scoring.php';
 
 $GLOBALS['se_passed'] = 0;
 $GLOBALS['se_failed'] = 0;
