@@ -130,9 +130,31 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Special Events JavaScript must parse
+        run: |
+          set -euo pipefail
+
+          # The Studio, the portal and every crew screen are ES modules that
+          # nothing compiles, so a stray backtick in an htm template ships as
+          # a blank page (it did: the whole Studio, #39). node --check parses
+          # without running; the .mjs copy makes Node read it as a module.
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          fail=0
+          while IFS= read -r -d '' f; do
+            cp "$f" "$tmp/check.mjs"
+            if ! out=$(node --check "$tmp/check.mjs" 2>&1); then
+              echo "::error file=$f::$(echo "$out" | grep -m1 -E 'SyntaxError|Error' || echo 'does not parse')"
+              fail=1
+            fi
+          done < <(find assets/se/js -type f \( -name '*.js' -o -name '*.mjs' \) -print0)
+          exit $fail
+
       - name: Special Events unit tests
         run: |
           set -euo pipefail
+          # Includes function_calls_test.php: every function the module calls
+          # must exist (php -l cannot see a call to a function never written).
           php tests/special_events/run.php
 
           # The glob form, not a bare directory: `node --test <dir>` is not
@@ -178,9 +200,64 @@ jobs:
 
           exit $fail
 
+  integration:
+    name: Special Events integration (${{ matrix.engine }})
+    # The production engine is MySQL 8 or MariaDB (unconfirmed, guide §2.3),
+    # and they disagree on real things (MariaDB rejects GROUP BY on a key
+    # with other columns selected; MySQL rejects some generated-column FKs),
+    # so the migrations and the integration suite run on both.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: mysql-8.0
+            image: mysql:8.0
+            health: mysqladmin ping -h 127.0.0.1 -uroot -proot
+          - engine: mariadb-10.11
+            image: mariadb:10.11
+            health: healthcheck.sh --connect --innodb_initialized
+    services:
+      db:
+        image: ${{ matrix.image }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="${{ matrix.health }}"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, pcntl
+          coverage: none
+
+      - name: Migrations apply, and apply again (idempotent)
+        run: |
+          set -euo pipefail
+          php tests/special_events/db_setup.php --host=127.0.0.1 --port=3306 --user=root --pass=root --db=se_it --fresh --seed
+          php tests/special_events/db_setup.php --host=127.0.0.1 --port=3306 --user=root --pass=root --db=se_it
+
+      - name: Integration tests (real database, concurrent check-ins, a whole game night)
+        env:
+          SE_TEST_DB_HOST: 127.0.0.1
+          SE_TEST_DB_PORT: '3306'
+          SE_TEST_DB_USER: root
+          SE_TEST_DB_PASS: root
+          SE_TEST_DB_NAME: se_it
+        run: php tests/special_events/integration/run.php
+
   deploy:
     name: Deploy via webhook
-    needs: lint
+    needs: [lint, integration]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
