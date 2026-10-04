@@ -29,6 +29,9 @@
           "start_time": {
             "type": "string"
           },
+          "end_time": {
+            "type": "string"
+          },
           "duration_min": {
             "type": "integer"
           },
