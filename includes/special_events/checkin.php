@@ -131,7 +131,7 @@ function se_checkin(PDO $pdo, array $event, array $days, array $in, array $ctx):
     // ---- 1. Window -------------------------------------------------------
     $phase    = se_event_phase($event, $days, $now);
     $window   = se_checkin_window($event, $days, $now);
-    $testMode = se_bool($event['test_mode'] ?? false);
+    $testMode = se_bool(se_event_settings($event)['test_mode'] ?? false);
 
     // Test mode exists so the crew can rehearse the whole door flow days
     // early (§11.13); refusing them on the window would defeat it.
@@ -525,7 +525,7 @@ function se_checkin_payload(PDO $pdo, array $event, array $result): array
         'card_signature' => trim((string) $event['title'] . ' ' . (string) ($event['edition_label'] ?? ''))
             . ' by ' . (string) ($event['organizer_label'] ?? 'Envision'),
         'walkin'        => !empty($result['walkin']),
-        'test_mode'     => se_bool($event['test_mode'] ?? false),
+        'test_mode'     => se_bool(se_event_settings($event)['test_mode'] ?? false),
     ];
 
     // The display keys are what let a phone watch its own team's private
@@ -728,6 +728,50 @@ function se_transfer_code_redeem(PDO $pdo, array $event, string $code, ?array $d
     ], 'registration', $registrationId, null, $registrationId);
 
     return ['registration_id' => $registrationId];
+}
+
+/**
+ * `lookup` with `purpose = "checkin"` (§12.2).
+ *
+ * The register lookup already works out who this phone belongs to and what
+ * we still need to ask; check-in adds two things on top: whether they are
+ * already in tonight, and when the door opens.
+ */
+function se_lookup_phone_checkin(PDO $pdo, array $event, array $days, array $settings, array $phone, ?array $device): array
+{
+    $out     = se_lookup_phone($pdo, $event, $settings, $phone, $device);
+    $window  = se_checkin_window($event, $days);
+    $eventId = (int) $event['id'];
+
+    $out['checkin'] = [
+        'open'        => $window['open'],
+        'opens_at'    => $window['opens_at'],
+        'opens_in_ms' => $window['opens_in_ms'],
+        'closes_at'   => $window['closes_at'],
+    ];
+
+    $contact = se_contact_find_by_phone($pdo, (string) $phone['e164']);
+    $reg     = $contact ? se_registration_find($pdo, $eventId, (int) $contact['id']) : null;
+
+    if ($reg && (string) $reg['status'] === 'confirmed' && $window['day_date'] !== null) {
+        $row = se_checkin_row($pdo, $eventId, (int) $reg['id'], (string) $window['day_date']);
+        if ($row) {
+            $out['kind']         = 'checked_in';
+            $out['display_name'] = (string) $reg['display_name'];
+            $out['needs']        = [];
+            $out['device_owns']  = se_device_owns($device, $reg);
+            $out['player_no']    = $reg['player_no'] !== null ? (int) $reg['player_no'] : null;
+        }
+    }
+
+    // A walk-in only ever needs a name and consent — the full registration
+    // form belongs on the portal, not on a queue at the door (§13.6).
+    $out['needs'] = array_values(array_intersect(
+        $out['needs'],
+        ['first_name', 'last_name', 'gender', 'consent']
+    ));
+
+    return $out;
 }
 
 /** Check-in pace in 5-minute buckets, for the Studio live monitor (§18.3). */
