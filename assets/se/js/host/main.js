@@ -15,9 +15,8 @@
 // PR3 shipped the Show column, the Teams column and the health bar. PR4
 // adds the run of show — start, finish, skip, undo, with the drift the
 // whole room is feeling shown in plain minutes — and a karaoke strip so
-// the host can see who is singing without opening the DJ screen. The Game
-// column is PR5: its buttons are present but disabled, so the host can see
-// what is coming without being able to break anything.
+// the host can see who is singing without opening the DJ screen. PR5 and
+// PR6 add the complete game runner, judging, awards and finale.
 
 import { render } from 'preact';
 import { useEffect, useState, useCallback, useRef } from 'preact/hooks';
@@ -252,14 +251,53 @@ function RunOfShow({ state, act }) {
                     </div>`}
             </section>
 
-            <section class="se-panel">
-                <h2>Game</h2>
-                <p class="se-small se-muted">Quiz, charades, buzzer and feud arrive with the games release.</p>
-                <button type="button" class="se-tap" disabled>Arm</button>
-                <button type="button" class="se-tap" disabled>Lock</button>
-                <button type="button" class="se-tap" disabled>Reveal</button>
-            </section>
+            <${GameRunner} state=${state} act=${act} />
         </div>`;
+}
+
+function GameRunner({ state, act }) {
+    const game = state.game;
+    const round = game?.private?.row;
+    const item = game?.private?.item?.payload || {};
+    const buzzes = game?.private?.buzzes || [];
+    const [player, setPlayer] = useState('');
+    const [team, setTeam] = useState('');
+    const [teamB, setTeamB] = useState('');
+    if (!game) return html`<section class="se-panel"><h2>Game runner</h2><p class="se-small se-muted">Start a game from the Games tab in Studio.</p></section>`;
+
+    const next = () => act('round_next', { game_id: game.id });
+    const arm = () => act('round_arm', { game_id: game.id, round_id: round?.id });
+    return html`<section class="se-panel se-stack">
+        <div class="flex justify-between"><h2>${game.title}</h2><span class="se-small">${game.type}</span></div>
+        ${round ? html`<p class="se-small">Round ${round.round_no} · <strong>${round.state}</strong></p>` : null}
+        ${item.phrase ? html`<p class="se-private-answer">Secret: ${item.phrase}</p>` : null}
+        ${item.answer ? html`<p class="se-private-answer">Answer: ${item.answer}</p>` : null}
+        <div class="se-grid-buttons">
+            ${!round || ['scored','void'].includes(round.state) ? html`<button class="se-tap" onClick=${next}>Next round</button>` : null}
+            ${round?.state === 'pending' && game.type !== 'charades' ? html`<button class="se-tap" onClick=${arm}>Arm</button>` : null}
+            ${['armed','open'].includes(round?.state) && game.type !== 'charades' ? html`<button class="se-tap" onClick=${()=>act('round_lock',{round_id:round.id})}>Lock</button>` : null}
+            ${round?.state === 'locked' ? html`<button class="se-tap" onClick=${()=>act('round_reveal',{round_id:round.id})}>Reveal</button>` : null}
+            ${round?.state === 'revealed' ? html`<button class="se-tap" onClick=${()=>act('round_score',{round_id:round.id})}>Score</button>` : null}
+        </div>
+        ${game.type === 'who_am_i' && round ? html`<button class="se-tap" onClick=${()=>act('clue_next',{round_id:round.id})}>Next clue</button>` : null}
+        ${game.type === 'charades' && round ? html`<div class="se-stack">
+            <select class="se-input" value=${team} onChange=${e=>setTeam(e.currentTarget.value)}><option value="">Acting team</option>${state.teams.map(t=>html`<option value=${t.id}>${t.name||t.label}</option>`)}</select>
+            <input class="se-input" value=${player} placeholder="Player number, or random" onInput=${e=>setPlayer(e.currentTarget.value)}/>
+            <button class="se-tap" onClick=${()=>act('charades_turn',{round_id:round.id,team_id:Number(team),player_no:player||'random'})}>Pick presenter</button>
+            <button class="se-tap" onClick=${()=>act('charades_start',{round_id:round.id})}>Start timer</button>
+            <button class="se-tap" onClick=${()=>act('charades_mark',{round_id:round.id,result:'correct'})}>✓ Got it</button>
+            <button class="se-tap" onClick=${()=>act('charades_mark',{round_id:round.id,result:'pass'})}>Pass</button>
+            <button class="se-tap" onClick=${()=>act('charades_end',{round_id:round.id})}>End turn</button>
+        </div>` : null}
+        ${buzzes.map(b=>html`<div class="se-row"><span>${b.display_name} · ${b.effective_ms}</span><button class="se-tap" onClick=${()=>act('buzz_judge',{round_id:round.id,buzz_id:b.id,correct:true})}>✓</button><button class="se-tap" onClick=${()=>act('buzz_judge',{round_id:round.id,buzz_id:b.id,correct:false})}>✕</button></div>`)}
+        ${game.type === 'feud' && round ? html`<div class="se-stack">
+            <div class="se-grid-buttons"><select class="se-input" value=${team} onChange=${e=>setTeam(e.currentTarget.value)}><option value="">Team A</option>${state.teams.map(t=>html`<option value=${t.id}>${t.name||t.label}</option>`)}</select><select class="se-input" value=${teamB} onChange=${e=>setTeamB(e.currentTarget.value)}><option value="">Team B</option>${state.teams.map(t=>html`<option value=${t.id}>${t.name||t.label}</option>`)}</select><button class="se-tap" onClick=${()=>act('feud_faceoff',{round_id:round.id,team_a:Number(team),team_b:Number(teamB)})}>Start face-off</button></div>
+            ${(game.private?.board||[]).map(a=>html`<button class="se-tap" onClick=${()=>act('feud_reveal',{round_id:round.id,answer_id:a.id})}>Reveal ${a.label} · ${a.points}</button>`)}
+            <div class="se-grid-buttons"><button class="se-tap" onClick=${()=>act('feud_control',{round_id:round.id,team_id:Number(team)})}>A controls</button><button class="se-tap" onClick=${()=>act('feud_control',{round_id:round.id,team_id:Number(teamB)})}>B controls</button><button class="se-tap" onClick=${()=>act('feud_strike',{round_id:round.id})}>Strike ✕</button><button class="se-tap" onClick=${()=>act('feud_steal',{round_id:round.id,success:true})}>Steal ✓</button><button class="se-tap" onClick=${()=>act('feud_bank',{round_id:round.id})}>Bank</button><button class="se-tap" onClick=${()=>act('feud_reveal_all',{round_id:round.id})}>Reveal all</button></div>
+        </div>` : null}
+        <button class="se-tap" onClick=${()=>act('scene',{scene:'leaderboard',payload:{show_mvp:true}})}>Leaderboard</button>
+        <button class="se-tap" onClick=${()=>act('finale')}>Run finale</button>
+    </section>`;
 }
 
 function TeamsColumn({ state, act }) {
@@ -289,6 +327,8 @@ function TeamsColumn({ state, act }) {
                                 <button type="button" class="se-tap"
                                     onClick=${() => act('team_name', { team_id: team.id, name: value })}>
                                     Rename</button>
+                                ${[100,200,500].map(points=>html`<button type="button" class="se-tap" onClick=${()=>{const reason=prompt(`Name this +${points} award`);if(reason)act('score_adjust',{scope:'team',team_id:team.id,points,kind:'award',reason});}}>+${points}</button>`)}
+                                <button type="button" class="se-tap" onClick=${()=>{const raw=prompt('Points (use a minus for a penalty)');const reason=raw&&prompt('Reason');if(reason)act('score_adjust',{scope:'team',team_id:team.id,points:Number(raw),kind:Number(raw)<0?'penalty':'award',reason});}}>Custom score</button>
 
                                 <label class="se-label" for=${'se-cap-' + team.id}>Captain</label>
                                 <select class="se-input" id=${'se-cap-' + team.id}
@@ -307,6 +347,11 @@ function TeamsColumn({ state, act }) {
                         </div>`;
                     })}
                 </div>
+            </section>
+
+            <section class="se-panel">
+                <h2>Recent score changes</h2>
+                ${(state.score_history||[]).filter(row=>['award','penalty','correction'].includes(row.kind)).map(row=>html`<div class="se-row"><span><strong>${row.points>0?'+':''}${row.points}</strong> · ${row.reason}</span><button class="se-tap" onClick=${()=>{const reason=prompt('Why undo this score?');if(reason)act('score_void',{score_event_id:row.id,reason});}}>Undo</button></div>`)}
             </section>
 
             <section class="se-panel">

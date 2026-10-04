@@ -303,13 +303,31 @@ function se_snapshot_room(PDO $pdo, array $event, array $state, array $context =
         }
     }
 
+    $finale = function_exists('se_finale_payload') && se_game_ready($pdo)
+        ? se_finale_payload($pdo, $event)
+        : ['mvp' => []];
+    $presenter = null;
+    $buzzWinner = null;
+    if (se_game_ready($pdo)) {
+        $stmt = $pdo->prepare("SELECT r.id,r.presenter_registration_id,r.team_id,r.state_json FROM se_rounds r JOIN se_games g ON g.id=r.game_id WHERE r.event_id=? AND g.type='charades' AND r.state IN ('armed','open') ORDER BY r.id DESC LIMIT 1");
+        $stmt->execute([$eventId]);
+        $round = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($round && $round['presenter_registration_id']) {
+            $reg = se_registration_by_id($pdo, (int)$round['presenter_registration_id'], $eventId);
+            $stateData = se_json_decode($round['state_json'] ?? null) ?: [];
+            $presenter = ['round_id'=>(int)$round['id'],'display_name'=>(string)($reg['display_name'] ?? ''),'team_id'=>(int)$round['team_id'],'words_done'=>count(array_filter($stateData['words'] ?? [], static fn(array $word): bool => ($word['result'] ?? '') === 'correct'))];
+        }
+        $stmt = $pdo->prepare("SELECT b.team_id,r.display_name FROM se_buzzes b JOIN se_registrations r ON r.id=b.registration_id WHERE b.event_id=? AND b.judged IN ('pending','correct') ORDER BY b.id DESC LIMIT 1");
+        $stmt->execute([$eventId]);
+        $winner = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($winner) $buzzWinner = ['team_id'=>(int)$winner['team_id'],'display_name'=>(string)$winner['display_name']];
+    }
+
     return [
-        // MVP, presenter and buzz winner arrive with PR5. The keys are
-        // present and empty so the client shape never changes.
-        'mvp'         => [],
+        'mvp'         => $finale['mvp'] ?? [],
         'karaoke'     => se_karaoke_ready($pdo) ? se_snapshot_karaoke_room($pdo, $event) : null,
-        'presenter'   => null,
-        'buzz_winner' => null,
+        'presenter'   => $presenter,
+        'buzz_winner' => $buzzWinner,
         'captains'    => $captains,
     ];
 }
@@ -629,9 +647,16 @@ function se_live_tick(PDO $pdo, array $event, ?int $actorId = null): array
             error_log('SE live/tick karaoke: ' . $e->getMessage());
         }
 
-        // 4. PR5 adds round auto-lock, charades timeout and buzz settling
-        //    here. They are time-based transitions on tables that do not
-        //    exist yet, so the hook is the `dirty` flag below.
+        // 4. Round deadlines. Correctness is still checked lazily by every
+        //    answer/buzz request; this transition only keeps screens fresh.
+        if (se_table_exists($pdo, 'se_rounds')) {
+            $stmt = $pdo->prepare("UPDATE se_rounds SET state='locked',locked_at=NOW(3) WHERE event_id=? AND state IN ('armed','open') AND closes_at IS NOT NULL AND closes_at<=NOW(3)");
+            $stmt->execute([$eventId]);
+            if ($stmt->rowCount() > 0) {
+                $pdo->prepare("UPDATE se_live_state SET version=version+1,dirty=1 WHERE event_id=?")->execute([$eventId]);
+                $dirty = true;
+            }
+        }
 
         if ($dirty) {
             se_live_publish($pdo, $eventId, true);
@@ -1155,8 +1180,14 @@ function se_live_console(PDO $pdo, array $event): array
 
         // PR5 fills these in; the shape is fixed so the console can be
         // written once (§28.3).
-        'game'     => se_live_game_payload($pdo, $event),
+        'game'     => function_exists('se_live_game_private') ? se_live_game_private($pdo, $event) : se_live_game_payload($pdo, $event),
         'round'    => null,
+        'finale'   => function_exists('se_finale_payload') && se_game_ready($pdo) ? se_finale_payload($pdo, $event) : null,
+        'score_history' => se_game_ready($pdo) ? (static function () use ($pdo, $eventId): array {
+            $stmt = $pdo->prepare("SELECT id,scope,team_id,registration_id,points,reason,kind,created_at FROM se_score_events WHERE event_id=? AND voided_at IS NULL ORDER BY id DESC LIMIT 30");
+            $stmt->execute([$eventId]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        })() : [],
     ];
 }
 

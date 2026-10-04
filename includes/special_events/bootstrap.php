@@ -52,6 +52,7 @@ require_once __DIR__ . '/portal.php';
 require_once __DIR__ . '/games.php';
 require_once __DIR__ . '/games_engine.php';
 require_once __DIR__ . '/scoring.php';
+require_once __DIR__ . '/party_games.php';
 
 // SMS goes out through SMS Studio's tables and worker (§16.1). Loading its
 // helpers here keeps sms_render(), sms_segments() and sms_health() available

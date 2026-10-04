@@ -11,11 +11,8 @@
 // and the fresh state, so two producers tapping at once can never silently
 // overwrite each other.
 //
-// PR3 shipped the show controls (scenes, announcements, sound), the team
-// actions and the whole desk; PR4 adds the run of show and the karaoke
-// queue. Game and score actions are still routed to a deliberate
-// FEATURE_NOT_READY so the console can show the tab greyed out instead of
-// crashing on a missing case.
+// PR3 shipped the show controls and desk, PR4 the programme and karaoke,
+// PR5 the quiz engine and score ledger, and PR6 the party games and finale.
 
 require_once '../includes/db.php';
 require_once '../includes/special_events/bootstrap.php';
@@ -430,11 +427,47 @@ try {
 
         case 'game_start': case 'game_pause': case 'game_finish': { $event=se_live_event($pdo,$body);se_require_capability($pdo,(int)$event['id'],'game.control');$status=['game_start'=>'live','game_pause'=>'paused','game_finish'=>'finished'][$action];$out=se_game_status_set($pdo,$event,se_int($body['game_id']??0,0),$status,se_live_expected($body),se_live_actor());se_api_success('Game updated.',['status'=>$status,'version'=>(int)$out['version']]); }
         // Games engine and scoring (PR5)
-        case 'round_next': { $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control'); $g=se_game_list($pdo,(int)$event['id']); $game=null; foreach($g as $candidate){ if((int)$candidate['id']===(int)($body['game_id']??0)){ $game=$candidate; break; } } if(!$game) se_api_error('Game not found.','EVENT_NOT_FOUND'); se_api_success('Round ready.',se_round_next($pdo,$event,$game,se_live_actor(),se_bool($body['is_test']??false))); }
+        case 'round_next': { $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control'); $g=se_game_list($pdo,(int)$event['id']); $game=null; foreach($g as $candidate){ if((int)$candidate['id']===(int)($body['game_id']??0)){ $game=$candidate; break; } } if(!$game) se_api_error('Game not found.','EVENT_NOT_FOUND'); se_api_success('Round ready.',se_round_next_live($pdo,$event,$game,se_bool(se_event_settings($event)['test_mode']??false),se_live_expected($body),se_live_actor())); }
         case 'round_arm': { $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control'); $s=$pdo->prepare('SELECT * FROM se_games WHERE id=? AND event_id=?');$s->execute([se_int($body['game_id']??0,0),(int)$event['id']]);$game=$s->fetch(PDO::FETCH_ASSOC)?:[];$settings=se_game_settings($game); se_api_success('Round armed.',se_round_arm_live($pdo,$event,se_int($body['round_id']??0,0),se_int($body['preroll_ms']??($settings['preroll_ms']??3000),2500),se_int($body['duration_ms']??($settings['duration_ms']??20000),1),se_live_expected($body),se_live_actor())); }
         case 'round_lock': case 'round_reveal': case 'round_score': case 'round_void': { $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control'); $to=['round_lock'=>'locked','round_reveal'=>'revealed','round_score'=>'scored','round_void'=>'void'][$action]; if($action==='round_score') se_api_success('Scored.',se_round_score_live($pdo,$event,se_int($body['round_id']??0,0),se_live_expected($body),se_live_actor())); $out=se_round_transition_live($pdo,$event,se_int($body['round_id']??0,0),$to,se_live_expected($body),se_live_actor(),se_line($body['reason']??'',160)); se_api_success('Round updated.',['version'=>(int)$out['version'],'round_id'=>se_int($body['round_id']??0,0),'state'=>$to]); }
-        case 'score_adjust': { $event=se_live_event($pdo,$body);se_require_capability($pdo,(int)$event['id'],'score.manage');se_api_success('Score saved.',se_score_insert($pdo,$event,$body,se_live_actor())); }
-        case 'score_void': { $event=se_live_event($pdo,$body);se_require_capability($pdo,(int)$event['id'],'score.manage');se_score_void($pdo,$event,se_int($body['score_id']??0,0),se_line($body['reason']??'',160),se_live_actor());se_api_success('Score voided.'); }
+        case 'score_adjust': { $event=se_live_event($pdo,$body);se_require_capability($pdo,(int)$event['id'],'score.manage');se_api_success('Score saved.',se_score_adjust_live($pdo,$event,$body,se_live_expected($body),se_live_actor())); }
+        case 'score_void': { $event=se_live_event($pdo,$body);se_require_capability($pdo,(int)$event['id'],'score.manage');se_api_success('Score voided.',se_score_void_live($pdo,$event,se_int($body['score_id']??$body['score_event_id']??0,0),se_line($body['reason']??'',160),se_live_expected($body),se_live_actor())); }
+
+        // Party games and finale (§11.8–§11.11)
+        case 'clue_next': {
+            $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control');
+            se_api_success('Next clue.', se_clue_next($pdo,$event,se_int($body['round_id']??0,0),se_live_expected($body),se_live_actor()));
+        }
+        case 'charades_turn': {
+            $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control');
+            $player = ($body['player_no'] ?? '') === 'random' ? 'random' : se_int($body['player_no']??0,0);
+            se_api_success('Presenter selected.', se_charades_turn($pdo,$event,se_int($body['round_id']??0,0),se_int($body['team_id']??0,0),$player,se_bool($body['show_on_console']??false),se_live_expected($body),se_live_actor()));
+        }
+        case 'charades_start': {
+            $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control');
+            se_api_success('Turn starting.', se_charades_start($pdo,$event,se_int($body['round_id']??0,0),se_live_expected($body),se_live_actor()));
+        }
+        case 'charades_mark': {
+            $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control');
+            se_api_success('Marked.', se_charades_mark($pdo,$event,se_int($body['round_id']??0,0),se_enum($body['result']??'', ['correct','pass'], ''),se_live_expected($body),se_live_actor()));
+        }
+        case 'charades_end': {
+            $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control');
+            se_api_success('Turn ended.', se_charades_end($pdo,$event,se_int($body['round_id']??0,0),se_live_expected($body),se_live_actor()));
+        }
+        case 'buzz_judge': {
+            $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control');
+            se_api_success('Buzz judged.', se_buzz_judge_party($pdo,$event,se_int($body['round_id']??0,0),se_int($body['buzz_id']??0,0),se_bool($body['correct']??false),se_live_expected($body),se_live_actor()));
+        }
+        case 'feud_faceoff': case 'feud_control': case 'feud_reveal': case 'feud_strike': case 'feud_steal': case 'feud_bank': case 'feud_reveal_all': {
+            $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'game.control');
+            $op=substr($action,5);
+            se_api_success('Feud board updated.', se_feud_update($pdo,$event,se_int($body['round_id']??0,0),$op,$body,se_live_expected($body),se_live_actor()));
+        }
+        case 'finale': {
+            $event=se_live_event($pdo,$body); se_require_capability($pdo,(int)$event['id'],'host.control');
+            se_api_success('Finale started.', se_finale_start($pdo,$event,se_live_expected($body),se_live_actor()));
+        }
 
         // ------------------------------------------------------------------
         // Test mode (§11.13) — producer only

@@ -683,6 +683,10 @@ function se_me_payload(PDO $pdo, array $event, array $days, array $registration,
         $links['manage_url'] = se_event_url((string) $event['slug'], 'me/' . $manageToken);
     }
 
+    $gameMe = function_exists('se_game_me_payload') && se_game_ready($pdo)
+        ? se_game_me_payload($pdo, $event, $registration, $device)
+        : ['games' => ['joined' => $device !== null && ($device['joined_games_at'] ?? null) !== null], 'round' => null, 'presenter' => null, 'score' => null];
+
     return [
         'registration' => [
             'status'            => (string) $registration['status'],
@@ -702,10 +706,10 @@ function se_me_payload(PDO $pdo, array $event, array $days, array $registration,
         // PR4 fills karaoke; round, presenter and score arrive with PR5.
         'team'      => $team !== null ? se_team_public($team, se_event_theme($event)) : null,
         'karaoke'   => se_karaoke_ready($pdo) ? se_karaoke_me($pdo, $event, (int) $registration['id']) : null,
-        'games'     => ['joined' => $device !== null && ($device['joined_games_at'] ?? null) !== null],
-        'round'     => null,
-        'presenter' => null,
-        'score'     => null,
+        'games'     => $gameMe['games'],
+        'round'     => $gameMe['round'],
+        'presenter' => $gameMe['presenter'],
+        'score'     => $gameMe['score'],
         'alerts'    => se_me_alerts($pdo, $event, $registration),
         'links'     => $links,
         'can'       => [
