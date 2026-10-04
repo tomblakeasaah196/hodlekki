@@ -134,9 +134,15 @@ const SE_ASSET_ROLES = [
 /** AI source roles purged by cron after 30 days (§14.1). */
 const SE_ASSET_ROLES_TEMPORARY = ['program_source', 'songs_source'];
 
+/**
+ * Stage scenes (§11.12).
+ *
+ * `blank` is the §11.12 name for what PR1 called `blackout`; `finale` is kept
+ * because §13.8 names it as the closing scene (§28.4).
+ */
 const SE_SCENES = [
-    'standby', 'welcome', 'program', 'game', 'karaoke', 'leaderboard',
-    'announcement', 'teams', 'finale', 'blackout',
+    'standby', 'welcome', 'program', 'teams', 'game', 'leaderboard',
+    'karaoke', 'announcement', 'break', 'blank', 'recap', 'finale',
 ];
 
 const SE_SFX_CUES = [
@@ -243,6 +249,8 @@ const SE_REGISTER_MIN_FILL_MS = 1500;
 const SE_MANAGE_TOKEN_LENGTH = 22;
 const SE_REG_CODE_LENGTH = 8;
 const SE_REF_CODE_LENGTH = 6;
+/** Desk transfer codes: 6 digits, single use, ten minutes (§9.3, §10.3.6). */
+const SE_TRANSFER_CODE_TTL_MIN = 10;
 const SE_DISPLAY_KEY_LENGTH = 22;
 
 // --------------------------------------------------------------------------
@@ -300,6 +308,16 @@ const SE_SCHEMA_EXPECTED = [
         'se_ai_requests'   => ['id', 'job_id', 'event_id', 'user_id', 'task', 'model', 'prompt_version', 'input_tokens', 'output_tokens', 'latency_ms', 'ok'],
         'se_message_runs'  => ['id', 'event_id', 'kind', 'run_key', 'scheduled_for', 'status', 'sms_campaign_id', 'recipients', 'est_units'],
     ],
+    '20261013090000_se_checkin_teams.sql' => [
+        'se_teams'        => ['id', 'event_id', 'sort_order', 'color_hex', 'color_label', 'name', 'name_set_at', 'name_set_by', 'captain_registration_id', 'team_key'],
+        'se_checkins'     => ['id', 'event_id', 'registration_id', 'day_date', 'method', 'is_walkin', 'is_test', 'device_id', 'checked_in_by', 'verse_id', 'checked_in_at'],
+        'se_team_moves'   => ['id', 'event_id', 'registration_id', 'from_team_id', 'to_team_id', 'method', 'reason', 'moved_by'],
+        'se_event_verses' => ['id', 'event_id', 'translation', 'ref_display', 'text', 'text_source', 'prayer_template', 'sort_order', 'is_active', 'approved_by', 'approved_at', 'second_approved_by', 'times_used'],
+        'se_bible_cache'  => ['translation', 'ref_norm', 'ref_display', 'text', 'fetched_at'],
+    ],
+    '20261013090200_se_live_state.sql' => [
+        'se_live_state' => ['event_id', 'version', 'scene', 'scene_payload_json', 'announcement_json', 'sfx_seq', 'sfx_cue', 'room_key', 'lobby_key', 'stage_key', 'dirty', 'last_published_at', 'updated_at', 'updated_by'],
+    ],
 ];
 
 /**
@@ -308,8 +326,7 @@ const SE_SCHEMA_EXPECTED = [
  * rather than as an error.
  */
 const SE_SCHEMA_LATER_PHASES = [
-    'B' => ['se_teams', 'se_checkins', 'se_team_moves', 'se_event_verses', 'se_bible_cache',
-            'se_program_items', 'se_songs', 'se_event_songs', 'se_karaoke_entries', 'se_live_state'],
+    'B' => ['se_program_items', 'se_songs', 'se_event_songs', 'se_karaoke_entries'],
     'C' => ['se_decks', 'se_deck_items', 'se_games', 'se_game_items', 'se_rounds',
             'se_answers', 'se_buzzes', 'se_survey_responses', 'se_feud_answers', 'se_score_events'],
     'D' => ['se_feedback', 'se_handoffs', 'se_handoff_items'],
@@ -325,6 +342,7 @@ const SE_STUDIO_TABS = [
     'details'      => ['label' => 'Details',      'requires' => null],
     'brand'        => ['label' => 'Brand',        'requires' => null],
     'registration' => ['label' => 'Registration', 'requires' => 'se_form_fields'],
+    'checkin'      => ['label' => 'Check-in',     'requires' => 'se_checkins'],
     'program'      => ['label' => 'Programme',    'requires' => 'se_program_items'],
     'teams'        => ['label' => 'Teams',        'requires' => 'se_teams'],
     'karaoke'      => ['label' => 'Karaoke',      'requires' => 'se_songs'],
@@ -345,7 +363,8 @@ const SE_STUDIO_TABS = [
  * (build_prompts.md PR1: "Tabs belonging to later PRs stay hidden").
  */
 const SE_STUDIO_TABS_READY = [
-    'overview', 'details', 'brand', 'registration', 'attendees', 'assets', 'crew', 'settings',
+    'overview', 'details', 'brand', 'registration', 'checkin', 'teams', 'live',
+    'attendees', 'assets', 'crew', 'settings',
 ];
 
 // --------------------------------------------------------------------------
@@ -386,6 +405,52 @@ const SE_PRELOAD = [
         '/assets/se/js/core/theme.js',
         '/assets/se/js/core/store.js',
     ],
+
+    // The displays are unattended all evening, so everything they need is
+    // on the first paint — there is nobody standing there to reload them.
+    'stage' => [
+        '/assets/se/js/stage/main.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/store.js',
+        '/assets/se/js/core/clock.js',
+        '/assets/se/js/core/realtime.js',
+        '/assets/se/js/core/sfx.js',
+        '/assets/se/js/core/qr.js',
+        '/assets/se/js/core/boot.js',
+        '/assets/se/js/core/svg.js',
+    ],
+    'lobby' => [
+        '/assets/se/js/lobby/main.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/store.js',
+        '/assets/se/js/core/clock.js',
+        '/assets/se/js/core/realtime.js',
+        '/assets/se/js/core/qr.js',
+        '/assets/se/js/core/boot.js',
+        '/assets/se/js/core/svg.js',
+    ],
+    'host' => [
+        '/assets/se/js/host/main.js',
+        '/assets/se/js/core/html.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/store.js',
+        '/assets/se/js/core/clock.js',
+        '/assets/se/js/core/boot.js',
+    ],
+    'desk' => [
+        '/assets/se/js/desk/main.js',
+        '/assets/se/js/core/html.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/store.js',
+        '/assets/se/js/core/phone.js',
+        '/assets/se/js/core/boot.js',
+    ],
+    'dj' => [
+        '/assets/se/js/dj/main.js',
+        '/assets/se/js/core/store.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/boot.js',
+    ],
 ];
 
 // --------------------------------------------------------------------------
@@ -402,5 +467,5 @@ const SE_AUDIT_ACTIONS = [
     'round_op', 'score_award', 'score_void', 'karaoke_op', 'crew_add',
     'crew_revoke', 'keys_rotate', 'export', 'handoff_run', 'erase', 'optout',
     'ai_job_apply', 'messages_run', 'adhoc_message', 'test_mode', 'notice_sent',
-    'client_error', 'asset_upload', 'asset_delete', 'settings_save',
+    'client_error', 'asset_upload', 'asset_delete', 'settings_save', 'verse_save',
 ];

@@ -221,6 +221,12 @@ export function OverviewTab() {
                         ${event.preview_url ? html`<${CopyLink} label="Draft preview (share with crew)" url=${event.preview_url} />` : null}
                         <${CopyLink} label="Check-in (poster QR target)" url=${event.portal_url + '/in'} />
                         <${CopyLink} label="Privacy notice" url=${event.portal_url + '/privacy'} />
+                        <${CopyLink} label="Host console" url=${event.portal_url + '/host'} />
+                        <${CopyLink} label="Desk" url=${event.portal_url + '/desk'} />
+                        <p class="text-xs text-gray-400 pt-2">
+                            The stage and lobby screens need a link with a key in it. They are on the
+                            Live tab, next to the button that rotates them.
+                        </p>
                     <//>
                 </div>
             </div>

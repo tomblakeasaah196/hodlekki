@@ -91,7 +91,8 @@ function NewEventForm({ onDone, cloneFrom }) {
         brand_secondary: defaults.secondary || '#D11920',
     });
     const [options, setOptions] = useState({
-        details: true, brand: true, registration: true, form_fields: true, crew: false,
+        details: true, brand: true, registration: true, form_fields: true,
+        teams: true, verses: true, crew: false,
     });
     const [busy, setBusy] = useState(false);
     const [errors, setErrors] = useState({});
@@ -217,6 +218,8 @@ function NewEventForm({ onDone, cloneFrom }) {
                             ['brand', 'Colours, fonts and brand-kit images'],
                             ['registration', 'Capacity rules and the form'],
                             ['form_fields', 'Your own questions'],
+                            ['teams', 'Team colours (empty, ready to fill)'],
+                            ['verses', 'Welcome verses, already approved'],
                             ['crew', 'The crew list'],
                         ].map(([key, label]) => html`
                             <${Switch} key=${key} label=${label} checked=${options[key]}
@@ -224,7 +227,8 @@ function NewEventForm({ onDone, cloneFrom }) {
                     </div>
                     <p class="text-xs text-gray-500 mt-4">
                         Registrations, check-ins, scores, karaoke claims and display keys are never copied.
-                        Day times shift to the new start date.
+                        Team names and captains are not either — only the colours. Day times shift to the
+                        new start date.
                     </p>
                 </fieldset>` : null}
 

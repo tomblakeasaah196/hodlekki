@@ -1453,6 +1453,52 @@ function se_clone_event(PDO $pdo, int $sourceId, array $opts, array $input, int 
             }
         }
 
+        // Teams are the colours, not the people: a cloned event starts with
+        // the same palette and empty rosters, which is exactly what a series
+        // wants (§10.10). Names, captains and keys are deliberately dropped —
+        // "The Lions" belonged to last year's room.
+        if ($opt('teams') && se_table_exists($pdo, 'se_teams')) {
+            $stmt = $pdo->prepare(
+                "SELECT sort_order, color_hex, color_label FROM se_teams WHERE event_id = ? ORDER BY sort_order"
+            );
+            $stmt->execute([$sourceId]);
+            $insert = $pdo->prepare(
+                "INSERT INTO se_teams (event_id, sort_order, color_hex, color_label, team_key)
+                 VALUES (?, ?, ?, ?, ?)"
+            );
+            foreach ($stmt->fetchAll() as $t) {
+                $insert->execute([
+                    $newId, (int) $t['sort_order'], (string) $t['color_hex'],
+                    (string) $t['color_label'], se_random_token(SE_DISPLAY_KEY_LENGTH),
+                ]);
+            }
+        }
+
+        // Verses carry their approval with them: they were read by a human
+        // once and the text has not changed. Usage counts reset, because
+        // "spread them evenly" is a question about tonight.
+        if ($opt('verses') && se_table_exists($pdo, 'se_event_verses')) {
+            $stmt = $pdo->prepare(
+                "SELECT translation, ref_display, text, text_source, prayer_template, sort_order,
+                        is_active, approved_by, approved_at
+                   FROM se_event_verses WHERE event_id = ? ORDER BY sort_order, id"
+            );
+            $stmt->execute([$sourceId]);
+            $insert = $pdo->prepare(
+                "INSERT INTO se_event_verses
+                    (event_id, translation, ref_display, text, text_source, prayer_template,
+                     sort_order, is_active, approved_by, approved_at, times_used)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
+            );
+            foreach ($stmt->fetchAll() as $v) {
+                $insert->execute([
+                    $newId, $v['translation'], $v['ref_display'], $v['text'], $v['text_source'],
+                    $v['prayer_template'], (int) $v['sort_order'], (int) $v['is_active'],
+                    $v['approved_by'], $v['approved_at'],
+                ]);
+            }
+        }
+
         if ($opt('crew', false) && se_table_exists($pdo, 'se_crew')) {
             $stmt = $pdo->prepare(
                 "SELECT user_id, role FROM se_crew WHERE event_id = ? AND revoked_at IS NULL"

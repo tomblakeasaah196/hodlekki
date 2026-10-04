@@ -548,3 +548,58 @@ function se_portal_manage(array $event, array $days, array $settings): void
 </section>
     <?php
 }
+
+/**
+ * `/in` — the check-in page (§13.6).
+ *
+ * The first paint is real HTML so that a guest standing in the doorway on a
+ * weak signal sees the wordmark and the phone field immediately. The reveal,
+ * the countdown and the welcome card are enhancements on top.
+ */
+function se_portal_checkin(array $event, array $days, array $settings, array $window): void
+{
+    $slug    = (string) $event['slug'];
+    $title   = (string) $event['title'];
+    $edition = (string) ($event['edition_label'] ?? '');
+    $full    = trim($title . ' ' . $edition);
+    $doors   = se_parse_datetime(($days[0]['doors_open_at'] ?? null));
+    ?>
+<section class="se-section" aria-labelledby="se-checkin-title">
+  <div class="se-container se-measure">
+
+    <p class="se-label"><?= se_h(mb_strtoupper($full, 'UTF-8')) ?></p>
+    <h1 class="se-h1 se-page-title" id="se-checkin-title">Welcome to <?= se_h($title) ?>! Let's check you in.</h1>
+
+    <?php if (!$window['open']): ?>
+    <div class="se-glass se-pad se-stack" role="status">
+      <?php if (($window['reason'] ?? '') === 'CHECKIN_CLOSED'): ?>
+      <p class="se-h2">Check-in has closed — please see the desk.</p>
+      <p class="se-small se-muted">The team at the door will sort you out in a moment.</p>
+      <?php else: ?>
+      <p class="se-h2">Check-in opens<?= $doors !== null ? ' at ' . se_h(ltrim($doors->format('g:i A'), '0')) : ' soon' ?>. See you soon!</p>
+      <p class="se-small se-muted" id="se-checkin-countdown"
+         data-opens-at="<?= se_h((string) ($window['opens_at'] ?? '')) ?>">
+        Keep this page open — it will let you in the moment the doors do.
+      </p>
+      <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <div id="se-checkin" class="se-stack" aria-live="polite"
+         data-open="<?= $window['open'] ? '1' : '0' ?>"></div>
+
+    <noscript>
+      <p class="se-glass se-pad se-small">
+        This page needs JavaScript to check you in. Come to the desk and give
+        your phone number — it takes a few seconds.
+      </p>
+    </noscript>
+
+    <p class="se-small se-hero-foot">
+      <a class="se-md-link" href="<?= se_h(se_event_url($slug, '', false)) ?>">Back to <?= se_h($title) ?></a>
+      · <a class="se-md-link" href="<?= se_h(se_event_url($slug, 'privacy', false)) ?>">How we use your details</a>
+    </p>
+  </div>
+</section>
+    <?php
+}

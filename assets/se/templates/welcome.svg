@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- /assets/se/templates/welcome.svg
+     Welcome-verse card, 1080 x 1920 (guide §14.3).
+
+     Token ids follow §14.4 and are resolved on the guest's phone by
+     @se/core/svg.js. Nothing here is fetched at render time: the fonts are
+     inlined and the QR is drawn from the data, so the card rasterises on a
+     phone with no signal.
+
+     Live text only, no <foreignObject>, no script, no external references. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920" font-family="Inter, sans-serif">
+
+  <defs>
+    <linearGradient id="se-bg-grad" x1="0" y1="0" x2="0.4" y2="1">
+      <stop id="se__stop__primary" offset="0" stop-color="#1D356A"/>
+      <stop id="se__stop__bg" offset="0.55" stop-color="#0B0D13"/>
+      <stop id="se__stop__secondary--2" offset="1" stop-color="#D11920"/>
+    </linearGradient>
+    <radialGradient id="se-glow-grad" cx="0.5" cy="0.5" r="0.5">
+      <stop id="se__stop__glow" offset="0" stop-color="#D11920" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#D11920" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect id="se__fill__bg" x="0" y="0" width="1080" height="1920" fill="#0B0D13"/>
+  <rect x="0" y="0" width="1080" height="1920" fill="url(#se-bg-grad)" opacity="0.92"/>
+  <circle cx="540" cy="700" r="669" fill="url(#se-glow-grad)" opacity="0.3"/>
+
+  <text id="se__text__organizer" x="540" y="130" font-size="30" font-weight="700" letter-spacing="7"
+        text-anchor="middle" fill="#FFFFFF" fill-opacity="0.7">ENVISION</text>
+  <rect id="se__box__organizer--fit" x="64" y="98" width="952" height="44"/>
+
+  <text id="se__text__title" x="540" y="250" font-size="84" font-weight="800"
+        font-family="Unbounded, sans-serif" text-anchor="middle" fill="#FFFFFF">Chara</text>
+  <rect id="se__box__title--fit" x="64" y="170" width="952" height="96"/>
+
+  <text id="se__text__headline" x="540" y="560" font-size="72" font-weight="700"
+        text-anchor="middle" fill="#FFFFFF" fill-opacity="0.85">Welcome,</text>
+  <rect id="se__box__headline--fit" x="64" y="498" width="952" height="82"/>
+
+  <text id="se__text__first_name" x="540" y="700" font-size="112" font-weight="800"
+        font-family="Unbounded, sans-serif" text-anchor="middle" fill="#F5C518">Ada</text>
+  <rect id="se__box__first_name--fit" x="64" y="602" width="952" height="124"/>
+
+  <!-- The verse itself, on its own plate so it reads as a gift and not a caption -->
+  <rect id="se__fill__surface" x="64" y="820" width="952" height="620" rx="44"
+        fill="#151822" fill-opacity="0.72"/>
+
+  <text id="se__text__verse_ref" x="540" y="900" font-size="40" font-weight="700"
+        text-anchor="middle" fill="#F5C518">Psalms 16:11</text>
+  <rect id="se__box__verse_ref--fit" x="112" y="866" width="856" height="48"/>
+
+  <text id="se__text__verse" x="540" y="990" font-size="46" font-weight="500"
+        text-anchor="middle" fill="#FFFFFF">Thou wilt shew me the path of life.</text>
+  <rect id="se__box__verse--wrap-6" x="112" y="948" width="856"
+        height="300"/>
+
+  <text id="se__text__prayer" x="540" y="1330" font-size="36" font-weight="500"
+        font-style="italic" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.72">May this be your season, Ada.</text>
+  <rect id="se__box__prayer--wrap-2" x="112" y="1298" width="856" height="88"/>
+
+  <!-- Team flash: only when teams are running tonight -->
+  <g id="se__if__has_team">
+    <rect id="se__fill__team" x="280" y="1520" width="520" height="92" rx="46"
+          fill="#D11920"/>
+    <text id="se__text__team" x="540" y="1582" font-size="44"
+          font-weight="800" text-anchor="middle" fill="#FFFFFF">Team Black</text>
+    <rect id="se__box__team--fit" x="300" y="1538" width="480"
+          height="56"/>
+  </g>
+
+  <text id="se__text__url" x="540" y="1690" font-size="34" font-weight="700"
+        text-anchor="middle" fill="#FFFFFF">hodlc.lpc.cm/e/chara</text>
+  <rect id="se__box__url--fit" x="64" y="1660" width="952" height="44"/>
+
+  <text id="se__text__signature" x="540" y="1770" font-size="28" font-weight="500"
+        text-anchor="middle" fill="#FFFFFF" fill-opacity="0.55">Chara 2026 by Envision</text>
+  <rect id="se__box__signature--fit" x="64" y="1746" width="952" height="36"/>
+
+  <rect id="se__fill__secondary" x="440" y="1848" width="200" height="8" rx="4" fill="#D11920"/>
+</svg>

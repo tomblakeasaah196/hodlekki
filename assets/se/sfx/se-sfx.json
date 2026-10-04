@@ -1,0 +1,20 @@
+{
+  "src": "se-sfx.mp3",
+  "loudness_lufs": -16,
+  "note": "Offsets are in milliseconds: [start, duration]. Keep this file and the sprite in step — @se/core/sfx.js trusts it and plays nothing for a cue it cannot find.",
+  "sprite": {
+    "tick":      [0, 220],
+    "arm":       [500, 700],
+    "reveal":    [1500, 1100],
+    "correct":   [3000, 900],
+    "wrong":     [4200, 900],
+    "buzz":      [5400, 700],
+    "strike":    [6400, 800],
+    "ding":      [7500, 600],
+    "team_name": [8500, 1600],
+    "fanfare":   [10500, 2400],
+    "applause":  [13500, 3000],
+    "drumroll":  [17000, 2600],
+    "whoosh":    [20000, 800]
+  }
+}

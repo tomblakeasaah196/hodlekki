@@ -76,6 +76,8 @@ it as you type and tells you at once whether it is free.
 | Colours, fonts and brand-kit images | Scores, answers, karaoke claims |
 | Capacity rules and the form | Display keys (new ones are made) |
 | Your own questions | The old link |
+| Team colours (empty, ready to fill) | Team names and captains |
+| Welcome verses, still approved | How often each verse was used |
 | The crew (off by default) | |
 
 The dates shift to the new start date, keeping the same shape — a Saturday
@@ -455,9 +457,212 @@ made, so it fits wherever they post it.
 This is the cheapest invitation you have: it goes out in your guests' own
 voice, to people no flyer reaches.
 
+
 ---
 
-## 14. Settings and Health
+## 14. Checking people in
+
+Check-in is the one part of the night where a queue is unforgivable, so there
+are four ways in and they all work at once.
+
+### The window
+
+Check-in opens when **doors open** and closes at the day's **check-in closes**
+time. Before it opens, the page shows a countdown — "Check-in opens in 42
+minutes" — rather than a dead end. Both times are set per day in **Details**.
+
+### On their own phone
+
+The QR on the posters goes to `/e/<your-link>/in`. They type their phone
+number, see their name, and tap **Yes, that's me**.
+
+What happens next, in about a second:
+
+- a **verse** appears, picked from the ones you approved, with their name in
+  the prayer line;
+- their **team** sweeps in in its colour, with their **player number**;
+- the lobby screen says "Welcome Ada O. → Team Black".
+
+If they have already checked in tonight **on that phone**, they just see their
+card again. If they are already checked in but this is a **different** phone —
+a borrowed one, or a new handset — the page opens **read-only**: they can see
+their team and number but cannot play from it. To move the night to the new
+phone, ask the desk for a **transfer code**.
+
+If we do not know whether they are male or female, we ask once. It is the only
+thing teams are balanced on besides size, so it is not optional — but it is one
+tap and it is explained on screen.
+
+### Walk-ins
+
+Somebody who never registered taps **I'm not registered**, gives a name and a
+number, and is in. Walk-ins come out of the walk-in allowance you set in
+**Registration**, so they can run out while online seats remain — that is the
+point of having two pools.
+
+### At the desk
+
+**Desk mode** is at `/e/<your-link>/desk` and needs a crew sign-in. Search by
+name, by the last four digits of a phone number or by player number, and tap
+the person. It is built for one hand and a bad signal:
+
+- **Nothing waits for the network.** Every check-in is saved on the device
+  first and sent afterwards. If the Wi-Fi drops, carry on — the counter says
+  "3 waiting to sync" and they go up by themselves when the signal returns.
+- **Walk-in** adds somebody who is not on the list.
+- **Undo** reverses the last check-in. The player number, the team and any
+  karaoke place stay — they were said out loud and taking them back would
+  renumber the room.
+- **Get a code** issues a six-digit transfer code, good for ten minutes and one
+  use, that moves a guest's night to a different phone.
+
+### Posters
+
+**Check-in → Posters** makes the printable QR, in A4 for doors and corridors
+and A3 for the foyer. Press the button, then use **Print PDF** — it is sized
+to the paper exactly, so "Fit to page" cannot shrink it. The address is also
+printed in words underneath, for the camera that refuses to focus.
+
+Print them early. A poster is the only part of check-in that does not need
+anything to be working.
+
+---
+
+## 15. Welcome verses
+
+**Check-in → Welcome verses** is the list guests are greeted with. Each person
+gets one, spread evenly across the list.
+
+Add a reference — `Psalms 16:11` — and the King James text is fetched for you.
+The optional prayer line must contain `{name}`, which becomes their first name:
+"May this be your season, Ada."
+
+**Suggest verses** asks the AI for references on a theme you type. It never
+sees a guest. It proposes references; the text still comes from the KJV lookup,
+and every suggestion lands as **needs review**. Nothing is shown to anybody
+until you press **Approve**. If no verse is approved, guests simply do not get
+one — nothing breaks.
+
+---
+
+## 16. Teams
+
+**Teams** is colours first, because that is how the room talks: "Team Red", not
+"Team 3".
+
+Paste hex codes into the box, one per line, and the readable name — Red, Royal
+Blue, Lime — is worked out for you. Two to eight teams. Duplicates are dropped,
+because two teams called Red is nobody's idea of a good night.
+
+Two warnings can appear, and neither blocks you:
+
+- **two colours look alike** on a projector, which is a different question from
+  whether they look alike on your laptop;
+- **a colour is low contrast** against the stage background, in which case the
+  screens draw it with a white ring so it still reads from the back row.
+
+### How people are put on teams
+
+Automatically, at check-in, in this order: the **smallest** team first; then
+the team with the **fewest of that person's gender**; then the fewest **members
+or guests** to match; then simple round-robin. The result is that team sizes
+never differ by more than one, and the gender split stays even — without
+anybody queueing to pick sides.
+
+### On the night
+
+- **Names**: crew types them in, here or on the host console. The stage plays a
+  cue and reveals the name.
+- **Captains**: set from the host console or here, from that team's roster.
+- **Moves**: a producer can move somebody, with a reason, which goes in the log.
+  Points already scored stay with the team that earned them.
+
+**The team count locks** the moment the first person is assigned. Colours,
+names and captains can still change — the number of teams cannot, because the
+room has already been told.
+
+---
+
+## 17. The screens
+
+Two screens, both unattended, both opened with a link that carries a key.
+Find them on **Live → Screen links**, and **Rotate the links** if one has been
+shared too widely.
+
+### Lobby
+
+A TV by the door. Left: the big QR and a countdown to the start. Right:
+arrivals flying up as people check in, newest biggest. Underneath: a bar per
+team so the room can see the balance. After a quiet minute it shows a tip
+instead.
+
+If you would rather not show names downstairs, turn off **lobby names** in
+Settings and the cards read "New arrival → Team Black".
+
+### Stage
+
+The projector in the hall. Open the link, press **Start** once — that unlocks
+the sound, goes full screen and stops the laptop sleeping — and leave it alone
+for the rest of the night.
+
+It never asks our server for content: it reads a published file, so a slow
+moment on the website cannot blank the screen. A dot in the corner goes amber
+and then red if it stops hearing anything, and the last scene stays up.
+
+Scenes in this release: standby, welcome, teams, announcement, break and blank,
+plus the programme card. Games, leaderboard, karaoke and the recap arrive with
+the next release and currently show the standby frame rather than an empty
+screen.
+
+---
+
+## 18. The host console
+
+`/e/<your-link>/host`, crew sign-in. One person runs the night from here.
+
+- **Scene** — what the stage is showing. Tap a scene; it changes in about a
+  second.
+- **Announcement** — up to 160 characters on every screen and every phone, for
+  as many seconds as you choose. "The bus leaves at 9:30."
+- **Sound board** — the cues: fanfare, applause, drumroll, ding.
+- **Teams** — rename, set captains.
+- **Blackout** — the big red one. Also the `B` key.
+
+Keyboard, when you are on a laptop: `W` welcome · `T` teams · `S` leaderboard ·
+`K` karaoke · `B` blackout.
+
+Along the top, four dots tell you whether the night is actually working:
+**Screens** (how old the published state is — under three seconds is healthy),
+**Cron**, **SMS worker** and **Door** (is check-in open).
+
+**If two people are driving at once**, the second one to tap gets "Someone else
+just changed the show — check and retry" instead of silently undoing the first.
+That is deliberate. Decide between you who is driving.
+
+---
+
+## 19. Rehearsing without leaving a trace
+
+**Live → Rehearsal**, producers only.
+
+Turn **test mode** on and walk the whole night through: register, check in, see
+the teams form, drive the scenes. While it is on:
+
+- every screen carries a red **TEST MODE** ribbon, so nobody mistakes a
+  rehearsal for the real thing;
+- the crew can check in **outside** the check-in window;
+- registrations and check-ins made now are marked as tests and do not count
+  towards capacity or any number you report.
+
+**Reset rehearsal** deletes every test registration and check-in, and the
+contacts that only existed because of them. Real data is never touched.
+
+Test mode **switches itself off fifteen minutes before doors open**, because
+the one way to ruin a night is to leave it on.
+
+---
+
+## 20. Settings and Health
 
 **Settings** (administrators only) holds what applies to every event: the
 default colours, the privacy notice, the **privacy contact email** people
@@ -470,7 +675,7 @@ the database is up to date. Red names what is missing.
 
 ---
 
-## 15. FAQ
+## 21. FAQ
 
 **Can I change the link after the posters are printed?**
 Yes. The old link redirects to the new one, forever.
@@ -519,3 +724,29 @@ registration is closed.
 
 **Does the "I'm going" photo get uploaded?**
 No. The card is drawn on the guest's own phone and the photo never leaves it.
+
+**Someone checked in on a friend's phone by mistake.**
+The desk issues a **transfer code**. They type it on their own phone and the
+night moves across; the friend's phone drops to read-only.
+
+**The desk tablet lost signal halfway through the queue.**
+Keep going. Desk mode saves every check-in on the device first and shows how
+many are waiting. They send themselves when the signal returns.
+
+**The stage screen has frozen.**
+Look at the dot in the corner. Red means it has stopped hearing from us — the
+last scene stays up on purpose, so the room sees something rather than nothing.
+Reload the page; it picks up wherever the night has got to.
+
+**Can I change the number of teams after people have arrived?**
+No. The moment the first person is assigned, the count locks — they have
+already been told their colour. Colours, names and captains can still change.
+
+**Why is this person not on a team?**
+Teams are assigned at check-in, not at registration. Somebody who has not
+checked in has no team and no player number yet.
+
+**We rehearsed with real-looking data. Is it in the numbers?**
+Not if test mode was on. **Live → Reset rehearsal** removes every test row.
+Check the red ribbon was showing during the rehearsal — if it was not, the
+rows are real and have to be removed one by one from Attendees.

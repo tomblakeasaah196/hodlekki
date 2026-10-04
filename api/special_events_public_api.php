@@ -252,16 +252,20 @@ try {
             se_public_limit($pdo, $event, 'lookup', 20, 400, 600);
 
             $purpose = se_enum($body['purpose'] ?? 'register', ['register', 'checkin'], 'register');
-            if ($purpose === 'checkin') {
-                // Check-in arrives with PR3; the portal never asks for it yet.
-                se_api_error('Check-in is not available yet.', 'FEATURE_NOT_READY');
-            }
 
             $phone = se_public_phone($body['phone'] ?? '');
             se_rate_limit_or_fail($pdo, 'lookup_phone', (int) $event['id'] . ':' . $phone['e164'], 10, 600);
 
             $settings = se_event_settings($event);
             [, $device] = se_public_actor($pdo, $event, $body, false);
+
+            if ($purpose === 'checkin') {
+                if (!se_checkin_ready($pdo)) {
+                    se_api_error('Check-in is not available yet.', 'FEATURE_NOT_READY');
+                }
+                $days = se_event_days($pdo, (int) $event['id']);
+                se_api_success('OK', se_lookup_phone_checkin($pdo, $event, $days, $settings, $phone, $device));
+            }
 
             se_api_success('OK', se_lookup_phone($pdo, $event, $settings, $phone, $device));
         }
@@ -570,6 +574,85 @@ try {
             se_contact_optout($pdo, $event, $reg);
 
             se_api_success('Done — we will not contact you again.', ['opted_out' => true]);
+        }
+
+        // ------------------------------------------------------------------
+        case 'checkin': {
+            $event = se_public_event($pdo, $body);
+            se_public_require_writable($event);
+            se_public_limit($pdo, $event, 'checkin', 10, 600, 600);
+
+            if (!se_checkin_ready($pdo)) {
+                se_api_error('Check-in is not available yet.', 'FEATURE_NOT_READY');
+            }
+
+            $days   = se_event_days($pdo, (int) $event['id']);
+            $phone  = se_public_phone($body['phone'] ?? '');
+            se_rate_limit_or_fail($pdo, 'checkin_phone', (int) $event['id'] . ':' . $phone['e164'], 10, 600);
+
+            // The device row is created here rather than on the lookup, so a
+            // browsing guest never gets a cookie they did not need (§10.3.5).
+            $cookie = null;
+            $device = se_device_ensure($pdo, $event, $days, $cookie);
+
+            $settings    = se_event_settings($event);
+            $consentMode = (string) ($settings['registration']['consent_mode'] ?? 'required_followup');
+
+            $result = se_checkin($pdo, $event, $days, [
+                'phone'        => $phone,
+                'first_name'   => $body['first_name'] ?? null,
+                'last_name'    => $body['last_name'] ?? null,
+                'gender'       => $body['gender'] ?? null,
+                'email'        => $body['email'] ?? null,
+                'consent'      => se_bool($body['consent'] ?? false),
+                'consent_text' => $consentMode === 'off'
+                    ? ''
+                    : (string) ($settings['registration']['consent_text'] ?? ''),
+                'karaoke_interest' => se_bool($body['karaoke_interest'] ?? false),
+            ], [
+                'method'   => 'self',
+                'device'   => $device,
+                'days'     => $days,
+                'ip_hash'  => se_ip_hash(),
+                // A signed-in crew member rehearsing on their own phone may
+                // check in before the doors open while test mode is on.
+                'is_crew'  => isset($_SESSION['user_id'])
+                    && se_has_capability($pdo, (int) $event['id'], 'desk', (int) $_SESSION['user_id']),
+            ]);
+
+            $payload = $result['payload'];
+            $payload['readonly'] = ($device['mode'] ?? 'full') === 'readonly'
+                || $result['outcome'] === 'already_elsewhere';
+
+            se_api_success(
+                $result['outcome'] === 'checked_in'
+                    ? 'You are in!'
+                    : 'You are already checked in.',
+                $payload
+            );
+        }
+
+        // ------------------------------------------------------------------
+        case 'transfer': {
+            $event = se_public_event($pdo, $body);
+            se_public_require_writable($event);
+            se_public_limit($pdo, $event, 'transfer', 5, 100, 600);
+
+            $days   = se_event_days($pdo, (int) $event['id']);
+            $cookie = null;
+            $device = se_device_ensure($pdo, $event, $days, $cookie);
+
+            $out = se_transfer_code_redeem($pdo, $event, se_str($body['code'] ?? '', 10), $device);
+            $reg = se_registration_by_id($pdo, $out['registration_id'], (int) $event['id']);
+
+            if (!$reg) {
+                se_api_error('That code is no longer valid.', 'CODE_INVALID');
+            }
+
+            se_api_success(
+                'This phone is now yours for tonight.',
+                se_me_payload($pdo, $event, $days, $reg, se_device_load($pdo, $event, $cookie))
+            );
         }
 
         // ------------------------------------------------------------------

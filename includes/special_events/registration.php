@@ -653,9 +653,9 @@ function se_contact_optout(PDO $pdo, array $event, array $registration): void
 /**
  * Everything this device may know about its own registration.
  *
- * PR2 fills the registration, links and wants_visit parts; team, karaoke,
- * games, round, score and alerts arrive with PR3–PR5 and are present as nulls
- * so the client shape never changes.
+ * PR2 fills the registration, links and wants_visit parts; PR3 adds the
+ * team; karaoke, round, score and alerts arrive with PR4–PR5 and are present
+ * as nulls so the client shape never changes.
  */
 function se_me_payload(PDO $pdo, array $event, array $days, array $registration, ?array $device = null, ?string $manageToken = null): array
 {
@@ -671,6 +671,10 @@ function se_me_payload(PDO $pdo, array $event, array $days, array $registration,
             error_log('SE registration/me checkin: ' . $e->getMessage());
         }
     }
+
+    $team = !empty($registration['team_id']) && se_teams_ready($pdo)
+        ? se_team_find($pdo, (int) $event['id'], (int) $registration['team_id'])
+        : null;
 
     $links = [
         'ref_url' => se_event_url((string) $event['slug']) . '?r=' . rawurlencode((string) $registration['ref_code']),
@@ -695,7 +699,8 @@ function se_me_payload(PDO $pdo, array $event, array $days, array $registration,
             'device_mode'       => (string) ($device['mode'] ?? 'full'),
             'created_at'        => se_iso($registration['created_at'] ?? null),
         ],
-        'team'      => null,
+        // PR3 fills team; karaoke, round, presenter and score arrive with PR4/PR5.
+        'team'      => $team !== null ? se_team_public($team, se_event_theme($event)) : null,
         'karaoke'   => null,
         'games'     => ['joined' => $device !== null && ($device['joined_games_at'] ?? null) !== null],
         'round'     => null,

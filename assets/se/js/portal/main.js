@@ -301,6 +301,12 @@ function start() {
 
     if (config.view === 'manage') {
         startManage();
+    } else if (config.view === 'checkin') {
+        // Loaded on demand: the portal's own critical path must not carry
+        // the check-in flow, and /in never needs the hero machinery.
+        import('./checkin.js')
+            .then((module) => module.startCheckin(config))
+            .catch(() => toast('Check-in could not load. Please see the desk.', 'error'));
     } else if (config.view === 'home') {
         startHeroVideo();
         animateHero();

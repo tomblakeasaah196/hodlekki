@@ -23,7 +23,7 @@ cgi-bin/
 /composer.phar
 
 # Front-end tooling / node
-node_modules/
+node_modules
 tailwindcss-linux-x64
 tailwindcss-macos-*
 tailwindcss-windows-*
