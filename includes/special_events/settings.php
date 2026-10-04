@@ -312,8 +312,11 @@ function se_settings_spec(): array
         ]],
 
         'program' => ['type' => 'obj', 'children' => [
+            // The same three modes se_program_public_time() renders. 'hidden'
+            // used to be listed here instead of 'order_only', so choosing
+            // "Order only" in the Studio was silently reset to 'approximate'.
             'public_time_mode' => ['type' => 'enum', 'default' => 'approximate',
-                                   'values' => ['exact', 'approximate', 'hidden']],
+                                   'values' => SE_PROGRAM_TIME_MODES],
         ]],
 
         'portal' => ['type' => 'obj', 'children' => [

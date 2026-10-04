@@ -307,9 +307,13 @@ function se_program_public_time(?DateTimeImmutable $when, string $mode): ?string
     }
 
     if ($mode === 'approximate') {
+        // Snap to the hour, then add the rounded quarter. The old
+        // modify('+' . $delta . ' minutes') produced '+-7 minutes' when
+        // rounding down, which PHP builds disagree about: 8.3.6 reads it as
+        // +7, so 7:07 PM was published as ~7:14 PM.
         $minutes = (int) $when->format('i');
         $rounded = (int) (round($minutes / 15) * 15);
-        $when    = $when->modify('+' . ($rounded - $minutes) . ' minutes');
+        $when    = $when->setTime((int) $when->format('G'), 0)->modify('+' . $rounded . ' minutes');
 
         return '~' . ltrim($when->format('g:i A'), '0');
     }

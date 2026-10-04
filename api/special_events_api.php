@@ -181,6 +181,9 @@ function se_studio_event_payload(PDO $pdo, array $event, int $userId, string $ac
             'checkin_closes_at' => $d['checkin_closes_at'],
         ], $days),
         'registration'   => [
+            // The Registration tab reads every capacity field from this block;
+            // without this key the seats box always showed empty.
+            'online_capacity'          => $event['online_capacity'] !== null ? (int) $event['online_capacity'] : null,
             'reg_opens_at'             => $event['reg_opens_at'],
             'reg_closes_at'            => $event['reg_closes_at'],
             'reg_override'             => $event['reg_override'],
