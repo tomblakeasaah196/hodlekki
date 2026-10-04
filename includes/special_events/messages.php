@@ -612,7 +612,7 @@ function se_messages_run_scheduled(PDO $pdo, array $event, array $days, array $s
         return $finish('skipped', ['detail' => 'Nobody to text.']);
     }
 
-    $result = se_messages_send($pdo, $event, $days, $kind, $template, $recipients, $createdBy);
+    $result = se_messages_send($pdo, $event, $days, $kind, $template, $recipients, $createdBy, $kind === 'thank_you' ? '#recap' : '');
 
     return $finish($result['recipients'] > 0 ? 'queued' : 'skipped', $result);
 }

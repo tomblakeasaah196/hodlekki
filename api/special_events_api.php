@@ -1896,6 +1896,38 @@ try {
         ));
     }
 
+    case 'insights_get': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+        se_api_success('OK', se_insights($pdo, $event));
+    }
+
+    case 'handoff_preview': {
+        $event = se_studio_event($pdo, $body, 'handoff.run');
+        se_api_success('Preview ready.', se_handoff_preview($pdo, $event, se_bool($body['include_no_shows'] ?? false)));
+    }
+
+    case 'handoff_push': {
+        $event = se_studio_event($pdo, $body, 'handoff.run');
+        $overrides = is_array($body['overrides'] ?? null) ? $body['overrides'] : [];
+        $options = is_array($body['options'] ?? null) ? $body['options'] : [];
+        se_api_success('Hand-off complete.', se_handoff_push($pdo, $event, $options, $overrides, $userId));
+    }
+
+    case 'handoff_history': {
+        $event = se_studio_event($pdo, $body, 'handoff.run');
+        $stmt = $pdo->prepare("SELECT id, reach_campaign_id, summary_json, created_by, created_at FROM se_handoffs WHERE event_id=? ORDER BY id DESC LIMIT 50");
+        $stmt->execute([(int) $event['id']]);
+        se_api_success('OK', ['runs' => $stmt->fetchAll() ?: []]);
+    }
+
+    case 'report_links': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+        se_api_success('OK', [
+            'pdf' => '/api/special_events_report.php?event=' . rawurlencode((string) $event['public_id']),
+            'excel' => '/api/special_events_export.php?event=' . rawurlencode((string) $event['public_id']) . '&full=1',
+        ]);
+    }
+
     case 'decks_list': case 'deck_list': case 'deck_save': case 'deck_item_save': case 'deck_items_review': case 'deck_generate': case 'deck_generate_apply': case 'game_list': case 'games_list': case 'games_save': case 'game_save': case 'game_items_save': {
         $event=se_studio_event($pdo,$body,'event.edit');
         if($action==='deck_list'||$action==='decks_list') se_api_success('OK',['decks'=>se_deck_list($pdo,(int)$event['id'],$body['content_type']??null)]);

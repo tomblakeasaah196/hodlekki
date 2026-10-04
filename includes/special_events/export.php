@@ -177,6 +177,40 @@ function se_export_attendees(PDO $pdo, array $event, bool $withPii, array &$meta
     $summary->getColumnDimension('A')->setAutoSize(true);
     $summary->getColumnDimension('B')->setAutoSize(true);
 
+    // Full operational appendix (§18.6). These sheets deliberately use
+    // registration codes/display names rather than contact details.
+    $appendices = [
+        'Check-ins' => [
+            "SELECT r.reg_code, r.display_name, c.day_date, c.method, c.is_walkin, c.checked_in_at FROM se_checkins c JOIN se_registrations r ON r.id=c.registration_id WHERE c.event_id=? ORDER BY c.checked_in_at",
+            ['Reg code','Display name','Day','Method','Walk-in','Checked in at'],
+        ],
+        'Scores' => [
+            "SELECT scope, team_id, registration_id, round_id, kind, points, voided_at, created_at FROM se_score_events WHERE event_id=? ORDER BY id",
+            ['Scope','Team ID','Registration ID','Round ID','Kind','Points','Voided at','Created at'],
+        ],
+        'Karaoke' => [
+            "SELECT r.reg_code, r.display_name, s.title, s.artist, k.status, k.queue_no, k.on_stage_at, k.finished_at FROM se_karaoke_entries k JOIN se_registrations r ON r.id=k.registration_id JOIN se_songs s ON s.id=k.song_id WHERE k.event_id=? ORDER BY k.queue_no,k.id",
+            ['Reg code','Display name','Song','Artist','Status','Queue #','On stage','Finished'],
+        ],
+        'Feedback' => [
+            "SELECT r.reg_code, r.display_name, f.nps, f.favorite, f.one_word, f.comment, f.wants_visit, f.future_optin, f.created_at FROM se_feedback f JOIN se_registrations r ON r.id=f.registration_id WHERE f.event_id=? ORDER BY f.id",
+            ['Reg code','Display name','NPS','Favourite','One word','Comment','Wants visit','Future opt-in','Created at'],
+        ],
+    ];
+    foreach ($appendices as $name => [$sql, $labels]) {
+        $extra = $spreadsheet->createSheet();
+        $extra->setTitle($name);
+        foreach ($labels as $i => $label) $extra->setCellValue(Coordinate::stringFromColumnIndex($i + 1) . '1', $label);
+        if (($name !== 'Feedback' || se_table_exists($pdo, 'se_feedback')) && ($name !== 'Scores' || se_table_exists($pdo, 'se_score_events'))) {
+            $q = $pdo->prepare($sql); $q->execute([$eventId]); $line = 1;
+            foreach ($q->fetchAll(PDO::FETCH_NUM) ?: [] as $values) {
+                $line++;
+                foreach ($values as $i => $value) $extra->setCellValueExplicit(Coordinate::stringFromColumnIndex($i + 1) . $line, (string) ($value ?? ''), DataType::TYPE_STRING);
+            }
+        }
+        $extra->getStyle('A1:' . Coordinate::stringFromColumnIndex(count($labels)) . '1')->getFont()->setBold(true);
+    }
+
     $spreadsheet->setActiveSheetIndex(0);
 
     return $spreadsheet;

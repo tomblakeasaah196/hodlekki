@@ -1,0 +1,1 @@
+{"type":"object","required":["headline","paragraphs","highlights","recommendations"],"properties":{"headline":{"type":"string"},"paragraphs":{"type":"array","items":{"type":"string"},"minItems":3,"maxItems":3},"highlights":{"type":"array","items":{"type":"string"},"maxItems":5},"recommendations":{"type":"array","items":{"type":"string"},"maxItems":3}}}

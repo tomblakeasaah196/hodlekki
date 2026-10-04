@@ -84,6 +84,20 @@ function render(host, data, config, reload) {
     if (status !== 'cancelled' && status !== 'removed') {
         const actions = el('div', { class: 'se-action-grid' });
 
+        if (['post', 'archived'].includes(config.event?.phase) || ['#recap', '#feedback'].includes(location.hash)) {
+            actions.appendChild(el('button', {
+                class: 'se-action', type: 'button', text: '✨  My Night card',
+                onclick: async () => {
+                    const { openCardBuilder } = await import('./card.js');
+                    openCardBuilder('my_night');
+                },
+            }));
+            actions.appendChild(el('button', {
+                class: 'se-action', type: 'button', text: '💬  Share one-minute feedback',
+                onclick: () => openFeedback(host, reload),
+            }));
+        }
+
         if (config.flags?.im_going_card !== false) {
             actions.appendChild(el('button', {
                 class: 'se-action', type: 'button', text: '🎟  Your “I’m going” card',
@@ -223,6 +237,32 @@ function optOutBlock() {
     });
 
     return el('p', { class: 'se-hero-foot' }, button);
+}
+
+function openFeedback(host, reload) {
+    const nps = el('input', { class: 'se-input', type: 'number', min: '0', max: '10', required: true, placeholder: '0–10', 'aria-label': 'Likelihood to recommend, zero to ten' });
+    const favorite = el('input', { class: 'se-input', maxlength: '30', placeholder: 'Favourite moment' });
+    const oneWord = el('input', { class: 'se-input', maxlength: '40', placeholder: 'One word for the night' });
+    const comment = el('textarea', { class: 'se-input', maxlength: '2000', rows: '3', placeholder: 'Anything else?' });
+    const visit = el('input', { type: 'checkbox' });
+    const future = el('input', { type: 'checkbox' });
+    const form = el('form', { class: 'se-glass se-pad se-stack-sm', id: 'feedback', onsubmit: async (event) => {
+        event.preventDefault();
+        const button = event.submitter; button.disabled = true;
+        try {
+            await call('public', 'feedback', { ...eventRef(), nps: Number(nps.value), favorite: favorite.value, one_word: oneWord.value, comment: comment.value, wants_visit: visit.checked, future_optin: future.checked });
+            toast('Thank you — your feedback is saved.', 'success');
+            reload();
+        } catch (error) { toast(error.message, 'error'); button.disabled = false; }
+    } },
+        el('h2', { class: 'se-h2', text: 'How was your night?' }),
+        el('label', { class: 'se-small', text: 'How likely are you to recommend the next one? (0–10)' }), nps,
+        favorite, oneWord, comment,
+        el('label', { class: 'se-small' }, visit, ' I would like to visit HOD Lekki'),
+        el('label', { class: 'se-small' }, future, ' Keep me posted about future events'),
+        el('button', { class: 'se-btn se-btn-primary', type: 'submit', text: 'Send feedback' }));
+    host.replaceChildren(form);
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 /** Shown when the token has expired: a way back in that reveals nothing. */

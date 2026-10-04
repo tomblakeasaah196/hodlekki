@@ -122,3 +122,10 @@ No — the profile now belongs to Embrace. Ask an Embrace leader to update it.
 Super Admins, pastors, and members of the Reach / Evangelism and IDI departments.
 
 > Changing anything in Reach? Update this guide in the same pull request — CI checks for it.
+
+## Special Event campaigns
+
+Campaigns of type **Special Event** are created by the Special Events hand-off;
+their leads arrive with notes about the event. Envision reviews consent and
+attendance before pushing them. Continue follow-up here using the normal Reach
+workflow; do not create a second campaign for the same event.

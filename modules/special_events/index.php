@@ -98,6 +98,7 @@ $se_boot = [
 <?= se_json_for_html(se_import_map(false)) ?>
 </script>
 
+<script src="/assets/se/vendor/chartjs-4.5.0/chart.umd.min.js"></script>
 <script type="module" src="/assets/se/js/studio/main.js"></script>
 
 <?php require_once '../../includes/footer.php'; ?>

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- /assets/se/templates/team.svg
+     Team card, 1080 x 1920 (guide §14.3).
+
+     Token ids follow §14.4 and are resolved on the guest's phone by
+     @se/core/svg.js. Nothing here is fetched at render time: the fonts are
+     inlined and the QR is drawn from the data, so the card rasterises on a
+     phone with no signal.
+
+     Live text only, no <foreignObject>, no script, no external references. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920" font-family="Inter, sans-serif">
+
+  <defs>
+    <linearGradient id="se-bg-grad" x1="0" y1="0" x2="0.4" y2="1">
+      <stop id="se__stop__primary" offset="0" stop-color="#1D356A"/>
+      <stop id="se__stop__bg" offset="0.55" stop-color="#0B0D13"/>
+      <stop id="se__stop__secondary--2" offset="1" stop-color="#D11920"/>
+    </linearGradient>
+    <radialGradient id="se-glow-grad" cx="0.5" cy="0.5" r="0.5">
+      <stop id="se__stop__glow" offset="0" stop-color="#D11920" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#D11920" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect id="se__fill__bg" x="0" y="0" width="1080" height="1920" fill="#0B0D13"/>
+  <rect x="0" y="0" width="1080" height="1920" fill="url(#se-bg-grad)" opacity="0.92"/>
+  <circle cx="540" cy="600" r="648" fill="url(#se-glow-grad)" opacity="0.32"/>
+
+  <!-- The team colour is the whole point of this card, so it is the frame -->
+  <rect id="se__stroke__team" x="28" y="28" width="1024" height="1864" rx="56" fill="none"
+        stroke="#D11920" stroke-width="16"/>
+
+  <text id="se__text__organizer" x="540" y="130" font-size="30" font-weight="700" letter-spacing="7"
+        text-anchor="middle" fill="#FFFFFF" fill-opacity="0.7">ENVISION</text>
+  <rect id="se__box__organizer--fit" x="96" y="98" width="888" height="44"/>
+
+  <text id="se__text__title" x="540" y="250" font-size="80" font-weight="800"
+        font-family="Unbounded, sans-serif" text-anchor="middle" fill="#FFFFFF">Chara</text>
+  <rect id="se__box__title--fit" x="96" y="174" width="888" height="92"/>
+
+  <text id="se__text__headline" x="540" y="520" font-size="56" font-weight="700"
+        letter-spacing="4" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.8">I&#8217;M PLAYING FOR</text>
+  <rect id="se__box__headline--fit" x="96" y="472" width="888" height="66"/>
+
+  <text id="se__text__team" x="540" y="700" font-size="130" font-weight="800"
+        font-family="Unbounded, sans-serif" text-anchor="middle" fill="#D11920">Team Black</text>
+  <rect id="se__box__team--fit" x="64" y="584" width="952" height="146"/>
+
+  <rect id="se__fill__surface" x="96" y="840" width="888" height="430" rx="44"
+        fill="#151822" fill-opacity="0.72"/>
+
+  <text x="540" y="930" font-size="30" font-weight="700" letter-spacing="5"
+        text-anchor="middle" fill="#FFFFFF" fill-opacity="0.5">CAPTAIN</text>
+  <text id="se__text__captain" x="540" y="1010" font-size="58" font-weight="700"
+        text-anchor="middle" fill="#FFFFFF">Ada O.</text>
+  <rect id="se__box__captain--fit" x="144" y="960" width="792" height="68"/>
+
+  <text x="540" y="1110" font-size="30" font-weight="700" letter-spacing="5"
+        text-anchor="middle" fill="#FFFFFF" fill-opacity="0.5">MY NUMBER</text>
+  <text id="se__text__player_no" x="540" y="1210" font-size="96" font-weight="800"
+        font-family="Unbounded, sans-serif" text-anchor="middle" fill="#F5C518">17</text>
+  <rect id="se__box__player_no--fit" x="144" y="1126" width="792" height="106"/>
+
+  <text id="se__text__count" x="540" y="1400" font-size="40" font-weight="500"
+        text-anchor="middle" fill="#FFFFFF" fill-opacity="0.72">12 of us tonight</text>
+  <rect id="se__box__count--fit" x="96" y="1366" width="888" height="50"/>
+
+  <text id="se__text__url" x="540" y="1664" font-size="34" font-weight="700"
+        text-anchor="middle" fill="#FFFFFF">hodlc.lpc.cm/e/chara</text>
+  <rect id="se__box__url--fit" x="96" y="1634" width="888" height="44"/>
+
+  <text id="se__text__signature" x="540" y="1740" font-size="28" font-weight="500"
+        text-anchor="middle" fill="#FFFFFF" fill-opacity="0.55">Chara 2026 by Envision</text>
+  <rect id="se__box__signature--fit" x="96" y="1716" width="888" height="36"/>
+
+  <rect id="se__fill__secondary" x="440" y="1832" width="200" height="8" rx="4" fill="#D11920"/>
+</svg>
