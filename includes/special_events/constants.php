@@ -99,6 +99,69 @@ const SE_GAME_TYPES = ['live_quiz', 'trivia', 'charades', 'buzzer', 'who_am_i', 
 
 const SE_CONTENT_TYPES = ['mcq', 'open', 'charade', 'clues', 'emoji', 'verse', 'survey'];
 
+/** What a producer sees for each game type and content type. */
+const SE_GAME_TYPE_LABELS = [
+    'live_quiz' => 'Live Quiz',
+    'trivia'    => 'Bible Trivia (captains)',
+    'buzzer'    => 'Buzzer',
+    'who_am_i'  => 'Who Am I?',
+    'charades'  => 'Bible Charades',
+    'feud'      => 'Family Feud',
+];
+
+const SE_CONTENT_TYPE_LABELS = [
+    'mcq'     => 'Multiple choice',
+    'open'    => 'Question and answer',
+    'emoji'   => 'Emoji puzzle',
+    'verse'   => 'Finish the verse',
+    'clues'   => 'Who am I? clues',
+    'charade' => 'Charades phrase',
+    'survey'  => 'Feud survey question',
+];
+
+/**
+ * Which content each game type can play (§11.1). Live Quiz and Trivia need
+ * answer choices, so a verse or emoji item only qualifies there once it has
+ * them (se_game_item_playable()).
+ */
+const SE_GAME_CONTENT_TYPES = [
+    'live_quiz' => ['mcq', 'verse', 'emoji'],
+    'trivia'    => ['mcq', 'verse'],
+    'buzzer'    => ['open', 'verse', 'emoji', 'mcq'],
+    'who_am_i'  => ['clues'],
+    'charades'  => ['charade'],
+    'feud'      => ['survey'],
+];
+
+/** Game settings defaults (§11.14). Every number is editable per game. */
+const SE_GAME_DEFAULTS = [
+    'live_quiz' => [
+        'preroll_ms' => 3000, 'duration_ms' => 20000, 'grace_ms' => 1500, 'points_mode' => 'standard',
+        'team_base' => 1000, 'auto_lock' => true, 'auto_score' => true,
+    ],
+    'trivia' => [
+        'preroll_ms' => 3000, 'duration_ms' => 30000, 'grace_ms' => 1500, 'points_correct' => 300,
+        'use_suggestions_if_no_captain' => true, 'auto_lock' => true, 'auto_score' => true,
+    ],
+    'buzzer' => [
+        'preroll_ms' => 2500, 'window_ms' => 15000, 'reopen_window_ms' => 10000, 'points_correct' => 300,
+        'wrong_penalty' => 0, 'reopen_on_wrong' => true,
+    ],
+    'who_am_i' => [
+        'preroll_ms' => 2500, 'window_ms' => 20000, 'points_by_clue' => [500, 400, 300, 200, 100],
+        'wrong_penalty' => 0,
+    ],
+    'charades' => [
+        'turn_ms' => 60000, 'points_per_word' => 200, 'max_passes' => 2,
+    ],
+    'feud' => [
+        'round_multipliers' => [1, 1, 2, 3], 'faceoff_window_ms' => 15000,
+    ],
+];
+
+/** Charades categories (Appendix C). */
+const SE_CHARADE_CATEGORIES = ['person', 'story', 'object', 'place', 'miracle', 'parable'];
+
 const SE_PROGRAM_KINDS = [
     'welcome', 'worship', 'prayer', 'word', 'game', 'karaoke', 'debate',
     'break', 'food', 'announcement', 'performance', 'buffer', 'closing', 'other',

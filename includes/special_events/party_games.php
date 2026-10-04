@@ -1,302 +1,521 @@
 <?php
 // /includes/special_events/party_games.php
-// Party games, survey boards and finale controls (Special Events PR6).
+//
+// The party games and the finale (guide §11.7–§11.11): judging a buzz, Who Am
+// I? clues, Bible Charades turns, Family Feud (survey, board, face-off,
+// strikes, steal, bank), the leaderboard finale, and the Chara starter pack
+// (Appendix G).
+//
+// Privacy rules that matter here (AGENTS.md):
+//   * a charades phrase reaches ONLY the presenter's phone (through `me`) and
+//     the capability-protected console — never a snapshot;
+//   * names (buzzers, presenters, face-off players, the MVP) go only into the
+//     key-protected room snapshot, never into public.json.
 
-function se_chara_starter_content(PDO $pdo, array $event, int $actor): array
-{
-    $sets = [
-        ['title' => 'Chara · Who Am I?', 'type' => 'clues', 'items' => [
-            ['clues' => ['My father gave me a special coat', 'My brothers sold me', 'I interpreted dreams in Egypt', 'I became governor over Egypt'], 'answer' => 'Joseph', 'accept' => ['joseph']],
-            ['clues' => ['I was raised by my cousin', 'I became queen in Persia', 'I asked my people to fast', 'I said, if I perish, I perish'], 'answer' => 'Esther', 'accept' => ['esther', 'queen esther']],
-        ]],
-        ['title' => 'Chara · Bible Charades', 'type' => 'charade', 'items' => [
-            ['phrase' => 'David and Goliath', 'category' => 'story'],
-            ['phrase' => 'Zacchaeus climbing a tree', 'category' => 'story', 'hint' => 'A short man wanted to see Jesus'],
-            ['phrase' => "Daniel in the lions' den", 'category' => 'story'],
-        ]],
-        ['title' => 'Chara · Feud Survey', 'type' => 'survey', 'items' => array_map(static fn(string $question): array => ['question' => $question], [
-            "Name something you'd find on Noah's Ark.",
-            'Name a gospel song everyone in Lagos knows the words to.',
-            'Name something people do at a Nigerian wedding reception.',
-            'Name a Bible character known for being strong.',
-            'Name something you bring to a church picnic.',
-        ])],
-    ];
-    $created = 0;
+// --------------------------------------------------------------------------
+// Formulas — pure, unit-tested
+// --------------------------------------------------------------------------
 
-    foreach ($sets as $set) {
-        $check = $pdo->prepare('SELECT id FROM se_decks WHERE event_id=? AND title=? LIMIT 1');
-        $check->execute([(int) $event['id'], $set['title']]);
-        $deckId = (int) ($check->fetchColumn() ?: 0);
-
-        if (!$deckId) {
-            $deck = se_deck_save($pdo, $event, ['title' => $set['title'], 'content_type' => $set['type'], 'scope' => 'event', 'description' => 'Appendix G starter content'], $actor);
-            $deckId = (int) $deck['id'];
-        }
-
-        foreach ($set['items'] as $index => $payload) {
-            $json = se_json_encode($payload);
-            $exists = $pdo->prepare('SELECT 1 FROM se_deck_items WHERE deck_id=? AND payload_json=? LIMIT 1');
-            $exists->execute([$deckId, $json]);
-
-            if ($exists->fetchColumn()) {
-                continue;
-            }
-            $item = se_deck_item_save($pdo, $event, ['deck_id' => $deckId, 'content_type' => $set['type'], 'payload' => $payload, 'sort_order' => $index, 'source' => 'manual'], $actor);
-            $pdo->prepare("UPDATE se_deck_items SET review_status='approved',reviewed_by=?,reviewed_at=NOW() WHERE id=?")->execute([$actor, (int) $item['id']]);
-            $created++;
-        }
-    }
-
-    return ['created' => $created, 'decks' => count($sets)];
-}
-
+/** Who Am I? points by the clue the winning buzz came on (500, 400, …). */
 function se_who_am_i_points(array $pointsByClue, int $clueIndex): int
 {
     if ($pointsByClue === []) {
-        $pointsByClue = [500, 400, 300, 200, 100];
+        $pointsByClue = SE_GAME_DEFAULTS['who_am_i']['points_by_clue'];
     }
     $index = max(0, min(count($pointsByClue) - 1, $clueIndex));
 
     return max(0, (int) $pointsByClue[$index]);
 }
 
+/** Family Feud: Σ revealed answer points × the round multiplier (≥ 1). */
 function se_feud_bank_points(array $revealedPoints, int $multiplier): int
 {
     return array_sum(array_map('intval', $revealedPoints)) * max(1, $multiplier);
 }
 
-function se_round_state_data(array $round): array
-{
-    $state = json_decode((string) ($round['state_json'] ?? '{}'), true);
+// --------------------------------------------------------------------------
+// Shared: a round change under the live lock
+// --------------------------------------------------------------------------
 
-    return is_array($state) ? $state : [];
-}
-
-function se_party_round(PDO $pdo, array $event, int $roundId, bool $lock = false): array
-{
-    $sql = 'SELECT r.*, g.type game_type, g.settings_json, g.weight FROM se_rounds r JOIN se_games g ON g.id = r.game_id WHERE r.id = ? AND r.event_id = ?';
-
-    if ($lock) {
-        $sql .= ' FOR UPDATE';
-    }
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$roundId, (int) $event['id']]);
-    $round = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if (!$round) {
-        throw new SeNotFoundException('Round not found.');
-    }
-
-    return $round;
-}
-
+/**
+ * Run `$change($round, $live)` with the round row locked inside
+ * se_live_mutate(). `$change` returns [result, live-state changes].
+ */
 function se_party_live_mutate(PDO $pdo, array $event, int $roundId, ?int $expected, int $actor, string $action, callable $change): array
 {
     $result = [];
-    $state = se_live_mutate($pdo, $event, $expected, static function () use ($pdo, $event, $roundId, $change, &$result): array {
-        $round = se_party_round($pdo, $event, $roundId, true);
-        $result = $change($round);
+    $state  = se_live_mutate($pdo, $event, $expected, static function (array $live) use ($pdo, $event, $roundId, $change, &$result): array {
+        $round = se_round_find($pdo, (int) $event['id'], $roundId, true);
+        if (!$round) {
+            throw new SeNotFoundException('We could not find that round.');
+        }
 
-        return ['active_game_id' => (int) $round['game_id'], 'active_round_id' => $roundId, 'scene' => 'game'];
-    }, $action, ['round_id' => $roundId], $actor);
+        [$result, $liveChanges] = $change($round, $live);
+
+        return ['active_game_id' => (int) $round['game_id'], 'active_round_id' => $roundId, 'scene' => 'game'] + $liveChanges;
+    }, 'round_op:' . $action, ['round_id' => $roundId], $actor);
 
     return ['version' => (int) $state['version']] + $result;
 }
 
+/** Persist a round's working state. */
+function se_round_state_save(PDO $pdo, int $roundId, array $data): void
+{
+    $pdo->prepare("UPDATE se_rounds SET state_json = ? WHERE id = ?")->execute([se_json_encode($data), $roundId]);
+}
+
+// --------------------------------------------------------------------------
+// Buzzer games and Who Am I? (§11.7, §11.8)
+// --------------------------------------------------------------------------
+
+/**
+ * Next clue (§11.8): the stage adds the clue, every team that was locked out
+ * may buzz again, and a fresh buzz window opens.
+ */
 function se_clue_next(PDO $pdo, array $event, int $roundId, ?int $expected, int $actor): array
 {
-    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'clue_next', static function (array $round) use ($pdo, $roundId): array {
-        if ($round['game_type'] !== 'who_am_i' || !in_array($round['state'], ['armed', 'open'], true)) {
-            throw new SeRuleException('STALE_STATE', 'That clue cannot be advanced now.');
+    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'clue_next', static function (array $round, array $live) use ($pdo): array {
+        if ((string) $round['game_type'] !== 'who_am_i' || !in_array((string) $round['state'], ['armed', 'open', 'locked'], true)) {
+            throw new SeRuleException('STALE_STATE', 'Show the first clue (Start) before moving on.');
         }
-        $item = se_round_item($pdo, $round);
-        $clues = $item['payload']['clues'] ?? [];
-        $state = se_round_state_data($round);
-        $next = min(max(0, count($clues) - 1), ((int) ($state['clue_index'] ?? 0)) + 1);
 
-        if ($next === (int) ($state['clue_index'] ?? 0)) {
-            throw new SeRuleException('NO_MORE_CLUES', 'That was the final clue.');
+        $item  = se_round_item($pdo, $round);
+        $clues = (array) ($item['payload']['clues'] ?? []);
+        $data  = se_round_state_data($round);
+        $index = (int) ($data['clue_index'] ?? 0);
+
+        if ($index + 1 >= count($clues)) {
+            throw new SeRuleException('NO_MORE_CLUES', 'That was the last clue — reveal the answer.');
         }
-        $state['clue_index'] = $next;
-        $state['locked_out'] = [];
-        $state['attempt'] = ((int) ($state['attempt'] ?? 1)) + 1;
-        $stmt = $pdo->prepare('UPDATE se_rounds SET state_json = ?, attempt = attempt + 1, opens_at = NOW(3), closes_at = DATE_ADD(NOW(3), INTERVAL 15 SECOND) WHERE id = ?');
-        $stmt->execute([se_json_encode($state), $roundId]);
+        if (se_round_buzz_leader($pdo, $round) !== null) {
+            throw new SeRuleException('STALE_STATE', 'Judge the buzz first.');
+        }
 
-        return ['clue_index' => $next, 'clues_total' => count($clues)];
+        $data['clue_index'] = $index + 1;
+        $data['locked_out'] = [];
+
+        $settings = se_game_settings($round);
+        $opens    = se_epoch_ms() + 1500;
+        $closes   = $opens + (int) ($settings['window_ms'] ?? 20000);
+
+        $pdo->prepare(
+            "UPDATE se_rounds SET state = 'armed', attempt = attempt + 1, state_json = ?, opens_at = ?, closes_at = ?, locked_at = NULL
+              WHERE id = ?"
+        )->execute([se_json_encode($data), se_ms_to_sql($opens), se_ms_to_sql($closes), (int) $round['id']]);
+
+        return [['clue_index' => $index + 1, 'clues_total' => count($clues)], se_live_cue($live, 'whoosh')];
     });
 }
 
+/**
+ * Judge the buzz the host heard (§11.7.6).
+ *
+ * ✔ awards the team (buzzer: points_correct; Who Am I?: by clue), reveals the
+ * answer and scores the round. ✘ applies the optional penalty and locks the
+ * team out; a Buzzer round then reopens for the other teams when
+ * `reopen_on_wrong` is on, and a Who Am I? round waits for the next clue.
+ */
+function se_buzz_judge_party(PDO $pdo, array $event, int $roundId, int $buzzId, bool $correct, ?int $expected, int $actor): array
+{
+    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'buzz_judge', static function (array $round, array $live) use ($pdo, $event, $roundId, $buzzId, $correct, $actor): array {
+        $type = (string) $round['game_type'];
+        if (!in_array($type, ['buzzer', 'who_am_i'], true)) {
+            throw new SeRuleException('STALE_STATE', 'This round is not judged by buzz.');
+        }
+        if (in_array((string) $round['state'], ['revealed', 'scored', 'void'], true)) {
+            throw new SeRuleException('STALE_STATE', 'This round is already over.');
+        }
+
+        $stmt = $pdo->prepare("SELECT * FROM se_buzzes WHERE id = ? AND round_id = ? AND judged = 'pending' FOR UPDATE");
+        $stmt->execute([$buzzId, $roundId]);
+        $buzz = $stmt->fetch();
+        if (!$buzz) {
+            throw new SeRuleException('STALE_STATE', 'That buzz was already judged.');
+        }
+
+        $pdo->prepare("UPDATE se_buzzes SET judged = ? WHERE id = ?")->execute([$correct ? 'correct' : 'wrong', $buzzId]);
+
+        $settings = se_game_settings($round);
+        $data     = se_round_state_data($round);
+        $teamId   = (int) $buzz['team_id'];
+        $reason   = !empty($round['is_test']) ? se_score_test_reason() : null;
+
+        if ($correct) {
+            $points = $type === 'who_am_i'
+                ? se_who_am_i_points((array) ($settings['points_by_clue'] ?? []), (int) ($data['clue_index'] ?? 0))
+                : (int) ($settings['points_correct'] ?? 300);
+            $points = se_weighted_points($points, $round['weight'] ?? 1);
+
+            if ($points > 0) {
+                se_score_insert($pdo, $event, [
+                    'scope' => 'team', 'team_id' => $teamId, 'game_id' => (int) $round['game_id'], 'round_id' => $roundId,
+                    'kind' => 'auto', 'points' => $points, 'reason' => $reason ?? 'Correct buzz',
+                    'idempotency_key' => 'r:' . $roundId . ':t:' . $teamId,
+                ], $actor);
+            }
+
+            // Everybody still waiting in the queue is no longer in the running.
+            $pdo->prepare("UPDATE se_buzzes SET judged = 'ignored' WHERE round_id = ? AND judged = 'pending'")->execute([$roundId]);
+
+            $result = se_round_reveal_result($pdo, $event, $round) + [
+                'winner_team_id' => $teamId,
+                'team_points'    => [(string) $teamId => $points],
+            ];
+            $data['winner_team_id'] = $teamId;
+            $pdo->prepare(
+                "UPDATE se_rounds SET state = 'scored', state_json = ?, result_json = ?,
+                        locked_at = COALESCE(locked_at, NOW(3)), revealed_at = NOW(3)
+                  WHERE id = ?"
+            )->execute([se_json_encode($data), se_json_encode($result), $roundId]);
+
+            return [['correct' => true, 'team_id' => $teamId, 'points' => $points, 'round_state' => 'scored'], se_live_cue($live, 'correct')];
+        }
+
+        // Wrong.
+        $penalty = (int) ($settings['wrong_penalty'] ?? 0);
+        if ($penalty > 0) {
+            se_score_insert($pdo, $event, [
+                'scope' => 'team', 'team_id' => $teamId, 'game_id' => (int) $round['game_id'], 'round_id' => $roundId,
+                'kind' => 'penalty', 'points' => -$penalty, 'reason' => $reason ?? 'Wrong buzz',
+                'idempotency_key' => 'p:' . $roundId . ':t:' . $teamId . ':a:' . (int) $round['attempt'],
+            ], $actor);
+        }
+
+        $locked = array_values(array_unique(array_merge(array_map('intval', (array) ($data['locked_out'] ?? [])), [$teamId])));
+        $data['locked_out'] = $locked;
+
+        $reopened = false;
+        if ($type === 'buzzer' && !empty($settings['reopen_on_wrong'])) {
+            $teams = se_teams_ready($pdo) ? count(se_teams($pdo, (int) $event['id'])) : 0;
+            if ($teams > count($locked)) {
+                // A fresh window for everybody not yet locked out (§11.7.6).
+                $opens  = se_epoch_ms() + 1500;
+                $closes = $opens + (int) ($settings['reopen_window_ms'] ?? 10000);
+                $pdo->prepare(
+                    "UPDATE se_rounds SET state = 'armed', attempt = attempt + 1, state_json = ?, opens_at = ?, closes_at = ?, locked_at = NULL
+                      WHERE id = ?"
+                )->execute([se_json_encode($data), se_ms_to_sql($opens), se_ms_to_sql($closes), $roundId]);
+                $reopened = true;
+            }
+        }
+        if (!$reopened) {
+            se_round_state_save($pdo, $roundId, $data);
+        }
+
+        return [['correct' => false, 'team_id' => $teamId, 'reopened' => $reopened, 'round_state' => (string) $round['state']], se_live_cue($live, 'wrong')];
+    });
+}
+
+// --------------------------------------------------------------------------
+// Bible Charades (§11.9)
+// --------------------------------------------------------------------------
+
+/**
+ * Pick a presenter on a team: by player number ("#47" or 47) or at random
+ * among members checked in tonight whose phone was seen in the last two
+ * minutes.
+ */
 function se_presenter_find(PDO $pdo, array $event, int $teamId, int|string $player): array
 {
-    $args = [(int) $event['id'], $teamId];
-    $where = '';
+    $day  = se_game_day($pdo, $event);
+    $args = [$day, (int) $event['id'], $teamId];
+    $tail = 'ORDER BY RAND() LIMIT 1';
 
-    if ($player === 'random') {
-        $where = 'ORDER BY RAND() LIMIT 1';
-    } else {
-        $where = 'AND r.player_no = ? LIMIT 1';
-        $args[] = (int) ltrim((string) $player, '#');
+    if ($player !== 'random') {
+        $number = (int) ltrim(trim((string) $player), '#');
+        if ($number <= 0) {
+            throw new SeValidationException(['player_no' => 'Type the player number, or choose Random.']);
+        }
+        $tail   = 'AND r.player_no = ? LIMIT 1';
+        $args[] = $number;
     }
-    $stmt = $pdo->prepare("SELECT r.id, r.display_name, r.player_no, r.team_id
-        FROM se_registrations r
-        JOIN se_checkins c ON c.registration_id = r.id AND c.event_id = r.event_id AND c.day_date = CURDATE()
-        JOIN se_devices d ON d.registration_id = r.id AND d.event_id = r.event_id AND d.mode = 'full'
-        WHERE r.event_id = ? AND r.team_id = ? AND r.status = 'confirmed' AND d.last_seen_at >= DATE_SUB(NOW(), INTERVAL 2 MINUTE)
-        {$where}");
+
+    $stmt = $pdo->prepare(
+        "SELECT r.id, r.display_name, r.player_no, r.team_id,
+                MAX(d.last_seen_at >= DATE_SUB(NOW(), INTERVAL 2 MINUTE)) AS active_phone
+           FROM se_registrations r
+           JOIN se_checkins c ON c.registration_id = r.id AND c.event_id = r.event_id AND c.day_date = ?
+           LEFT JOIN se_devices d ON d.registration_id = r.id AND d.event_id = r.event_id AND d.mode = 'full'
+          WHERE r.event_id = ? AND r.team_id = ? AND r.status = 'confirmed'
+          GROUP BY r.id, r.display_name, r.player_no, r.team_id
+         HAVING " . ($player === 'random' ? 'active_phone = 1 ' : '1 = 1 ') . $tail
+    );
     $stmt->execute($args);
-    $presenter = $stmt->fetch(PDO::FETCH_ASSOC);
+    $presenter = $stmt->fetch();
 
     if (!$presenter) {
-        throw new SeRuleException('PRESENTER_UNAVAILABLE', 'That player is not checked in on this team with an active phone.');
+        throw new SeRuleException('PRESENTER_UNAVAILABLE', $player === 'random'
+            ? 'Nobody on that team has a phone in the games right now — type a player number instead.'
+            : 'That player number is not checked in on this team.');
     }
 
     return $presenter;
 }
 
+/**
+ * Every phrase this game has already shown, in any turn (§11.9.6 "never
+ * repeated in the event"). A phrase counts as used the moment it reached the
+ * presenter's phone, guessed or not.
+ */
+function se_charades_used_items(PDO $pdo, int $gameId): array
+{
+    $stmt = $pdo->prepare("SELECT state_json FROM se_rounds WHERE game_id = ? AND state <> 'pending'");
+    $stmt->execute([$gameId]);
+
+    $used = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $json) {
+        $data = se_json_decode($json);
+        foreach ((array) ($data['words'] ?? []) as $word) {
+            $used[(int) ($word['item_id'] ?? 0)] = true;
+        }
+        if (!empty($data['current_item_id'])) {
+            $used[(int) $data['current_item_id']] = true;
+        }
+    }
+    unset($used[0]);
+
+    return array_keys($used);
+}
+
+/** The next phrase in the game's order that nobody has seen yet. */
+function se_charades_next_item(PDO $pdo, int $gameId, array $used): ?int
+{
+    $stmt = $pdo->prepare(
+        "SELECT gi.deck_item_id FROM se_game_items gi
+           JOIN se_deck_items i ON i.id = gi.deck_item_id AND i.review_status = 'approved'
+          WHERE gi.game_id = ? ORDER BY gi.sort_order, gi.deck_item_id"
+    );
+    $stmt->execute([$gameId]);
+    $seen = array_flip(array_map('intval', $used));
+
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $itemId) {
+        if (!isset($seen[(int) $itemId])) {
+            return (int) $itemId;
+        }
+    }
+
+    return null;
+}
+
+/** Next turn: the acting team and its presenter (§11.9.1). */
 function se_charades_turn(PDO $pdo, array $event, int $roundId, int $teamId, int|string $player, bool $showOnConsole, ?int $expected, int $actor): array
 {
-    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'charades_turn', static function (array $round) use ($pdo, $event, $roundId, $teamId, $player, $showOnConsole): array {
-        if ($round['game_type'] !== 'charades' || !in_array($round['state'], ['pending', 'armed'], true)) {
-            throw new SeRuleException('STALE_STATE', 'That charades turn has already moved on.');
+    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'charades_turn', static function (array $round) use ($pdo, $event, $teamId, $player, $showOnConsole): array {
+        if ((string) $round['game_type'] !== 'charades' || !in_array((string) $round['state'], ['pending', 'armed'], true)
+            || !empty($round['opens_at'])) {
+            throw new SeRuleException('STALE_STATE', 'This turn has already started — end it, then take the next turn.');
         }
-        $presenter = se_presenter_find($pdo, $event, $teamId, $player);
-        $state = ['words' => [], 'passes' => 0, 'phrase_index' => 0, 'show_on_console' => $showOnConsole];
-        $stmt = $pdo->prepare("UPDATE se_rounds SET state = 'armed', team_id = ?, presenter_registration_id = ?, state_json = ?, arm_at = NOW(3), opens_at = NULL, closes_at = NULL WHERE id = ?");
-        $stmt->execute([$teamId, (int) $presenter['id'], se_json_encode($state), $roundId]);
+        if (!se_team_find($pdo, (int) $event['id'], $teamId)) {
+            throw new SeValidationException(['team_id' => 'Choose the acting team.']);
+        }
 
-        return ['presenter' => ['registration_id' => (int) $presenter['id'], 'display_name' => $presenter['display_name'], 'player_no' => (int) $presenter['player_no']]];
+        $presenter = se_presenter_find($pdo, $event, $teamId, $player);
+        $next      = se_charades_next_item($pdo, (int) $round['game_id'], se_charades_used_items($pdo, (int) $round['game_id']));
+        if ($next === null) {
+            throw new SeRuleException('NO_ITEMS', 'Every phrase in this game has been used. Add more in Studio → Games.');
+        }
+
+        $data = [
+            'words'           => [],
+            'passes'          => 0,
+            'current_item_id' => $next,
+            'show_on_console' => $showOnConsole,
+        ];
+        $pdo->prepare(
+            "UPDATE se_rounds SET state = 'armed', team_id = ?, presenter_registration_id = ?, state_json = ?,
+                    arm_at = NOW(3), opens_at = NULL, closes_at = NULL
+              WHERE id = ?"
+        )->execute([$teamId, (int) $presenter['id'], se_json_encode($data), (int) $round['id']]);
+
+        return [[
+            'presenter' => [
+                'registration_id' => (int) $presenter['id'],
+                'display_name'    => (string) $presenter['display_name'],
+                'player_no'       => $presenter['player_no'] !== null ? (int) $presenter['player_no'] : null,
+                'active_phone'    => (bool) $presenter['active_phone'],
+            ],
+        ], []];
     });
 }
 
+/** Start the timer (§11.9.3). */
 function se_charades_start(PDO $pdo, array $event, int $roundId, ?int $expected, int $actor): array
 {
-    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'charades_start', static function (array $round) use ($pdo, $roundId): array {
-        if ($round['game_type'] !== 'charades' || $round['state'] !== 'armed' || empty($round['presenter_registration_id'])) {
+    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'charades_start', static function (array $round, array $live) use ($pdo): array {
+        if ((string) $round['game_type'] !== 'charades' || (string) $round['state'] !== 'armed'
+            || empty($round['presenter_registration_id']) || !empty($round['opens_at'])) {
             throw new SeRuleException('STALE_STATE', 'Pick the presenter first.');
         }
-        $settings = se_game_settings($round);
-        $turnMs = max(10000, min(180000, (int) ($settings['turn_ms'] ?? 60000)));
-        $opens = se_epoch_ms() + 1500;
-        $closes = $opens + $turnMs;
-        $fmt = static fn(int $ms): string => date('Y-m-d H:i:s.', intdiv($ms, 1000)) . str_pad((string) ($ms % 1000), 3, '0', STR_PAD_LEFT);
-        $pdo->prepare("UPDATE se_rounds SET state = 'armed', opens_at = ?, closes_at = ? WHERE id = ?")
-            ->execute([$fmt($opens), $fmt($closes), $roundId]);
 
-        return ['opens_ms' => $opens, 'closes_ms' => $closes];
+        $settings = se_game_settings($round);
+        $opens    = se_epoch_ms() + 1500;
+        $closes   = $opens + (int) ($settings['turn_ms'] ?? 60000);
+
+        $pdo->prepare("UPDATE se_rounds SET opens_at = ?, closes_at = ? WHERE id = ?")
+            ->execute([se_ms_to_sql($opens), se_ms_to_sql($closes), (int) $round['id']]);
+
+        return [['opens_ms' => $opens, 'closes_ms' => $closes], se_live_cue($live, 'arm')];
     });
 }
 
-function se_charades_item_at(PDO $pdo, array $round, int $offset): ?array
-{
-    $stmt = $pdo->prepare('SELECT d.* FROM se_game_items gi JOIN se_deck_items d ON d.id = gi.deck_item_id WHERE gi.game_id = ? ORDER BY gi.sort_order, d.id LIMIT 1 OFFSET ' . max(0, $offset));
-    $stmt->execute([(int) $round['game_id']]);
-    $item = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if (!$item) {
-        return null;
-    }
-    $item['payload'] = json_decode((string) $item['payload_json'], true) ?: [];
-
-    return $item;
-}
-
+/**
+ * ✔ Got it / Pass (§11.9.4): the result is recorded, a correct word scores
+ * the acting team, and the presenter's phone moves to the next phrase.
+ * A couple of seconds after the buzzer is allowed for the last tap.
+ */
 function se_charades_mark(PDO $pdo, array $event, int $roundId, string $result, ?int $expected, int $actor): array
 {
-    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'charades_mark', static function (array $round) use ($pdo, $event, $roundId, $result, $actor): array {
-        if ($round['game_type'] !== 'charades' || !in_array($round['state'], ['armed', 'open'], true) || !in_array($result, ['correct', 'pass'], true)) {
+    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'charades_mark', static function (array $round, array $live) use ($pdo, $event, $roundId, $result, $actor): array {
+        if ((string) $round['game_type'] !== 'charades' || !in_array($result, ['correct', 'pass'], true)) {
             throw new SeRuleException('STALE_STATE', 'That mark is not available.');
         }
-        $now = se_epoch_ms();
-        $opens = !empty($round['opens_at']) ? se_epoch_ms(se_parse_datetime($round['opens_at'])) : PHP_INT_MAX;
-        $closes = !empty($round['closes_at']) ? se_epoch_ms(se_parse_datetime($round['closes_at'])) : 0;
-
-        if ($now < $opens) {
-            throw new SeRuleException('TOO_EARLY', 'The timer has not started.');
+        if (!in_array((string) $round['state'], ['armed', 'open', 'locked'], true) || empty($round['opens_at'])) {
+            throw new SeRuleException('TOO_EARLY', 'Start the timer first.');
         }
 
-        if ($now > $closes) {
-            throw new SeRuleException('ROUND_CLOSED', "Time's up.");
+        $now    = se_epoch_ms();
+        $closes = (int) se_sql_to_ms($round['closes_at']);
+        if ($now > $closes + 3000) {
+            throw new SeRuleException('ROUND_CLOSED', "Time's up — end the turn.");
         }
-        $state = se_round_state_data($round);
+
+        $data     = se_round_state_data($round);
         $settings = se_game_settings($round);
-
-        if ($result === 'pass' && (int) ($state['passes'] ?? 0) >= (int) ($settings['max_passes'] ?? 2)) {
-            throw new SeRuleException('PASS_LIMIT', 'No passes remain in this turn.');
+        $current  = (int) ($data['current_item_id'] ?? 0);
+        if ($current <= 0) {
+            throw new SeRuleException('NO_ITEMS', 'There is no phrase on the presenter’s phone.');
         }
-        $number = count($state['words'] ?? []) + 1;
-        $state['words'][] = ['result' => $result, 'item_id' => (int) ($round['deck_item_id'] ?? 0)];
+        if ($result === 'pass' && (int) ($data['passes'] ?? 0) >= (int) ($settings['max_passes'] ?? 2)) {
+            throw new SeRuleException('PASS_LIMIT', 'No passes left this turn.');
+        }
 
+        $data['words'][] = ['item_id' => $current, 'result' => $result];
+        $number = count($data['words']);
+
+        $points = 0;
         if ($result === 'pass') {
-            $state['passes'] = ((int) ($state['passes'] ?? 0)) + 1;
+            $data['passes'] = (int) ($data['passes'] ?? 0) + 1;
         } else {
-            $points = (int) ($settings['points_per_word'] ?? 200);
-            se_score_insert($pdo, $event, [
-                'scope' => 'team', 'team_id' => (int) $round['team_id'], 'game_id' => (int) $round['game_id'],
-                'round_id' => $roundId, 'kind' => 'auto', 'points' => $points,
-                'reason' => !empty($round['is_test']) ? 'TEST' : 'Charades word',
-                'idempotency_key' => 'c:' . $roundId . ':w:' . $number,
-            ], $actor);
+            $points = se_weighted_points((int) ($settings['points_per_word'] ?? 200), $round['weight'] ?? 1);
+            if ($points > 0) {
+                se_score_insert($pdo, $event, [
+                    'scope' => 'team', 'team_id' => (int) $round['team_id'], 'game_id' => (int) $round['game_id'],
+                    'round_id' => $roundId, 'kind' => 'auto', 'points' => $points,
+                    'reason' => !empty($round['is_test']) ? se_score_test_reason() : 'Charades',
+                    'idempotency_key' => 'c:' . $roundId . ':w:' . $number,
+                ], $actor);
+            }
         }
-        $state['phrase_index'] = ((int) ($state['phrase_index'] ?? 0)) + 1;
-        $next = se_charades_item_at($pdo, $round, (int) $state['phrase_index']);
-        $pdo->prepare('UPDATE se_rounds SET state_json = ? WHERE id = ?')->execute([se_json_encode($state), $roundId]);
 
-        return ['words_done' => count(array_filter($state['words'], static fn(array $word): bool => $word['result'] === 'correct')), 'passes' => (int) $state['passes'], 'has_next' => $next !== null];
+        // The phrase just marked is used; the next unseen one goes up.
+        $used = array_merge(se_charades_used_items($pdo, (int) $round['game_id']), array_column($data['words'], 'item_id'));
+        $data['current_item_id'] = se_charades_next_item($pdo, (int) $round['game_id'], $used);
+        se_round_state_save($pdo, $roundId, $data);
+
+        $done = count(array_filter($data['words'], static fn(array $w): bool => $w['result'] === 'correct'));
+
+        return [
+            ['words_done' => $done, 'passes' => (int) ($data['passes'] ?? 0), 'points' => $points, 'has_next' => $data['current_item_id'] !== null],
+            se_live_cue($live, $result === 'correct' ? 'ding' : 'whoosh'),
+        ];
     });
 }
 
+/** End the turn (§11.9.5): the round is scored; its points are already on the ledger. */
 function se_charades_end(PDO $pdo, array $event, int $roundId, ?int $expected, int $actor): array
 {
-    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'charades_end', static function (array $round) use ($pdo, $roundId): array {
-        if ($round['game_type'] !== 'charades' || !in_array($round['state'], ['armed', 'open'], true)) {
+    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'charades_end', static function (array $round, array $live) use ($pdo): array {
+        if ((string) $round['game_type'] !== 'charades' || !in_array((string) $round['state'], ['armed', 'open', 'locked'], true)) {
             throw new SeRuleException('STALE_STATE', 'That turn is already over.');
         }
-        $pdo->prepare("UPDATE se_rounds SET state = 'scored', locked_at = NOW(3), revealed_at = NOW(3) WHERE id = ?")->execute([$roundId]);
 
-        return ['state' => 'scored'];
+        $data = se_round_state_data($round);
+        $done = count(array_filter((array) ($data['words'] ?? []), static fn(array $w): bool => ($w['result'] ?? '') === 'correct'));
+        $result = ['words_done' => $done, 'team_id' => $round['team_id'] !== null ? (int) $round['team_id'] : null];
+
+        $pdo->prepare(
+            "UPDATE se_rounds SET state = 'scored', result_json = ?, locked_at = COALESCE(locked_at, NOW(3)), revealed_at = NOW(3)
+              WHERE id = ?"
+        )->execute([se_json_encode($result), (int) $round['id']]);
+
+        return [['state' => 'scored', 'words_done' => $done], se_live_cue($live, 'applause')];
     });
 }
 
-function se_charades_presenter_payload(PDO $pdo, array $event, int $registrationId): ?array
+/** The console's charades block: the phrase (the host may need it), the presenter. */
+function se_charades_console(PDO $pdo, array $event, array $round): array
+{
+    $data      = se_round_state_data($round);
+    $item      = !empty($data['current_item_id']) ? se_deck_item_by_id($pdo, (int) $data['current_item_id']) : null;
+    $presenter = !empty($round['presenter_registration_id'])
+        ? se_registration_by_id($pdo, (int) $round['presenter_registration_id'], (int) $event['id'])
+        : null;
+
+    return [
+        'presenter'       => $presenter ? [
+            'display_name' => (string) $presenter['display_name'],
+            'player_no'    => $presenter['player_no'] !== null ? (int) $presenter['player_no'] : null,
+        ] : null,
+        'phrase'          => $item ? (string) ($item['payload']['phrase'] ?? '') : null,
+        'category'        => $item ? (string) ($item['payload']['category'] ?? '') : null,
+        'hint'            => $item ? (string) ($item['payload']['hint'] ?? '') : null,
+        'show_on_console' => !empty($data['show_on_console']),
+        'words'           => (array) ($data['words'] ?? []),
+        'passes'          => (int) ($data['passes'] ?? 0),
+    ];
+}
+
+/**
+ * The secret card for the presenter's own phone (§11.9.2) — and nobody
+ * else's: the registration must be this turn's presenter AND the phone must
+ * be bound to it in full mode.
+ */
+function se_charades_presenter_payload(PDO $pdo, array $event, int $registrationId, ?array $device = null): ?array
 {
     if (!se_game_ready($pdo)) {
         return null;
     }
-    $stmt = $pdo->prepare("SELECT r.*, g.settings_json FROM se_rounds r JOIN se_games g ON g.id = r.game_id
-        WHERE r.event_id = ? AND g.type = 'charades' AND r.presenter_registration_id = ? AND r.state IN ('armed','open')
-        ORDER BY r.id DESC LIMIT 1");
-    $stmt->execute([(int) $event['id'], $registrationId]);
-    $round = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($device !== null && (($device['mode'] ?? '') !== 'full' || (int) ($device['registration_id'] ?? 0) !== $registrationId)) {
+        return null;
+    }
 
+    $stmt = $pdo->prepare(
+        "SELECT r.*, g.settings_json, g.type AS game_type
+           FROM se_rounds r JOIN se_games g ON g.id = r.game_id
+          WHERE r.event_id = ? AND g.type = 'charades' AND r.presenter_registration_id = ? AND r.state IN ('armed','open','locked')
+          ORDER BY r.id DESC LIMIT 1"
+    );
+    $stmt->execute([(int) $event['id'], $registrationId]);
+    $round = $stmt->fetch();
     if (!$round) {
         return null;
     }
-    $state = se_round_state_data($round);
-    $item = se_charades_item_at($pdo, $round, (int) ($state['phrase_index'] ?? 0));
 
-    if (!$item) {
-        return null;
-    }
-    $payload = $item['payload'];
+    $data = se_round_state_data($round);
+    $item = !empty($data['current_item_id']) ? se_deck_item_by_id($pdo, (int) $data['current_item_id']) : null;
 
     return [
-        'round_id' => (int) $round['id'], 'phrase' => (string) ($payload['phrase'] ?? ''),
-        'category' => (string) ($payload['category'] ?? ''), 'hint' => (string) ($payload['hint'] ?? ''),
-        'words_done' => count(array_filter($state['words'] ?? [], static fn(array $word): bool => ($word['result'] ?? '') === 'correct')),
-        'opens_ms' => $round['opens_at'] ? se_epoch_ms(se_parse_datetime($round['opens_at'])) : null,
-        'closes_ms' => $round['closes_at'] ? se_epoch_ms(se_parse_datetime($round['closes_at'])) : null,
+        'round_id'   => (int) $round['id'],
+        'phrase'     => $item ? (string) ($item['payload']['phrase'] ?? '') : null,
+        'category'   => $item ? (string) ($item['payload']['category'] ?? '') : '',
+        'hint'       => $item ? (string) ($item['payload']['hint'] ?? '') : '',
+        'words_done' => count(array_filter((array) ($data['words'] ?? []), static fn(array $w): bool => ($w['result'] ?? '') === 'correct')),
+        'opens_ms'   => se_sql_to_ms($round['opens_at'] ?? null),
+        'closes_ms'  => se_sql_to_ms($round['closes_at'] ?? null),
     ];
 }
 
+// --------------------------------------------------------------------------
+// Family Feud — the survey (§11.10.1)
+// --------------------------------------------------------------------------
+
+/** Normalise a survey answer for grouping: case, punctuation, articles, a simple plural. */
 function se_survey_normalize(string $text): string
 {
     $text = mb_strtolower(trim($text), 'UTF-8');
     $text = preg_replace('/[^\pL\pN\s]/u', ' ', $text) ?? '';
     $text = preg_replace('/\b(?:a|an|the)\b/u', ' ', $text) ?? $text;
-    $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
-    $text = trim($text);
+    $text = trim(preg_replace('/\s+/u', ' ', $text) ?? $text);
 
     if (mb_strlen($text) > 3 && str_ends_with($text, 's') && !str_ends_with($text, 'ss')) {
         $text = mb_substr($text, 0, -1);
@@ -305,417 +524,656 @@ function se_survey_normalize(string $text): string
     return $text;
 }
 
+/** Is the Feud survey still taking answers? It closes when the Feud starts. */
+function se_survey_open(PDO $pdo, array $event): bool
+{
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM se_games WHERE event_id = ? AND type = 'feud' AND status IN ('live','paused','finished')");
+    $stmt->execute([(int) $event['id']]);
+
+    return (int) $stmt->fetchColumn() === 0;
+}
+
+/** One guest's survey answer (one per person per question, editable). */
 function se_survey_save(PDO $pdo, array $event, array $registration, int $itemId, string $text): array
 {
     $text = se_line($text, 60);
-
-    if ($text === '' || mb_strlen($text) > 60) {
-        throw new SeValidationException(['text' => 'Keep your answer between 1 and 60 characters.'], 'Keep your answer between 1 and 60 characters.');
+    if ($text === '') {
+        throw new SeValidationException(['text' => 'Type an answer (60 characters at most).']);
+    }
+    if (preg_match('/\b(?:fuck\w*|shit\w*|bitch\w*|bastard\w*|asshole\w*)\b/iu', $text)) {
+        throw new SeValidationException(['text' => 'Please keep it friendly for the room.']);
     }
 
-    if (preg_match('/\b(?:fuck|shit|bitch|bastard)\b/i', $text)) {
-        throw new SeValidationException(['text' => 'Please keep it friendly for the room.'], 'Please keep it friendly for the room.');
-    }
-    $stmt = $pdo->prepare("SELECT d.id FROM se_deck_items d JOIN se_game_items gi ON gi.deck_item_id = d.id JOIN se_games g ON g.id = gi.game_id
-        WHERE d.id = ? AND g.event_id = ? AND g.type = 'feud' LIMIT 1");
+    $stmt = $pdo->prepare(
+        "SELECT 1 FROM se_game_items gi JOIN se_games g ON g.id = gi.game_id
+          WHERE gi.deck_item_id = ? AND g.event_id = ? AND g.type = 'feud' LIMIT 1"
+    );
     $stmt->execute([$itemId, (int) $event['id']]);
-
     if (!$stmt->fetchColumn()) {
-        throw new SeNotFoundException('Survey question not found.');
+        throw new SeNotFoundException('That survey question has gone.');
     }
-    $stmt = $pdo->prepare("SELECT started_at FROM se_games WHERE event_id = ? AND type = 'feud' AND status IN ('live','finished') LIMIT 1");
-    $stmt->execute([(int) $event['id']]);
+    if (!se_survey_open($pdo, $event)) {
+        throw new SeRuleException('ROUND_CLOSED', 'The survey has closed — the Feud is on!');
+    }
 
-    if ($stmt->fetchColumn()) {
-        throw new SeRuleException('ROUND_CLOSED', 'The survey has closed.');
-    }
-    $norm = se_survey_normalize($text);
     $test = se_bool(se_event_settings($event)['test_mode'] ?? false) ? 1 : 0;
-    $stmt = $pdo->prepare('INSERT INTO se_survey_responses(event_id,deck_item_id,registration_id,answer_text,answer_norm,is_test) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE answer_text=VALUES(answer_text),answer_norm=VALUES(answer_norm),is_test=VALUES(is_test)');
-    $stmt->execute([(int) $event['id'], $itemId, (int) $registration['id'], $text, $norm, $test]);
+    $pdo->prepare(
+        "INSERT INTO se_survey_responses (event_id, deck_item_id, registration_id, answer_text, answer_norm, is_test)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE answer_text = VALUES(answer_text), answer_norm = VALUES(answer_norm), is_test = VALUES(is_test)"
+    )->execute([(int) $event['id'], $itemId, (int) $registration['id'], $text, mb_substr(se_survey_normalize($text), 0, 80, 'UTF-8'), $test]);
 
     return ['saved' => true, 'item_id' => $itemId];
 }
 
+/** The survey questions a guest can still answer, with their own answers. */
 function se_survey_questions(PDO $pdo, array $event, int $registrationId): array
+{
+    if (!se_game_ready($pdo) || !se_survey_open($pdo, $event)) {
+        return [];
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT d.id, d.payload_json, MIN(gi.sort_order) AS sort_order,
+                (SELECT s.answer_text FROM se_survey_responses s
+                  WHERE s.event_id = g.event_id AND s.deck_item_id = d.id AND s.registration_id = ?) AS answer
+           FROM se_games g
+           JOIN se_game_items gi ON gi.game_id = g.id
+           JOIN se_deck_items d ON d.id = gi.deck_item_id
+          WHERE g.event_id = ? AND g.type = 'feud'
+          GROUP BY d.id, d.payload_json, g.event_id
+          ORDER BY sort_order"
+    );
+    $stmt->execute([$registrationId, (int) $event['id']]);
+
+    return array_map(static fn(array $row): array => [
+        'id'       => (int) $row['id'],
+        'question' => (string) (se_json_decode($row['payload_json'])['question'] ?? ''),
+        'answer'   => $row['answer'] !== null ? (string) $row['answer'] : null,
+    ], $stmt->fetchAll());
+}
+
+// --------------------------------------------------------------------------
+// Family Feud — boards (§11.10.2)
+// --------------------------------------------------------------------------
+
+/** One question's board, in order. */
+function se_feud_board(PDO $pdo, array $event, int $itemId, bool $approvedOnly = true): array
+{
+    if (!se_table_exists($pdo, 'se_feud_answers') || $itemId <= 0) {
+        return [];
+    }
+    $stmt = $pdo->prepare(
+        "SELECT id, label, points, sort_order, source, approved FROM se_feud_answers
+          WHERE event_id = ? AND deck_item_id = ?" . ($approvedOnly ? ' AND approved = 1' : '') . "
+          ORDER BY sort_order, id"
+    );
+    $stmt->execute([(int) $event['id'], $itemId]);
+
+    return $stmt->fetchAll();
+}
+
+/** The survey questions of the event's Feud games, for Studio → Games. */
+function se_feud_items(PDO $pdo, array $event): array
 {
     if (!se_game_ready($pdo)) {
         return [];
     }
-    $stmt = $pdo->prepare("SELECT DISTINCT d.id, d.payload_json, r.answer_text
-        FROM se_games g JOIN se_game_items gi ON gi.game_id = g.id JOIN se_deck_items d ON d.id = gi.deck_item_id
-        LEFT JOIN se_survey_responses r ON r.event_id = g.event_id AND r.deck_item_id = d.id AND r.registration_id = ?
-        WHERE g.event_id = ? AND g.type = 'feud' AND g.status NOT IN ('live','finished') ORDER BY gi.sort_order");
-    $stmt->execute([$registrationId, (int) $event['id']]);
+    $eventId = (int) $event['id'];
 
-    return array_map(static function (array $row): array {
-        $payload = json_decode((string) $row['payload_json'], true) ?: [];
+    $stmt = $pdo->prepare(
+        "SELECT d.id, d.payload_json, MIN(gi.sort_order) AS sort_order,
+                (SELECT COUNT(*) FROM se_survey_responses s WHERE s.event_id = g.event_id AND s.deck_item_id = d.id) AS responses,
+                (SELECT COUNT(*) FROM se_feud_answers f WHERE f.event_id = g.event_id AND f.deck_item_id = d.id AND f.approved = 1) AS board_approved,
+                (SELECT COUNT(*) FROM se_feud_answers f WHERE f.event_id = g.event_id AND f.deck_item_id = d.id) AS board_total
+           FROM se_games g
+           JOIN se_game_items gi ON gi.game_id = g.id
+           JOIN se_deck_items d ON d.id = gi.deck_item_id
+          WHERE g.event_id = ? AND g.type = 'feud'
+          GROUP BY d.id, d.payload_json, g.event_id
+          ORDER BY sort_order"
+    );
+    $stmt->execute([$eventId]);
 
-        return ['id' => (int) $row['id'], 'question' => (string) ($payload['question'] ?? ''), 'answer' => $row['answer_text']];
-    }, $stmt->fetchAll(PDO::FETCH_ASSOC));
+    return array_map(static function (array $row) use ($pdo, $event): array {
+        return [
+            'item_id'   => (int) $row['id'],
+            'question'  => (string) (se_json_decode($row['payload_json'])['question'] ?? ''),
+            'responses' => (int) $row['responses'],
+            'approved'  => (int) $row['board_approved'] > 0,
+            'board'     => array_map(static fn(array $a): array => [
+                'id' => (int) $a['id'], 'label' => (string) $a['label'], 'points' => (int) $a['points'],
+                'source' => (string) $a['source'], 'approved' => (bool) $a['approved'],
+            ], se_feud_board($pdo, $event, (int) $row['id'], false)),
+        ];
+    }, $stmt->fetchAll());
 }
 
-function se_feud_board(PDO $pdo, array $event, int $itemId, bool $approvedOnly = true): array
-{
-    $sql = 'SELECT id,label,points,sort_order,source,approved FROM se_feud_answers WHERE event_id = ? AND deck_item_id = ?';
-
-    if ($approvedOnly) {
-        $sql .= ' AND approved = 1';
-    }
-    $sql .= ' ORDER BY sort_order,id';
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([(int) $event['id'], $itemId]);
-
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
-}
-
+/** A survey question that belongs to one of the event's Feud games. */
 function se_feud_item_payload(PDO $pdo, array $event, int $itemId): array
 {
-    $stmt = $pdo->prepare("SELECT d.payload_json FROM se_deck_items d JOIN se_game_items gi ON gi.deck_item_id=d.id JOIN se_games g ON g.id=gi.game_id WHERE d.id=? AND g.event_id=? AND g.type='feud' LIMIT 1");
+    $stmt = $pdo->prepare(
+        "SELECT d.payload_json FROM se_deck_items d
+           JOIN se_game_items gi ON gi.deck_item_id = d.id
+           JOIN se_games g ON g.id = gi.game_id
+          WHERE d.id = ? AND g.event_id = ? AND g.type = 'feud' LIMIT 1"
+    );
     $stmt->execute([$itemId, (int) $event['id']]);
     $json = $stmt->fetchColumn();
-
     if ($json === false) {
-        throw new SeNotFoundException('Survey question not found.');
+        throw new SeNotFoundException('That survey question is not in a Family Feud game.');
     }
 
-    return json_decode((string) $json, true) ?: [];
+    return se_json_decode((string) $json);
 }
 
-function se_feud_build_board(PDO $pdo, array $event, int $itemId, int $actor): array
+/**
+ * Draft a board from the survey (§11.10.2): AI clustering once there are
+ * `min_responses` answers, otherwise the exact normalised groups. Nothing is
+ * saved — the crew edits the draft and approves it with se_feud_board_save().
+ */
+function se_feud_build_board(PDO $pdo, array $event, int $itemId, int $actor, array $ctx = []): array
 {
-    $payload = se_feud_item_payload($pdo, $event, $itemId);
-    $question = se_line($payload['question'] ?? '', 100);
+    $question = se_line(se_feud_item_payload($pdo, $event, $itemId)['question'] ?? '', 100);
 
-    if ($question === '') {
-        throw new SeNotFoundException('Survey question not found.');
-    }
-    $stmt = $pdo->prepare('SELECT id,answer_text,answer_norm FROM se_survey_responses WHERE event_id = ? AND deck_item_id = ? ORDER BY id');
+    $stmt = $pdo->prepare("SELECT id, answer_text, answer_norm FROM se_survey_responses WHERE event_id = ? AND deck_item_id = ? ORDER BY id");
     $stmt->execute([(int) $event['id'], $itemId]);
-    $responses = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $settings = se_event_settings($event);
-    $minimum = max(1, (int) ($settings['games']['feud']['min_responses'] ?? 25));
+    $responses = $stmt->fetchAll();
 
-    if (count($responses) < $minimum) {
-        $groups = [];
+    $minimum = max(1, (int) (se_settings_path(se_event_settings($event), 'games.feud.min_responses', 25)));
 
-        foreach ($responses as $response) {
-            $key = (string) $response['answer_norm'];
-
-            if ($key === '') {
-                continue;
-            }
+    $groups = [];
+    foreach ($responses as $response) {
+        $key = (string) $response['answer_norm'];
+        if ($key !== '') {
             $groups[$key] = ($groups[$key] ?? 0) + 1;
         }
-        arsort($groups);
-        $clusters = [];
-
-        foreach ($groups as $label => $count) {
-            $clusters[] = ['label' => mb_convert_case($label, MB_CASE_TITLE), 'points' => $count, 'source' => 'survey'];
-        }
-
-        return ['mode' => 'manual', 'responses' => count($responses), 'minimum' => $minimum, 'answers' => array_slice($clusters, 0, 8), 'warning' => 'Too few responses for AI clustering. Review these exact groups or enter an estimated board manually.'];
     }
-    $anonymous = array_map(static function (array $response): string {
+    arsort($groups);
+    $exact = [];
+    foreach (array_slice($groups, 0, 8, true) as $label => $count) {
+        $exact[] = ['label' => mb_substr(mb_convert_case((string) $label, MB_CASE_TITLE, 'UTF-8'), 0, 24, 'UTF-8'), 'points' => $count, 'source' => 'survey'];
+    }
+
+    if (count($responses) < $minimum) {
+        return [
+            'mode'      => 'manual',
+            'responses' => count($responses),
+            'minimum'   => $minimum,
+            'answers'   => $exact,
+            'warning'   => count($responses)
+                ? 'Only ' . count($responses) . ' answers so far — these are the exact groups. Edit them or type an estimated board.'
+                : 'No survey answers yet. Type an estimated board, or wait for answers to come in.',
+        ];
+    }
+
+    // Anonymous text only (§15.6): numbers, emails and links are scrubbed.
+    $anonymous = [];
+    foreach (array_slice($responses, 0, 400) as $response) {
         $text = (string) $response['answer_text'];
-        $text = preg_replace('/\b[+\d][\d\s()\-]{7,}\d\b/', '[number removed]', $text) ?? $text;
-        $text = preg_replace('/\b[^\s@]+@[^\s@]+\.[^\s@]+\b/u', '[email removed]', $text) ?? $text;
-        $text = preg_replace('~https?://\S+~i', '[link removed]', $text) ?? $text;
+        $text = preg_replace('/[+\d][\d\s()\-]{7,}\d/', '[number]', $text) ?? $text;
+        $text = preg_replace('/\S+@\S+\.\S+/u', '[email]', $text) ?? $text;
+        $text = preg_replace('~https?://\S+~i', '[link]', $text) ?? $text;
+        $anonymous[] = (int) $response['id'] . ': ' . $text;
+    }
 
-        return (int) $response['id'] . ': ' . $text;
-    }, $responses);
-    $result = se_ai($pdo, 'feud_cluster', ['question' => $question, 'responses' => $anonymous], ['user_id' => $actor, 'event_id' => (int) $event['id']]);
-    $jobId = se_ai_job_create($pdo, (int) $event['id'], 'feud_cluster', ['item_id' => $itemId, 'question' => $question], $result, $actor, 'ready');
+    try {
+        $result = se_ai($pdo, 'feud_cluster', ['question' => $question, 'responses' => $anonymous],
+            ['user_id' => $actor, 'event_id' => (int) $event['id']] + $ctx);
+    } catch (SeAiException $e) {
+        return [
+            'mode' => 'manual', 'responses' => count($responses), 'minimum' => $minimum, 'answers' => $exact,
+            'warning' => 'AI grouping is unavailable (' . $e->getMessage() . ') — these are the exact groups.',
+        ];
+    }
 
-    return ['mode' => 'ai_review', 'job_id' => $jobId, 'responses' => count($responses), 'result' => $result];
+    $answers = [];
+    foreach ((array) ($result['clusters'] ?? []) as $cluster) {
+        $count = count((array) ($cluster['response_ids'] ?? []));
+        $label = se_line($cluster['label'] ?? '', 24);
+        if ($count > 0 && $label !== '') {
+            $answers[] = ['label' => $label, 'points' => $count, 'source' => 'survey'];
+        }
+    }
+    usort($answers, static fn(array $a, array $b): int => $b['points'] <=> $a['points']);
+    $answers = array_slice($answers, 0, 8);
+
+    $jobId = se_ai_job_create($pdo, (int) $event['id'], 'feud_cluster', ['item_id' => $itemId], ['answers' => $answers], $actor, 'ready');
+
+    return ['mode' => 'ai_review', 'job_id' => $jobId, 'responses' => count($responses), 'minimum' => $minimum, 'answers' => $answers];
 }
 
+/** Save (and optionally approve) one question's board: 1–8 answers. */
 function se_feud_board_save(PDO $pdo, array $event, int $itemId, array $answers, bool $approved, int $actor): array
 {
     se_feud_item_payload($pdo, $event, $itemId);
 
-    if (count($answers) < 1 || count($answers) > 8) {
-        throw new SeValidationException(['answers' => 'Use between 1 and 8 board answers.'], 'Use between 1 and 8 board answers.');
-    }
-    $pdo->beginTransaction();
-
-    try {
-        $pdo->prepare('DELETE FROM se_feud_answers WHERE event_id = ? AND deck_item_id = ?')->execute([(int) $event['id'], $itemId]);
-        $stmt = $pdo->prepare('INSERT INTO se_feud_answers(event_id,deck_item_id,label,points,sort_order,source,approved) VALUES(?,?,?,?,?,?,?)');
-
-        foreach (array_values($answers) as $index => $answer) {
-            if (!is_array($answer)) {
-                continue;
-            }
-            $label = se_line($answer['label'] ?? '', 24);
-
-            if ($label === '') {
-                throw new SeValidationException(['answers' => 'Every board answer needs a label.'], 'Every board answer needs a label.');
-            }
-            $source = se_enum($answer['source'] ?? 'manual', ['survey', 'ai', 'manual'], 'manual');
-            $stmt->execute([(int) $event['id'], $itemId, $label, max(0, (int) ($answer['points'] ?? 0)), $index, $source, $approved ? 1 : 0]);
+    $clean = [];
+    foreach ($answers as $answer) {
+        if (!is_array($answer)) {
+            continue;
         }
-        se_audit($pdo, (int) $event['id'], 'feud_board_save', ['item_id' => $itemId, 'approved' => $approved], 'deck_item', $itemId, $actor);
-        $pdo->commit();
+        $label = se_line($answer['label'] ?? '', 24);
+        if ($label === '') {
+            continue;
+        }
+        $clean[] = [
+            'label'  => $label,
+            'points' => se_int($answer['points'] ?? 0, 0, 999, 0),
+            'source' => se_enum($answer['source'] ?? 'manual', ['survey', 'ai', 'manual'], 'manual'),
+        ];
+    }
+    if (count($clean) < 1 || count($clean) > 8) {
+        throw new SeValidationException(['answers' => 'A board has between one and eight answers.']);
+    }
+    usort($clean, static fn(array $a, array $b): int => $b['points'] <=> $a['points']);
+
+    $owns = !$pdo->inTransaction();
+    if ($owns) {
+        $pdo->beginTransaction();
+    }
+    try {
+        $pdo->prepare("DELETE FROM se_feud_answers WHERE event_id = ? AND deck_item_id = ?")->execute([(int) $event['id'], $itemId]);
+        $insert = $pdo->prepare(
+            "INSERT INTO se_feud_answers (event_id, deck_item_id, label, points, sort_order, source, approved) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        );
+        foreach ($clean as $index => $answer) {
+            $insert->execute([(int) $event['id'], $itemId, $answer['label'], $answer['points'], $index, $answer['source'], $approved ? 1 : 0]);
+        }
+        if ($owns) {
+            $pdo->commit();
+        }
     } catch (Throwable $e) {
-        if ($pdo->inTransaction()) {
+        if ($owns && $pdo->inTransaction()) {
             $pdo->rollBack();
         }
-
         throw $e;
     }
 
-    return ['answers' => se_feud_board($pdo, $event, $itemId, false), 'approved' => $approved];
+    se_audit($pdo, (int) $event['id'], 'game_op:feud_board', ['item_id' => $itemId, 'approved' => $approved, 'answers' => count($clean)], 'deck_item', $itemId, $actor);
+
+    return ['item_id' => $itemId, 'approved' => $approved, 'answers' => se_feud_board($pdo, $event, $itemId, false)];
 }
 
+// --------------------------------------------------------------------------
+// Family Feud — play (§11.10.3)
+// --------------------------------------------------------------------------
+
+/** The public Feud block: hidden slots until revealed, no names. */
+function se_feud_public(PDO $pdo, array $round, array $data): array
+{
+    $item     = se_round_item($pdo, $round);
+    $revealed = array_map('intval', (array) ($data['revealed'] ?? []));
+    $board    = se_feud_board($pdo, ['id' => (int) $round['event_id']], (int) $round['deck_item_id'], true);
+
+    return [
+        'question'     => (string) ($item['payload']['question'] ?? ''),
+        'board'        => array_map(static function (array $answer, int $i) use ($revealed): array {
+            $shown = in_array((int) $answer['id'], $revealed, true);
+            return ['slot' => $i + 1, 'label' => $shown ? (string) $answer['label'] : null, 'points' => $shown ? (int) $answer['points'] : null, 'revealed' => $shown];
+        }, $board, array_keys($board)),
+        'phase'        => (string) ($data['phase'] ?? 'setup'),
+        'team_a'       => isset($data['team_a']) ? (int) $data['team_a'] : null,
+        'team_b'       => isset($data['team_b']) ? (int) $data['team_b'] : null,
+        'control_team' => isset($data['control_team']) ? (int) $data['control_team'] : null,
+        'steal_team'   => isset($data['steal_team']) ? (int) $data['steal_team'] : null,
+        'strikes'      => (int) ($data['strikes'] ?? 0),
+        'bank'         => (int) ($data['bank'] ?? 0),
+        'multiplier'   => (int) ($data['multiplier'] ?? 1),
+        'winner_team'  => isset($data['winner_team']) ? (int) $data['winner_team'] : null,
+    ];
+}
+
+/** One Feud control from the console: faceoff, control, reveal, strike, steal, bank, reveal_all. */
 function se_feud_update(PDO $pdo, array $event, int $roundId, string $op, array $input, ?int $expected, int $actor): array
 {
-    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'feud_' . $op, static function (array $round) use ($pdo, $event, $roundId, $op, $input, $actor): array {
-        if ($round['game_type'] !== 'feud') {
-            throw new SeRuleException('STALE_STATE', 'This is not a Feud round.');
+    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'feud_' . $op, static function (array $round, array $live) use ($pdo, $event, $roundId, $op, $input, $actor): array {
+        if ((string) $round['game_type'] !== 'feud') {
+            throw new SeRuleException('STALE_STATE', 'This is not a Family Feud round.');
         }
-        $state = se_round_state_data($round);
+        if (in_array((string) $round['state'], ['void'], true) || ((string) $round['state'] === 'scored' && $op !== 'reveal_all')) {
+            throw new SeRuleException('STALE_STATE', 'This board is finished. Take the next round.');
+        }
+
         $board = se_feud_board($pdo, $event, (int) $round['deck_item_id'], true);
-
-        if ($board === []) {
-            throw new SeRuleException('BOARD_NOT_APPROVED', 'Approve this Feud board before playing it.');
+        if (!$board) {
+            throw new SeRuleException('BOARD_NOT_APPROVED', 'Approve this board in Studio → Games before playing it.');
         }
 
-        if ($op === 'faceoff') {
-            $a = (int) ($input['team_a'] ?? 0);
-            $b = (int) ($input['team_b'] ?? 0);
-
-            if (!$a || !$b || $a === $b) {
-                throw new SeValidationException(['team_a' => 'Choose two different teams.', 'team_b' => 'Choose two different teams.'], 'Choose two different teams.');
-            }
-            $repA = se_presenter_find($pdo, $event, $a, !empty($input['rep_a']) ? (int) $input['rep_a'] : 'random');
-            $repB = se_presenter_find($pdo, $event, $b, !empty($input['rep_b']) ? (int) $input['rep_b'] : 'random');
-            $state = ['phase' => 'faceoff', 'team_a' => $a, 'team_b' => $b, 'rep_a' => (int) $repA['id'], 'rep_b' => (int) $repB['id'], 'rep_a_name' => (string) $repA['display_name'], 'rep_b_name' => (string) $repB['display_name'], 'control_team' => null, 'revealed' => [], 'strikes' => 0, 'bank' => 0, 'steal_team' => null, 'banked' => false];
-            $pdo->prepare("UPDATE se_rounds SET state='armed', team_id=?, opponent_team_id=?, state_json=?, opens_at=NOW(3), closes_at=DATE_ADD(NOW(3), INTERVAL 15 SECOND) WHERE id=?")
-                ->execute([$a, $b, se_json_encode($state), $roundId]);
-        } elseif ($op === 'control') {
-            $team = (int) ($input['team_id'] ?? 0);
-
-            if (!in_array($team, [(int) ($state['team_a'] ?? 0), (int) ($state['team_b'] ?? 0)], true)) {
-                throw new SeValidationException(['team_id' => 'Control must go to a face-off team.'], 'Control must go to a face-off team.');
-            }
-            $state['phase'] = 'control';
-            $state['control_team'] = $team;
-        } elseif ($op === 'reveal') {
-            $answerId = (int) ($input['answer_id'] ?? 0);
-            $match = null;
-
-            foreach ($board as $answer) {
-                if ((int) $answer['id'] === $answerId) {
-                    $match = $answer;
-                }
-            }
-
-            if (!$match) {
-                throw new SeNotFoundException('Board answer not found.');
-            }
-
-            if (!in_array($answerId, $state['revealed'] ?? [], true)) {
-                $state['revealed'][] = $answerId;
-                $state['bank'] = ((int) ($state['bank'] ?? 0)) + (int) $match['points'];
-            }
-        } elseif ($op === 'strike') {
-            $state['strikes'] = min(3, ((int) ($state['strikes'] ?? 0)) + 1);
-
-            if ($state['strikes'] >= 3) {
-                $state['phase'] = 'steal';
-                $state['steal_team'] = (int) $state['control_team'] === (int) $state['team_a'] ? (int) $state['team_b'] : (int) $state['team_a'];
-            }
-        } elseif ($op === 'steal') {
-            $state['steal_success'] = se_bool($input['success'] ?? false);
-            $state['phase'] = 'bank';
-        } elseif ($op === 'reveal_all') {
-            $state['revealed'] = array_map(static fn(array $a): int => (int) $a['id'], $board);
-        } elseif ($op === 'bank') {
-            if (!empty($state['banked'])) {
-                throw new SeRuleException('ALREADY_SCORED', 'This bank is already awarded.');
-            }
-            $settings = se_game_settings($round);
-            $multipliers = $settings['round_multipliers'] ?? [1, 1, 2, 3];
-            $multiplier = max(1, (int) ($input['multiplier'] ?? ($multipliers[max(0, (int) $round['round_no'] - 1)] ?? 1)));
-            $winner = !empty($state['steal_success']) ? (int) $state['steal_team'] : (int) $state['control_team'];
-
-            if (!$winner) {
-                throw new SeRuleException('NO_CONTROL', 'Give a team control before banking.');
-            }
-            $points = se_feud_bank_points([(int) ($state['bank'] ?? 0)], $multiplier);
-            se_score_insert($pdo, $event, ['scope' => 'team', 'team_id' => $winner, 'game_id' => (int) $round['game_id'], 'round_id' => $roundId, 'kind' => 'auto', 'points' => $points, 'reason' => !empty($round['is_test']) ? 'TEST' : 'Family Feud bank', 'idempotency_key' => 'f:' . $roundId . ':bank'], $actor);
-            $state['banked'] = true;
-            $state['winner_team'] = $winner;
-            $state['multiplier'] = $multiplier;
-            $state['total'] = $points;
-            $pdo->prepare("UPDATE se_rounds SET state='scored',locked_at=NOW(3),revealed_at=NOW(3) WHERE id=?")->execute([$roundId]);
-        } else {
-            throw new SeValidationException(['op' => 'Unknown Feud operation.'], 'Unknown Feud operation.');
-        }
-        $pdo->prepare('UPDATE se_rounds SET state_json = ? WHERE id = ?')->execute([se_json_encode($state), $roundId]);
-
-        return ['board' => $board, 'feud' => $state];
-    });
-}
-
-function se_buzz_judge_party(PDO $pdo, array $event, int $roundId, int $buzzId, bool $correct, ?int $expected, int $actor): array
-{
-    return se_party_live_mutate($pdo, $event, $roundId, $expected, $actor, 'buzz_judge', static function (array $round) use ($pdo, $event, $roundId, $buzzId, $correct, $actor): array {
-        if (!in_array($round['game_type'], ['buzzer', 'who_am_i'], true)) {
-            throw new SeRuleException('STALE_STATE', 'This round is not judged by buzz.');
-        }
-        $stmt = $pdo->prepare("SELECT * FROM se_buzzes WHERE id=? AND round_id=? AND judged='pending' FOR UPDATE");
-        $stmt->execute([$buzzId, $roundId]);
-        $buzz = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$buzz) {
-            throw new SeRuleException('STALE_STATE', 'That buzz was already judged.');
-        }
-        $stmt = $pdo->prepare('UPDATE se_buzzes SET judged=? WHERE id=?');
-        $stmt->execute([$correct ? 'correct' : 'wrong', $buzzId]);
+        $data = se_round_state_data($round);
+        $cue  = null;
         $settings = se_game_settings($round);
-        $state = se_round_state_data($round);
+        $multipliers = (array) ($settings['round_multipliers'] ?? [1, 1, 2, 3]);
+        $data['multiplier'] = max(1, (int) ($multipliers[max(0, (int) $round['round_no'] - 1)] ?? end($multipliers) ?: 1));
 
-        if ($correct) {
-            $points = $round['game_type'] === 'who_am_i'
-                ? se_who_am_i_points($settings['points_by_clue'] ?? [], (int) ($state['clue_index'] ?? 0))
-                : (int) ($settings['points_correct'] ?? 300);
-            se_score_insert($pdo, $event, ['scope' => 'team', 'team_id' => (int) $buzz['team_id'], 'game_id' => (int) $round['game_id'], 'round_id' => $roundId, 'kind' => 'auto', 'points' => $points, 'reason' => !empty($round['is_test']) ? 'TEST' : 'Correct buzz', 'idempotency_key' => 'r:' . $roundId . ':t:' . $buzz['team_id']], $actor);
-            $state['winner_team_id'] = (int) $buzz['team_id'];
-            $state['points'] = $points;
-            $pdo->prepare("UPDATE se_rounds SET state='scored',state_json=?,locked_at=NOW(3),revealed_at=NOW(3) WHERE id=?")->execute([se_json_encode($state), $roundId]);
-        } else {
-            $state['locked_out'] = array_values(array_unique(array_merge($state['locked_out'] ?? [], [(int) $buzz['team_id']])));
-            $penalty = (int) ($settings['wrong_penalty'] ?? 0);
+        switch ($op) {
+            case 'faceoff':
+                $a = se_int($input['team_a'] ?? 0, 0);
+                $b = se_int($input['team_b'] ?? 0, 0);
+                if (!$a || !$b || $a === $b) {
+                    throw new SeValidationException(['team_a' => 'Choose two different teams.']);
+                }
+                $repA = se_presenter_find($pdo, $event, $a, ($input['rep_a'] ?? '') !== '' ? (string) $input['rep_a'] : 'random');
+                $repB = se_presenter_find($pdo, $event, $b, ($input['rep_b'] ?? '') !== '' ? (string) $input['rep_b'] : 'random');
 
-            if ($penalty !== 0) {
-                se_score_insert($pdo, $event, ['scope' => 'team', 'team_id' => (int) $buzz['team_id'], 'game_id' => (int) $round['game_id'], 'round_id' => $roundId, 'kind' => 'penalty', 'points' => -$penalty, 'reason' => !empty($round['is_test']) ? 'TEST' : 'Wrong buzz', 'idempotency_key' => 'p:' . $roundId . ':t:' . $buzz['team_id'] . ':a:' . $round['attempt']], $actor);
-            }
-            $pdo->prepare('UPDATE se_rounds SET state_json=? WHERE id=?')->execute([se_json_encode($state), $roundId]);
+                $data = [
+                    'phase' => 'faceoff', 'team_a' => $a, 'team_b' => $b,
+                    'rep_a' => (int) $repA['id'], 'rep_b' => (int) $repB['id'],
+                    'control_team' => null, 'steal_team' => null, 'revealed' => [], 'strikes' => 0, 'bank' => 0,
+                    'multiplier' => $data['multiplier'],
+                ];
+                $opens  = se_epoch_ms() + 1500;
+                $closes = $opens + (int) ($settings['faceoff_window_ms'] ?? 15000);
+                $pdo->prepare(
+                    "UPDATE se_rounds SET state = 'armed', team_id = ?, opponent_team_id = ?, attempt = attempt + 1,
+                            opens_at = ?, closes_at = ?, arm_at = COALESCE(arm_at, NOW(3)), locked_at = NULL
+                      WHERE id = ?"
+                )->execute([$a, $b, se_ms_to_sql($opens), se_ms_to_sql($closes), $roundId]);
+                se_deck_item_mark_used($pdo, $round, (int) $event['id']);
+                $cue = 'arm';
+                break;
+
+            case 'control':
+                $team = se_int($input['team_id'] ?? 0, 0);
+                if (!in_array($team, [(int) ($data['team_a'] ?? 0), (int) ($data['team_b'] ?? 0)], true)) {
+                    throw new SeValidationException(['team_id' => 'Control goes to one of the two face-off teams.']);
+                }
+                $data['phase'] = 'control';
+                $data['control_team'] = $team;
+                $data['strikes'] = 0;
+                break;
+
+            case 'reveal':
+                $answerId = se_int($input['answer_id'] ?? 0, 0);
+                $match = null;
+                foreach ($board as $answer) {
+                    if ((int) $answer['id'] === $answerId) {
+                        $match = $answer;
+                    }
+                }
+                if (!$match) {
+                    throw new SeNotFoundException('That answer is not on this board.');
+                }
+                if (!in_array($answerId, array_map('intval', (array) ($data['revealed'] ?? [])), true)) {
+                    $data['revealed'][] = $answerId;
+                    // Answers turned over after the bank are for fun only.
+                    if (empty($data['banked'])) {
+                        $data['bank'] = (int) ($data['bank'] ?? 0) + (int) $match['points'];
+                    }
+                }
+                $cue = 'ding';
+                break;
+
+            case 'strike':
+                if (($data['phase'] ?? '') !== 'control') {
+                    throw new SeRuleException('STALE_STATE', 'Give a team control first.');
+                }
+                $data['strikes'] = min(3, (int) ($data['strikes'] ?? 0) + 1);
+                if ($data['strikes'] >= 3) {
+                    $data['phase'] = 'steal';
+                    $data['steal_team'] = (int) $data['control_team'] === (int) $data['team_a'] ? (int) $data['team_b'] : (int) $data['team_a'];
+                }
+                $cue = 'strike';
+                break;
+
+            case 'steal':
+                if (($data['phase'] ?? '') !== 'steal') {
+                    throw new SeRuleException('STALE_STATE', 'A steal comes after three strikes.');
+                }
+                $data['steal_success'] = se_bool($input['success'] ?? false);
+                $data['phase'] = 'bank';
+                $cue = $data['steal_success'] ? 'correct' : 'wrong';
+                break;
+
+            case 'bank':
+                if (!empty($data['banked'])) {
+                    throw new SeRuleException('ALREADY_SCORED', 'This board is already banked.');
+                }
+                $winner = !empty($data['steal_success']) ? (int) ($data['steal_team'] ?? 0) : (int) ($data['control_team'] ?? 0);
+                if (!$winner) {
+                    throw new SeRuleException('NO_CONTROL', 'Give a team control before banking.');
+                }
+                $points = se_weighted_points(se_feud_bank_points([(int) ($data['bank'] ?? 0)], (int) $data['multiplier']), $round['weight'] ?? 1);
+                if ($points > 0) {
+                    se_score_insert($pdo, $event, [
+                        'scope' => 'team', 'team_id' => $winner, 'game_id' => (int) $round['game_id'], 'round_id' => $roundId,
+                        'kind' => 'auto', 'points' => $points,
+                        'reason' => !empty($round['is_test']) ? se_score_test_reason() : 'Family Feud',
+                        'idempotency_key' => 'f:' . $roundId . ':bank',
+                    ], $actor);
+                }
+                $data['banked'] = true;
+                $data['phase'] = 'done';
+                $data['winner_team'] = $winner;
+                $data['total'] = $points;
+                $pdo->prepare(
+                    "UPDATE se_rounds SET state = 'scored', result_json = ?, locked_at = COALESCE(locked_at, NOW(3)), revealed_at = NOW(3)
+                      WHERE id = ?"
+                )->execute([se_json_encode(['winner_team_id' => $winner, 'team_points' => [(string) $winner => $points]]), $roundId]);
+                $cue = 'applause';
+                break;
+
+            case 'reveal_all':
+                $data['revealed'] = array_map(static fn(array $a): int => (int) $a['id'], $board);
+                $cue = 'reveal';
+                break;
+
+            default:
+                throw new SeValidationException(['op' => 'Unknown Feud control.']);
         }
 
-        return ['correct' => $correct, 'team_id' => (int) $buzz['team_id'], 'round_state' => $correct ? 'scored' : $round['state']];
+        se_round_state_save($pdo, $roundId, $data);
+
+        return [['feud' => se_feud_public($pdo, se_round_find($pdo, (int) $event['id'], $roundId) ?? $round, $data)], $cue ? se_live_cue($live, $cue) : []];
     });
 }
 
-function se_live_game_private(PDO $pdo, array $event): ?array
-{
-    $public = se_live_game_payload($pdo, $event);
+// --------------------------------------------------------------------------
+// Leaderboards, MVP and the finale (§11.11)
+// --------------------------------------------------------------------------
 
-    if (!$public || empty($public['round'])) {
-        return $public;
-    }
-    $stmt = $pdo->prepare('SELECT r.*,g.type game_type FROM se_rounds r JOIN se_games g ON g.id=r.game_id WHERE r.id=? AND r.event_id=?');
-    $stmt->execute([(int) $public['round']['id'], (int) $event['id']]);
-    $round = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if (!$round) {
-        return $public;
-    }
-    $item = se_round_item($pdo, $round);
-    $private = ['row' => $round, 'item' => $item, 'state' => se_round_state_data($round)];
-    $buzzes = $pdo->prepare('SELECT b.*,r.display_name FROM se_buzzes b JOIN se_registrations r ON r.id=b.registration_id WHERE b.round_id=? ORDER BY b.effective_ms,b.received_at');
-    $buzzes->execute([(int) $round['id']]);
-    $private['buzzes'] = $buzzes->fetchAll(PDO::FETCH_ASSOC);
-
-    if ($round['game_type'] === 'feud') {
-        $private['board'] = se_feud_board($pdo, $event, (int) $round['deck_item_id'], true);
-    }
-
-    return $public + ['private' => $private];
-}
-
-function se_game_me_payload(PDO $pdo, array $event, array $registration, ?array $device): array
-{
-    $joined = $device !== null && ($device['joined_games_at'] ?? null) !== null;
-    $games = ['joined' => $joined, 'captain' => false, 'survey' => se_survey_questions($pdo, $event, (int) $registration['id'])];
-    $roundPayload = null;
-
-    if (se_game_ready($pdo)) {
-        $stmt = $pdo->prepare("SELECT r.*,g.type game_type FROM se_rounds r JOIN se_games g ON g.id=r.game_id WHERE r.event_id=? AND r.state NOT IN ('void','pending') ORDER BY r.id DESC LIMIT 1");
-        $stmt->execute([(int) $event['id']]);
-        $round = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if ($round) {
-            $roundPayload = ['id' => (int) $round['id'], 'state' => (string) $round['state'], 'game_type' => (string) $round['game_type'], 'attempt' => (int) $round['attempt']];
-            $answer = $pdo->prepare("SELECT choice_index,elapsed_ms,points,is_correct FROM se_answers WHERE round_id=? AND registration_id=? AND role IN ('player','captain') LIMIT 1");
-            $answer->execute([(int) $round['id'], (int) $registration['id']]);
-            $mine = $answer->fetch(PDO::FETCH_ASSOC);
-
-            if ($mine) {
-                $roundPayload['my_answer'] = $mine;
-            }
-        }
-
-        if (!empty($registration['team_id'])) {
-            $captain = $pdo->prepare('SELECT captain_registration_id FROM se_teams WHERE id=? AND event_id=?');
-            $captain->execute([(int) $registration['team_id'], (int) $event['id']]);
-            $games['captain'] = (int) ($captain->fetchColumn() ?: 0) === (int) $registration['id'];
-        }
-    }
-    $stmt = $pdo->prepare("SELECT COALESCE(SUM(points),0) FROM se_score_events WHERE event_id=? AND registration_id=? AND scope='individual' AND voided_at IS NULL");
-    $stmt->execute([(int) $event['id'], (int) $registration['id']]);
-    $points = (int) $stmt->fetchColumn();
-    $rankStmt = $pdo->prepare("SELECT COUNT(*)+1 FROM (SELECT registration_id,SUM(points) total FROM se_score_events WHERE event_id=? AND scope='individual' AND voided_at IS NULL GROUP BY registration_id HAVING total>?) ranked");
-    $rankStmt->execute([(int) $event['id'], $points]);
-
-    return ['games' => $games, 'round' => $roundPayload, 'presenter' => se_charades_presenter_payload($pdo, $event, (int) $registration['id']), 'score' => ['points' => $points, 'rank' => (int) $rankStmt->fetchColumn()]];
-}
-
+/**
+ * Everything the finale and the recap need, WITH names (the MVP). Only the
+ * console, the key-protected room snapshot, cards and the recap read this;
+ * public.json gets se_finale_public() instead.
+ */
 function se_finale_payload(PDO $pdo, array $event): array
 {
-    $leaders = se_leaderboards($pdo, $event);
-    $teams = [];
-    $teamRows = se_teams($pdo, (int) $event['id']);
-    $scores = array_column($leaders['teams'], 'points', 'team_id');
+    $eventId = (int) $event['id'];
+    $boards  = se_leaderboards($pdo, $event, 5);
+    $scores  = array_column($boards['teams'], null, 'team_id');
 
-    foreach ($teamRows as $team) {
-        $teams[] = ['id' => (int) $team['id'], 'name' => (string) ($team['name'] ?: $team['color_label']), 'hex' => (string) $team['color_hex'], 'points' => (int) ($scores[(int) $team['id']] ?? 0)];
+    $teams = [];
+    if (se_teams_ready($pdo)) {
+        foreach (se_teams($pdo, $eventId) as $team) {
+            $row = $scores[(int) $team['id']] ?? ['points' => 0, 'rank' => null];
+            $teams[] = [
+                'id'     => (int) $team['id'],
+                'name'   => (string) ($team['name'] !== null && $team['name'] !== '' ? $team['name'] : 'Team ' . $team['color_label']),
+                'hex'    => (string) $team['color_hex'],
+                'points' => (int) $row['points'],
+                'rank'   => $row['rank'] !== null ? (int) $row['rank'] : null,
+            ];
+        }
     }
     usort($teams, static fn(array $a, array $b): int => [$b['points'], $a['id']] <=> [$a['points'], $b['id']]);
 
-    foreach ($teams as $index => &$team) {
-        $team['rank'] = $index + 1;
-    }
-    unset($team);
     $mvp = [];
-
-    foreach ($leaders['mvp'] as $row) {
-        $stmt = $pdo->prepare('SELECT display_name,team_id FROM se_registrations WHERE id=? AND event_id=?');
-        $stmt->execute([(int) $row['registration_id'], (int) $event['id']]);
-        $reg = $stmt->fetch(PDO::FETCH_ASSOC);
-
+    foreach ($boards['mvp'] as $row) {
+        $reg = se_registration_by_id($pdo, (int) $row['registration_id'], $eventId);
         if ($reg) {
-            $mvp[] = ['registration_id' => (int) $row['registration_id'], 'display_name' => (string) $reg['display_name'], 'team_id' => (int) $reg['team_id'], 'points' => (int) $row['points']];
+            $mvp[] = [
+                'registration_id' => (int) $row['registration_id'],
+                'display_name'    => (string) $reg['display_name'],
+                'team_id'         => $reg['team_id'] !== null ? (int) $reg['team_id'] : null,
+                'points'          => (int) $row['points'],
+            ];
         }
     }
 
-    return ['teams' => $teams, 'champion' => $teams[0] ?? null, 'mvp' => $mvp, 'mvp_winner' => $mvp[0] ?? null, 'awards' => se_named_awards($pdo, $event)];
+    $champion = ($teams[0]['points'] ?? 0) > 0 ? $teams[0] : null;
+
+    return ['teams' => $teams, 'champion' => $champion, 'mvp' => $mvp, 'mvp_winner' => $mvp[0] ?? null, 'awards' => se_named_awards($pdo, $event)];
 }
 
+/** The finale as public.json may show it: teams and the champion, no people. */
+function se_finale_public(array $finale): array
+{
+    return [
+        'teams'    => array_map(static fn(array $t): array => [
+            'id' => $t['id'], 'name' => $t['name'], 'hex' => $t['hex'], 'points' => $t['points'], 'rank' => $t['rank'],
+        ], $finale['teams']),
+        'champion' => $finale['champion'] ? [
+            'id' => $finale['champion']['id'], 'name' => $finale['champion']['name'],
+            'hex' => $finale['champion']['hex'], 'points' => $finale['champion']['points'],
+        ] : null,
+        'has_mvp'  => !empty($finale['mvp_winner']),
+    ];
+}
+
+/** Named crew awards (team awards with a reason), for chips and the recap. */
 function se_named_awards(PDO $pdo, array $event): array
 {
-    $stmt = $pdo->prepare("SELECT id,scope,team_id,registration_id,points,reason,created_at FROM se_score_events WHERE event_id=? AND kind='award' AND voided_at IS NULL AND reason IS NOT NULL ORDER BY id");
+    if (!se_table_exists($pdo, 'se_score_events')) {
+        return [];
+    }
+    $stmt = $pdo->prepare(
+        "SELECT id, scope, team_id, points, reason, created_at FROM se_score_events
+          WHERE event_id = ? AND kind = 'award' AND voided_at IS NULL AND reason IS NOT NULL
+            AND reason <> 'TEST' AND reason NOT LIKE 'TEST: %'
+          ORDER BY id"
+    );
     $stmt->execute([(int) $event['id']]);
 
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    return array_map(static fn(array $row): array => [
+        'id'      => (int) $row['id'],
+        'scope'   => (string) $row['scope'],
+        'team_id' => $row['team_id'] !== null ? (int) $row['team_id'] : null,
+        'points'  => (int) $row['points'],
+        'reason'  => (string) $row['reason'],
+    ], $stmt->fetchAll());
 }
 
+/**
+ * Console → Finale (§11.11): the stage counts the teams down to the champion
+ * with a fanfare; the MVP is revealed from the room snapshot.
+ */
 function se_finale_start(PDO $pdo, array $event, ?int $expected, int $actor): array
 {
-    $payload = se_finale_payload($pdo, $event);
-
-    if (!$payload['champion']) {
-        throw new SeRuleException('NO_SCORES', 'Score at least one team before the finale.');
+    $finale = se_finale_payload($pdo, $event);
+    if (!$finale['champion']) {
+        throw new SeRuleException('NO_SCORES', 'Score at least one round before the finale.');
     }
-    $current = se_live_state($pdo, (int) $event['id']);
-    $state = se_live_mutate($pdo, $event, $expected, static fn(): array => [
-        'scene' => 'finale',
-        'scene_payload_json' => se_json_encode(['since_ms' => se_epoch_ms(), 'payload' => $payload]),
-        'sfx_seq' => ((int) ($current['sfx_seq'] ?? 0)) + 1,
-        'sfx_cue' => 'fanfare',
-    ], 'finale', ['champion_team_id' => $payload['champion']['id']], $actor);
 
-    return ['version' => (int) $state['version'], 'finale' => $payload];
+    $state = se_live_mutate($pdo, $event, $expected, static fn(array $live): array => [
+        'scene'              => 'finale',
+        'scene_payload_json' => se_json_encode(['since_ms' => se_epoch_ms(), 'payload' => se_finale_public($finale)]),
+    ] + se_live_cue($live, 'fanfare'), 'scene_set:finale', ['champion_team_id' => $finale['champion']['id']], $actor);
+
+    return ['version' => (int) $state['version'], 'finale' => $finale];
+}
+
+// --------------------------------------------------------------------------
+// The Chara starter pack (Appendix G)
+// --------------------------------------------------------------------------
+
+/**
+ * Seed the decks and the suggested lineup of games, every item approved and
+ * attached, so a rehearsal can run every game type straight away. Safe to
+ * press again: a deck or game that already exists by title is reused, and an
+ * item already in a deck is not added twice.
+ */
+function se_chara_starter_content(PDO $pdo, array $event, int $actor): array
+{
+    $sets = [
+        'quiz' => ['title' => 'Chara · Bible quiz', 'type' => 'mcq', 'items' => [
+            [['prompt' => 'Who was swallowed by a great fish?', 'choices' => ['Jonah', 'Elijah', 'Peter', 'Noah'], 'answer_index' => 0,
+              'explanation' => 'God prepared a great fish to swallow Jonah — three days and three nights.'], 'Jonah 1:17'],
+            [['prompt' => 'For how many days and nights did it rain during the flood?', 'choices' => ['7', '12', '40', '100'], 'answer_index' => 2], 'Genesis 7:12'],
+            [['prompt' => 'Who was the mother of the prophet Samuel?', 'choices' => ['Hannah', 'Ruth', 'Sarah', 'Elizabeth'], 'answer_index' => 0], '1 Samuel 1:20'],
+            [['prompt' => 'At the wedding in Cana, what did Jesus turn water into?', 'choices' => ['Milk', 'Wine', 'Oil', 'Honey'], 'answer_index' => 1], 'John 2:9'],
+            [['prompt' => 'Which king asked God for an understanding heart?', 'choices' => ['David', 'Saul', 'Solomon', 'Hezekiah'], 'answer_index' => 2], '1 Kings 3:9'],
+        ]],
+        'buzz' => ['title' => 'Chara · Buzzer round', 'type' => 'open', 'items' => [
+            [['prompt' => 'Which disciple denied Jesus three times?', 'answer' => 'Peter', 'accept' => ['peter', 'simon peter', 'simon']], 'Luke 22:61'],
+            [['prompt' => 'Which city\'s walls fell after the people shouted?', 'answer' => 'Jericho', 'accept' => ['jericho']], 'Joshua 6:20'],
+            [['prompt' => 'Who was thrown into a den of lions for praying?', 'answer' => 'Daniel', 'accept' => ['daniel']], 'Daniel 6:16'],
+        ]],
+        'clues' => ['title' => 'Chara · Who Am I?', 'type' => 'clues', 'items' => [
+            [['clues' => ['My father gave me a special coat', 'My brothers sold me', 'I ended up in prison in Egypt', 'I interpreted Pharaoh\'s dreams', 'I became governor over Egypt'],
+              'answer' => 'Joseph', 'accept' => ['joseph']], 'Genesis 37:3'],
+            [['clues' => ['I was raised by my cousin', 'I became queen in Persia', 'I asked my people to fast for three days', 'I said, "if I perish, I perish"'],
+              'answer' => 'Esther', 'accept' => ['esther', 'queen esther']], 'Esther 4:16'],
+        ]],
+        'charades' => ['title' => 'Chara · Bible Charades', 'type' => 'charade', 'items' => [
+            [['phrase' => 'David and Goliath', 'category' => 'story'], '1 Samuel 17:49'],
+            [['phrase' => 'Zacchaeus climbing a tree', 'category' => 'story', 'hint' => 'A short man who wanted to see Jesus'], 'Luke 19:4'],
+            [['phrase' => "Daniel in the lions' den", 'category' => 'story'], 'Daniel 6:16'],
+            [['phrase' => 'Noah building the ark', 'category' => 'story'], 'Genesis 6:14'],
+            [['phrase' => 'Jesus walking on water', 'category' => 'miracle'], 'Matthew 14:25'],
+            [['phrase' => 'The parting of the Red Sea', 'category' => 'miracle'], 'Exodus 14:21'],
+            [['phrase' => 'The prodigal son', 'category' => 'parable'], 'Luke 15:20'],
+            [['phrase' => 'Feeding the five thousand', 'category' => 'miracle'], 'John 6:11'],
+        ]],
+        'survey' => ['title' => 'Chara · Feud survey', 'type' => 'survey', 'items' => [
+            [['question' => "Name something you'd find on Noah's Ark."], null],
+            [['question' => 'Name a gospel song everyone in Lagos knows the words to.'], null],
+            [['question' => 'Name something people do at a Nigerian wedding reception.'], null],
+            [['question' => 'Name a Bible character known for being strong.'], null],
+        ]],
+    ];
+
+    $games = [
+        ['title' => 'Live Quiz',      'type' => 'live_quiz', 'deck' => 'quiz'],
+        ['title' => 'Bible Trivia',   'type' => 'trivia',    'deck' => 'quiz'],
+        ['title' => 'Buzzer round',   'type' => 'buzzer',    'deck' => 'buzz'],
+        ['title' => 'Who Am I?',      'type' => 'who_am_i',  'deck' => 'clues'],
+        ['title' => 'Bible Charades', 'type' => 'charades',  'deck' => 'charades'],
+        ['title' => 'Family Feud',    'type' => 'feud',      'deck' => 'survey'],
+    ];
+
+    $eventId = (int) $event['id'];
+    $created = ['items' => 0, 'games' => 0];
+    $itemIds = [];
+
+    foreach ($sets as $key => $set) {
+        $check = $pdo->prepare("SELECT id FROM se_decks WHERE event_id = ? AND title = ? LIMIT 1");
+        $check->execute([$eventId, $set['title']]);
+        $deckId = (int) ($check->fetchColumn() ?: 0);
+        if (!$deckId) {
+            $deckId = se_deck_save($pdo, $event, [
+                'title' => $set['title'], 'content_type' => $set['type'], 'scope' => 'event',
+                'description' => 'Appendix G starter content',
+            ], $actor)['id'];
+        }
+
+        $itemIds[$key] = [];
+        foreach ($set['items'] as [$payload, $ref]) {
+            [$clean] = se_deck_payload_clean($set['type'], $payload);
+            $exists = $pdo->prepare("SELECT id FROM se_deck_items WHERE deck_id = ? AND payload_json = ? LIMIT 1");
+            $exists->execute([$deckId, se_json_encode($clean)]);
+            $id = (int) ($exists->fetchColumn() ?: 0);
+            if (!$id) {
+                $id = se_deck_item_save($pdo, $event, [
+                    'deck_id' => $deckId, 'payload' => $clean, 'scripture_ref' => $ref ?? '', 'source' => 'manual',
+                ], $actor)['id'];
+                $created['items']++;
+            }
+            $itemIds[$key][] = $id;
+        }
+    }
+
+    foreach ($games as $spec) {
+        $check = $pdo->prepare("SELECT id FROM se_games WHERE event_id = ? AND title = ? LIMIT 1");
+        $check->execute([$eventId, $spec['title']]);
+        $gameId = (int) ($check->fetchColumn() ?: 0);
+        if ($gameId) {
+            continue;
+        }
+        $gameId = se_game_save($pdo, $event, ['title' => $spec['title'], 'type' => $spec['type']], $actor)['id'];
+        se_game_items_save($pdo, $event, ['game_id' => $gameId, 'item_ids' => $itemIds[$spec['deck']]], $actor);
+        $created['games']++;
+    }
+
+    return $created + ['decks' => count($sets)];
 }

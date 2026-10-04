@@ -540,7 +540,13 @@ try {
         // ------------------------------------------------------------------
         case 'me': {
             $event = se_public_event($pdo, $body);
-            se_public_limit($pdo, $event, 'me', 120, 4000, 600);
+            // The games screen refreshes `me` once a round per phone, and the
+            // whole room shares one Wi-Fi IP, so it has its own bucket.
+            if (($body['purpose'] ?? '') === 'play') {
+                se_public_limit($pdo, $event, 'me_play', 300, 30000, 600);
+            } else {
+                se_public_limit($pdo, $event, 'me', 120, 4000, 600);
+            }
 
             [$reg, $device, $token] = se_public_actor($pdo, $event, $body);
             $days = se_event_days($pdo, (int) $event['id']);
@@ -599,15 +605,42 @@ try {
             ));
         }
 
-        // Games player actions (§12.2)
-        case 'join_games': case 'answer': case 'suggest': case 'buzz': {
-            $event=se_public_event($pdo,$body); se_public_require_writable($event); se_public_limit($pdo,$event,$action,120,6000,60); [$reg,$device]=se_public_actor($pdo,$event,$body);
-            if($action!=='join_games') se_game_require_player($pdo,$event,$reg,$device);
-            if($action==='join_games') $out=se_game_join($pdo,$event,$reg,$device);
-            elseif($action==='answer') $out=se_game_answer($pdo,$event,$reg,$body);
-            elseif($action==='suggest') $out=se_game_suggest($pdo,$event,$reg,$body);
-            else $out=se_game_buzz($pdo,$event,$reg,$body);
-            se_api_success('OK',$out);
+        // ------------------------------------------------------------------
+        // Games (§11.3, §12.2)
+        // ------------------------------------------------------------------
+        //
+        // Every one of these needs a phone bound in full to a checked-in
+        // person (se_game_require_player). The per-IP limits are generous
+        // on purpose: on the night the whole room is behind one Wi-Fi IP.
+        case 'join_games': {
+            $event = se_public_event($pdo, $body);
+            se_public_require_writable($event);
+            se_public_limit($pdo, $event, 'join_games', 30, 3000, 600);
+
+            [$reg, $device] = se_public_actor($pdo, $event, $body);
+            se_api_success('You are in the games.', se_game_join($pdo, $event, $reg, $device));
+        }
+
+        case 'answer':
+        case 'suggest':
+        case 'buzz': {
+            $event = se_public_event($pdo, $body);
+            se_public_require_writable($event);
+            se_public_limit($pdo, $event, $action, 120, 6000, 60);
+
+            [$reg, $device] = se_public_actor($pdo, $event, $body);
+            se_game_require_player($pdo, $event, $reg, $device);
+
+            $out = match ($action) {
+                'answer'  => se_game_answer($pdo, $event, $reg, $body, $device),
+                'suggest' => se_game_suggest($pdo, $event, $reg, $body),
+                default   => se_game_buzz($pdo, $event, $reg, $body),
+            };
+            se_api_success(match ($action) {
+                'answer'  => 'Locked in.',
+                'suggest' => 'Suggested to your captain.',
+                default   => 'Buzzed!',
+            }, $out);
         }
 
         // ------------------------------------------------------------------
