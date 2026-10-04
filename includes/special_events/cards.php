@@ -42,7 +42,7 @@ function se_card_payload(PDO $pdo, array $event, array $days, array $settings, s
 
     $first = $days[0] ?? null;
     $start = se_parse_datetime($first['starts_at'] ?? ($event['starts_at'] ?? null));
-    $theme = se_event_theme($pdo, $event);
+    $theme = se_event_theme($event);
 
     $refUrl = se_event_url((string) $event['slug']) . '?r=' . rawurlencode((string) $registration['ref_code']);
 
