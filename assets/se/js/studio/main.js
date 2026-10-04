@@ -31,6 +31,8 @@ import { AssetsTab } from './tabs/assets.js';
 import { CrewTab } from './tabs/crew.js';
 import { SettingsTab } from './tabs/settings.js';
 import { GamesTab } from './tabs/games.js';
+import { InsightsTab } from './tabs/insights.js';
+import { HandoffTab } from './tabs/handoff.js';
 
 const TABS = {
     overview: OverviewTab,
@@ -47,6 +49,8 @@ const TABS = {
     attendees: AttendeesTab,
     assets: AssetsTab,
     crew: CrewTab,
+    insights: InsightsTab,
+    handoff: HandoffTab,
     settings: SettingsTab,
 };
 

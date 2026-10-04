@@ -30,7 +30,7 @@ $root = dirname(__DIR__, 3);
 require_once $root . '/includes/sms_functions.php';
 foreach (['constants', 'util', 'db', 'theme', 'settings', 'events', 'identity',
           'capacity', 'registration', 'realtime', 'live', 'bible', 'verses',
-          'teams', 'checkin', 'messages', 'attendees', 'program', 'karaoke'] as $lib) {
+          'teams', 'checkin', 'messages', 'attendees', 'program', 'karaoke', 'after_event'] as $lib) {
     require_once $root . '/includes/special_events/' . $lib . '.php';
 }
 
@@ -704,6 +704,27 @@ if (!se_table_exists($pdo, 'se_message_runs')) {
     }
 }
 
+
+// ==========================================================================
+// Test 8 — a hand-off re-run creates nothing new (§17.6)
+// ==========================================================================
+
+echo "\n  hand-off rerun idempotency\n";
+if (!se_table_exists($pdo, 'se_handoffs')) {
+    echo "    (post-event migration is not in this database — skipped)\n";
+} else {
+    $hEvent = se_it_event($pdo, ['online_capacity' => 10]);
+    $hReg = se_it_register($pdo, $hEvent, 9901);
+    $hRegId = (int) ($hReg['registration']['id'] ?? $hReg['id'] ?? 0);
+    $pdo->prepare("UPDATE se_registrations SET first_checkin_at=NOW() WHERE id=?")->execute([$hRegId]);
+    $first = se_handoff_push($pdo, $hEvent, [], [], 1);
+    $second = se_handoff_push($pdo, $hEvent, [], [], 1);
+    $q=$pdo->prepare("SELECT COUNT(*) FROM reach_leads WHERE campaign_id=?"); $q->execute([(int)$first['reach_campaign_id']]);
+    is_same('one Reach lead after two hand-off runs', 1, (int)$q->fetchColumn());
+    $q=$pdo->prepare("SELECT COUNT(*) FROM se_handoff_items WHERE event_id=? AND outcome IN ('created','linked_existing')"); $q->execute([(int)$hEvent['id']]);
+    is_same('one successful hand-off item after rerun', 1, (int)$q->fetchColumn());
+    ok('rerun records the already-handed-off outcome', (int)($second['counts']['already_handed_off']??0) >= 1);
+}
 
 // ==========================================================================
 

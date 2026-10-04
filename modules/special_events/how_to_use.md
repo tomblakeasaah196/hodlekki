@@ -1004,3 +1004,39 @@ One week before the event:
    buzzes, survey answers and karaoke entries are gone, and TEST scores are
    voided. Real rows must remain.
 7. Write the fix list, repeat the failed step, and turn test mode off.
+
+## 23. After the event (PR7)
+
+The next morning, check **Messages** for the `thank_you` run. It goes once to
+everyone who checked in and opens their private manage link at **My Night**.
+The card contains their team result, points, MVP badge when applicable and
+performed karaoke song. **Feedback** asks for NPS (0–10), a favourite moment,
+one word, a comment, visit interest and future-event consent.
+
+Open **Insights** for the registration funnel, source channels, show-up,
+members/guests, gender, games, karaoke, team and NPS totals. Every visual has
+a table. Series events include edition comparisons and the champion Hall of
+Fame. **PDF report** is aggregate and contains no phone numbers or email
+addresses; its AI narrative uses aggregate statistics only and falls back to
+a fixed narrative when AI is off. **Excel** is operational data: only users
+with PII permission receive unmasked contact fields, and every export is
+audited.
+
+Within 72 hours, open **Hand-off** with the Follow-up liaison. Review the rule
+summary and every row. By default, checked-in consenting guests who want a
+visit go to Embrace; other checked-in consenting guests go to the event's
+Reach campaign. Members, opt-outs, no-consent rows and no-shows are excluded.
+Only enable the no-show rule deliberately. Press **Push reviewed people**
+once the preview is right. History remains visible and a re-run safely picks
+up late opt-ins without duplicating a successful person.
+
+A manager may archive at least 24 hours after the end. Archived events are
+frozen except for exports, insights and hand-off. A manager, or a producer in
+the same series, can reclaim the short slug for the next edition; the old
+edition receives an edition/year slug. Cron removes expired devices and
+tokens and anonymises non-consenting guest details after the configured
+retention period. A direct erasure request remains available in Attendees.
+
+After-event checklist: recap scene; attendee export; confirm thank-you run;
+review feedback after 48 hours; download the PDF; run hand-off with Follow-up;
+notify leadership; archive after at least seven days.

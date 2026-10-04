@@ -576,6 +576,13 @@ try {
             se_api_success('Done — we will not contact you again.', ['opted_out' => true]);
         }
 
+        case 'feedback': {
+            $event = se_public_event($pdo, $body);
+            se_public_limit($pdo, $event, 'feedback', 20, 1000, 600);
+            [$reg] = se_public_actor($pdo, $event, $body);
+            se_api_success('Thank you — your feedback is saved.', se_feedback_save($pdo, $event, $reg, $body));
+        }
+
         case 'survey': {
             $event = se_public_event($pdo, $body);
             se_public_require_writable($event);

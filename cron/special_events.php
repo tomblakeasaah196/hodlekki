@@ -41,7 +41,7 @@ function se_cron_log(string $message): void
 }
 
 $startedAt = microtime(true);
-$summary   = ['messages' => 0, 'karaoke' => 0, 'test_mode' => 0, 'tokens' => 0, 'devices' => 0, 'rate_limits' => 0, 'ai_sources' => 0];
+$summary   = ['messages' => 0, 'karaoke' => 0, 'test_mode' => 0, 'tokens' => 0, 'devices' => 0, 'rate_limits' => 0, 'ai_sources' => 0, 'anonymised' => 0];
 
 try {
     if (!se_table_exists($pdo, 'se_events')) {
@@ -154,6 +154,18 @@ try {
         }
     } catch (Throwable $e) {
         error_log('SE cron/ai_purge: ' . $e->getMessage());
+    }
+
+    // ---- 6. post-event retention (§19.8) -----------------------------
+    try {
+        if (se_table_exists($pdo, 'se_feedback')) {
+            $retention = se_retention_run($pdo);
+            $summary['anonymised'] = (int) $retention['contacts'];
+            $summary['devices'] += (int) $retention['devices'];
+            $summary['tokens'] += (int) $retention['tokens'];
+        }
+    } catch (Throwable $e) {
+        error_log('SE cron/retention: ' . $e->getMessage());
     }
 
     // The heartbeat the health panel reads (§23.6).

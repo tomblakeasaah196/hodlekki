@@ -9,8 +9,8 @@
 // Nothing here touches the guest's photo. It is read, cropped and drawn
 // entirely in the browser and never reaches the server (§14.3, §19.5).
 
-/** Templates that exist. `my_night` arrives with the recap in PR5. */
-const SE_CARD_KINDS_READY = ['im_going', 'welcome', 'team'];
+/** Personal card templates available on the portal. */
+const SE_CARD_KINDS_READY = ['im_going', 'welcome', 'team', 'my_night'];
 
 /** The sizes a card may be rendered at (§14.3). */
 const SE_CARD_SIZES = [
@@ -52,7 +52,7 @@ function se_card_payload(PDO $pdo, array $event, array $days, array $settings, s
     // The welcome and team cards are about tonight, not about the invitation,
     // so they are built separately rather than bent out of the "I'm going"
     // shape. They share the colours, the fonts and the signature.
-    if ($kind === 'welcome' || $kind === 'team') {
+    if ($kind === 'welcome' || $kind === 'team' || $kind === 'my_night') {
         return se_card_night_payload($pdo, $event, $settings, $kind, $registration, $theme, $signature);
     }
 
@@ -226,9 +226,16 @@ function se_card_night_payload(
 
     $days      = se_event_days($pdo, $eventId);
     $phaseInfo = se_event_phase($event, $days);
-    $checkin   = se_checkin_ready($pdo)
-        ? se_checkin_row($pdo, $eventId, (int) $registration['id'], se_checkin_day($phaseInfo))
-        : null;
+    $checkin = null;
+    if (se_checkin_ready($pdo)) {
+        if ($kind === 'my_night') {
+            $stmt = $pdo->prepare("SELECT * FROM se_checkins WHERE event_id=? AND registration_id=? ORDER BY checked_in_at DESC LIMIT 1");
+            $stmt->execute([$eventId, (int) $registration['id']]);
+            $checkin = $stmt->fetch() ?: null;
+        } else {
+            $checkin = se_checkin_row($pdo, $eventId, (int) $registration['id'], se_checkin_day($phaseInfo));
+        }
+    }
 
     if ($checkin === null) {
         throw new SeRuleException('NOT_CHECKED_IN', 'This card is ready once you have checked in.');
@@ -251,7 +258,26 @@ function se_card_night_payload(
         'team'       => $teamPublic ? ($teamPublic['name'] ?? ('Team ' . $teamPublic['label'])) : '',
     ];
 
-    if ($kind === 'welcome') {
+    if ($kind === 'my_night') {
+        $finale = function_exists('se_finale_payload') ? se_finale_payload($pdo, $event) : [];
+        $standing = null;
+        foreach (($finale['teams'] ?? []) as $row) {
+            if ((int) ($row['id'] ?? 0) === (int) ($registration['team_id'] ?? 0)) {
+                $standing = $row;
+                break;
+            }
+        }
+        $songStmt = $pdo->prepare("SELECT s.title FROM se_karaoke_entries k JOIN se_songs s ON s.id=k.song_id WHERE k.event_id=? AND k.registration_id=? AND k.status='done' ORDER BY k.finished_at DESC LIMIT 1");
+        $songStmt->execute([$eventId, (int) $registration['id']]);
+        $song = $songStmt->fetchColumn() ?: null;
+        $text += [
+            'headline' => 'My Night',
+            'rank' => $standing ? '#' . (int) ($standing['rank'] ?? 0) : '',
+            'points' => $standing ? (string) (int) ($standing['score'] ?? 0) : '0',
+            'song' => $song ? (string) $song : '',
+            'mvp' => (int) (($finale['mvp']['registration_id'] ?? 0)) === (int) $registration['id'] ? 'MVP' : '',
+        ];
+    } elseif ($kind === 'welcome') {
         $verse = !empty($checkin['verse_id']) && se_verses_ready($pdo)
             ? se_verse_for_card(se_verse_find($pdo, $eventId, (int) $checkin['verse_id']), $firstName)
             : null;

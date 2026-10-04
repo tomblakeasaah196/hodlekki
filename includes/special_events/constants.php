@@ -346,6 +346,11 @@ const SE_SCHEMA_EXPECTED = [
     '20261013090200_se_live_state.sql' => [
         'se_live_state' => ['event_id', 'version', 'scene', 'scene_payload_json', 'announcement_json', 'sfx_seq', 'sfx_cue', 'room_key', 'lobby_key', 'stage_key', 'dirty', 'last_published_at', 'updated_at', 'updated_by'],
     ],
+    '20261027090000_se_post_event.sql' => [
+        'se_feedback' => ['id', 'event_id', 'registration_id', 'nps', 'favorite', 'one_word', 'comment', 'wants_visit', 'future_optin'],
+        'se_handoffs' => ['id', 'event_id', 'reach_campaign_id', 'summary_json', 'created_by', 'created_at'],
+        'se_handoff_items' => ['id', 'handoff_id', 'event_id', 'registration_id', 'contact_id', 'destination', 'outcome', 'target_table', 'target_id', 'done_contact_key'],
+    ],
 ];
 
 /**
@@ -356,7 +361,6 @@ const SE_SCHEMA_EXPECTED = [
 const SE_SCHEMA_LATER_PHASES = [
     'C' => ['se_decks', 'se_deck_items', 'se_games', 'se_game_items', 'se_rounds',
             'se_answers', 'se_buzzes', 'se_survey_responses', 'se_feud_answers', 'se_score_events'],
-    'D' => ['se_feedback', 'se_handoffs', 'se_handoff_items'],
 ];
 
 /**
@@ -391,7 +395,7 @@ const SE_STUDIO_TABS = [
  */
 const SE_STUDIO_TABS_READY = [
     'overview', 'details', 'brand', 'registration', 'checkin', 'program', 'teams',
-    'karaoke', 'games', 'messages', 'live', 'attendees', 'assets', 'crew', 'settings',
+    'karaoke', 'games', 'messages', 'live', 'attendees', 'insights', 'handoff', 'assets', 'crew', 'settings',
 ];
 
 /**
