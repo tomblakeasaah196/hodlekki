@@ -432,9 +432,12 @@ flyer brought 40 people and Instagram brought 4.
 **✨ Suggest three** is the writing helper. Pick what you need — a tagline, the
 page description, a blurb, an FAQ answer, an SMS, a card headline — add a line
 of brief if you want ("mention that it ends by 9pm"), and you get three
-options that respect the length limit. Nothing is ever applied for you: read
-them, pick one, edit it. If the button is missing, no AI key is configured on
-the server, and you simply write it yourself.
+options that respect the length limit. Portal descriptions can now come back as
+three fuller 120-word options; if the AI cuts a JSON answer short, the system
+tries once more with clearer instructions and more output room. Nothing is ever
+applied for you: read them, pick one, edit it. The system does not put the raw
+prompt or AI output in the server logs. If the button is missing, no AI key is
+configured on the server, and you simply write it yourself.
 
 ---
 
