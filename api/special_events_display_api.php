@@ -115,7 +115,17 @@ try {
                     'doors_ms'  => se_epoch_ms(se_parse_datetime($days[0]['doors_open_at'] ?? null)),
                 ],
                 'theme' => [
-                    'css'    => se_theme_css_vars($theme, se_teams($pdo, (int) $event['id'])),
+                    // se_theme_css_vars() takes team TOKENS (colour, on,
+                    // glow, ring), not se_teams rows: passing the rows wrote
+                    // empty --team-N variables and four warnings per team.
+                    'css'    => se_theme_css_vars($theme, array_map(
+                        static fn(array $team): array => se_team_tokens(
+                            (string) $team['color_hex'],
+                            (string) ($theme['tokens']['--se-bg'] ?? '#0B0D13'),
+                            (int) $team['sort_order']
+                        ),
+                        se_teams_ready($pdo) ? se_teams($pdo, (int) $event['id']) : []
+                    )),
                     'tokens' => $theme['tokens'],
                     'fonts'  => [
                         'display' => (string) $event['font_display'],

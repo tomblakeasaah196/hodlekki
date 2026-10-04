@@ -129,19 +129,21 @@ function QuizCard({ game, round, me, teamSnap, mine, isCaptain, myTeamId, onAnsw
         ${trivia ? html`<p class="se-small se-muted">${isCaptain
             ? 'You are the captain: your tap locks in the team’s answer.'
             : captainChoice !== null ? 'Your captain has locked in ' + LETTERS[captainChoice] + '.'
-            : 'Tap to suggest an answer' + (captainName ? ' to ' + captainName : '') + '.'}</p>` : null}
+            : 'Tap to suggest an answer' + (captainName ? ' — your captain is ' + captainName : '.')}</p>` : null}
         <ol class="se-play-tiles">
             ${choices.map((choice, i) => {
-                const chosen = myChoice === i || (trivia && captainChoice === i);
+                const chosen = myChoice === i;
+                const teamLock = trivia && captainChoice === i;
                 const votes = suggestions[String(i)] || 0;
                 return html`
                     <li key=${i}>
-                        <button type="button" class="se-answer-tile" data-chosen=${chosen ? '1' : '0'}
+                        <button type="button" class="se-answer-tile" data-chosen=${chosen ? '1' : '0'} data-lock=${teamLock ? '1' : '0'}
                             disabled=${!open || lockedIn || (!trivia && myChoice !== null)}
                             onClick=${() => onAnswer(round, i, trivia && !isCaptain ? 'suggest' : 'answer')}>
                             <span class="se-answer-letter">${LETTERS[i]}</span>
                             <span>${choice}</span>
-                            ${trivia && votes ? html`<span class="se-answer-votes">${votes}</span>` : null}
+                            ${teamLock ? html`<span class="se-answer-votes">Team answer</span>`
+                                : trivia && votes ? html`<span class="se-answer-votes" title="Suggestions from your team">${votes}</span>` : null}
                         </button>
                     </li>`;
             })}
@@ -477,7 +479,7 @@ function Play({ config }) {
             </section>`;
     }
 
-    const scene = snap?.scene?.scene || null;
+    const scene = snap?.scene?.key || null;
     const finale = scene === 'finale' ? (snap?.scene?.payload || null) : null;
     const showRound = game && game.status === 'live' && round && round.state !== 'void';
 
@@ -506,7 +508,7 @@ function Play({ config }) {
     return html`
         <div class="se-play">
             <header class="se-play-head" style=${myTeam ? { '--team-color': myTeam.hex, '--team-on': myTeam.on } : null}>
-                <strong>${myTeam ? teamName(myTeam) : 'The games'}</strong>
+                <strong class="se-play-head-team">${myTeam ? teamName(myTeam) : 'The games'}</strong>
                 <span>${myNo ? '#' + myNo : ''}${isCaptain ? ' · Captain' : ''}</span>
                 <span>${me?.score?.points ? me.score.points + ' pts' : ''}</span>
             </header>
