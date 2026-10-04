@@ -438,6 +438,11 @@ function se_boot_payload(
             'ask_wants_visit'    => (bool) se_settings_path($settings, 'registration.ask_wants_visit_after_submit', true),
             'link_on_demand'     => (bool) se_settings_path($settings, 'registration.link_on_demand_enabled', true),
             'self_cancel'        => (bool) $event['self_cancel_enabled'],
+            // Karaoke needs both the tables and a published list before a
+            // phone offers the picker at all (§10.8.1).
+            'karaoke_ready'      => se_table_exists($pdo, 'se_karaoke_entries'),
+            'karaoke_list_published' => (bool) se_settings_path($settings, 'karaoke.list_published', false),
+            'karaoke_prepick'    => (bool) se_settings_path($settings, 'karaoke.prepick_enabled', true),
         ],
         'realtime' => [
             'driver'      => se_settings_path($settings, 'realtime.driver', 'poll'),

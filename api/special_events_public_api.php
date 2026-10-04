@@ -10,10 +10,11 @@
 //     touches one person's own registration;
 //   * rate limits per device, per IP and per phone (§12.1).
 //
-// PR2 implements: time, bootstrap, lookup, register, wants_visit,
-// request_link, claim_link, me, cancel, optout, card and beacon. Check-in,
-// karaoke, games and feedback actions belong to later PRs and are simply not
-// routed, so they answer BAD_REQUEST rather than half-working.
+// Implemented so far: time, bootstrap, lookup, register, wants_visit,
+// request_link, claim_link, me, cancel, optout, card, beacon (PR2),
+// check-in and transfer (PR3), and songs / pick_song / release_song (PR4).
+// Game and feedback actions belong to later PRs and are simply not routed,
+// so they answer BAD_REQUEST rather than half-working.
 
 require_once '../includes/db.php';
 require_once '../includes/special_events/bootstrap.php';
@@ -574,6 +575,71 @@ try {
             se_contact_optout($pdo, $event, $reg);
 
             se_api_success('Done — we will not contact you again.', ['opted_out' => true]);
+        }
+
+        // ------------------------------------------------------------------
+        // Karaoke (§10.8, §12.2)
+        // ------------------------------------------------------------------
+        case 'songs': {
+            $event = se_public_event($pdo, $body);
+            se_public_limit($pdo, $event, 'songs', 120, 3000, 600);
+
+            if (!se_karaoke_ready($pdo)) {
+                se_api_error('Karaoke is not available yet.', 'FEATURE_NOT_READY');
+            }
+
+            // The list is only readable by somebody who holds a seat: the
+            // device's own registration, or a manage token.
+            se_public_actor($pdo, $event, $body);
+
+            $settings = se_event_settings($event);
+            if (!se_bool($settings['karaoke']['enabled'] ?? false)) {
+                se_api_error('There is no karaoke at this event.', 'FEATURE_DISABLED');
+            }
+            if (!se_bool($settings['karaoke']['list_published'] ?? false)) {
+                se_api_error('The song list is coming soon 🎤', 'LIST_NOT_PUBLISHED');
+            }
+
+            se_api_success('OK', se_songs_event_list($pdo, $event, [
+                'q'           => $body['q'] ?? '',
+                'page'        => $body['page'] ?? 1,
+                'per_page'    => 40,
+                'active_only' => true,
+            ]));
+        }
+
+        case 'pick_song': {
+            $event = se_public_event($pdo, $body);
+            se_public_require_writable($event);
+            se_public_limit($pdo, $event, 'pick_song', 20, 600, 600);
+
+            if (!se_karaoke_ready($pdo)) {
+                se_api_error('Karaoke is not available yet.', 'FEATURE_NOT_READY');
+            }
+
+            [$reg] = se_public_actor($pdo, $event, $body);
+
+            $karaoke = se_karaoke_pick(
+                $pdo,
+                $event,
+                $reg,
+                se_int($body['song_id'] ?? 0, 0),
+                se_bool(se_event_phase($event, se_event_days($pdo, (int) $event['id']))['checkin_open'] ?? false)
+                    ? 'portal' : 'prepick'
+            );
+
+            se_api_success('That song is yours 🎤', ['karaoke' => $karaoke]);
+        }
+
+        case 'release_song': {
+            $event = se_public_event($pdo, $body);
+            se_public_require_writable($event);
+            se_public_limit($pdo, $event, 'release_song', 20, 600, 600);
+
+            [$reg] = se_public_actor($pdo, $event, $body);
+            se_karaoke_release($pdo, $event, $reg);
+
+            se_api_success('Released. Somebody else can sing it now.', ['karaoke' => null]);
         }
 
         // ------------------------------------------------------------------

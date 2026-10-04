@@ -699,14 +699,14 @@ function se_me_payload(PDO $pdo, array $event, array $days, array $registration,
             'device_mode'       => (string) ($device['mode'] ?? 'full'),
             'created_at'        => se_iso($registration['created_at'] ?? null),
         ],
-        // PR3 fills team; karaoke, round, presenter and score arrive with PR4/PR5.
+        // PR4 fills karaoke; round, presenter and score arrive with PR5.
         'team'      => $team !== null ? se_team_public($team, se_event_theme($event)) : null,
-        'karaoke'   => null,
+        'karaoke'   => se_karaoke_ready($pdo) ? se_karaoke_me($pdo, $event, (int) $registration['id']) : null,
         'games'     => ['joined' => $device !== null && ($device['joined_games_at'] ?? null) !== null],
         'round'     => null,
         'presenter' => null,
         'score'     => null,
-        'alerts'    => [],
+        'alerts'    => se_me_alerts($pdo, $event, $registration),
         'links'     => $links,
         'can'       => [
             // What the manage page is allowed to offer. Deciding it here
@@ -718,6 +718,42 @@ function se_me_payload(PDO $pdo, array $event, array $days, array $registration,
             'request_link' => se_bool(se_event_settings($event)['registration']['link_on_demand_enabled'] ?? true),
         ],
     ];
+}
+
+/**
+ * The nudges a phone should show (§12.2.1).
+ *
+ * Today there is one: "you are up next", which is the whole reason the
+ * singer keeps the page open. It carries the moment the DJ pressed the
+ * button, so the client can decide whether it has already buzzed for it.
+ */
+function se_me_alerts(PDO $pdo, array $event, array $registration): array
+{
+    $alerts = [];
+
+    if (se_karaoke_ready($pdo)) {
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT id, status, on_stage_at, queued_at FROM se_karaoke_entries
+                  WHERE event_id = ? AND registration_id = ? AND status IN ('up_next','on_stage')
+                  ORDER BY id DESC LIMIT 1"
+            );
+            $stmt->execute([(int) $event['id'], (int) $registration['id']]);
+            $entry = $stmt->fetch();
+
+            if ($entry) {
+                $when = se_parse_datetime($entry['on_stage_at'] ?? null) ?? se_now();
+                $alerts[] = [
+                    'type'  => (string) $entry['status'] === 'on_stage' ? 'karaoke_on_stage' : 'karaoke_up_next',
+                    'at_ms' => se_epoch_ms($when),
+                ];
+            }
+        } catch (Throwable $e) {
+            error_log('SE registration/alerts: ' . $e->getMessage());
+        }
+    }
+
+    return $alerts;
 }
 
 /**

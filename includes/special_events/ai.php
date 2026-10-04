@@ -505,6 +505,50 @@ function se_ai_log(
 }
 
 // --------------------------------------------------------------------------
+// Inline files (§15.1): a screenshot or a PDF sent with the prompt
+// --------------------------------------------------------------------------
+
+/**
+ * Turn one of the event's own uploaded assets into a Gemini `inlineData`
+ * part for an import task (programme, song list).
+ *
+ * The asset must belong to this event and be one of the roles §14.1 marks as
+ * AI input, so a stray id can never make the module read an arbitrary file
+ * off disk and post it to a third party.
+ *
+ * @return array{inline_data: array{mime_type: string, data: string}}
+ */
+function se_ai_inline_asset(PDO $pdo, array $event, int $assetId): array
+{
+    $asset = se_asset_find($pdo, $assetId);
+    if (!$asset || (int) $asset['event_id'] !== (int) $event['id'] || $asset['deleted_at'] !== null) {
+        throw new SeValidationException(['asset_id' => 'We could not find that upload.']);
+    }
+    if (!in_array((string) $asset['role'], SE_ASSET_ROLES_TEMPORARY, true)) {
+        throw new SeValidationException(['asset_id' => 'Upload the picture under "AI source" first.']);
+    }
+
+    $path = se_docroot() . (string) $asset['path'];
+    $real = realpath($path);
+    $base = realpath(se_docroot() . '/uploads/se');
+    if ($real === false || $base === false || !str_starts_with($real, $base . DIRECTORY_SEPARATOR)) {
+        throw new SeValidationException(['asset_id' => 'That upload is no longer on the server.']);
+    }
+
+    $bytes = (string) file_get_contents($real);
+    if ($bytes === '' || strlen($bytes) > 15728640) {
+        throw new SeValidationException(['asset_id' => 'That file is empty or too large to read.']);
+    }
+
+    return [
+        'inline_data' => [
+            'mime_type' => (string) $asset['mime'],
+            'data'      => base64_encode($bytes),
+        ],
+    ];
+}
+
+// --------------------------------------------------------------------------
 // AI jobs (review before apply, §15.1)
 // --------------------------------------------------------------------------
 

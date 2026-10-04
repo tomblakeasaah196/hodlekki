@@ -5,9 +5,11 @@
 // (§6.2) + the capability for the event being acted on. Writes to se_events
 // carry expected_row_version (§9.3).
 //
-// PR1 implements the Events, Brand, Registration, Days, Assets, Crew and Ops
-// rows. Actions belonging to later PRs are not routed at all, so an unknown
-// action is simply BAD_REQUEST — never a half-working endpoint.
+// Implemented so far: Events, Brand, Registration, Days, Assets, Crew and
+// Ops (PR1), Attendees (PR2), Teams, Verses and Live (PR3), and Programme,
+// Karaoke and Messages (PR4). Actions belonging to later PRs are not routed
+// at all, so an unknown action is simply BAD_REQUEST — never a half-working
+// endpoint.
 
 require_once '../includes/db.php';
 require_once '../includes/special_events/bootstrap.php';
@@ -1228,6 +1230,236 @@ try {
     // ====================================================================
     // Check-in posters (§14.2)
     // ====================================================================
+
+    // ====================================================================
+    // Days & programme (§10.7)
+    // ====================================================================
+
+    case 'program_list': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+
+        se_api_success('OK', [
+            'program' => se_program_payload($pdo, $event),
+            'kinds'   => SE_PROGRAM_KINDS,
+            'time_mode' => se_event_settings($event)['program']['public_time_mode'] ?? 'approximate',
+        ]);
+    }
+
+    case 'program_save': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $items = is_array($body['items'] ?? null) ? $body['items'] : [];
+
+        $program = se_program_save($pdo, $event, $items, $userId);
+
+        // The public time mode travels with the builder, because it is the
+        // one programme setting a Producer changes while looking at it.
+        if (isset($body['public_time_mode'])) {
+            se_event_settings_patch($pdo, $event, [
+                'program' => ['public_time_mode' => se_enum($body['public_time_mode'], SE_PROGRAM_TIME_MODES, 'approximate')],
+            ], $userId);
+        }
+
+        se_api_success('Programme saved.', ['program' => $program]);
+    }
+
+    case 'program_import': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        se_rate_limit_or_fail($pdo, 'ai_user', 'u' . $userId, 30, 3600);
+
+        se_api_success('Here is what we read.', se_program_import($pdo, $event, [
+            'text'     => $body['text'] ?? '',
+            'asset_id' => $body['asset_id'] ?? null,
+        ], $userId));
+    }
+
+    case 'program_apply': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        $items = is_array($body['items'] ?? null) ? $body['items'] : [];
+        if (!$items && !empty($body['job_id'])) {
+            // The reviewer applied the job unchanged: read the rows back
+            // from the stored result rather than trusting the round trip.
+            $job = se_ai_job_find($pdo, se_int($body['job_id'], 1), (int) $event['id']);
+            $items = is_array(se_json_decode($job['result_json'] ?? null)['items'] ?? null)
+                ? se_json_decode($job['result_json'])['items'] : [];
+        }
+
+        $program = se_program_apply(
+            $pdo,
+            $event,
+            $items,
+            se_str($body['mode'] ?? 'append', 10),
+            se_int($body['day_id'] ?? 0, 0),
+            se_int_or_null($body['job_id'] ?? null, 1),
+            $userId
+        );
+
+        se_api_success('Programme updated.', ['program' => $program]);
+    }
+
+    // ====================================================================
+    // Karaoke (§10.8)
+    // ====================================================================
+
+    case 'songs_event_list': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+
+        se_api_success('OK', se_songs_event_list($pdo, $event, [
+            'q'        => $body['q'] ?? '',
+            'page'     => $body['page'] ?? 1,
+            'per_page' => $body['per_page'] ?? 100,
+        ]) + [
+            'settings' => se_event_settings($event)['karaoke'] ?? [],
+            'queue'    => se_karaoke_ready($pdo) ? se_karaoke_queue($pdo, $event) : null,
+        ]);
+    }
+
+    case 'songs_import_preview': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        $assetId = se_int_or_null($body['asset_id'] ?? null, 1);
+        $text    = se_str($body['text'] ?? '', 60000);
+        $csv     = se_str($body['csv'] ?? '', 200000);
+
+        if ($assetId !== null) {
+            se_rate_limit_or_fail($pdo, 'ai_user', 'u' . $userId, 30, 3600);
+            se_api_success('Here is what we read.', se_songs_import_ai($pdo, $event, $assetId, $text, $userId));
+        }
+
+        $rows = $csv !== '' ? se_songs_parse_csv($csv) : se_songs_parse_text($text);
+        if (!$rows) {
+            throw new SeValidationException(['text' => 'We could not find any songs in that.']);
+        }
+
+        se_api_success('Here is what we read.', se_songs_import_preview($pdo, $event, $rows));
+    }
+
+    case 'songs_import_commit': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $rows  = is_array($body['rows'] ?? null) ? $body['rows'] : [];
+        if (!$rows) {
+            throw new SeValidationException(['rows' => 'Nothing to add.']);
+        }
+
+        se_api_success('Songs added.', se_songs_import_commit($pdo, $event, $rows, $userId));
+    }
+
+    case 'songs_toggle': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        se_api_success('Updated.', se_song_toggle(
+            $pdo, $event, se_int($body['song_id'] ?? 0, 1), se_bool($body['active'] ?? true), $userId
+        ));
+    }
+
+    case 'karaoke_settings_save': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $in    = is_array($body['settings'] ?? null) ? $body['settings'] : [];
+
+        $updated = se_event_settings_patch($pdo, $event, ['karaoke' => $in], $userId);
+
+        se_api_success('Karaoke settings saved.', [
+            'settings' => se_event_settings($updated)['karaoke'] ?? [],
+            'event'    => se_studio_event_payload($pdo, $updated, $userId, $accessLevel, true),
+        ]);
+    }
+
+    case 'karaoke_publish_list': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $on    = se_bool($body['on'] ?? true);
+
+        $updated = se_event_settings_patch($pdo, $event, ['karaoke' => ['list_published' => $on]], $userId);
+
+        se_live_publish($pdo, (int) $event['id'], true);
+
+        se_api_success($on ? 'The song list is live.' : 'The song list is hidden again.', [
+            'settings' => se_event_settings($updated)['karaoke'] ?? [],
+        ]);
+    }
+
+    // ====================================================================
+    // Messages (§16)
+    // ====================================================================
+
+    case 'messages_get': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+
+        se_api_success('OK', se_messages_studio($pdo, $event));
+    }
+
+    case 'messages_save': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $in    = is_array($body['settings'] ?? null) ? $body['settings'] : [];
+
+        $updated = se_event_settings_patch($pdo, $event, ['messages' => $in], $userId);
+
+        se_api_success('Messages saved.', se_messages_studio($pdo, $updated));
+    }
+
+    case 'messages_preview':
+    case 'messages_estimate': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+
+        $kind     = se_str($body['kind'] ?? '', 30);
+        $settings = se_event_settings($event);
+        $days     = se_event_days($pdo, (int) $event['id']);
+
+        $template = isset($body['template']) && se_str($body['template'], 600) !== ''
+            ? se_str($body['template'], 600)
+            : se_message_template($settings, $kind);
+
+        $preview  = se_message_preview($template, $event, $days, [], $settings);
+        $segment  = se_str($body['segment'] ?? $kind, 40);
+        $audience = count(se_message_audience($pdo, $event, $segment, $days[0] ?? null));
+
+        se_api_success('OK', [
+            'preview'    => $preview,
+            'recipients' => $audience,
+            'est_units'  => $audience * (int) $preview['pages'],
+        ]);
+    }
+
+    case 'messages_test': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        se_api_success('Test message queued.', se_messages_test_send(
+            $pdo, $event, se_str($body['kind'] ?? '', 30), se_str($body['phone'] ?? '', 20), $userId
+        ));
+    }
+
+    case 'messages_send_adhoc': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        $result = se_messages_send_adhoc(
+            $pdo, $event,
+            se_str($body['segment'] ?? '', 40),
+            se_str($body['template'] ?? '', 600),
+            $userId
+        );
+
+        se_api_success('On its way to ' . $result['recipients'] . ' people.', $result + [
+            'runs' => se_message_runs($pdo, (int) $event['id']),
+        ]);
+    }
+
+    case 'messages_run_now': {
+        // The recovery path for a cron that stopped (§16.4). It claims the
+        // same run keys, so it can never double-send what the cron did.
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        $runs = se_messages_run_due($pdo, $event, se_now(), $userId);
+
+        se_api_success($runs ? 'Done.' : 'Nothing is due right now.', [
+            'ran'  => $runs,
+            'runs' => se_message_runs($pdo, (int) $event['id']),
+        ]);
+    }
+
+    case 'message_runs': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+
+        se_api_success('OK', ['runs' => se_message_runs($pdo, (int) $event['id'])]);
+    }
 
     case 'poster_data': {
         $event = se_studio_event($pdo, $body, 'insights.view');

@@ -609,10 +609,11 @@ It never asks our server for content: it reads a published file, so a slow
 moment on the website cannot blank the screen. A dot in the corner goes amber
 and then red if it stops hearing anything, and the last scene stays up.
 
-Scenes in this release: standby, welcome, teams, announcement, break and blank,
-plus the programme card. Games, leaderboard, karaoke and the recap arrive with
-the next release and currently show the standby frame rather than an empty
-screen.
+Scenes in this release: standby, welcome, teams, announcement, break, blank,
+the programme (what is on now and what is next, with the times corrected for
+how the night is actually running) and karaoke (who is singing, who is up
+next). Games, leaderboard and the recap arrive with the next release and
+currently show the standby frame rather than an empty screen.
 
 ---
 
@@ -625,6 +626,12 @@ screen.
 - **Announcement** — up to 160 characters on every screen and every phone, for
   as many seconds as you choose. "The bus leaves at 9:30."
 - **Sound board** — the cues: fanfare, applause, drumroll, ding.
+- **Run of show** — the programme, with the next few items and their times.
+  **Start** when a thing really begins and **Finish** when it really ends;
+  everything after it moves, here and on everyone's phone. **Skip** drops an
+  item, **Undo** takes back the last press.
+- **Karaoke** — who is on stage and who is next, with one button to send the
+  next singer up. The full queue lives on the DJ screen.
 - **Teams** — rename, set captains.
 - **Blackout** — the big red one. Also the `B` key.
 
@@ -641,6 +648,119 @@ That is deliberate. Decide between you who is driving.
 
 ---
 
+## 18b. The programme
+
+**Programme** tab in the Studio.
+
+A run of show is a list of things with lengths. Add them with **Add an item**,
+order them with the arrows, and type a length in minutes. Most items simply
+follow the one before, so you do not type times at all — the grey time under
+each title is worked out for you. **Pin a time** only where it matters
+("doors at 5:00", "the message at 7:15"); the items around it move, the pinned
+one does not.
+
+Per item, under **More**: who is leading it, a line for the guests, a crew
+note nobody else sees, whether it appears on the public page at all, and
+whether it is **featured** (bigger on the programme and on the stage screen).
+
+**What guests see** decides how times are printed: *approximate* ("~7:15 PM",
+the kind default), *exact*, or *order only* — no times, just the order.
+
+**Importing one.** Most programmes arrive as a screenshot in a group chat.
+Paste the text into **Import a programme** — or upload the picture or PDF on
+the Assets tab and choose it here — and press **Read it**. You get a table of
+what we read, which you can correct, and nothing is saved until you press
+**Apply**. Choose **Add to the programme** or **Replace this day**.
+
+On the night, the host presses Start and Finish on the console and the times
+everywhere follow. If the night is running late, the portal says so.
+
+---
+
+## 18c. Karaoke
+
+**Karaoke** tab in the Studio.
+
+The song library is shared across every event: typing "Way Maker" tonight and
+"way maker " next year gives you one song, not two. Adding songs to tonight's
+list is what this tab does.
+
+**Adding songs.** Paste a list into **Add songs** — one per line, "Title —
+Artist", with a length on the end if you have one — and press **Read it**. A
+CSV with `title,artist,duration` columns works too; press **It is a CSV**. You
+see what we read, with each row marked *new*, *already in the library*,
+*already on tonight's list* or *might be a duplicate*. Untick anything you do
+not want, then add them. For a photographed song book, upload the picture on
+the Assets tab and choose it here.
+
+**Publishing.** Nobody can pick until you press **Publish the list**. Do it
+when the list is final; unpublishing hides it again.
+
+**How it runs** (the settings at the bottom):
+
+- *Let people pre-pick* — guests choose on their phone before the night. A
+  pick made before they arrive is a **hold**, not a place in the queue; it
+  becomes a queue number when they check in, in arrival order. That is the
+  fair way round, and the phone says so.
+- *One person per song* — on by default. Two people tapping the same song in
+  the same second is normal; exactly one gets it and the other is told
+  straight away, with the list refreshed.
+- *Release a hold after* — if somebody pre-picks and never turns up, their
+  song goes back on the list this many minutes after the doors open.
+- *Songs per person*, *most singers tonight*, and *minutes per song* (used for
+  the "about 40 minutes left" line on the DJ screen).
+
+**The DJ screen** is `/e/<your-link>/dj`, crew sign-in. On stage and Up next
+are pinned to the top with big buttons: **Call them up**, **On stage**,
+**Done**, **Skip**, **No show**, and **Back in the queue** for somebody who
+stepped out. The waiting list is below, with arrows to reorder — reordering
+changes the running order, never the numbers people were given at the door.
+**Add someone** puts a walk-up into the queue with their player number.
+
+A singer's phone buzzes and says **You are up next** when the DJ calls them.
+
+---
+
+## 18d. Messages
+
+**Messages** tab in the Studio. Everything here costs money, so the tab shows
+you the bill before you commit to it.
+
+Each message shows exactly what will be sent, how it is encoded, how many
+segments it is per person, how many people will get it, and the estimated
+units. Edit the words and the numbers update. **Test send** texts it to one
+number so you can read it on a real phone first.
+
+- **The evening before** (*reminder 1*) goes out at a time you choose on the
+  day before. On a two-day event it is sent once, before the first day.
+- **Before the doors** (*reminder 2*) goes out a number of minutes before each
+  day starts — so a two-day event gets one per day.
+
+Each send is created once and once only: if the cron job stalls and catches
+up later, nobody gets the same text twice. A send that is more than
+**90 minutes late** is skipped rather than delivered at the wrong moment; the
+run log says so.
+
+**Send something now** is for what nobody planned — a venue change, a delay, a
+thank you. Choose who gets it, write it, press **Check it first**, read how
+many people and how many units, then send. There is no undo.
+
+The **run log** lists every send with its status and a link into SMS Studio,
+where delivery reports live. **Run what is due now** is the recovery button
+for a night when the cron job is not running; it cannot double-send.
+
+**The cron job.** Add this once in cPanel → Cron Jobs:
+
+```
+*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/special_events.php >/dev/null 2>&1
+```
+
+It creates the reminders that are due, releases abandoned karaoke holds and
+clears out expired tokens and old AI source files. The **Cron** dot on the
+host console turns amber if it has not run for ten minutes.
+
+---
+
 ## 19. Rehearsing without leaving a trace
 
 **Live → Rehearsal**, producers only.
@@ -654,8 +774,9 @@ the teams form, drive the scenes. While it is on:
 - registrations and check-ins made now are marked as tests and do not count
   towards capacity or any number you report.
 
-**Reset rehearsal** deletes every test registration and check-in, and the
-contacts that only existed because of them. Real data is never touched.
+**Reset rehearsal** deletes every test registration, check-in and karaoke
+entry, and the contacts that only existed because of them. Real data is never
+touched.
 
 Test mode **switches itself off fifteen minutes before doors open**, because
 the one way to ruin a night is to leave it on.
@@ -697,6 +818,19 @@ history, so cancel or archive it instead.
 
 **Does this touch Sunday attendance?**
 No. These events keep their own records entirely.
+
+**Two people picked the same song.**
+They cannot. The second tap is refused in the database itself, not by a
+check that can be raced, and the person who lost is shown the list again
+immediately.
+
+**Someone pre-picked and never came.**
+Their hold is released automatically, so many minutes after the doors open
+(Karaoke tab). Their song goes back on the list for everybody else.
+
+**Can I resend a reminder?**
+Not the same one — that is the point of the run log. Use **Send something
+now** if the room genuinely needs to hear it again.
 
 **Who sees a guest's phone number?**
 Only a Producer or a Follow-up liaison. Screens during the night show "Ada O."

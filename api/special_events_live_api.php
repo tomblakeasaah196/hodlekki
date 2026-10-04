@@ -11,10 +11,11 @@
 // and the fresh state, so two producers tapping at once can never silently
 // overwrite each other.
 //
-// PR3 ships the show controls (scenes, announcements, sound), the team
-// actions and the whole desk. Game, score, programme and karaoke actions are
-// routed to a deliberate FEATURE_NOT_READY so the console can show the tab
-// greyed out instead of crashing on a missing case.
+// PR3 shipped the show controls (scenes, announcements, sound), the team
+// actions and the whole desk; PR4 adds the run of show and the karaoke
+// queue. Game and score actions are still routed to a deliberate
+// FEATURE_NOT_READY so the console can show the tab greyed out instead of
+// crashing on a missing case.
 
 require_once '../includes/db.php';
 require_once '../includes/special_events/bootstrap.php';
@@ -28,14 +29,12 @@ $action = se_str($body['action'] ?? '', 40);
 
 /** Actions whose tables arrive with PR4/PR5. Routed, but honest about it. */
 const SE_LIVE_LATER_ACTIONS = [
-    'program', 'program_move',
     'game_start', 'game_pause', 'game_finish', 'round_next', 'round_arm',
     'round_lock', 'round_reveal', 'round_score', 'round_void',
     'charades_turn', 'charades_start', 'charades_mark', 'buzz_judge', 'clue_next',
     'feud_faceoff', 'feud_control', 'feud_reveal', 'feud_strike', 'feud_steal',
     'feud_bank', 'feud_reveal_all',
     'score_adjust', 'score_void',
-    'karaoke_queue', 'karaoke_set', 'karaoke_move', 'karaoke_add',
 ];
 
 /** The event this request is about. Crew actions always name it by public id. */
@@ -64,88 +63,6 @@ function se_live_expected(array $body): ?int
 function se_live_actor(): int
 {
     return (int) ($_SESSION['user_id'] ?? 0);
-}
-
-/** Everything the host console redraws itself from (§12.4 `console`). */
-function se_live_console(PDO $pdo, array $event): array
-{
-    $eventId  = (int) $event['id'];
-    $days     = se_event_days($pdo, $eventId);
-    $settings = se_event_settings($event);
-    $state    = se_live_state($pdo, $eventId);
-    $phase    = se_event_phase($event, $days);
-    $counts   = se_capacity_counts($pdo, $eventId);
-    $theme    = se_event_theme($event);
-
-    $teams = [];
-    foreach (se_teams($pdo, $eventId) as $team) {
-        $teams[] = se_team_public($team, $theme) + [
-            'team_key' => (string) $team['team_key'],
-            'captain_registration_id' => $team['captain_registration_id'] !== null
-                ? (int) $team['captain_registration_id'] : null,
-        ];
-    }
-
-    return [
-        'server_ms' => se_epoch_ms(),
-        'event'     => [
-            'public_id' => (string) $event['public_id'],
-            'slug'      => (string) $event['slug'],
-            'title'     => (string) $event['title'],
-            'edition'   => (string) ($event['edition_label'] ?? ''),
-            'phase'     => (string) ($phase['phase'] ?? 'upcoming'),
-            'test_mode' => se_bool($settings['test_mode'] ?? false),
-        ],
-        'state' => $state ? [
-            'version'      => (int) $state['version'],
-            'scene'        => (string) $state['scene'],
-            'scene_payload' => se_scene_payload($state),
-            'announcement' => se_announcement_payload($state),
-            'sfx'          => ['seq' => (int) $state['sfx_seq'], 'cue' => $state['sfx_cue']],
-        ] : null,
-        'scenes'  => SE_SCENES,
-        'cues'    => SE_SFX_CUES,
-        'teams'   => $teams,
-        'roster'  => se_teams_roster($pdo, $eventId),
-        'counts'  => [
-            'checked_in'   => se_checkin_total($pdo, $eventId, se_now()->format('Y-m-d')),
-            'confirmed'    => (int) ($counts['confirmed'] ?? 0),
-            'joined_games' => se_joined_games_count($pdo, $eventId),
-        ],
-        'checkin'  => se_checkin_window($event, $days),
-        'health'   => se_live_health($pdo, $event, $state),
-        'displays' => se_display_links($event, $state),
-        // PR4 fills these from se_program_items, se_games and se_rounds.
-        'program'  => null,
-        'game'     => null,
-        'round'    => null,
-        'karaoke'  => null,
-    ];
-}
-
-/** The desk's lighter poll: counts and the window, never any game data. */
-function se_desk_state(PDO $pdo, array $event): array
-{
-    $eventId = (int) $event['id'];
-    $days    = se_event_days($pdo, $eventId);
-    $counts  = se_capacity_counts($pdo, $eventId);
-    $state   = se_live_state($pdo, $eventId, false);
-
-    return [
-        'server_ms'  => se_epoch_ms(),
-        'checked_in' => se_checkin_total($pdo, $eventId, se_now()->format('Y-m-d')),
-        'confirmed'  => (int) ($counts['confirmed'] ?? 0),
-        'walkins'    => (int) ($counts['walkin_taken'] ?? 0),
-        'walkin_free' => se_walkin_free($event, $counts),
-        'seats_left' => se_seats_left($event, $counts),
-        'checkin'    => se_checkin_window($event, $days),
-        'test_mode'  => se_bool(se_event_settings($event)['test_mode'] ?? false),
-        'health'     => se_live_health($pdo, $event, $state),
-        'teams'      => array_map(
-            static fn(array $t): array => se_team_public($t, se_event_theme($event)),
-            se_teams($pdo, $eventId)
-        ),
-    ];
 }
 
 try {
@@ -412,6 +329,110 @@ try {
             );
 
             se_api_success('Undone.', $out);
+        }
+
+        // ------------------------------------------------------------------
+        // Run of show (§10.7.2)
+        // ------------------------------------------------------------------
+        case 'program': {
+            $event = se_live_event($pdo, $body);
+            se_require_capability($pdo, (int) $event['id'], 'host.control');
+
+            $program = se_program_op(
+                $pdo,
+                $event,
+                se_int($body['item_id'] ?? 0, 0),
+                se_str($body['op'] ?? '', 10),
+                se_live_expected($body),
+                se_live_actor()
+            );
+
+            $state = se_live_state($pdo, (int) $event['id']);
+            se_api_success('Done.', [
+                'program' => $program,
+                'version' => $state ? (int) $state['version'] : 0,
+            ]);
+        }
+
+        case 'program_move': {
+            $event = se_live_event($pdo, $body);
+            se_require_capability($pdo, (int) $event['id'], 'host.control');
+
+            $program = se_program_move(
+                $pdo,
+                $event,
+                se_int($body['item_id'] ?? 0, 0),
+                se_int_or_null($body['before_id'] ?? null, 0),
+                se_live_expected($body),
+                se_live_actor()
+            );
+
+            $state = se_live_state($pdo, (int) $event['id']);
+            se_api_success('Moved.', [
+                'program' => $program,
+                'version' => $state ? (int) $state['version'] : 0,
+            ]);
+        }
+
+        // ------------------------------------------------------------------
+        // Karaoke (§10.8.2, §13.12)
+        // ------------------------------------------------------------------
+        case 'karaoke_queue': {
+            $event = se_live_event($pdo, $body);
+            se_require_capability($pdo, (int) $event['id'], 'karaoke.queue');
+
+            $state = se_live_state($pdo, (int) $event['id'], false);
+            se_api_success('OK', se_karaoke_queue($pdo, $event) + [
+                'version'   => $state ? (int) $state['version'] : 0,
+                'server_ms' => se_epoch_ms(),
+                'songs'     => se_songs_event_list($pdo, $event, ['per_page' => 100, 'active_only' => true])['items'],
+            ]);
+        }
+
+        case 'karaoke_set': {
+            $event = se_live_event($pdo, $body);
+            se_require_capability($pdo, (int) $event['id'], 'karaoke.queue');
+
+            $queue = se_karaoke_set_status(
+                $pdo,
+                $event,
+                se_int($body['entry_id'] ?? 0, 0),
+                se_str($body['status'] ?? '', 20),
+                se_live_expected($body),
+                se_live_actor()
+            );
+
+            $state = se_live_state($pdo, (int) $event['id']);
+            se_api_success('Updated.', $queue + ['version' => $state ? (int) $state['version'] : 0]);
+        }
+
+        case 'karaoke_move': {
+            $event = se_live_event($pdo, $body);
+            se_require_capability($pdo, (int) $event['id'], 'karaoke.queue');
+
+            $queue = se_karaoke_move(
+                $pdo,
+                $event,
+                se_int($body['entry_id'] ?? 0, 0),
+                se_int_or_null($body['before_id'] ?? null, 0),
+                se_live_expected($body),
+                se_live_actor()
+            );
+
+            $state = se_live_state($pdo, (int) $event['id']);
+            se_api_success('Moved.', $queue + ['version' => $state ? (int) $state['version'] : 0]);
+        }
+
+        case 'karaoke_add': {
+            $event = se_live_event($pdo, $body);
+            se_require_capability($pdo, (int) $event['id'], 'karaoke.queue');
+
+            $out = se_karaoke_add($pdo, $event, [
+                'registration_id' => $body['registration_id'] ?? null,
+                'player_no'       => $body['player_no'] ?? null,
+            ], se_int($body['song_id'] ?? 0, 0), se_live_actor());
+
+            se_api_success('Added to the queue.', $out);
         }
 
         // ------------------------------------------------------------------

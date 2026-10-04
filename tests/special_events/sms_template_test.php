@@ -128,3 +128,57 @@ echo "    segment arithmetic itself\n";
 is_same('160 GSM-7 characters is one page', 1, sms_segments(str_repeat('a', 160))['pages']);
 is_same('161 is two', 2, sms_segments(str_repeat('a', 161))['pages']);
 is_same('an emoji switches to Unicode', 'Unicode', sms_segments('Hi 🎉')['encoding']);
+
+// --------------------------------------------------------------------------
+// When the reminders go out (§16.2, §16.4)
+// --------------------------------------------------------------------------
+//
+// The schedule is pure arithmetic over the days, and every slot carries a
+// run key. The key is the thing that makes a reminder un-sendable twice, so
+// it is asserted literally: change the format and you change what "already
+// sent" means for events already in the database.
+
+echo "    reminder schedule\n";
+
+$on = se_settings_normalize([
+    'messages' => [
+        'reminder_1' => ['enabled' => true, 'at' => '18:00'],
+        'reminder_2' => ['enabled' => true, 'minutes_before' => 120],
+    ],
+]);
+
+$slots = se_message_schedule($event, $days, $on);
+is_same('one day gives two reminders', 2, count($slots));
+is_same('reminder 1 is the evening before', '2026-10-23 18:00', $slots[0]['scheduled_for']->format('Y-m-d H:i'));
+is_same('reminder 2 is two hours before the doors', '2026-10-24 15:00', $slots[1]['scheduled_for']->format('Y-m-d H:i'));
+is_same('reminder 1 keys off the event date', 'reminder_1:20261024', $slots[0]['run_key']);
+is_same('reminder 2 keys off its own day', 'reminder_2:20261024', $slots[1]['run_key']);
+
+$twoDays = [
+    ['day_date' => '2026-10-24', 'starts_at' => '2026-10-24 17:00:00', 'ends_at' => '2026-10-24 21:00:00'],
+    ['day_date' => '2026-10-25', 'starts_at' => '2026-10-25 16:00:00', 'ends_at' => '2026-10-25 20:00:00'],
+];
+
+$multi = se_message_schedule($event, $twoDays, $on);
+is_same('a two-day event still gets one "evening before"', 1,
+    count(array_filter($multi, static fn(array $s): bool => $s['kind'] === 'reminder_1')));
+is_same('…but a day-of reminder for each day', 2,
+    count(array_filter($multi, static fn(array $s): bool => $s['kind'] === 'reminder_2')));
+
+$keys = array_map(static fn(array $s): string => $s['run_key'], $multi);
+is_same('and the two day-of keys differ, so neither blocks the other',
+    2, count(array_unique(array_filter($keys, static fn(string $k): bool => str_starts_with($k, 'reminder_2')))));
+ok('the second day\'s label names the day, so a producer can tell them apart',
+    str_contains($multi[2]['label'], 'Oct') || str_contains($multi[2]['label'], '25'),
+    $multi[2]['label']);
+
+$off = se_settings_normalize([
+    'messages' => [
+        'reminder_1' => ['enabled' => false],
+        'reminder_2' => ['enabled' => false],
+    ],
+]);
+is_same('switching them off schedules nothing at all', 0, count(se_message_schedule($event, $days, $off)));
+
+$noDays = se_message_schedule(['id' => 1, 'slug' => 'x', 'title' => 'X'], [], $on);
+is_same('an event with no days has no schedule either', 0, count($noDays));

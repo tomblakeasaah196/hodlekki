@@ -394,3 +394,454 @@ function se_messages_enqueue_link(PDO $pdo, array $event, array $days, array $re
 
     return $result['recipients'] > 0;
 }
+
+// --------------------------------------------------------------------------
+// Scheduled kinds (§16.2, §16.4) — PR4
+// --------------------------------------------------------------------------
+
+/**
+ * When each enabled scheduled kind is due, and with which run key.
+ *
+ * Pure apart from the days it is handed: the cron asks this, the Studio asks
+ * this to draw "Reminder 2 · Sat 24 Oct, 3:00 PM", and both get the same
+ * answer. Multi-day events get one `reminder_2` per day (§16.2); there is
+ * only ever one `reminder_1`, the evening before the first day.
+ *
+ * @param list<array<string,mixed>> $days
+ * @return list<array{kind:string, run_key:string, scheduled_for:DateTimeImmutable, day:?array, label:string}>
+ */
+function se_message_schedule(array $event, array $days, array $settings): array
+{
+    $out   = [];
+    $first = $days[0] ?? null;
+
+    $start = se_parse_datetime($first['starts_at'] ?? ($event['starts_at'] ?? null));
+    if ($start === null) {
+        return $out;
+    }
+
+    if (se_bool($settings['messages']['reminder_1']['enabled'] ?? false)) {
+        $at = se_normalize_time_of_day((string) ($settings['messages']['reminder_1']['at'] ?? '18:00'), '18:00');
+        [$h, $m] = array_map('intval', explode(':', $at));
+        $when = $start->modify('-1 day')->setTime($h, $m, 0);
+
+        $out[] = [
+            'kind'          => 'reminder_1',
+            'run_key'       => 'reminder_1:' . $start->format('Ymd'),
+            'scheduled_for' => $when,
+            'day'           => $first,
+            'label'         => 'The evening before',
+        ];
+    }
+
+    if (se_bool($settings['messages']['reminder_2']['enabled'] ?? false)) {
+        $before = se_int($settings['messages']['reminder_2']['minutes_before'] ?? 120, 0, 1440, 120);
+
+        foreach ($days as $day) {
+            $dayStart = se_parse_datetime($day['starts_at']);
+            if ($dayStart === null) {
+                continue;
+            }
+
+            $out[] = [
+                'kind'          => 'reminder_2',
+                'run_key'       => 'reminder_2:' . $dayStart->format('Ymd'),
+                'scheduled_for' => $dayStart->modify('-' . $before . ' minutes'),
+                'day'           => $day,
+                'label'         => count($days) > 1
+                    ? $before . ' minutes before ' . $dayStart->format('D j M')
+                    : $before . ' minutes before the doors',
+            ];
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * The people one run should text.
+ *
+ * Every audience excludes test rows, opted-out and erased contacts, and
+ * anything without a usable Nigerian mobile — se_messages_send() checks the
+ * last two again per recipient, because a person can opt out between the
+ * count and the send.
+ *
+ * @return list<array<string,mixed>> registration rows
+ */
+function se_message_audience(PDO $pdo, array $event, string $segment, ?array $day = null): array
+{
+    $eventId = (int) $event['id'];
+
+    $base = "SELECT r.* FROM se_registrations r
+                JOIN se_contacts c ON c.id = r.contact_id
+               WHERE r.event_id = ? AND r.is_test = 0
+                 AND c.opted_out_at IS NULL AND c.erased_at IS NULL AND c.sms_capable = 1";
+    $args = [$eventId];
+
+    $checkinJoin = se_table_exists($pdo, 'se_checkins');
+
+    switch ($segment) {
+        case 'reminder_1':
+        case 'confirmed':
+            $sql = $base . " AND r.status = 'confirmed'";
+            break;
+
+        case 'waitlisted':
+            $sql = $base . " AND r.status = 'waitlisted'";
+            break;
+
+        case 'cancelled':
+            $sql = $base . " AND r.status = 'cancelled'";
+            break;
+
+        case 'checked_in':
+            if (!$checkinJoin) {
+                return [];
+            }
+            $sql = $base . " AND EXISTS (SELECT 1 FROM se_checkins k WHERE k.event_id = r.event_id AND k.registration_id = r.id)";
+            break;
+
+        case 'karaoke_singers':
+            if (!se_table_exists($pdo, 'se_karaoke_entries')) {
+                return [];
+            }
+            $sql = $base . " AND EXISTS (SELECT 1 FROM se_karaoke_entries e
+                                          WHERE e.event_id = r.event_id AND e.registration_id = r.id
+                                            AND e.status IN ('held','queued','up_next','on_stage','done'))";
+            break;
+
+        case 'reminder_2':
+        case 'confirmed_not_checked_in':
+            // Per day for reminder 2 (§16.2): somebody who came yesterday
+            // still needs tonight's nudge.
+            $sql = $base . " AND r.status = 'confirmed'";
+            if ($checkinJoin) {
+                if ($day !== null) {
+                    $sql .= " AND NOT EXISTS (SELECT 1 FROM se_checkins k
+                                               WHERE k.event_id = r.event_id AND k.registration_id = r.id
+                                                 AND k.day_date = ?)";
+                    $args[] = (string) $day['day_date'];
+                } else {
+                    $sql .= " AND NOT EXISTS (SELECT 1 FROM se_checkins k
+                                               WHERE k.event_id = r.event_id AND k.registration_id = r.id)";
+                }
+            }
+            break;
+
+        default:
+            return [];
+    }
+
+    // One message per phone, even when two registrations share a number.
+    $sql .= " GROUP BY c.phone_e164, r.id ORDER BY r.id ASC";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($args);
+    $rows = $stmt->fetchAll() ?: [];
+
+    $seen = [];
+    $out  = [];
+    foreach ($rows as $row) {
+        $phone = se_message_recipient_phone($pdo, $row);
+        if ($phone === null || isset($seen[$phone])) {
+            continue;
+        }
+        $seen[$phone] = true;
+        $out[] = $row;
+    }
+
+    return $out;
+}
+
+/**
+ * Run one scheduled message (§16.4).
+ *
+ * The run key is claimed first, so two crons racing produce one run; a run
+ * whose moment passed by more than `max_lateness_min` is recorded as
+ * `skipped`, because a reminder two hours after the start is worse than no
+ * reminder at all.
+ *
+ * @return array{status:string, recipients:int, est_units:int, detail:?string}
+ */
+function se_messages_run_scheduled(PDO $pdo, array $event, array $days, array $slot, ?DateTimeImmutable $now = null, ?int $createdBy = null): array
+{
+    $now ??= se_now();
+    $eventId  = (int) $event['id'];
+    $settings = se_event_settings($event);
+    $kind     = (string) $slot['kind'];
+
+    $runId = se_message_run_claim($pdo, $eventId, $kind, (string) $slot['run_key'], $slot['scheduled_for'], $createdBy);
+    if ($runId === null) {
+        return ['status' => 'already', 'recipients' => 0, 'est_units' => 0, 'detail' => 'Already run.'];
+    }
+
+    $finish = static function (string $status, array $extra) use ($pdo, $runId, $eventId, $kind, $slot, $createdBy): array {
+        se_message_run_finish($pdo, $runId, $status, $extra);
+        se_audit($pdo, $eventId, 'messages_run', [
+            'kind'       => $kind,
+            'run_key'    => $slot['run_key'],
+            'status'     => $status,
+            'recipients' => (int) ($extra['recipients'] ?? 0),
+        ], 'event', $eventId, $createdBy);
+
+        return [
+            'status'     => $status,
+            'recipients' => (int) ($extra['recipients'] ?? 0),
+            'est_units'  => (int) ($extra['est_units'] ?? 0),
+            'detail'     => $extra['detail'] ?? null,
+        ];
+    };
+
+    if (in_array((string) $event['status'], ['cancelled', 'archived'], true)) {
+        return $finish('skipped', ['detail' => 'The event is ' . $event['status'] . '.']);
+    }
+
+    $lateness = (int) round(($now->getTimestamp() - $slot['scheduled_for']->getTimestamp()) / 60);
+    $maxLate  = se_int($settings['messages']['max_lateness_min'] ?? 90, 0, 1440, 90);
+    if ($lateness > $maxLate) {
+        return $finish('skipped', ['detail' => 'Missed by ' . $lateness . ' minutes.']);
+    }
+
+    $template = se_message_template($settings, $kind);
+    if (trim($template) === '') {
+        return $finish('skipped', ['detail' => 'No template.']);
+    }
+
+    $recipients = se_message_audience($pdo, $event, $kind, $slot['day'] ?? null);
+    if (!$recipients) {
+        return $finish('skipped', ['detail' => 'Nobody to text.']);
+    }
+
+    $result = se_messages_send($pdo, $event, $days, $kind, $template, $recipients, $createdBy);
+
+    return $finish($result['recipients'] > 0 ? 'queued' : 'skipped', $result);
+}
+
+/**
+ * Every due scheduled run for one event. Called by the cron, and by the
+ * Studio's "Run now" so a Producer can recover from a dead cron.
+ */
+function se_messages_run_due(PDO $pdo, array $event, ?DateTimeImmutable $now = null, ?int $createdBy = null): array
+{
+    $now ??= se_now();
+
+    if ((string) $event['status'] !== 'published') {
+        return [];
+    }
+
+    $days     = se_event_days($pdo, (int) $event['id']);
+    $settings = se_event_settings($event);
+    $out      = [];
+
+    foreach (se_message_schedule($event, $days, $settings) as $slot) {
+        if ($slot['scheduled_for'] > $now) {
+            continue;
+        }
+        $result = se_messages_run_scheduled($pdo, $event, $days, $slot, $now, $createdBy);
+        if ($result['status'] !== 'already') {
+            $out[$slot['run_key']] = $result;
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * An ad-hoc message to a segment (§16.6). Producer-only; the caller has
+ * already confirmed the recipient count on screen.
+ */
+function se_messages_send_adhoc(PDO $pdo, array $event, string $segment, string $template, ?int $createdBy): array
+{
+    $segment = se_enum($segment, SE_MESSAGE_SEGMENTS, '');
+    if ($segment === '') {
+        throw new SeValidationException(['segment' => 'Choose who this message goes to.']);
+    }
+
+    $template = se_str($template, 600);
+    if (trim($template) === '') {
+        throw new SeValidationException(['template' => 'Write the message first.']);
+    }
+
+    $eventId = (int) $event['id'];
+    $days    = se_event_days($pdo, $eventId);
+
+    $runKey = 'adhoc:' . se_now()->format('YmdHis');
+    $runId  = se_message_run_claim($pdo, $eventId, 'adhoc', $runKey, se_now(), $createdBy);
+    if ($runId === null) {
+        throw new SeRuleException('RATE_LIMITED', 'That message is already going out.');
+    }
+
+    $recipients = se_message_audience($pdo, $event, $segment);
+    if (!$recipients) {
+        se_message_run_finish($pdo, $runId, 'skipped', ['detail' => 'Nobody in that segment.']);
+        throw new SeRuleException('RULE', 'There is nobody in that group to text.');
+    }
+
+    $result = se_messages_send($pdo, $event, $days, 'adhoc', $template, $recipients, $createdBy);
+
+    se_message_run_finish($pdo, $runId, $result['recipients'] > 0 ? 'queued' : 'skipped', $result + ['detail' => $segment]);
+    se_audit($pdo, $eventId, 'adhoc_message', [
+        'segment' => $segment, 'recipients' => $result['recipients'], 'run_key' => $runKey,
+    ], 'event', $eventId, $createdBy);
+
+    return $result + ['segment' => $segment, 'run_key' => $runKey];
+}
+
+/**
+ * Send one message to one number, so the crew can read it on a real phone
+ * before a hundred people do. It is a real campaign of one, keyed by the
+ * minute, which is also its throttle.
+ */
+function se_messages_test_send(PDO $pdo, array $event, string $kind, string $phone, ?int $createdBy): array
+{
+    if (!se_sms_available($pdo)) {
+        throw new SeRuleException('FEATURE_NOT_READY', 'SMS Studio is not set up on this site.');
+    }
+
+    $normalised = se_phone_normalize($phone);
+    if ($normalised === null) {
+        throw new SeValidationException(['phone' => 'Enter a mobile number, e.g. 0803 123 4567.']);
+    }
+
+    $settings = se_event_settings($event);
+    $template = se_message_template($settings, $kind);
+    if (trim($template) === '') {
+        throw new SeValidationException(['kind' => 'That message has no template yet.']);
+    }
+
+    $eventId = (int) $event['id'];
+    $days    = se_event_days($pdo, $eventId);
+    $runKey  = 'test:' . $kind . ':' . se_now()->format('YmdHi');
+
+    $runId = se_message_run_claim($pdo, $eventId, $kind, $runKey, se_now(), $createdBy);
+    if ($runId === null) {
+        throw new SeRuleException('RATE_LIMITED', 'A test of that message just went out. Give it a minute.');
+    }
+
+    $body = se_message_render_event($template, $event, $days);
+    $body = function_exists('sms_render')
+        ? sms_render($body, ['first_name' => 'Ada', 'link' => se_event_url((string) $event['slug'], '')])
+        : $body;
+
+    $pdo->prepare(
+        "INSERT INTO sms_campaigns (title, audience, event_id, filters_json, body_template, total, status, created_by)
+         VALUES (?, 'special_event', NULL, ?, ?, 1, 'queued', ?)"
+    )->execute([
+        mb_substr(trim((string) $event['title']) . ' · Test ' . (SE_MESSAGE_KIND_LABELS[$kind] ?? $kind), 0, 255, 'UTF-8'),
+        se_json_encode(['se_event_id' => $eventId, 'kind' => $kind, 'test' => true]),
+        $body,
+        $createdBy,
+    ]);
+    $campaignId = (int) $pdo->lastInsertId();
+
+    $pdo->prepare("INSERT INTO sms_queue (campaign_id, recipient_json, status) VALUES (?, ?, 'queued')")
+        ->execute([$campaignId, se_json_encode([
+            'source'     => 'se_test',
+            'source_id'  => 0,
+            'name'       => 'Test',
+            'first_name' => 'Ada',
+            'phone'      => $normalised,
+            'event_title' => (string) $event['title'],
+            'link'       => se_event_url((string) $event['slug'], ''),
+        ])]);
+
+    se_message_run_finish($pdo, $runId, 'queued', [
+        'sms_campaign_id' => $campaignId, 'recipients' => 1, 'est_units' => 1, 'detail' => 'Test send',
+    ]);
+
+    return ['campaign_id' => $campaignId, 'phone' => se_mask_phone($normalised)];
+}
+
+/**
+ * Everything the Studio's Messages tab draws: the settings, each kind's
+ * preview and estimate, and the run log.
+ */
+function se_messages_studio(PDO $pdo, array $event): array
+{
+    $eventId  = (int) $event['id'];
+    $days     = se_event_days($pdo, $eventId);
+    $settings = se_event_settings($event);
+
+    $kinds = [];
+    foreach (['reminder_1', 'reminder_2', 'thank_you', 'waitlist_promotion', 'link_on_demand'] as $kind) {
+        $config   = is_array($settings['messages'][$kind] ?? null) ? $settings['messages'][$kind] : [];
+        $template = se_message_template($settings, $kind);
+        $preview  = se_message_preview($template, $event, $days, [], $settings);
+
+        $audience = in_array($kind, ['reminder_1', 'reminder_2'], true)
+            ? count(se_message_audience($pdo, $event, $kind, $kind === 'reminder_2' ? ($days[0] ?? null) : null))
+            : null;
+
+        $kinds[$kind] = [
+            'kind'     => $kind,
+            'label'    => SE_MESSAGE_KIND_LABELS[$kind] ?? $kind,
+            'enabled'  => se_bool($config['enabled'] ?? true),
+            'at'       => $config['at'] ?? null,
+            'minutes_before' => isset($config['minutes_before']) ? (int) $config['minutes_before'] : null,
+            'template' => $template,
+            'preview'  => $preview,
+            'audience' => $audience,
+            'est_units' => $audience !== null ? $audience * (int) $preview['pages'] : null,
+            'scheduled' => false,
+        ];
+    }
+
+    $schedule = [];
+    foreach (se_message_schedule($event, $days, $settings) as $slot) {
+        $schedule[] = [
+            'kind'          => $slot['kind'],
+            'run_key'       => $slot['run_key'],
+            'scheduled_for' => $slot['scheduled_for']->format('c'),
+            'label'         => $slot['label'],
+        ];
+        $kinds[$slot['kind']]['scheduled'] = true;
+    }
+
+    return [
+        'kinds'    => array_values($kinds),
+        'schedule' => $schedule,
+        'segments' => SE_MESSAGE_SEGMENTS,
+        'runs'     => se_message_runs($pdo, $eventId),
+        'sms'      => [
+            'available'     => se_sms_available($pdo),
+            'worker_fresh'  => se_sms_worker_fresh($pdo),
+            'studio_url'    => '/modules/sms_studio/index.php',
+        ],
+        'max_lateness_min' => se_int($settings['messages']['max_lateness_min'] ?? 90, 0, 1440, 90),
+    ];
+}
+
+/** The run log, newest first, with a link into SMS Studio's history. */
+function se_message_runs(PDO $pdo, int $eventId, int $limit = 50): array
+{
+    if (!se_table_exists($pdo, 'se_message_runs')) {
+        return [];
+    }
+
+    $limit = max(1, min(200, $limit));
+    $stmt  = $pdo->prepare(
+        "SELECT * FROM se_message_runs WHERE event_id = ? ORDER BY id DESC LIMIT {$limit}"
+    );
+    $stmt->execute([$eventId]);
+
+    $out = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $campaignId = $row['sms_campaign_id'] !== null ? (int) $row['sms_campaign_id'] : null;
+        $out[] = [
+            'id'            => (int) $row['id'],
+            'kind'          => (string) $row['kind'],
+            'label'         => SE_MESSAGE_KIND_LABELS[(string) $row['kind']] ?? (string) $row['kind'],
+            'run_key'       => (string) $row['run_key'],
+            'scheduled_for' => se_iso($row['scheduled_for']),
+            'status'        => (string) $row['status'],
+            'recipients'    => (int) $row['recipients'],
+            'est_units'     => (int) $row['est_units'],
+            'detail'        => $row['detail'] ?? null,
+            'campaign_id'   => $campaignId,
+            'campaign_url'  => $campaignId !== null ? '/modules/sms_studio/index.php?campaign=' . $campaignId : null,
+            'created_at'    => se_iso($row['created_at'] ?? null),
+        ];
+    }
+
+    return $out;
+}

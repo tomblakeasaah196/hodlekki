@@ -17,7 +17,7 @@ if (defined('SE_BOOTSTRAPPED')) {
 define('SE_BOOTSTRAPPED', true);
 
 /** The module's own version, shown in Studio → Settings → Health. */
-const SE_MODULE_VERSION = '1.2.0-pr3';
+const SE_MODULE_VERSION = '1.3.0-pr4';
 
 // Session: db.php starts it, but a CLI script (cron, tests) may not have one.
 if (PHP_SAPI !== 'cli' && session_status() === PHP_SESSION_NONE) {
@@ -42,6 +42,8 @@ require_once __DIR__ . '/bible.php';
 require_once __DIR__ . '/verses.php';
 require_once __DIR__ . '/teams.php';
 require_once __DIR__ . '/checkin.php';
+require_once __DIR__ . '/program.php';
+require_once __DIR__ . '/karaoke.php';
 require_once __DIR__ . '/messages.php';
 require_once __DIR__ . '/attendees.php';
 require_once __DIR__ . '/cards.php';

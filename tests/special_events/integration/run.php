@@ -30,7 +30,7 @@ $root = dirname(__DIR__, 3);
 require_once $root . '/includes/sms_functions.php';
 foreach (['constants', 'util', 'db', 'theme', 'settings', 'events', 'identity',
           'capacity', 'registration', 'realtime', 'live', 'bible', 'verses',
-          'teams', 'checkin', 'messages', 'attendees'] as $lib) {
+          'teams', 'checkin', 'messages', 'attendees', 'program', 'karaoke'] as $lib) {
     require_once $root . '/includes/special_events/' . $lib . '.php';
 }
 
@@ -506,6 +506,204 @@ if (!se_checkin_ready($pdo) || !se_teams_ready($pdo)) {
     $stmt->execute([$raceId]);
     is_same('each assignment left exactly one audit row', $arrivals, (int) $stmt->fetchColumn());
 }
+
+// ==========================================================================
+// Test 6 — the karaoke song race (§10.8.1, §22.2)
+// ==========================================================================
+//
+// Ten people tap the same song in the same second. Exactly one may have it:
+// the uniqueness is a UNIQUE index on a generated column, not a SELECT then
+// an INSERT, so this is the test that proves the index is the one doing the
+// work. The nine losers must get SONG_TAKEN — a sentence, not a 500.
+
+echo "\n  karaoke song race\n";
+
+if (!se_karaoke_ready($pdo)) {
+    echo "    (se_karaoke_entries is not in this database — skipped)\n";
+} else {
+    $kEvent = se_it_event($pdo, ['online_capacity' => 50]);
+    $kId    = (int) $kEvent['id'];
+
+    $pdo->prepare("UPDATE se_events SET settings_json = ? WHERE id = ?")->execute([
+        se_json_encode(se_settings_normalize([
+            'karaoke' => ['enabled' => true, 'prepick_enabled' => true, 'unique_songs' => true, 'list_published' => true],
+        ])),
+        $kId,
+    ]);
+    $stmt = $pdo->prepare("SELECT * FROM se_events WHERE id = ?");
+    $stmt->execute([$kId]);
+    $kEvent = $stmt->fetch();
+
+    $song = se_song_upsert($pdo, 'Way Maker', 'Sinach', 312, 1);
+    $pdo->prepare("INSERT INTO se_event_songs (event_id, song_id, is_active, added_by) VALUES (?, ?, 1, 1)")
+        ->execute([$kId, (int) $song['id']]);
+
+    $singers = [];
+    for ($i = 1; $i <= 10; $i++) {
+        $singers[] = se_it_register($pdo, $kEvent, 7000 + $i)['registration'];
+    }
+
+    $pick = static function (PDO $db, int $eventId, array $registration, int $songId): bool {
+        $stmt = $db->prepare("SELECT * FROM se_events WHERE id = ?");
+        $stmt->execute([$eventId]);
+
+        try {
+            se_karaoke_pick($db, $stmt->fetch(), $registration, $songId, 'prepick');
+
+            return true;
+        } catch (SeRuleException $e) {
+            if ($e->errorCode !== 'SONG_TAKEN') {
+                fwrite(STDERR, "    unexpected karaoke error: " . $e->errorCode . "\n");
+            }
+
+            return false;
+        }
+    };
+
+    if ($canFork) {
+        $kids = [];
+        foreach ($singers as $registration) {
+            $pid = pcntl_fork();
+            if ($pid === 0) {
+                try {
+                    $child = se_it_pdo();
+                    exit($pick($child, $kId, $registration, (int) $song['id']) ? 0 : 1);
+                } catch (Throwable $e) {
+                    fwrite(STDERR, "    karaoke worker: " . $e->getMessage() . "\n");
+                    exit(2);
+                }
+            }
+            $kids[] = $pid;
+        }
+        $crashes = 0;
+        foreach ($kids as $pid) {
+            pcntl_waitpid($pid, $status);
+            if (pcntl_wexitstatus($status) === 2) { $crashes++; }
+        }
+        is_same('nobody got an exception instead of an answer', 0, $crashes);
+    } else {
+        echo "    (pcntl not available: running the same ten picks serially)\n";
+        foreach ($singers as $registration) {
+            $pick($pdo, $kId, $registration, (int) $song['id']);
+        }
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(*) FROM se_karaoke_entries
+          WHERE event_id = ? AND song_id = ? AND status IN ('held','queued','up_next','on_stage','done')"
+    );
+    $stmt->execute([$kId, (int) $song['id']]);
+    is_same('exactly one person has the song', 1, (int) $stmt->fetchColumn());
+
+    // The loser may try again on a different song, and must succeed.
+    $other = se_song_upsert($pdo, 'Imela', 'Nathaniel Bassey', 298, 1);
+    $pdo->prepare("INSERT INTO se_event_songs (event_id, song_id, is_active, added_by) VALUES (?, ?, 1, 1)")
+        ->execute([$kId, (int) $other['id']]);
+
+    $stmt = $pdo->prepare(
+        "SELECT registration_id FROM se_karaoke_entries WHERE event_id = ? AND song_id = ? LIMIT 1"
+    );
+    $stmt->execute([$kId, (int) $song['id']]);
+    $winnerId = (int) $stmt->fetchColumn();
+
+    $loser = null;
+    foreach ($singers as $registration) {
+        if ((int) $registration['id'] !== $winnerId) { $loser = $registration; break; }
+    }
+    ok('somebody who lost the race can take another song',
+        $pick($pdo, $kId, $loser, (int) $other['id']));
+
+    // And holds become queue numbers in arrival order at check-in (§10.8.2).
+    $stmt = $pdo->prepare("SELECT * FROM se_events WHERE id = ?");
+    $stmt->execute([$kId]);
+    $kEvent = $stmt->fetch();
+
+    foreach ([$winnerId, (int) $loser['id']] as $registrationId) {
+        se_checkin($pdo, $kEvent, se_event_days($pdo, $kId), ['registration_id' => $registrationId], [
+            'method' => 'desk', 'device' => null, 'actor_user_id' => 1, 'ip_hash' => null, 'is_crew' => true,
+        ]);
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT queue_no FROM se_karaoke_entries WHERE event_id = ? AND status = 'queued' ORDER BY queue_no"
+    );
+    $stmt->execute([$kId]);
+    $numbers = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    is_same('checking in turned both holds into queued entries', 2, count($numbers));
+    is_same('numbered from one…', 1, $numbers[0] ?? 0);
+    is_same('…upwards, in arrival order', 2, $numbers[1] ?? 0);
+}
+
+// ==========================================================================
+// Test 7 — cron idempotency (§16.4, §23.4)
+// ==========================================================================
+//
+// The cron runs every five minutes and a reminder is due. Running it twice
+// must create ONE run, because the run key is unique — this is the whole
+// defence against a stuck cron sending the same text to the room twice.
+
+echo "\n  cron idempotency\n";
+
+if (!se_table_exists($pdo, 'se_message_runs')) {
+    echo "    (se_message_runs is not in this database — skipped)\n";
+} else {
+    $mEvent = se_it_event($pdo, ['online_capacity' => 10]);
+    $mId    = (int) $mEvent['id'];
+
+    // Pull the day back so that both reminders are already due.
+    $start = se_now()->modify('+30 minutes');
+    $pdo->prepare(
+        "UPDATE se_event_days SET day_date = ?, doors_open_at = ?, starts_at = ?, ends_at = ? WHERE event_id = ?"
+    )->execute([
+        $start->format('Y-m-d'),
+        $start->modify('-30 minutes')->format('Y-m-d H:i:s'),
+        $start->format('Y-m-d H:i:s'),
+        $start->modify('+3 hours')->format('Y-m-d H:i:s'),
+        $mId,
+    ]);
+    $pdo->prepare("UPDATE se_events SET starts_at = ?, settings_json = ? WHERE id = ?")->execute([
+        $start->format('Y-m-d H:i:s'),
+        se_json_encode(se_settings_normalize([
+            'messages' => [
+                'max_lateness_min' => 10000,
+                'reminder_1' => ['enabled' => true, 'at' => '18:00'],
+                'reminder_2' => ['enabled' => true, 'minutes_before' => 120],
+            ],
+        ])),
+        $mId,
+    ]);
+    $stmt = $pdo->prepare("SELECT * FROM se_events WHERE id = ?");
+    $stmt->execute([$mId]);
+    $mEvent = $stmt->fetch();
+
+    for ($i = 1; $i <= 3; $i++) {
+        se_it_register($pdo, $mEvent, 8000 + $i);
+    }
+
+    $first  = se_messages_run_due($pdo, $mEvent, se_now(), null);
+    $second = se_messages_run_due($pdo, $mEvent, se_now(), null);
+
+    ok('the first run did something', count($first) > 0, 'ran: ' . count($first));
+    is_same('the second run has nothing left to do', 0, count($second));
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM se_message_runs WHERE event_id = ?");
+    $stmt->execute([$mId]);
+    is_same('one row per run key, however many times the cron fires',
+        count($first), (int) $stmt->fetchColumn());
+
+    $stmt = $pdo->prepare("SELECT COUNT(DISTINCT run_key) FROM se_message_runs WHERE event_id = ?");
+    $stmt->execute([$mId]);
+    is_same('…and every key is distinct', count($first), (int) $stmt->fetchColumn());
+
+    if (se_table_exists($pdo, 'sms_campaigns')) {
+        $stmt = $pdo->prepare(
+            "SELECT COUNT(*) FROM sms_campaigns WHERE filters_json LIKE ?"
+        );
+        $stmt->execute(['%"se_event_id":' . $mId . '%']);
+        is_same('one SMS campaign per run, never two', count($first), (int) $stmt->fetchColumn());
+    }
+}
+
 
 // ==========================================================================
 

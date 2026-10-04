@@ -39,6 +39,7 @@ function se_portal_render(
     se_portal_hero($event, $days, $settings, $phase, $state, $seatsLeft, $heroAsset, $heroVideoAsset, $registration);
     se_portal_intro($event, $settings);
     se_portal_chapters($event, $settings);
+    se_portal_program($pdo, $event, $days, $settings);
     se_portal_venue($event, $days);
     se_portal_faq($event, $settings);
     se_portal_footer($event, $organizer);
@@ -274,9 +275,9 @@ function se_portal_intro(array $event, array $settings): void
 /**
  * One chapter per default activity block.
  *
- * The programme table arrives with PR4; until then `chapters_from_featured`
- * has nothing to read, so the defaults from §13.3 are used and the switch is
- * honoured by simply not promising a programme.
+ * `chapters_from_featured` lets an event drive this off its own featured
+ * programme items instead; when it is off, or there is no programme yet,
+ * the defaults from §13.3 are used.
  *
  * @return list<array{key:string, title:string, blurb:string}>
  */

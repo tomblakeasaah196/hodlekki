@@ -272,7 +272,13 @@ function se_snapshot_public(PDO $pdo, array $event, array $state, array $context
             'joined_games'     => se_joined_games_count($pdo, $eventId),
         ],
         'teams'   => $teamRows,
-        'program' => null,
+        // Public programme: public items only, times in the event's chosen
+        // mode, and never a crew note (§10.7.2).
+        'program' => se_program_ready($pdo)
+            ? se_program_public($pdo, $event, $days, $settings)
+            : null,
+        // Songs, never singers: public.json is world-readable (§8.5.2).
+        'karaoke' => se_karaoke_ready($pdo) ? se_karaoke_public($pdo, $event) : null,
         'scene'   => se_scene_payload($state),
         'game'    => null,
         'announcement' => se_announcement_payload($state),
@@ -298,10 +304,10 @@ function se_snapshot_room(PDO $pdo, array $event, array $state, array $context =
     }
 
     return [
-        // MVP, karaoke, presenter and buzz winner arrive with PR4/PR5. The
-        // keys are present and empty so the client shape never changes.
+        // MVP, presenter and buzz winner arrive with PR5. The keys are
+        // present and empty so the client shape never changes.
         'mvp'         => [],
-        'karaoke'     => null,
+        'karaoke'     => se_karaoke_ready($pdo) ? se_snapshot_karaoke_room($pdo, $event) : null,
         'presenter'   => null,
         'buzz_winner' => null,
         'captains'    => $captains,
@@ -612,7 +618,18 @@ function se_live_tick(PDO $pdo, array $event, ?int $actorId = null): array
             }
         }
 
-        // 3. PR4/PR5 add round auto-lock, charades timeout and buzz settling
+        // 3. Karaoke holds whose release time has passed (§10.8.2). The cron
+        //    does this too; the tick means the picker frees the song within
+        //    a second rather than within five minutes.
+        try {
+            if (se_karaoke_release_holds($pdo, $event) > 0) {
+                $dirty = true;
+            }
+        } catch (Throwable $e) {
+            error_log('SE live/tick karaoke: ' . $e->getMessage());
+        }
+
+        // 4. PR5 adds round auto-lock, charades timeout and buzz settling
         //    here. They are time-based transitions on tables that do not
         //    exist yet, so the hook is the `dirty` flag below.
 
@@ -897,7 +914,7 @@ function se_test_mode_due_off(PDO $pdo, array $event, ?DateTimeImmutable $now = 
 function se_reset_rehearsal(PDO $pdo, array $event, ?int $actorId): array
 {
     $eventId = (int) $event['id'];
-    $removed = ['checkins' => 0, 'registrations' => 0, 'contacts' => 0, 'team_moves' => 0];
+    $removed = ['checkins' => 0, 'karaoke_entries' => 0, 'registrations' => 0, 'contacts' => 0, 'team_moves' => 0];
 
     se_lock_event($pdo, $eventId, static function (array $locked, PDO $pdo) use ($eventId, &$removed): void {
         // The registrations we are about to delete, captured before the rows
@@ -914,6 +931,14 @@ function se_reset_rehearsal(PDO $pdo, array $event, ?int $actorId): array
             $stmt = $pdo->prepare("DELETE FROM se_checkins WHERE event_id = ? AND is_test = 1");
             $stmt->execute([$eventId]);
             $removed['checkins'] = $stmt->rowCount();
+        }
+
+        // Karaoke rows go before the registrations that own them:
+        // fk_se_karaoke_reg is ON DELETE RESTRICT (§9.5 item 1).
+        if (se_table_exists($pdo, 'se_karaoke_entries')) {
+            $stmt = $pdo->prepare("DELETE FROM se_karaoke_entries WHERE event_id = ? AND is_test = 1");
+            $stmt->execute([$eventId]);
+            $removed['karaoke_entries'] = $stmt->rowCount();
         }
 
         if ($regIds) {
@@ -1120,12 +1145,60 @@ function se_live_console(PDO $pdo, array $event): array
         'health'   => se_live_health($pdo, $event, $state),
         'displays' => se_display_links($event, $state),
 
-        // PR4 and PR5 fill these in; the shape is fixed now so the console
-        // can be written once (§28.3).
-        'program'  => null,
+        'program'  => se_program_ready($pdo) ? se_program_payload($pdo, $event, $days) : null,
+        'karaoke'  => se_karaoke_ready($pdo) ? se_karaoke_queue($pdo, $event) : null,
+
+        // PR5 fills these in; the shape is fixed so the console can be
+        // written once (§28.3).
         'game'     => null,
         'round'    => null,
-        'karaoke'  => null,
+    ];
+}
+
+/**
+ * The karaoke block of the room snapshot: now, next and the short list, with
+ * display names — which is why it lives behind the room key and not in
+ * public.json (§8.5.2).
+ */
+function se_snapshot_karaoke_room(PDO $pdo, array $event): ?array
+{
+    $queue = se_karaoke_queue($pdo, $event);
+    if (!$queue['ready']) {
+        return null;
+    }
+
+    $short = [];
+    foreach ($queue['entries'] as $entry) {
+        if (!in_array($entry['status'], ['queued', 'up_next'], true)) {
+            continue;
+        }
+        $short[] = [
+            'queue_no' => $entry['queue_no'],
+            'singer'   => $entry['singer'],
+            'song'     => $entry['song']['title'],
+            'artist'   => $entry['song']['artist'],
+        ];
+        if (count($short) >= 8) {
+            break;
+        }
+    }
+
+    $shape = static fn(?array $e): ?array => $e === null ? null : [
+        'queue_no' => $e['queue_no'],
+        'singer'   => $e['singer'],
+        'song'     => $e['song']['title'],
+        'artist'   => $e['song']['artist'],
+    ];
+
+    if ($queue['now'] === null && $queue['next'] === null && !$short) {
+        return null;
+    }
+
+    return [
+        'now'   => $shape($queue['now']),
+        'next'  => $shape($queue['next']),
+        'queue' => $short,
+        'stats' => $queue['stats'],
     ];
 }
 
