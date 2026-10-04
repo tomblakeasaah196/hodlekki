@@ -9,8 +9,8 @@
 // Nothing here touches the guest's photo. It is read, cropped and drawn
 // entirely in the browser and never reaches the server (§14.3, §19.5).
 
-/** Templates PR2 ships. Later PRs add welcome, team and my_night. */
-const SE_CARD_KINDS_READY = ['im_going'];
+/** Templates that exist. `my_night` arrives with the recap in PR5. */
+const SE_CARD_KINDS_READY = ['im_going', 'welcome', 'team'];
 
 /** The sizes a card may be rendered at (§14.3). */
 const SE_CARD_SIZES = [
@@ -45,6 +45,16 @@ function se_card_payload(PDO $pdo, array $event, array $days, array $settings, s
     $theme = se_event_theme($event);
 
     $refUrl = se_event_url((string) $event['slug']) . '?r=' . rawurlencode((string) $registration['ref_code']);
+
+    $signature = trim((string) $event['title'] . ' ' . (string) ($event['edition_label'] ?? ''))
+        . ' by ' . (string) ($event['organizer_label'] ?? 'Envision');
+
+    // The welcome and team cards are about tonight, not about the invitation,
+    // so they are built separately rather than bent out of the "I'm going"
+    // shape. They share the colours, the fonts and the signature.
+    if ($kind === 'welcome' || $kind === 'team') {
+        return se_card_night_payload($pdo, $event, $settings, $kind, $registration, $theme, $signature);
+    }
 
     return [
         'kind'  => $kind,
@@ -188,5 +198,114 @@ function se_poster_payload(PDO $pdo, array $event): array
             'display' => (string) $event['font_display'],
             'body'    => (string) $event['font_body'],
         ],
+    ];
+}
+
+/**
+ * The two cards that only exist once someone is in the room (§14.3).
+ *
+ * `welcome` is the verse they were given at check-in — the same one, not a
+ * fresh draw, because they have already read it on their phone and a card
+ * that said something different would feel like a trick.
+ *
+ * `team` is their colour, their captain and their player number.
+ *
+ * @throws SeRuleException NOT_CHECKED_IN
+ */
+function se_card_night_payload(
+    PDO $pdo,
+    array $event,
+    array $settings,
+    string $kind,
+    array $registration,
+    array $theme,
+    string $signature
+): array {
+    $eventId = (int) $event['id'];
+    $colors  = se_card_colors($theme);
+
+    $days      = se_event_days($pdo, $eventId);
+    $phaseInfo = se_event_phase($event, $days);
+    $checkin   = se_checkin_ready($pdo)
+        ? se_checkin_row($pdo, $eventId, (int) $registration['id'], se_checkin_day($phaseInfo))
+        : null;
+
+    if ($checkin === null) {
+        throw new SeRuleException('NOT_CHECKED_IN', 'This card is ready once you have checked in.');
+    }
+
+    $firstName = (string) $registration['first_name'];
+
+    $team = !empty($registration['team_id']) && se_teams_ready($pdo)
+        ? se_team_find($pdo, $eventId, (int) $registration['team_id'])
+        : null;
+    $teamPublic = $team ? se_team_public($team, $theme) : null;
+
+    $text = [
+        'title'      => (string) $event['title'],
+        'edition'    => (string) ($event['edition_label'] ?? ''),
+        'organizer'  => (string) ($event['organizer_label'] ?? 'Envision'),
+        'first_name' => $firstName,
+        'url'        => se_card_short_url($event),
+        'signature'  => $signature,
+        'team'       => $teamPublic ? ($teamPublic['name'] ?? ('Team ' . $teamPublic['label'])) : '',
+    ];
+
+    if ($kind === 'welcome') {
+        $verse = !empty($checkin['verse_id']) && se_verses_ready($pdo)
+            ? se_verse_for_card(se_verse_find($pdo, $eventId, (int) $checkin['verse_id']), $firstName)
+            : null;
+
+        $text += [
+            'headline'  => 'Welcome,',
+            'verse_ref' => $verse['ref'] ?? '',
+            'verse'     => $verse['text'] ?? '',
+            'prayer'    => $verse['prayer'] ?? '',
+        ];
+    } else {
+        $captain = null;
+        if ($team && !empty($team['captain_registration_id'])) {
+            $captainReg = se_registration_by_id($pdo, (int) $team['captain_registration_id'], $eventId);
+            $captain = $captainReg ? (string) $captainReg['display_name'] : null;
+        }
+
+        $size = 0;
+        if ($teamPublic) {
+            $counts = se_team_counts($pdo, $eventId);
+            $size   = (int) ($counts[$teamPublic['id']]['n'] ?? 0);
+        }
+
+        $text += [
+            'headline'  => "I'm playing for",
+            'captain'   => $captain ?? 'To be announced',
+            'player_no' => $registration['player_no'] !== null ? (string) (int) $registration['player_no'] : '—',
+            'count'     => $size > 0 ? $size . ' of us tonight' : '',
+        ];
+    }
+
+    // The team colour overrides the brand accent on these two cards: on the
+    // night, the colour people identify with is their team's, not Envision's.
+    if ($teamPublic) {
+        $colors['team'] = $teamPublic['hex'];
+        $colors['on_team'] = $teamPublic['on'];
+    }
+
+    return [
+        'kind'  => $kind,
+        'sizes' => SE_CARD_SIZES,
+        'templates' => [
+            'story'  => se_card_template_url($kind, 'story'),
+            'square' => se_card_template_url($kind, 'square'),
+        ],
+        'text'   => $text,
+        'qr'     => [],
+        'flags'  => ['has_team' => $teamPublic !== null],
+        'colors' => $colors,
+        'fonts'  => [
+            'display' => (string) $event['font_display'],
+            'body'    => (string) $event['font_body'],
+        ],
+        'filename' => se_card_filename($event, $kind, $firstName),
+        'privacy'  => 'Nothing here leaves your phone until you share it.',
     ];
 }
