@@ -997,6 +997,238 @@ try {
         se_api_success('Here are three.', ['variants' => array_slice($variants, 0, 3), 'purpose' => $purpose]);
     }
 
+
+    // ====================================================================
+    // Teams (§10.6)
+    // ====================================================================
+
+    case 'teams_get': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+        if (!se_teams_ready($pdo)) {
+            se_api_error('Teams are not available until the database is migrated.', 'FEATURE_NOT_READY');
+        }
+
+        se_api_success('OK', se_teams_payload($pdo, $event));
+    }
+
+    case 'teams_save': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        if (!se_teams_ready($pdo)) {
+            se_api_error('Teams are not available until the database is migrated.', 'FEATURE_NOT_READY');
+        }
+
+        se_teams_save($pdo, $event, [
+            'hex_list' => $body['hex_list'] ?? null,
+            'teams'    => $body['teams'] ?? null,
+        ], $userId);
+
+        se_api_success('Teams saved.', se_teams_payload($pdo, $event));
+    }
+
+    case 'team_move': {
+        $event = se_studio_event($pdo, $body, 'team.move');
+
+        se_team_move(
+            $pdo,
+            $event,
+            se_int($body['registration_id'] ?? 0, 0),
+            se_int($body['team_id'] ?? 0, 0),
+            se_line($body['reason'] ?? '', 160),
+            $userId
+        );
+
+        se_api_success('Moved.', se_teams_payload($pdo, $event));
+    }
+
+    case 'captain_set': {
+        $event = se_studio_event($pdo, $body, 'team.rename');
+
+        se_captain_set(
+            $pdo,
+            $event,
+            se_int($body['team_id'] ?? 0, 0),
+            isset($body['registration_id']) && $body['registration_id'] !== null && $body['registration_id'] !== ''
+                ? se_int($body['registration_id'], 0)
+                : null,
+            $userId
+        );
+
+        se_api_success('Captain set.', se_teams_payload($pdo, $event));
+    }
+
+    // ====================================================================
+    // Welcome verses (§10.9, §15.7)
+    // ====================================================================
+
+    case 'verses_list': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+        if (!se_verses_ready($pdo)) {
+            se_api_error('Welcome verses are not available until the database is migrated.', 'FEATURE_NOT_READY');
+        }
+
+        se_api_success('OK', [
+            'verses' => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+        ]);
+    }
+
+    case 'verse_add': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        $verse = se_verse_add(
+            $pdo,
+            $event,
+            se_line($body['ref'] ?? '', 60),
+            $body['prayer_template'] ?? null,
+            $userId,
+            $body['text'] ?? null
+        );
+
+        se_api_success('Added.', [
+            'verse'  => se_verse_payload($verse),
+            'verses' => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+        ]);
+    }
+
+    case 'verses_save': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        se_verses_save($pdo, $event, is_array($body['verses'] ?? null) ? $body['verses'] : [], $userId);
+
+        se_api_success('Saved.', [
+            'verses' => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+        ]);
+    }
+
+    case 'verse_approve': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        se_verse_approve($pdo, $event, se_int($body['verse_id'] ?? 0, 0), $userId);
+
+        se_api_success('Approved.', [
+            'verses' => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+        ]);
+    }
+
+    case 'verse_delete': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        se_verse_delete($pdo, $event, se_int($body['verse_id'] ?? 0, 0), $userId);
+
+        se_api_success('Removed.', [
+            'verses' => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+        ]);
+    }
+
+    case 'verses_suggest': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        // AI only ever sees the event's theme words — never a guest (§15.1).
+        $result = se_verses_suggest(
+            $pdo,
+            $event,
+            se_line($body['theme'] ?? '', 160),
+            se_int($body['count'] ?? 8, 8),
+            se_line($body['tone'] ?? 'warm and hopeful', 60),
+            $userId
+        );
+
+        se_api_success('Here are some suggestions. Nothing is saved until you approve it.', $result);
+    }
+
+    case 'bible_lookup': {
+        se_studio_event($pdo, $body, 'insights.view');
+
+        $found = se_bible_lookup($pdo, se_line($body['ref'] ?? '', 60), 'KJV');
+        if ($found === null) {
+            se_api_error('We could not find that reference in the KJV.', 'NOT_FOUND');
+        }
+
+        se_api_success('OK', $found);
+    }
+
+    // ====================================================================
+    // Live: monitor, display keys, rehearsal (§11.13, §18.3)
+    // ====================================================================
+
+    case 'live_monitor': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+        if (!se_live_ready($pdo)) {
+            se_api_error('The live monitor is not available until the database is migrated.', 'FEATURE_NOT_READY');
+        }
+
+        se_api_success('OK', se_live_monitor($pdo, $event));
+    }
+
+    case 'keys_rotate': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        if (!se_live_ready($pdo)) {
+            se_api_error('Display keys are not available until the database is migrated.', 'FEATURE_NOT_READY');
+        }
+
+        $which = is_array($body['which'] ?? null) ? $body['which'] : ['stage', 'lobby', 'room'];
+
+        se_api_success('New links. The old ones stop working now.', [
+            'displays' => se_live_keys_rotate($pdo, $event, $which, $userId),
+        ]);
+    }
+
+    case 'test_mode': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        $fresh = se_test_mode_set($pdo, $event, se_bool($body['on'] ?? false), $userId);
+
+        se_api_success(
+            se_bool($body['on'] ?? false)
+                ? 'Test mode is ON. Everything from now on is a rehearsal.'
+                : 'Test mode is off.',
+            ['test_mode' => se_bool(se_event_settings($fresh)['test_mode'] ?? false)]
+        );
+    }
+
+    case 'reset_rehearsal': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        $out = se_reset_rehearsal($pdo, $event, $userId);
+
+        se_api_success('Rehearsal cleared.', ['removed' => $out['removed']]);
+    }
+
+    // ====================================================================
+    // Check-in posters (§14.2)
+    // ====================================================================
+
+    case 'poster_data': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+
+        se_api_success('OK', se_poster_payload($pdo, $event));
+    }
+
+    case 'render_save': {
+        $event = se_studio_event($pdo, $body, 'assets.manage');
+
+        $role = se_str($body['kind'] ?? '', 30);
+        if (!in_array($role, ['poster_a4', 'poster_a3'], true)) {
+            throw new SeValidationException(['kind' => 'That render cannot be saved yet.']);
+        }
+
+        $file = $_FILES['file'] ?? null;
+        if (!is_array($file)) {
+            throw new SeValidationException(['file' => 'The browser did not send the rendered image.']);
+        }
+
+        $asset = se_asset_store($pdo, $event, $role, $file, [
+            'title'    => $role === 'poster_a3' ? 'Check-in poster (A3)' : 'Check-in poster (A4)',
+            'alt_text' => 'Check-in poster for ' . $event['title'] . ' with a QR code to the check-in page.',
+        ], $userId);
+
+        se_api_success('Poster saved.', [
+            'asset'  => se_studio_asset_payload($asset),
+            'pdf'    => '/api/special_events_poster_pdf.php?event=' . rawurlencode((string) $event['public_id'])
+                . '&asset=' . (int) $asset['id'],
+            'assets' => array_map('se_studio_asset_payload', se_asset_list($pdo, (int) $event['id'])),
+        ]);
+    }
+
     // ====================================================================
     // Assets
     // ====================================================================

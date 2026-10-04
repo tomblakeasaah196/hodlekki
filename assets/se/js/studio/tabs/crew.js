@@ -3,8 +3,8 @@
 // Crew (guide §6.2, §13.13): who can do what for this event. Adding someone
 // notifies them; the last Producer cannot be removed.
 //
-// Display keys for the stage and lobby arrive with PR3, when those surfaces
-// exist.
+// The stage and lobby screens are not people, so their key-bearing links
+// live on the Live tab with the rotate button rather than here.
 
 import { html } from '@se/core/html.js';
 import { useState, useEffect, useRef } from 'preact/hooks';
@@ -190,6 +190,14 @@ export function CrewTab() {
                     </li>`)}
                 </ul>
             <//>` : null}
+
+            <${Card} title="Screens"
+                     subtitle="The stage and lobby displays sign in with a link, not a password.">
+                <p class="text-sm text-gray-500">
+                    Their links carry a key, so they live on the <strong>Live</strong> tab —
+                    together with the button that rotates them if a link gets shared too widely.
+                </p>
+            <//>
 
             <${Card} title="What each role can do">
                 <ul class="space-y-2">

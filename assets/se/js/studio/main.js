@@ -20,6 +20,9 @@ import { OverviewTab } from './tabs/overview.js';
 import { DetailsTab } from './tabs/details.js';
 import { BrandTab } from './tabs/brand.js';
 import { RegistrationTab } from './tabs/registration.js';
+import { CheckinTab } from './tabs/checkin.js';
+import { TeamsTab } from './tabs/teams.js';
+import { LiveTab } from './tabs/live.js';
 import { AttendeesTab } from './tabs/attendees.js';
 import { AssetsTab } from './tabs/assets.js';
 import { CrewTab } from './tabs/crew.js';
@@ -30,6 +33,9 @@ const TABS = {
     details: DetailsTab,
     brand: BrandTab,
     registration: RegistrationTab,
+    checkin: CheckinTab,
+    teams: TeamsTab,
+    live: LiveTab,
     attendees: AttendeesTab,
     assets: AssetsTab,
     crew: CrewTab,

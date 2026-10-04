@@ -123,3 +123,70 @@ function se_card_filename(array $event, string $kind, string $firstName): string
 
     return trim($slug, '-') . '.png';
 }
+
+// --------------------------------------------------------------------------
+// Check-in posters (§14.2)
+// --------------------------------------------------------------------------
+
+/** The two printable poster sizes, at 300 dpi (§14.2). */
+const SE_POSTER_SIZES = [
+    'poster_a4' => ['w' => 2480, 'h' => 3508, 'label' => 'A4', 'mm' => [210, 297]],
+    'poster_a3' => ['w' => 3508, 'h' => 4961, 'label' => 'A3', 'mm' => [297, 420]],
+];
+
+/**
+ * Everything the check-in poster templates need (§14.2).
+ *
+ * The poster is rendered in the Studio, in the browser, by the same template
+ * engine the share cards use — so this returns template URLs and token data,
+ * never pixels. The QR points at /e/<slug>/in, which is the only address a
+ * guest ever has to type.
+ */
+function se_poster_payload(PDO $pdo, array $event): array
+{
+    $days  = se_event_days($pdo, (int) $event['id']);
+    $first = $days[0] ?? null;
+    $start = se_parse_datetime($first['starts_at'] ?? ($event['starts_at'] ?? null));
+    $doors = se_parse_datetime($first['doors_open_at'] ?? null);
+    $theme = se_event_theme($event);
+
+    $checkinUrl = se_event_url((string) $event['slug'], 'in');
+
+    $sizes = [];
+    foreach (SE_POSTER_SIZES as $kind => $spec) {
+        $sizes[$kind] = [
+            'width'    => $spec['w'],
+            'height'   => $spec['h'],
+            'label'    => $spec['label'],
+            'template' => '/assets/se/templates/qr_' . $kind . '.svg',
+            'filename' => se_card_filename($event, 'checkin-' . strtolower($spec['label']), ''),
+        ];
+    }
+
+    return [
+        'sizes' => $sizes,
+        'text'  => [
+            'organizer' => (string) ($event['organizer_label'] ?? 'Envision'),
+            'title'     => (string) $event['title'],
+            'edition'   => (string) ($event['edition_label'] ?? ''),
+            'headline'  => 'Check in here',
+            'sub'       => 'Scan with your phone camera',
+            'date'      => $start !== null ? $start->format('D j M Y') : '',
+            'time'      => $doors !== null
+                ? 'Doors ' . ltrim($doors->format('g:i A'), '0')
+                : ($start !== null ? ltrim($start->format('g:i A'), '0') : ''),
+            'venue'     => (string) ($event['venue_name'] ?? ''),
+            'url'       => preg_replace('#^https?://#', '', $checkinUrl) ?? $checkinUrl,
+            'help'      => 'No phone? The desk will check you in.',
+            'signature' => trim((string) $event['title'] . ' ' . (string) ($event['edition_label'] ?? ''))
+                . ' by ' . (string) ($event['organizer_label'] ?? 'Envision'),
+        ],
+        'qr'     => ['checkin_url' => $checkinUrl],
+        'flags'  => ['has_venue' => ((string) ($event['venue_name'] ?? '')) !== ''],
+        'colors' => se_card_colors($theme),
+        'fonts'  => [
+            'display' => (string) $event['font_display'],
+            'body'    => (string) $event['font_body'],
+        ],
+    ];
+}
