@@ -787,6 +787,39 @@ function se_game_delete(PDO $pdo, array $event, int $gameId, int $actor): void
     se_audit($pdo, (int) $event['id'], 'game_op:delete', ['game_id' => $gameId, 'title' => $game['title']], 'game', $gameId, $actor);
 }
 
+/**
+ * Set the running order of the night's games. `$ids` lists game ids in the
+ * new order; ids from another event are ignored and any game left out keeps
+ * its place after the listed ones.
+ */
+function se_game_order(PDO $pdo, array $event, array $ids, int $actor): array
+{
+    $eventId = (int) $event['id'];
+    $games   = se_game_list($pdo, $eventId);
+    $known   = array_column($games, 'id');
+
+    $order = [];
+    foreach ($ids as $id) {
+        $id = (int) $id;
+        if (in_array($id, $known, true) && !in_array($id, $order, true)) {
+            $order[] = $id;
+        }
+    }
+    foreach ($known as $id) {
+        if (!in_array($id, $order, true)) {
+            $order[] = $id;
+        }
+    }
+
+    $stmt = $pdo->prepare("UPDATE se_games SET sort_order = ? WHERE id = ? AND event_id = ?");
+    foreach ($order as $n => $id) {
+        $stmt->execute([$n + 1, $id, $eventId]);
+    }
+    se_audit($pdo, $eventId, 'game_op:order', ['game_ids' => $order], 'event', $eventId, $actor);
+
+    return se_game_list($pdo, $eventId);
+}
+
 /** The items a game will play, in order. */
 function se_game_items(PDO $pdo, int $gameId): array
 {

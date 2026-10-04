@@ -2033,6 +2033,12 @@ try {
         se_api_success('Game deleted.', ['deleted' => true]);
     }
 
+    case 'game_order': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $ids   = is_array($body['game_ids'] ?? null) ? $body['game_ids'] : [];
+        se_api_success('Running order saved.', ['games' => se_game_order($pdo, $event, $ids, $userId)]);
+    }
+
     case 'game_items': {
         $event = se_studio_event($pdo, $body, 'event.edit');
         $game  = se_game_find($pdo, (int) $event['id'], se_int($body['game_id'] ?? 0, 0));
