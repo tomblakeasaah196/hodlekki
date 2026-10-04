@@ -374,6 +374,10 @@ function sms_render($template, array $data) {
         '{{email}}'        => trim((string)($data['email'] ?? '')),
         '{{event_title}}'  => trim((string)($data['event_title'] ?? '')),
         '{{blessing_ref}}' => trim((string)($data['blessing_ref'] ?? '')),
+        // Module-generated messages only (Special Events, guide §21.2). The
+        // SMS Studio composer strips unknown recipient keys, so a hand-written
+        // campaign simply renders this as an empty string.
+        '{{link}}'         => trim((string)($data['link'] ?? '')),
     ];
     return trim(sms_gsm_clean(strtr((string)$template, $map)));
 }

@@ -36,7 +36,7 @@ $profilePicPath = !empty($_SESSION['picture_path']) ? htmlspecialchars($_SESSION
 
 $currentModule = basename(dirname($_SERVER['PHP_SELF']));
 $isDashboard = ($_SERVER['PHP_SELF'] == '/index.php' || $currentModule == 'dashboard');
-$moduleTitles = ['sms_studio' => 'SMS Studio'];
+$moduleTitles = ['sms_studio' => 'SMS Studio', 'special_events' => 'Special Events'];
 $moduleTitle = $moduleTitles[$currentModule] ?? ucfirst(str_replace('_', ' ', $currentModule));
 
 // Helper function for active link styling
@@ -329,7 +329,19 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
         <span class="font-medium text-sm">HOD Academy</span>
     </a>
     
-    <?php if (userHasNavAccess($pastors, [1, 3, 4, 7, 11])): // Wrapper for Specialized Units header ?>
+    <?php
+    // Special Events: Envision's studio, plus anyone holding a crew role on a
+    // live event. Computed inside try/catch exactly like the Assimilation
+    // badge above, so a missing se_* table can never break the sidebar.
+    $se_nav = false;
+    try {
+        require_once __DIR__ . '/special_events/bootstrap.php';
+        $se_nav = se_nav_visible($pdo, (int) ($_SESSION['user_id'] ?? 0), se_session_roles());
+    } catch (Throwable $e) {
+        error_log('Special Events sidebar: ' . $e->getMessage());
+    }
+    ?>
+    <?php if (userHasNavAccess($pastors, [1, 3, 4, 7, 11]) || $se_nav): // Wrapper for Specialized Units header ?>
     <p class="px-4 pt-5 pb-2 text-[10px] font-bold text-blue-300/60 uppercase tracking-widest">Specialized Units</p>
     
     <?php if (userHasNavAccess($pastors, [1, 11])): // IDI and Junior Church ?>
@@ -350,6 +362,13 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
     <a href="/modules/envision/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'envision') ?>">
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
         <span class="font-medium text-sm">Envision (Media)</span>
+    </a>
+    <?php endif; ?>
+
+    <?php if ($se_nav): // Envision studio, or crew on any live event ?>
+    <a href="/modules/special_events/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'special_events') ?>">
+        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        <span class="font-medium text-sm">Special Events</span>
     </a>
     <?php endif; ?>
 
@@ -530,6 +549,13 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
             !empty($assim_manager)
                 ? ['find' => 'Find People', 'followup' => 'Follow-Up', 'team' => 'Team', 'analytics' => 'Analytics', 'howto' => 'How to Use']
                 : ['followup' => 'Follow-Up', 'team' => 'Team', 'howto' => 'How to Use']);
+    }
+    if (!empty($se_nav)) {
+        $gsAdd('special_events', 'Special Events', '/modules/special_events/index.php', 'Specialized Units',
+            'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+            ['events', 'karaoke', 'games', 'chara', 'check-in', 'envision'],
+            ['overview' => 'Overview', 'registration' => 'Registration', 'teams' => 'Teams',
+             'games' => 'Games', 'attendees' => 'Attendees', 'insights' => 'Insights']);
     }
     if (userHasNavAccess($pastors, [1, 10])) {
         $gsAdd('charis', 'Charis (Welfare)', '/modules/charis/index.php', 'Growth & Retention',

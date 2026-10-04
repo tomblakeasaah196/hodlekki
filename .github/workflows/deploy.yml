@@ -41,6 +41,17 @@ jobs:
             exit 1
           fi
 
+      - name: Special Events changes must update the How to Use guide
+        if: github.event_name == 'pull_request'
+        run: |
+          set -eu
+          CHANGED=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          if grep -qE '(^modules/special_events/|^api/special_events_|^includes/special_events/|^e/|^assets/se/js/)' <<< "$CHANGED" && \
+             ! grep -qx 'modules/special_events/how_to_use.md' <<< "$CHANGED"; then
+            echo "::error::Special Events module touched without updating modules/special_events/how_to_use.md"
+            exit 1
+          fi
+
       - name: Deploy exclusions must hold under tar (.deployignore)
         run: |
           set -euo pipefail
@@ -104,6 +115,27 @@ jobs:
                     -print0)
           exit $fail
 
+      - name: Special Events CSS must be freshly built
+        run: |
+          set -euo pipefail
+
+          # assets/se/css/se.css is COMMITTED because the cPanel host has no
+          # Node (guide §23.2). This rebuilds it with the pinned Tailwind
+          # standalone CLI and fails if the committed file differs — which is
+          # what stops a class name reaching production without its utility.
+          bash bin/build_se_css.sh --check
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Special Events unit tests
+        run: |
+          set -euo pipefail
+          php tests/special_events/run.php
+          node --test tests/special_events/js/
+
       - name: Secret sweep (block obvious leaks)
         run: |
           set -euo pipefail
@@ -123,6 +155,15 @@ jobs:
                 --exclude-dir=vendor --exclude-dir=node_modules \
                 --exclude='.env.example' . ; then
             echo "::error::Hardcoded DB_* credential found in tree"
+            fail=1
+          fi
+
+          # Special Events secrets must come from $_ENV, never be inlined.
+          if grep -rnE "(SE_HASH_PEPPER|ABLY_API_KEY)['\"]?\s*(=>|=|,)\s*['\"][A-Za-z0-9+/=_-]{16,}" \
+                --include='*.php' --include='*.js' --include='*.mjs' \
+                --exclude-dir=vendor --exclude-dir=node_modules \
+                --exclude='.env.example' . ; then
+            echo "::error::Hardcoded SE_HASH_PEPPER or ABLY_API_KEY found in tree"
             fail=1
           fi
 

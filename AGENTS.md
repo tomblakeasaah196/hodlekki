@@ -250,6 +250,87 @@ that migration has not been applied yet — the tree is rsynced to prod
   (same courtesy as Reach / Assimilation, though CI does not enforce it
   for this module yet).
 
+## Special Events module (added 2026-10)
+
+Envision's one-off events (Chara: karaoke and games night) live in their own
+standalone module. Design and build plan: `docs/engineering_guide.md`; the
+per-PR instructions are in `docs/build_prompts.md`.
+
+**Where things are**
+
+| Path | What |
+| ---- | ---- |
+| `includes/special_events/` | All module PHP. `bootstrap.php` is the only entry point; it requires the rest. |
+| `api/special_events_api.php` | Studio (ERP session + capability). |
+| `api/special_events_public_api.php` | Public (device cookie / manage token). |
+| `api/special_events_live_api.php` | Crew live ops. |
+| `api/special_events_display_api.php` | Stage and lobby displays (key in the URL fragment). |
+| `modules/special_events/index.php` | The Studio screen. |
+| `e/` | Public router: `/e/<slug>` and its sub-paths. |
+| `live/` | Runtime JSON snapshots. Git-ignored except `.htaccess` and `.keep`. |
+| `assets/se/` | Vendored libraries, the compiled CSS and the module's JS. |
+| `uploads/se/<public_id>/` | Uploaded media. Git-ignored, never deleted by a deploy. |
+
+All tables are prefixed `se_`. Endpoints bootstrap with
+`require_once '../includes/db.php';` then
+`require_once '../includes/special_events/bootstrap.php';` — in that order,
+because `db.php` owns the session, the PDO handle and the security gate.
+
+**Module-only front-end rules.** Preact + htm + `@preact/signals`, GSAP and
+the precompiled Tailwind are allowed **inside this module only**
+(`assets/se/**`, `e/`, the Studio page). The repo-wide
+"no React / Vue / Alpine" rule stands everywhere else. Libraries are
+**vendored** under `assets/se/vendor/<name>-<version>/` and listed in
+`VENDOR.md` with their SHA-256 — never loaded from a CDN at runtime, because
+the CSP in §19.7 allows only `'self'` (Google Fonts is the one exception).
+
+**No `style="…"` attributes in server-rendered HTML.** The module's CSP sets
+`style-src` to `'self'` plus a nonce, and a nonce does not cover style
+*attributes* — browsers drop them silently. Use classes, and put per-event or
+per-team values in the nonced `<style>` block via `se_theme_css_vars()`. The
+`style` prop inside a Preact component is fine (it goes through the CSSOM).
+
+**Rebuild the CSS when classes change.** `bin/build_se_css.sh` compiles
+`assets/se/css/se.css`, which is committed because the host has no Node. CI
+runs it with `--check` and fails on a stale file. If two branches both changed
+`se.css`, rebuild it rather than merging it by hand.
+
+**Rules that are not negotiable**
+
+- Seats, teams, player numbers and queue numbers are allocated **only** inside
+  `se_lock_event()` transactions, and uniqueness comes from unique keys —
+  never check-then-insert.
+- Scores are a **ledger** (`se_score_events`): never UPDATE points; void the
+  row and re-award.
+- After any state change that affects a screen, call `se_live_publish()`.
+  **Never** put personal names, phone numbers, unrevealed answers or charades
+  phrases in `public.json`. Names go only in key-protected snapshots, as
+  "Ada O."; phrases only through `me` or the console.
+- The module **never writes** `events`, `event_registrations`, `checkins`,
+  `attendance` or `users`. The single exception is the Embrace insert in the
+  PR7 hand-off (guide §17.4).
+- SMS only through SMS Studio campaigns and its queue — never write `sms_log`.
+  The module adds one merge field, `{{link}}` (guide §21.2).
+- AI only through `se_ai()`. **No attendee personal data in a prompt, ever**,
+  and nothing an AI returns is applied without human review.
+- Code shipped before a later migration MUST degrade safely: ask
+  `se_table_exists()` first and return `FEATURE_NOT_READY`, never a fatal.
+  The tree is copied to production *before* migrations run.
+
+**Requirements and operations**
+
+- `SE_HASH_PEPPER` (64 hex) is **required** in `.env`. Without it the module
+  refuses to issue tokens. Rotating it invalidates every device cookie and
+  manage link.
+- Cron, every 5 minutes: `php /home/smartqaq/public_html/hodlc.lpc.cm/cron/special_events.php`
+  (reminders, retention, purges). Arrives with PR4.
+- After every deploy, check **Studio → Settings → Health → Schema**.
+
+**Docs.** Any change under `modules/special_events/`, `api/special_events_`,
+`includes/special_events/`, `e/` or `assets/se/js/` MUST update
+`modules/special_events/how_to_use.md` in the same PR — CI enforces it, as it
+does for Reach and Assimilation.
+
 ## Common pitfalls spotted during onboarding
 
 - `includes/auth_middleware.php` is currently an **empty file**. Do not
