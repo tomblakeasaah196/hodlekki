@@ -483,7 +483,7 @@ function se_songs_import_ai(PDO $pdo, array $event, ?int $assetId, string $text,
 {
     $parts = [];
     if ($assetId !== null) {
-        $parts[] = se_ai_inline_asset($pdo, $event, $assetId);
+        $parts[] = se_ai_inline_asset($pdo, $event, $assetId, ['songs_source']);
     }
     if ($text !== '') {
         $parts[] = ['text' => $text];

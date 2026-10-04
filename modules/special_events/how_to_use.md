@@ -668,10 +668,27 @@ whether it is **featured** (bigger on the programme and on the stage screen).
 the kind default), *exact*, or *order only* — no times, just the order.
 
 **Importing one.** Most programmes arrive as a screenshot in a group chat.
-Paste the text into **Import a programme** — or upload the picture or PDF on
-the Assets tab and choose it here — and press **Read it**. You get a table of
-what we read, which you can correct, and nothing is saved until you press
-**Apply**. Choose **Add to the programme** or **Replace this day**.
+Open **Programme → Import a programme**, then either:
+
+1. choose **Upload screenshot or PDF** and select a **PNG, JPEG, WebP or PDF**;
+   describe an image when asked, then press **Upload and read**; or
+2. paste the schedule into **Paste programme text** and press **Read pasted
+   text**.
+
+The upload uses the same protected event asset process as the Assets tab: the
+server checks the real file bytes, size and allowed type before keeping it as a
+private programme source. You do not need to upload it somewhere else first.
+
+A review table appears before anything is written. Correct the **title, kind,
+event day, start time and minutes** in every row. A written range such as
+`3:30 PM–4:30 PM Photo Booth and games` is read as 60 minutes, but it remains
+editable. Choose **Add to programme** to append the reviewed rows, or
+**Replace this day** and select the day you mean. **Apply** is the only button
+that writes the rows; discarding the review leaves the programme unchanged.
+
+If image/PDF reading is temporarily unavailable, the tab says so plainly. Keep
+or paste the text and try again later, or use **Add a row manually** — the
+night can always be built without AI.
 
 On the night, the host presses Start and Finish on the console and the times
 everywhere follow. If the night is running late, the portal says so.

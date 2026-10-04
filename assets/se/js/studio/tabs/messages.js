@@ -250,7 +250,8 @@ function Runs({ runs }) {
 // --------------------------------------------------------------------------
 
 export function MessagesTab() {
-    const event = current.value?.event;
+    // current.value is already the complete Studio event payload.
+    const event = current.value;
     const [data, setData] = useState(null);
     const [busy, setBusy] = useState(false);
 

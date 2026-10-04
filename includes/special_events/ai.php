@@ -616,14 +616,15 @@ function se_ai_log(
  *
  * @return array{inline_data: array{mime_type: string, data: string}}
  */
-function se_ai_inline_asset(PDO $pdo, array $event, int $assetId): array
+function se_ai_inline_asset(PDO $pdo, array $event, int $assetId, ?array $allowedRoles = null): array
 {
     $asset = se_asset_find($pdo, $assetId);
     if (!$asset || (int) $asset['event_id'] !== (int) $event['id'] || $asset['deleted_at'] !== null) {
         throw new SeValidationException(['asset_id' => 'We could not find that upload.']);
     }
-    if (!in_array((string) $asset['role'], SE_ASSET_ROLES_TEMPORARY, true)) {
-        throw new SeValidationException(['asset_id' => 'Upload the picture under "AI source" first.']);
+    $allowedRoles ??= SE_ASSET_ROLES_TEMPORARY;
+    if (!in_array((string) $asset['role'], $allowedRoles, true)) {
+        throw new SeValidationException(['asset_id' => 'Upload the picture under the matching AI source type first.']);
     }
 
     $path = se_docroot() . (string) $asset['path'];

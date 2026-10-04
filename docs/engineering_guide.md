@@ -1416,9 +1416,9 @@ $drift_min = round((last eta_end − last planned_end) / 60);   // positive = ru
 #### 10.7.3 AI import (apply rules)
 
 AI parsing is described in §15.3. Applying a reviewed import:
-- **Replace**: allowed only when no item of that day is `live`/`done`; deletes planned items, inserts the new ones.
-- **Append**: adds after the last item.
-- Kind mapping: unknown kinds → `other`; times without dates are attached to the chosen day; durations missing → derived from the next item's start, else 10 min (flagged).
+- **Replace**: allowed only when no item of that day is `live`/`done`; deletes planned items, inserts the reviewed rows assigned to that selected day.
+- **Append**: adds after the last item on each reviewed row's selected event day.
+- Kind mapping: unknown kinds → `other`; times without dates are attached to the selected day; a written start/end range supplies the exact duration, otherwise a missing duration is derived from the next item's start, else 10 min (flagged).
 
 ### 10.8 Karaoke engine
 
@@ -1878,7 +1878,7 @@ Auth: ERP session + `X-SE-CSRF` + module access (§6.2) + capability on the even
 | Events | `list_events {filter}`, `get_event {id}`, `create_event {title, slug, days[], …}`, `update_event {id, section, fields, expected_row_version}`, `check_slug {slug, event_id?}`, `reclaim_slug {event_id, slug}`, `publish {id}`, `unpublish {id}`, `cancel {id, reason}`, `archive {id}`, `delete_draft {id}`, `clone_event {source_id, options, title, slug, first_start}` |
 | Brand | `palette_derive {primary, secondary, accent?, preset}` (pure maths, instant), `palette_suggest {primary, secondary, mood[]}` (AI job), `apply_palette {id, palette}` |
 | Registration | `form_fields_save {id, fields[]}`, `capacity_save {id, …}`, `override_set {id, mode, note}` |
-| Days & programme | `days_save {id, days[]}`, `program_list`, `program_save {items[]}`, `program_import {source: text\|asset_id}` (AI job), `program_apply {job_id, mode: replace\|append, day_id}` |
+| Days & programme | `days_save {id, days[]}`, `program_list {id}`, `program_save {id, items[]}`, `program_import {id, text?\|asset_id?}` (AI job), `program_apply {id, job_id, items[], mode: replace\|append, day_id}` |
 | Teams | `teams_save {id, teams[{color_hex, color_label, name?}]}` (count locked after first assignment), `teams_roster {id}` |
 | Karaoke | `songs_event_list`, `songs_import_preview {text\|file\|asset_id}` (AI for images), `songs_import_commit {preview_id}`, `songs_toggle {song_id, active}`, `karaoke_settings_save`, `karaoke_publish_list {on}` |
 | Verses | `verses_suggest {theme, count}` (AI), `verses_add {refs[]}` (fetch KJV), `verses_save {verses[]}` |
@@ -2370,9 +2370,9 @@ function se_ai(PDO $pdo, string $task, array $input, array $ctx): array;
 
 ### 15.3 Programme extraction (`program_extract`)
 
-- Input: pasted text **or** an image/PDF (`inlineData`), plus `{event_days: [{date, starts_at, ends_at}], kinds: [enum list]}`.
-- Output: `{items: [{day_index, title, kind, start_time?: "HH:MM", duration_min?, host?, notes?, confidence: 0–1}], warnings: []}`.
-- Post: map kinds to the enum (`other` fallback), compute missing durations from the next start, flag `confidence < 0.6` rows in amber, never create items without a title. Review table → **Apply** (replace/append, §10.7.3).
+- Input: pasted text **or** an image/PDF (`inlineData`), plus `{event_days: [{date, starts_at, ends_at}], kinds: [enum list]}`. Studio uploads image/PDF sources directly as the event's `program_source` asset through the normal magic-byte, size and sanitisation checks; a source id is accepted only for that event and role.
+- Output: `{items: [{day_index, title, kind, start_time?: "HH:MM", end_time?: "HH:MM", duration_min?, host?, notes?, confidence: 0–1}], warnings: []}`.
+- Post: map kinds to the enum (`other` fallback), calculate written time ranges first, then derive missing durations from the next start. The producer can edit title, kind, day, start, duration and append/replace mode in the review table; no row is created before **Apply**. If AI is unavailable, the UI keeps paste and manual-row options visible and explains the fallback rather than leaving a blank panel.
 
 ### 15.4 Deck generation (`deck_generate`)
 
@@ -3282,6 +3282,7 @@ Every design change made during the build is logged here (newest last), and the 
 | 2026-10-04 | PR6 | §13.1.6, §14.2 | The licensed SFX sprite and the PR4-deferred Format Studio remain deferred. Party games continue to degrade silently without the sprite; PR3's poster/card renderer is unchanged. | Neither item is in PR6's Build list. The sprite still requires an owner-approved licensed source, and absorbing the separate Format Studio delivery into the games/finale PR would violate the scope rule. |
 | 2026-10-04 | PR7 | §22.2, Appendix H.5 | The hand-off idempotency, report privacy and insight-count tests were added/reviewed, but the database-backed migration and integration suite and browser smoke could not be executed in the build runner. | The runner has no PHP or database runtime, Debian package mirrors are unreachable, and the pinned Tailwind binary host was also unreachable. JavaScript tests (118 checks) and `git diff --check` passed; CI supplies repository PHP lint. Run A.9–A.10 twice on scratch MySQL 8 and MariaDB and perform H.5 before merge. |
 | 2026-10-04 | AI copywriter hotfix | §15.1, §15.8, Appendix D.7 | `copywrite` moved to prompt version 2 with `max_tokens: 4096`, `thinking_budget: 0` for Gemini 2.5 Flash, an exact-three-variants schema and a 1200-character description post-processing cap. Invalid JSON retries now name parse/truncation problems without echoing model output and raise the output-token budget when `MAX_TOKENS` is reported. | Production showed portal-description generation failing with “The AI did not return usable JSON” while shorter taglines worked. The old 1024-token ceiling could be consumed by hidden thinking and truncate the JSON before it closed; the 600-character API clamp also left less room than a 120-word description. |
+| 2026-10-04 | Programme import repair | §10.7.3, §12.5, §15.3, Appendix D.2 | Programme sources upload directly from the Programme tab with role `program_source`, then use the existing asset id for the AI request. Review rows now carry editable day, start and duration; append can retain rows across days while replace remains one explicit selected day. `program_extract` v2 includes `end_time` so written ranges provide exact durations. | The prior UI pointed producers to Assets but exposed no picker, so an asset id could never reach `program_import`; the Programme tab also read a nonexistent `current.value.event` wrapper and rendered blank. |
 
 ---
 
@@ -4400,7 +4401,7 @@ Event: {{title}} — {{tagline}}. Mood words: {{mood}}. PRIMARY {{primary}}. SEC
 
 ```text
 ---
-version: 1
+version: 2
 temperature: 0.1
 max_tokens: 4096
 ---
@@ -4410,7 +4411,8 @@ Rules:
 - title: short, as written (fix obvious typos only).
 - kind: one of {{kinds}}. Use "other" if unsure.
 - start_time: "HH:MM" 24-hour only if a time is written for that item. Otherwise omit.
-- duration_min: only if written or clearly implied by the next item's start time.
+- end_time: "HH:MM" 24-hour if a written range has an end; for example, "3:30 PM–4:30 PM" becomes "15:30" and "16:30".
+- duration_min: include a written or ranged duration; otherwise include it only if clearly implied by the next item's start time.
 - host: the person leading the item, if written.
 - day_index: 0-based index into the event days {{days}} (most programmes have one day → 0).
 - confidence: 0.0–1.0 for how sure you are about this item's reading.
@@ -4422,7 +4424,7 @@ Output JSON only, matching the schema.
 { "type": "object", "required": ["items", "warnings"], "properties": {
   "items": { "type": "array", "maxItems": 60, "items": { "type": "object", "required": ["title", "kind", "day_index", "confidence"],
     "properties": { "title": {"type": "string"}, "kind": {"type": "string"}, "day_index": {"type": "integer"},
-      "start_time": {"type": "string"}, "duration_min": {"type": "integer"}, "host": {"type": "string"},
+      "start_time": {"type": "string"}, "end_time": {"type": "string"}, "duration_min": {"type": "integer"}, "host": {"type": "string"},
       "notes": {"type": "string"}, "confidence": {"type": "number"} } } },
   "warnings": { "type": "array", "items": { "type": "string" } } } }
 ```

@@ -741,7 +741,7 @@ function se_program_import(PDO $pdo, array $event, array $input, ?int $actorId):
     // must belong to this event: an asset id alone never reaches the model.
     $parts = [];
     if ($assetId !== null) {
-        $parts[] = se_ai_inline_asset($pdo, $event, $assetId);
+        $parts[] = se_ai_inline_asset($pdo, $event, $assetId, ['program_source']);
     }
     if ($text !== '') {
         $parts[] = ['text' => $text];
@@ -778,12 +778,38 @@ function se_program_import(PDO $pdo, array $event, array $input, ?int $actorId):
     ];
 }
 
+/** Parse a model-returned HH:MM clock without trusting browser locale. */
+function se_program_import_clock(string $value): ?array
+{
+    $value = trim($value);
+    if (preg_match('/^(\d{1,2}):(\d{2})$/', $value, $m)) {
+        $hour = (int) $m[1];
+        $minute = (int) $m[2];
+        return $hour <= 23 && $minute <= 59 ? [$hour, $minute] : null;
+    }
+
+    // Be forgiving if a model returned a legible 12-hour time despite the
+    // prompt asking for 24-hour HH:MM. It is still attached to the event day,
+    // never to the server's current date.
+    if (preg_match('/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i', $value, $m)) {
+        $hour = (int) $m[1];
+        $minute = (int) $m[2];
+        if ($hour < 1 || $hour > 12 || $minute > 59) {
+            return null;
+        }
+        if (strtoupper($m[3]) === 'PM' && $hour !== 12) { $hour += 12; }
+        if (strtoupper($m[3]) === 'AM' && $hour === 12) { $hour = 0; }
+        return [$hour, $minute];
+    }
+
+    return null;
+}
+
 /**
  * Post-processing for an extraction (§15.3): map kinds, attach times to a
- * day, derive missing durations from the next start (else 10 minutes, and
- * say so), and drop anything without a title.
- *
- * Pure, so the review table is testable without the model.
+ * day, derive a duration from an explicit time range or the next item's
+ * start, and drop anything without a title. Pure, so review behaviour stays
+ * testable even when an AI provider is unavailable.
  */
 function se_program_import_normalize(array $items, array $days): array
 {
@@ -800,23 +826,39 @@ function se_program_import_normalize(array $items, array $days): array
 
         $dayIndex = se_int($raw['day_index'] ?? 0, 0, max(0, count($days) - 1), 0);
         $day      = $days[$dayIndex] ?? ($days[0] ?? null);
+        $base     = $day !== null ? se_parse_datetime($day['starts_at']) : null;
+        $start    = null;
+        $end      = null;
 
-        $start = null;
-        $time  = se_str($raw['start_time'] ?? '', 5);
-        if ($day !== null && preg_match('/^(\d{1,2}):(\d{2})$/', $time, $m)) {
-            $base = se_parse_datetime($day['starts_at']);
-            if ($base !== null) {
-                $start = $base->setTime((int) $m[1], (int) $m[2], 0);
+        $startClock = se_program_import_clock(se_str($raw['start_time'] ?? '', 16));
+        if ($base !== null && $startClock !== null) {
+            $start = $base->setTime($startClock[0], $startClock[1], 0);
+        }
+
+        // The extraction schema carries end_time so a written range such as
+        // 3:30 PM–4:30 PM is exact rather than a guess from the next row.
+        $endClock = se_program_import_clock(se_str($raw['end_time'] ?? '', 16));
+        if ($base !== null && $endClock !== null) {
+            $end = $base->setTime($endClock[0], $endClock[1], 0);
+            if ($start !== null && $end <= $start) {
+                $end = $end->modify('+1 day');
             }
         }
+
+        $givenDuration = array_key_exists('duration_min', $raw) && $raw['duration_min'] !== null
+            ? se_int($raw['duration_min'], 0, 1440, 10)
+            : null;
+        $rangeDuration = $start !== null && $end !== null
+            ? (int) round(($end->getTimestamp() - $start->getTimestamp()) / 60)
+            : null;
 
         $out[] = [
             'day_index'    => $dayIndex,
             'day_id'       => $day !== null ? (int) $day['id'] : null,
             'title'        => $title,
             'kind'         => se_enum(strtolower((string) ($raw['kind'] ?? 'other')), SE_PROGRAM_KINDS, 'other'),
-            'start_time'   => $start !== null ? se_iso($start) : null,
-            'duration_min' => isset($raw['duration_min']) ? se_int($raw['duration_min'], 0, 1440, 10) : null,
+            'start_time'   => se_program_iso($start),
+            'duration_min' => $rangeDuration ?? $givenDuration,
             'host_name'    => se_line($raw['host'] ?? '', 120) ?: null,
             'notes'        => se_str($raw['notes'] ?? '', 400) ?: null,
             'confidence'   => round(se_float($raw['confidence'] ?? 0.0, 0.0, 1.0, 0.0), 2),
@@ -869,8 +911,8 @@ function se_program_apply(PDO $pdo, array $event, array $items, string $mode, in
     $eventId = (int) $event['id'];
     $mode    = se_enum($mode, ['replace', 'append'], 'append');
     $days    = se_event_days($pdo, $eventId);
+    $dayIds  = array_map(static fn(array $d): int => (int) $d['id'], $days);
 
-    $dayIds = array_map(static fn(array $d): int => (int) $d['id'], $days);
     if (!in_array($dayId, $dayIds, true)) {
         $dayId = $dayIds[0] ?? 0;
     }
@@ -878,19 +920,49 @@ function se_program_apply(PDO $pdo, array $event, array $items, string $mode, in
         throw new SeValidationException(['day_id' => 'Add a day to the event first.']);
     }
 
-    $current = se_program_items($pdo, $eventId, $dayId);
+    // The job id is audit/review metadata, not authority. Scope it to this
+    // event before marking it applied so one Producer cannot alter another
+    // event's AI-job history by guessing an id.
+    if ($jobId !== null) {
+        $job = se_ai_job_find($pdo, $jobId, $eventId);
+        if (!$job || (string) $job['task'] !== 'program_extract') {
+            throw new SeValidationException(['job_id' => 'That programme review is no longer available. Read the source again.']);
+        }
+    }
+
+    // Append may deliberately contain rows for several event days. Replace is
+    // always singular and explicit: every row must point at the selected day.
+    $reviewed = [];
+    foreach ($items as $raw) {
+        if (!is_array($raw)) {
+            continue;
+        }
+        $rowDayId = se_int($raw['day_id'] ?? $dayId, 0);
+        if (!in_array($rowDayId, $dayIds, true)) {
+            $rowDayId = $dayId;
+        }
+        if ($mode === 'replace' && $rowDayId !== $dayId) {
+            throw new SeValidationException(['items' => 'Replace this day can only apply rows assigned to that selected day.']);
+        }
+        $raw['day_id'] = $rowDayId;
+        $reviewed[] = $raw;
+    }
+
+    $allCurrent = se_program_items($pdo, $eventId);
+    $currentByDay = [];
+    $nextByDay = [];
+    foreach ($allCurrent as $row) {
+        $currentByDay[(int) $row['day_id']][] = $row;
+        $id = (int) $row['day_id'];
+        $nextByDay[$id] = max($nextByDay[$id] ?? 0, (int) $row['sort_order']);
+    }
 
     if ($mode === 'replace') {
-        foreach ($current as $row) {
+        foreach ($currentByDay[$dayId] ?? [] as $row) {
             if (in_array((string) $row['status'], ['live', 'done'], true)) {
                 throw new SeRuleException('RULE', 'This day has already started, so it can only be added to.');
             }
         }
-    }
-
-    $next = 0;
-    foreach ($current as $row) {
-        $next = max($next, (int) $row['sort_order']);
     }
 
     $pdo->beginTransaction();
@@ -898,7 +970,7 @@ function se_program_apply(PDO $pdo, array $event, array $items, string $mode, in
         if ($mode === 'replace') {
             $pdo->prepare("DELETE FROM se_program_items WHERE event_id = ? AND day_id = ? AND status = 'planned'")
                 ->execute([$eventId, $dayId]);
-            $next = 0;
+            $nextByDay[$dayId] = 0;
         }
 
         $insert = $pdo->prepare(
@@ -908,21 +980,19 @@ function se_program_apply(PDO $pdo, array $event, array $items, string $mode, in
         );
 
         $added = 0;
-        foreach ($items as $raw) {
-            if (!is_array($raw)) {
-                continue;
-            }
+        foreach ($reviewed as $raw) {
             $title = se_line($raw['title'] ?? '', 120);
             if ($title === '' || !se_bool($raw['include'] ?? true)) {
                 continue;
             }
 
+            $rowDayId = (int) $raw['day_id'];
             $start = se_parse_datetime($raw['start_time'] ?? null);
-            $next++;
+            $nextByDay[$rowDayId] = ($nextByDay[$rowDayId] ?? 0) + 1;
             $insert->execute([
                 $eventId,
-                $dayId,
-                $next,
+                $rowDayId,
+                $nextByDay[$rowDayId],
                 se_enum($raw['kind'] ?? 'other', SE_PROGRAM_KINDS, 'other'),
                 $title,
                 se_line($raw['host_name'] ?? '', 120) ?: null,
@@ -934,7 +1004,9 @@ function se_program_apply(PDO $pdo, array $event, array $items, string $mode, in
 
         $pdo->commit();
     } catch (Throwable $e) {
-        $pdo->rollBack();
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         throw $e;
     }
 
