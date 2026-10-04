@@ -225,7 +225,7 @@ const SE_COPYWRITE_PURPOSES = [
 /** How each purpose is described to the model, and to the Studio's menu. */
 const SE_COPYWRITE_LABELS = [
     'tagline'        => 'a one-line event tagline',
-    'description'    => 'a short portal description',
+    'description'    => 'the portal description paragraph',
     'activity_blurb' => 'a blurb for one activity',
     'faq_answer'     => 'an answer to a frequently asked question',
     'sms_reminder'   => 'an SMS reminder',
@@ -254,6 +254,104 @@ const SE_COPYWRITE_CHAR_LIMITS = [
     'sms_thanks'     => 220,
     'card_headline'  => 120,
 ];
+
+/**
+ * Purpose-specific craft notes sent to the model (§15.8). One generic
+ * instruction produced flat, interchangeable copy; each purpose now says what
+ * a good answer actually looks like.
+ */
+const SE_COPYWRITE_GUIDANCE = [
+    'tagline' => 'One line a designer could set in large type. No full stop needed, no sub-clause pile-up, '
+        . 'no colon-plus-slogan formula in every option. Concrete beats abstract.',
+    'description' => 'This is the paragraph a first-time guest reads on the event page before deciding to come. '
+        . 'Aim for 70 to 110 words per option — a full, confident paragraph, never one or two thin sentences. '
+        . 'Open with something a guest can picture, say plainly what the evening is and who it is for, name one or '
+        . 'two real things that will happen, and close with a simple, unpushy invitation. Mention the date and venue '
+        . 'naturally only if they are in the facts. Do not quote or restate the tagline as a sentence; the page '
+        . 'already shows it directly above this paragraph. Plain prose only: no headings, no bullet lists, no emoji, '
+        . 'no hashtags, no ALL CAPS.',
+    'activity_blurb' => 'One or two sentences that tell a guest what actually happens and why it is fun. '
+        . 'Name the activity once; do not oversell it.',
+    'faq_answer' => 'Answer the question directly in the first sentence, then add the one practical detail that '
+        . 'saves the guest another question. Calm, factual, friendly.',
+    'sms_reminder' => 'Sounds like a person texting, not a broadcast. Lead with what, when and where; keep the '
+        . 'link at the end.',
+    'sms_thanks' => 'Warm, short and specific. Thank them for coming, point once at what comes next.',
+    'card_headline' => 'Short enough to read at a glance on a phone-sized share card. Punchy, not shouty.',
+];
+
+/**
+ * The three angles the model must take, one per variant, so the options are
+ * genuinely different instead of three rewordings of the same sentence.
+ */
+const SE_COPYWRITE_ANGLES = [
+    'description' => [
+        'a guest-first warm invitation — written to someone who has never been to this church, easing them in',
+        'activity-forward and high-energy — lead with what will actually happen during the evening',
+        'community and belonging — the people in the room, coming together, bringing a friend along',
+    ],
+    'tagline' => [
+        'invitational and warm',
+        'playful and energetic, built around the main activity',
+        'belonging-focused — "us", together, a room full of people',
+    ],
+    'activity_blurb' => [
+        'what a guest will do, step by step',
+        'the fun and the energy of it',
+        'why it is easy to join in even if you are shy',
+    ],
+    'faq_answer' => [
+        'the plain, direct answer',
+        'the answer plus the practical detail that follows it',
+        'the answer in a reassuring, guest-calming voice',
+    ],
+    'sms_reminder' => [
+        'plain and practical',
+        'warm and personal',
+        'short and excited',
+    ],
+    'sms_thanks' => [
+        'simple gratitude',
+        'gratitude plus what comes next',
+        'warm and personal',
+    ],
+    'card_headline' => [
+        'invitational',
+        'activity-led',
+        'belonging-led',
+    ],
+];
+
+/**
+ * Filler and clichés the copy must avoid. Checked in the prompt and used by
+ * the Studio's review hints — never used to silently rewrite model output.
+ */
+const SE_COPYWRITE_BANNED_PHRASES = [
+    "you don't want to miss it",
+    'you do not want to miss it',
+    'your dose of happiness',
+    'something for everyone',
+    'good vibes',
+    'warm joy',
+    'fun for all ages',
+    'unforgettable experience',
+    'save the date',
+    'mark your calendar',
+];
+
+/**
+ * Target word window per purpose, used for the prompt text and for the
+ * Studio's soft word-count hint. [min, max]; max is the hard limit.
+ */
+const SE_COPYWRITE_WORD_TARGETS = [
+    'description' => [70, 120],
+];
+
+/**
+ * How similar two variants may be before the later one is treated as a
+ * near-duplicate (Jaccard overlap of their word sets, 0..1).
+ */
+const SE_COPYWRITE_DUPLICATE_THRESHOLD = 0.72;
 
 const SE_REGISTER_MIN_FILL_MS = 1500;
 

@@ -704,19 +704,184 @@ function se_ai_job_mark_applied(PDO $pdo, int $jobId, ?int $actorId): void
 // --------------------------------------------------------------------------
 
 /**
+ * The purpose-specific craft note that replaces the old one-size instruction.
+ * Falls back to a neutral line so an unknown purpose can never break the task.
+ */
+function se_ai_copywrite_guidance(string $purpose): string
+{
+    return (string) (SE_COPYWRITE_GUIDANCE[$purpose]
+        ?? 'Write clearly and warmly, in plain prose a first-time guest would understand.');
+}
+
+/**
+ * The three distinct angles, numbered, one per variant. Keeping them in the
+ * prompt is what stops the model returning three rewordings of one sentence.
+ */
+function se_ai_copywrite_angles(string $purpose): string
+{
+    $angles = SE_COPYWRITE_ANGLES[$purpose] ?? [
+        'a warm, guest-first angle',
+        'an activity-forward, high-energy angle',
+        'a community and belonging angle',
+    ];
+
+    $lines = [];
+    foreach (array_values($angles) as $i => $angle) {
+        $lines[] = 'Option ' . ($i + 1) . ': ' . $angle . '.';
+    }
+
+    return implode("\n", $lines);
+}
+
+/** The extra length sentence for purposes with a word target window. */
+function se_ai_copywrite_length_note(string $purpose): string
+{
+    $target = SE_COPYWRITE_WORD_TARGETS[$purpose] ?? null;
+    if (!is_array($target) || count($target) !== 2) {
+        return 'Use the full allowance when the piece deserves it; never pad to reach it.';
+    }
+
+    [$min, $max] = $target;
+
+    return 'Aim for ' . (int) $min . ' to ' . (int) ($max - 10) . ' words — a full paragraph. '
+        . 'Never go over ' . (int) $max . ' words, and never return one thin sentence.';
+}
+
+/** The banned-phrase list as one prompt-friendly, quoted string. */
+function se_ai_copywrite_banned_list(): string
+{
+    return implode(', ', array_map(
+        static fn(string $p): string => '"' . $p . '"',
+        SE_COPYWRITE_BANNED_PHRASES
+    ));
+}
+
+/** The comparable word set of a variant: lowercase, punctuation-free, deduped. */
+function se_ai_copywrite_word_set(string $text): array
+{
+    $clean = strtolower(preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $text) ?? $text);
+    $words = preg_split('/\s+/u', trim($clean), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+    // Very common words carry no signal about whether two options differ.
+    $stop = ['the', 'a', 'an', 'and', 'or', 'to', 'of', 'for', 'in', 'on', 'at',
+             'is', 'are', 'it', 'you', 'your', 'we', 'our', 'with', 'this', 'that'];
+
+    return array_values(array_unique(array_diff($words, $stop)));
+}
+
+/**
+ * How alike two variants are, 0 (nothing shared) to 1 (identical word sets).
+ * A deliberately simple Jaccard overlap: cheap, explainable, and it cannot
+ * throw on odd input.
+ */
+function se_ai_copywrite_similarity(string $a, string $b): float
+{
+    $setA = se_ai_copywrite_word_set($a);
+    $setB = se_ai_copywrite_word_set($b);
+    if (!$setA || !$setB) {
+        return $setA === $setB ? 1.0 : 0.0;
+    }
+
+    $shared = count(array_intersect($setA, $setB));
+    $union  = count(array_unique(array_merge($setA, $setB)));
+
+    return $union > 0 ? round($shared / $union, 4) : 0.0;
+}
+
+/**
+ * Drop options that are near-copies of one already kept.
+ *
+ * Deliberately gentle: it never empties the list and never returns fewer than
+ * one option, so a strict threshold can degrade the choice on offer but can
+ * never turn a successful generation into an error.
+ *
+ * @param string[] $variants
+ * @return string[]
+ */
+function se_ai_copywrite_drop_near_duplicates(array $variants, ?float $threshold = null): array
+{
+    $limit = $threshold ?? SE_COPYWRITE_DUPLICATE_THRESHOLD;
+    $kept  = [];
+
+    foreach (array_values($variants) as $variant) {
+        $isDuplicate = false;
+        foreach ($kept as $existing) {
+            if (se_ai_copywrite_similarity($existing, $variant) >= $limit) {
+                $isDuplicate = true;
+                break;
+            }
+        }
+        if (!$isDuplicate) {
+            $kept[] = $variant;
+        }
+    }
+
+    return $kept ?: array_values(array_slice($variants, 0, 1));
+}
+
+/**
+ * Remove a sentence that is just the event's tagline echoed back. Only an
+ * exact-ish match (ignoring case, punctuation and quotes) is removed, so real
+ * copy is never mangled, and the variant is left untouched if that would empty
+ * it.
+ */
+function se_ai_copywrite_strip_tagline_echo(string $text, string $tagline): string
+{
+    $tagline = trim($tagline);
+    if ($tagline === '' || mb_strlen($tagline, 'UTF-8') < 6) {
+        return $text;
+    }
+
+    $normalise = static fn(string $s): string => trim(preg_replace(
+        '/\s+/u',
+        ' ',
+        strtolower(preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $s) ?? $s)
+    ) ?? $s);
+
+    $target    = $normalise($tagline);
+    $sentences = preg_split('/(?<=[.!?])\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    if (count($sentences) < 2) {
+        return $text;
+    }
+
+    $kept = array_values(array_filter(
+        $sentences,
+        static fn(string $s): bool => $normalise($s) !== $target
+    ));
+
+    return $kept ? trim(implode(' ', $kept)) : $text;
+}
+
+/**
  * Clean the copywriter variants after schema validation. This deliberately
  * keeps longer portal descriptions intact (up to the purpose-specific cap)
  * while still enforcing the SMS GSM/page checks before a human can use one.
  *
+ * It also strips an echoed tagline and drops near-duplicate options, but it
+ * never rewrites wording and never empties the list: every surviving string
+ * still goes to a human for review (§15.1).
+ *
+ * @param array $context {tagline?: string}
  * @return string[] At most three human-review variants.
  */
-function se_ai_copywrite_variants(array $result, string $purpose): array
+function se_ai_copywrite_variants(array $result, string $purpose, array $context = []): array
 {
     $maxChars = max(60, (int) (SE_COPYWRITE_CHAR_LIMITS[$purpose] ?? 600));
+    $tagline  = (string) ($context['tagline'] ?? '');
+
     $variants = array_values(array_filter(array_map(
-        static fn($v) => se_line($v, $maxChars),
+        static function ($v) use ($maxChars, $tagline, $purpose): string {
+            $text = se_line($v, $maxChars);
+            if ($purpose === 'description' && $tagline !== '') {
+                $text = se_ai_copywrite_strip_tagline_echo($text, $tagline);
+            }
+
+            return $text;
+        },
         (array) ($result['variants'] ?? [])
     )));
+
+    $variants = se_ai_copywrite_drop_near_duplicates($variants);
 
     if (str_starts_with($purpose, 'sms_') && function_exists('sms_segments')) {
         $variants = array_values(array_filter($variants, static function (string $text): bool {
