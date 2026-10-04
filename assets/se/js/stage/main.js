@@ -13,10 +13,11 @@
 //   3. Everything is sized in cqw/cqh inside a fixed 16:9 frame, so the same
 //      code is correct on a 1080p projector and a 4K TV.
 //
-// PR3 ships the core scenes (standby, welcome, teams, announcement, break,
-// blank, programme) plus placeholders for leaderboard and recap. The game,
-// karaoke, feud and finale scenes arrive with PR4/PR5 and currently render
-// the standby frame rather than an empty screen.
+// PR3 shipped the core scenes (standby, welcome, teams, announcement,
+// break, blank) plus placeholders. PR4 makes the programme scene real —
+// now and next, off the live timeline — and adds the karaoke scene, which
+// reads the room snapshot because it says singers' names and public.json
+// is world-readable (§8.5.2). Game, feud and finale arrive with PR5.
 
 import { call } from '@se/core/api.js';
 import { boot, live, room } from '@se/core/store.js';
@@ -130,13 +131,83 @@ function sceneAnnouncement(data) {
     ];
 }
 
-function sceneProgram(scene) {
+/**
+ * The programme scene (§10.7.5).
+ *
+ * The room only ever needs two lines: what is happening and what is after
+ * it. Times come from the live ETA, so a night running twenty minutes late
+ * shows twenty-minutes-late times rather than the plan nobody is following.
+ */
+function sceneProgram(scene, data) {
     const payload = scene?.payload || {};
-    return [
-        node('p', 'se-scene-sub', 'Up now'),
-        node('h1', 'se-scene-title', payload.title || 'Tonight'),
-        node('p', 'se-scene-body', payload.note || ''),
-    ];
+    const program = data.program || {};
+    const now = program.now || null;
+    const next = program.next || null;
+
+    const out = [node('p', 'se-scene-sub', payload.label || 'On now')];
+    out.push(node('h1', 'se-scene-title', now?.title || payload.title || 'Tonight'));
+    if (now?.blurb || now?.host) {
+        out.push(node('p', 'se-scene-body', now.blurb || now.host));
+    }
+
+    if (next) {
+        const after = node('div', 'se-scene-next');
+        after.appendChild(node('p', 'se-scene-sub', 'Next'));
+        after.appendChild(node('p', 'se-scene-next-title',
+            next.title + (next.time ? ' · ' + next.time : '')));
+        out.push(after);
+    }
+
+    if (program.drift_min) {
+        out.push(node('p', 'se-scene-counter',
+            'Running ' + Math.abs(program.drift_min) + ' minutes '
+            + (program.drift_min > 0 ? 'behind' : 'ahead')));
+    }
+
+    return out;
+}
+
+/**
+ * The karaoke scene (§10.8.4).
+ *
+ * Names on a projector are the point here — the room cheers for a person,
+ * not for a song — so this is the one scene that insists on the room
+ * snapshot and shows nothing rather than guessing from public.json.
+ */
+function sceneKaraoke() {
+    const karaoke = room.value?.data?.karaoke || null;
+
+    if (!karaoke || (!karaoke.now && !karaoke.next)) {
+        return [
+            node('p', 'se-scene-sub', 'Karaoke'),
+            node('h1', 'se-scene-title', 'Who is next?'),
+            node('p', 'se-scene-body', 'Pick your song on your phone.'),
+        ];
+    }
+
+    const out = [node('p', 'se-scene-sub', 'Singing now')];
+
+    if (karaoke.now) {
+        out.push(node('h1', 'se-scene-title', karaoke.now.singer));
+        out.push(node('p', 'se-scene-body',
+            karaoke.now.song + ' · ' + karaoke.now.artist));
+    } else {
+        out.push(node('h1', 'se-scene-title', 'Up next'));
+    }
+
+    if (karaoke.next) {
+        const after = node('div', 'se-scene-next');
+        after.appendChild(node('p', 'se-scene-sub', 'Up next'));
+        after.appendChild(node('p', 'se-scene-next-title',
+            karaoke.next.singer + ' — ' + karaoke.next.song));
+        out.push(after);
+    }
+
+    if (karaoke.stats?.remaining) {
+        out.push(node('p', 'se-scene-counter', karaoke.stats.remaining + ' waiting'));
+    }
+
+    return out;
 }
 
 function sceneBreak(scene) {
@@ -161,7 +232,7 @@ function sceneBlank() {
     return [node('h1', 'se-scene-title', display.event.title)];
 }
 
-/** PR4/PR5 own these; until then the room sees something intentional. */
+/** PR5 owns these; until then the room sees something intentional. */
 function scenePlaceholder(label) {
     return [
         node('p', 'se-scene-sub', label),
@@ -186,13 +257,13 @@ function render() {
         welcome: () => sceneWelcome(scene),
         teams: () => sceneTeams(data),
         announcement: () => sceneAnnouncement(data),
-        program: () => sceneProgram(scene),
+        program: () => sceneProgram(scene, data),
         break: () => sceneBreak(scene),
         blank: () => sceneBlank(),
         leaderboard: () => scenePlaceholder('Leaderboard'),
         recap: () => scenePlaceholder('Recap'),
         game: () => scenePlaceholder('Game'),
-        karaoke: () => scenePlaceholder('Karaoke'),
+        karaoke: () => sceneKaraoke(),
         finale: () => scenePlaceholder('Finale'),
     };
 

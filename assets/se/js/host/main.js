@@ -12,9 +12,12 @@
 // producer both have the console open), so the loser gets STALE_VERSION,
 // the console refreshes, and nobody's change is silently lost.
 //
-// PR3 ships the Show column, the Teams column and the health bar. The Game
-// and Karaoke columns are PR4: their buttons are present but disabled, so
-// the host can see what is coming without being able to break anything.
+// PR3 shipped the Show column, the Teams column and the health bar. PR4
+// adds the run of show — start, finish, skip, undo, with the drift the
+// whole room is feeling shown in plain minutes — and a karaoke strip so
+// the host can see who is singing without opening the DJ screen. The Game
+// column is PR5: its buttons are present but disabled, so the host can see
+// what is coming without being able to break anything.
 
 import { render } from 'preact';
 import { useEffect, useState, useCallback, useRef } from 'preact/hooks';
@@ -152,18 +155,101 @@ function ShowColumn({ state, act }) {
         </div>`;
 }
 
+/**
+ * The run of show (§10.7.4).
+ *
+ * The host presses Start when a thing actually begins, and Finish when it
+ * actually ends. Those two taps are what make the ETA on two hundred
+ * phones honest, so they are the biggest buttons on the screen. Undo is
+ * there because the wrong button gets pressed in the dark.
+ */
 function RunOfShow({ state, act }) {
+    const program = state.program;
+    const items = (program?.days || []).flatMap((day) => day.items || []);
+    const live = items.find((item) => item.status === 'live') || null;
+    const upcoming = items.filter((item) => item.status === 'planned');
+    const drift = program?.drift_min || 0;
+
+    const time = (iso) => (iso
+        ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+        : '—');
+
     return html`
         <div class="se-stack">
             <section class="se-panel">
                 <h2>Run of show</h2>
-                ${state.program
-                    ? null
-                    : html`<p class="se-small se-muted">
-                        The programme runner arrives with the games release. Use the scene
-                        buttons to drive the screens tonight.</p>`}
+
+                ${!program?.ready || !items.length
+                    ? html`<p class="se-small se-muted">
+                        No programme has been built for tonight. Add one on the Programme tab in
+                        the Studio and it will appear here.</p>`
+                    : html`
+                    <p class="se-small ${drift ? 'se-warn' : 'se-muted'}">
+                        ${drift
+                            ? 'Running ' + Math.abs(drift) + ' minutes ' + (drift > 0 ? 'behind' : 'ahead')
+                            : 'On time'}
+                    </p>
+
+                    ${live ? html`
+                        <div class="se-now-block">
+                            <p class="se-small se-muted">On now</p>
+                            <p class="se-now-title">${live.title}</p>
+                            <p class="se-small">${live.host_name || ''} · started ${time(live.started_at)}</p>
+                            <div class="se-grid-buttons">
+                                <button type="button" class="se-tap"
+                                    onClick=${() => act('program', { item_id: live.id, op: 'finish' })}>Finish</button>
+                                <button type="button" class="se-tap"
+                                    onClick=${() => act('program', { item_id: live.id, op: 'skip' })}>Skip</button>
+                                <button type="button" class="se-tap"
+                                    onClick=${() => act('program', { item_id: live.id, op: 'undo' })}>Undo</button>
+                            </div>
+                        </div>` : null}
+
+                    <ol class="se-rows">
+                        ${upcoming.slice(0, 8).map((item) => html`
+                            <li class="se-row" key=${item.id}>
+                                <span class="se-dj-no">${time(item.eta_start)}</span>
+                                <span class="se-dj-row-main">
+                                    <strong>${item.title}</strong>
+                                    <span class="se-small se-muted"> · ${item.duration_min} min</span>
+                                </span>
+                                <span class="se-row-sub">
+                                    <button type="button" class="se-tap"
+                                        onClick=${() => act('program', { item_id: item.id, op: 'start' })}>Start</button>
+                                    <button type="button" class="se-tap"
+                                        onClick=${() => act('program', { item_id: item.id, op: 'skip' })}>Skip</button>
+                                </span>
+                            </li>`)}
+                    </ol>`}
+
                 <button type="button" class="se-tap" onClick=${() => act('publish_now')}>
                     Refresh the screens now</button>
+            </section>
+
+            <section class="se-panel">
+                <h2>Karaoke</h2>
+                ${!state.karaoke?.ready
+                    ? html`<p class="se-small se-muted">No karaoke queue tonight.</p>`
+                    : html`
+                    <p class="se-small">
+                        ${state.karaoke.now
+                            ? 'On stage: ' + state.karaoke.now.singer + ' — ' + state.karaoke.now.song.title
+                            : 'Nobody on stage.'}
+                    </p>
+                    <p class="se-small se-muted">
+                        ${state.karaoke.next
+                            ? 'Up next: ' + state.karaoke.next.singer + ' — ' + state.karaoke.next.song.title
+                            : 'Nobody queued.'}
+                        · ${state.karaoke.stats.remaining} to go
+                    </p>
+                    <div class="se-grid-buttons">
+                        ${state.karaoke.next ? html`
+                            <button type="button" class="se-tap"
+                                onClick=${() => act('karaoke_set', { entry_id: state.karaoke.next.id, status: 'on_stage' })}>
+                                Send them up</button>` : null}
+                        <button type="button" class="se-tap"
+                            onClick=${() => act('scene', { scene: 'karaoke', payload: {} })}>Karaoke on screen</button>
+                    </div>`}
             </section>
 
             <section class="se-panel">

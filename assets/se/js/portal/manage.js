@@ -5,14 +5,15 @@
 // Opening the link does two things: it shows the person their place, and it
 // binds this device to their registration (`claim_link`), which is what makes
 // "works on a second device" true. PR2 ships the status hero, the cards, the
-// invite link and self-cancel; the song picker and My Night arrive with the
-// karaoke and recap PRs.
+// invite link and self-cancel; PR4 adds the song picker and the "you are up
+// next" nudge. My Night arrives with the recap PR.
 
 import { call, SeApiError } from '@se/core/api.js';
 import { boot, me, toast } from '@se/core/store.js';
 import { formatDateTime } from '@se/core/boot.js';
 import { el, qs, copyText } from './dom.js';
 import { saveLocal } from './storage.js';
+import { karaokeBlock, karaokeAlert } from './karaoke.js';
 
 function eventRef() {
     const config = boot.value || {};
@@ -45,7 +46,16 @@ export async function startManage() {
             manage_url: data.links?.manage_url,
             status: data.registration?.status,
         });
-        render(host, data, config);
+        render(host, data, config, () => startManage());
+
+        // While somebody is queued the page refreshes itself, because the
+        // whole point of the nudge is that it arrives without a tap.
+        if (data.karaoke && !['done', 'released', 'cancelled'].includes(data.karaoke.status)) {
+            clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+                if (document.visibilityState === 'visible') startManage();
+            }, 20000);
+        }
     } catch (error) {
         host.setAttribute('aria-busy', 'false');
         host.replaceChildren(
@@ -54,7 +64,9 @@ export async function startManage() {
     }
 }
 
-function render(host, data, config) {
+let refreshTimer = null;
+
+function render(host, data, config, reload) {
     const registration = data.registration || {};
     const status = registration.status || 'confirmed';
 
@@ -108,6 +120,15 @@ function render(host, data, config) {
         }
 
         nodes.push(actions);
+
+        const alert = karaokeAlert(data);
+        if (alert) nodes.unshift(alert);
+
+        const flags = config.flags || {};
+        if (flags.karaoke_enabled !== false && flags.karaoke_ready
+            && (flags.karaoke_list_published || data.karaoke)) {
+            nodes.push(karaokeBlock(data, reload));
+        }
 
         if (data.can?.cancel) {
             nodes.push(cancelBlock(host, data, config));

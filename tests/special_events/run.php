@@ -60,6 +60,12 @@ require_once __DIR__ . '/../../includes/special_events/teams.php';
 require_once __DIR__ . '/../../includes/special_events/checkin.php';
 require_once __DIR__ . '/../../includes/special_events/live.php';
 
+// PR4's pure layers: the programme clock (planning, ETA, drift, the public
+// rounding) and the song library's normaliser and import parsers. Both files
+// talk to a PDO elsewhere, but nothing runs at include time.
+require_once __DIR__ . '/../../includes/special_events/program.php';
+require_once __DIR__ . '/../../includes/special_events/karaoke.php';
+
 $GLOBALS['se_passed'] = 0;
 $GLOBALS['se_failed'] = 0;
 $GLOBALS['se_failures'] = [];

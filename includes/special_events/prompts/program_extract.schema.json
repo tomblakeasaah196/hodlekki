@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "required": [
+    "items",
+    "warnings"
+  ],
+  "properties": {
+    "items": {
+      "type": "array",
+      "maxItems": 60,
+      "items": {
+        "type": "object",
+        "required": [
+          "title",
+          "kind",
+          "day_index",
+          "confidence"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "day_index": {
+            "type": "integer"
+          },
+          "start_time": {
+            "type": "string"
+          },
+          "duration_min": {
+            "type": "integer"
+          },
+          "host": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

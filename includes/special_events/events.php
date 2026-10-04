@@ -921,6 +921,32 @@ function se_event_update(PDO $pdo, int $eventId, string $section, array $fields,
     return se_event_find($pdo, $eventId) ?? [];
 }
 
+/**
+ * Patch one branch of `settings_json` without a version stamp.
+ *
+ * se_event_update() is the form path: it demands `expected_row_version`
+ * because two people editing the same tab must collide. A toggle like
+ * "publish the song list" or "test mode" is not a form — it is one switch,
+ * last press wins — so it goes through here instead of inventing a version
+ * the caller never had (§12.5, PR4 note in §28.4).
+ */
+function se_event_settings_patch(PDO $pdo, array $event, array $patch, ?int $actorId): array
+{
+    $eventId = (int) $event['id'];
+    if ((string) $event['status'] === 'archived') {
+        throw new SeRuleException('EVENT_ARCHIVED', 'This event is archived and can no longer be edited.');
+    }
+
+    $merged = se_settings_normalize(se_settings_merge(se_event_settings($event), $patch));
+
+    $pdo->prepare("UPDATE se_events SET settings_json = ?, row_version = row_version + 1, updated_by = ? WHERE id = ?")
+        ->execute([se_json_encode($merged), $actorId, $eventId]);
+
+    se_audit($pdo, $eventId, 'event_update:settings', ['keys' => array_keys($patch)], 'event', $eventId, $actorId);
+
+    return se_event_find($pdo, $eventId) ?? $event;
+}
+
 /** Deep-merge an incoming settings branch over the stored document. */
 function se_settings_merge(array $base, array $incoming): array
 {
@@ -1497,6 +1523,25 @@ function se_clone_event(PDO $pdo, int $sourceId, array $opts, array $input, int 
                     $v['approved_by'], $v['approved_at'],
                 ]);
             }
+        }
+
+        // Programme items carry over with their times shifted by Δ and
+        // every status reset to planned (§10.10). The day map pairs the
+        // source's days with the new event's, in order.
+        if ($opt('program') && se_program_ready($pdo)) {
+            $newDays = se_event_days($pdo, $newId);
+            $dayMap  = [];
+            foreach ($sourceDays as $i => $day) {
+                if (isset($newDays[$i])) {
+                    $dayMap[(int) $day['id']] = (int) $newDays[$i]['id'];
+                }
+            }
+            se_program_clone($pdo, $sourceId, $newId, $dayMap, $deltaSeconds);
+        }
+
+        // The song list comes along; the claims never do (§10.10).
+        if ($opt('karaoke') && se_karaoke_ready($pdo)) {
+            se_karaoke_clone($pdo, $sourceId, $newId, $actorId);
         }
 
         if ($opt('crew', false) && se_table_exists($pdo, 'se_crew')) {

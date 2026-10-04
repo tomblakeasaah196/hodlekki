@@ -315,6 +315,22 @@ const SE_SCHEMA_EXPECTED = [
         'se_event_verses' => ['id', 'event_id', 'translation', 'ref_display', 'text', 'text_source', 'prayer_template', 'sort_order', 'is_active', 'approved_by', 'approved_at', 'second_approved_by', 'times_used'],
         'se_bible_cache'  => ['translation', 'ref_norm', 'ref_display', 'text', 'fetched_at'],
     ],
+    '20261013090100_se_program_karaoke.sql' => [
+        'se_program_items'     => [
+            'id', 'event_id', 'day_id', 'sort_order', 'kind', 'title', 'public_blurb',
+            'icon', 'host_name', 'planned_start_at', 'duration_min', 'is_public',
+            'is_featured', 'game_id', 'media_asset_id', 'crew_notes', 'source',
+            'status', 'started_at', 'ended_at',
+        ],
+        'se_songs'             => ['id', 'title', 'artist', 'duration_sec', 'title_norm', 'artist_norm', 'tags', 'created_by'],
+        'se_event_songs'       => ['event_id', 'song_id', 'is_active', 'sort_order', 'added_by', 'added_at'],
+        'se_karaoke_entries'   => [
+            'id', 'event_id', 'registration_id', 'song_id', 'status', 'source',
+            'enforce_unique', 'is_test', 'queue_no', 'position', 'held_at',
+            'queued_at', 'on_stage_at', 'finished_at', 'updated_by',
+            'active_song_key', 'active_singer_key',
+        ],
+    ],
     '20261013090200_se_live_state.sql' => [
         'se_live_state' => ['event_id', 'version', 'scene', 'scene_payload_json', 'announcement_json', 'sfx_seq', 'sfx_cue', 'room_key', 'lobby_key', 'stage_key', 'dirty', 'last_published_at', 'updated_at', 'updated_by'],
     ],
@@ -326,7 +342,6 @@ const SE_SCHEMA_EXPECTED = [
  * rather than as an error.
  */
 const SE_SCHEMA_LATER_PHASES = [
-    'B' => ['se_program_items', 'se_songs', 'se_event_songs', 'se_karaoke_entries'],
     'C' => ['se_decks', 'se_deck_items', 'se_games', 'se_game_items', 'se_rounds',
             'se_answers', 'se_buzzes', 'se_survey_responses', 'se_feud_answers', 'se_score_events'],
     'D' => ['se_feedback', 'se_handoffs', 'se_handoff_items'],
@@ -363,9 +378,49 @@ const SE_STUDIO_TABS = [
  * (build_prompts.md PR1: "Tabs belonging to later PRs stay hidden").
  */
 const SE_STUDIO_TABS_READY = [
-    'overview', 'details', 'brand', 'registration', 'checkin', 'teams', 'live',
-    'attendees', 'assets', 'crew', 'settings',
+    'overview', 'details', 'brand', 'registration', 'checkin', 'program', 'teams',
+    'karaoke', 'messages', 'live', 'attendees', 'assets', 'crew', 'settings',
 ];
+
+/**
+ * Karaoke entry statuses (§10.8.2), grouped the way the rules read.
+ *
+ * `active` is what the UNIQUE(active_singer_key) index covers; `claiming`
+ * adds `done`, which is what the unique-song rule covers — a song that has
+ * already been sung is not free again.
+ */
+const SE_KARAOKE_STATUSES = [
+    'held', 'queued', 'up_next', 'on_stage', 'done', 'skipped', 'no_show',
+    'released', 'cancelled',
+];
+
+const SE_KARAOKE_ACTIVE   = ['held', 'queued', 'up_next', 'on_stage'];
+const SE_KARAOKE_CLAIMING = ['held', 'queued', 'up_next', 'on_stage', 'done'];
+const SE_KARAOKE_QUEUED   = ['queued', 'up_next', 'on_stage'];
+
+/**
+ * The longest a single karaoke entry can claim to be (§10.8).
+ *
+ * Two hours, because a medley or a worship set does occasionally get typed
+ * in as one row, and silently dropping its length would make the DJ's
+ * "minutes left" lie.
+ */
+const SE_SONG_MAX_SECONDS = 7200;
+
+/** Statuses the DJ console may set directly (§10.8.2). */
+const SE_KARAOKE_DJ_STATUSES = ['queued', 'up_next', 'on_stage', 'done', 'skipped', 'no_show'];
+
+/** How a public programme shows its times (§10.7.2). */
+const SE_PROGRAM_TIME_MODES = ['exact', 'approximate', 'order_only'];
+
+/** Segments an ad-hoc message may be sent to (§16.6). */
+const SE_MESSAGE_SEGMENTS = [
+    'confirmed', 'waitlisted', 'checked_in', 'confirmed_not_checked_in',
+    'karaoke_singers', 'cancelled',
+];
+
+/** Message kinds the cron schedules on its own (§16.2). */
+const SE_SCHEDULED_MESSAGE_KINDS = ['reminder_1', 'reminder_2'];
 
 // --------------------------------------------------------------------------
 // Front-end preload lists (§8.6.1). Checked by tests/special_events/preload_test.php
@@ -447,8 +502,10 @@ const SE_PRELOAD = [
     ],
     'dj' => [
         '/assets/se/js/dj/main.js',
+        '/assets/se/js/core/html.js',
         '/assets/se/js/core/store.js',
         '/assets/se/js/core/api.js',
+        '/assets/se/js/core/clock.js',
         '/assets/se/js/core/boot.js',
     ],
 ];

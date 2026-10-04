@@ -159,6 +159,7 @@ GitHub Secrets / Variables), and rollback instructions live in
 * * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >/dev/null 2>&1
 0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/reach_lost_souls.php >/dev/null 2>&1
 15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/assimilation_watchlists.php >/dev/null 2>&1
+*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/special_events.php >/dev/null 2>&1
 ```
 
 `sms_queue_worker.php` sends queued SMS for ~55 s (about one per second),
@@ -166,6 +167,14 @@ then fetches delivery reports for messages still awaiting one. Overlapping
 runs are safe (a MySQL named lock lets one run at a time) and a run that
 dies mid-send is recovered without texting anyone twice. SMS Studio's
 status bar turns red when this job has not run for 3 minutes.
+
+`special_events.php` is the Special Events housekeeper: it creates the
+event reminders that are due (each one exactly once, however often the job
+fires), releases karaoke song holds that nobody turned up to claim, clears
+expired tokens, devices and rate-limit rows, and purges imported AI source
+files. Overlapping runs are safe — a MySQL named lock lets one run at a
+time — and the Studio's **Health** page turns amber when it has not run for
+ten minutes.
 
 `assimilation_watchlists.php` re-runs every active Assimilation watchlist,
 sends managers one in-app digest per watchlist naming only the people who
@@ -238,7 +247,7 @@ api/            JSON endpoints, one file per module (auth_api.php, ...).
 assets/         Static CSS / JS / images shipped to the browser.
 auth/           Login, logout, first-time password setup.
 cron/           CLI jobs (sms_queue_worker.php, reach_lost_souls.php 07:00,
-                assimilation_watchlists.php 07:15).
+                assimilation_watchlists.php 07:15, special_events.php */5).
 includes/       Shared PHP: db.php, header.php, functions.php, PDF helpers,
                 sms_functions.php, sms_vault_key.php.
 modules/        One folder per ERP module; each has index.php as the view.
