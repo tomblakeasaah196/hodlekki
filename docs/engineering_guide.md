@@ -1924,7 +1924,11 @@ All tokens are CSS custom properties on `:root`. Tailwind v4 maps them to utilit
 }
 ```
 
-Class names used in templates MUST be complete literal strings (`bg-primary`, never `bg-${x}`), so Tailwind's scanner finds them. Team colours are applied with inline CSS variables (`style="--t: #000000"`) and fixed utility classes such as `bg-[var(--t)]`.
+Class names used in templates MUST be complete literal strings (`bg-primary`, never `bg-${x}`), so Tailwind's scanner finds them.
+
+**No `style="…"` attributes in server-rendered HTML.** The §19.7 CSP sets `style-src` to `'self'` plus a nonce, and a nonce does **not** cover style *attributes* — browsers drop every one of them (verified in Chromium, PR1). Server HTML therefore carries only classes, and anything per-event or per-team is a CSS variable written into the nonced `<style>` block by `se_theme_css_vars($theme, $teams)`: it emits `--team-<i>`, `--team-<i>-on`, `--team-<i>-glow` and `--team-<i>-ring` for every team. Markup then uses fixed utility classes such as `bg-[var(--team-1)]`.
+
+Inside Preact components the restriction does not apply: the `style` *prop* is set through the CSSOM, which CSP does not police.
 
 | Group | Tokens |
 |---|---|

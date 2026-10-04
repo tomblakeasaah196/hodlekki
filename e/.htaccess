@@ -1,0 +1,17 @@
+# /e/ — Special Events public router. Real files (index.php, sw.js) pass through.
+Options -Indexes
+DirectoryIndex index.php
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /e/
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^ - [L]
+  # /e/<slug>            → index.php?__slug=<slug>&__path=
+  # /e/<slug>/<rest…>    → index.php?__slug=<slug>&__path=<rest>
+  RewriteRule ^([A-Za-z0-9][A-Za-z0-9-]{0,39})/?$ index.php?__slug=$1&__path= [QSA,L]
+  RewriteRule ^([A-Za-z0-9][A-Za-z0-9-]{0,39})/(.+)$ index.php?__slug=$1&__path=$2 [QSA,L]
+</IfModule>
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

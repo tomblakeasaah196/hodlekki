@@ -228,6 +228,67 @@
     border-radius: 12px;
   }
 
+  /* ------------------------------------------------------------------ *
+   * Server-rendered layout (e/index.php).
+   *
+   * These exist as CLASSES, not style attributes, because the §19.7 CSP
+   * sets style-src to 'self' plus a nonce — and a nonce does not cover
+   * `style="..."` attributes. Chromium drops every one of them, so any
+   * inline style in server HTML is simply lost.
+   * ------------------------------------------------------------------ */
+
+  .se-stack-sm > * + * { margin-top: 0.5rem; }
+  .se-stack    > * + * { margin-top: 1rem; }
+  .se-stack-lg > * + * { margin-top: 2rem; }
+
+  .se-measure      { max-width: 68ch; }
+  .se-measure-tight { max-width: 48ch; }
+  .se-measure-hero { max-width: 40ch; }
+
+  .se-muted { color: var(--se-text-muted); }
+  .se-accent-text { color: var(--se-secondary); }
+
+  .se-notice {
+    padding: 0.75rem 1rem;
+    margin: 0;
+  }
+  .se-notice-top { padding-top: 1rem; }
+  .se-notice-danger { border-color: var(--se-danger); }
+
+  .se-hero-title { margin-block: 0.5rem 1rem; }
+  .se-hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-block: 2rem;
+  }
+  .se-hero-meta dd { margin: 0; font-weight: 700; }
+  .se-hero-figure { margin: 3rem 0 0; }
+  .se-hero-figure img {
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-card);
+  }
+  .se-hero-body { margin-top: 3rem; }
+  .se-hero-foot { margin-top: 3rem; }
+
+  .se-page-title { margin-block: 0.5rem 1.5rem; }
+
+  .se-card-grid {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  }
+  .se-card-grid > li { padding: 1.5rem; }
+  .se-card-title { font-size: 1.25rem; margin: 0 0 0.5rem; }
+
+  .se-list-plain { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
+
+  .se-pad { padding: 1rem; }
+  .se-pad-lg { padding: 2rem; }
+
   /* Markdown produced by se_markdown() (§19.5). */
   .se-md       { color: var(--se-text-muted); }
   .se-md p     { margin-block: 0.75em; }
