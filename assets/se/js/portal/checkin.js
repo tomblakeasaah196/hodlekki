@@ -99,14 +99,17 @@ async function submitPhone(raw) {
         return;
     }
 
-    state.phone = phone;
+    // The API takes the number itself. Sending the whole {e164, sms,
+    // display} object made the server answer INVALID_PHONE to every guest,
+    // so nobody could check themselves in at the door.
+    state.phone = phone.e164;
     busy(true);
 
     try {
         const data = await call('public', 'lookup', {
             event: config.event.public_id,
             purpose: 'checkin',
-            phone,
+            phone: state.phone,
         });
         state.lookup = data;
         stepConfirm(data);
