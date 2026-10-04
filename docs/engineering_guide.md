@@ -4520,6 +4520,7 @@ Statistics: {{stats_json}}
     "play_ahead_enabled": true,
     "link_on_demand_enabled": true,
     "companions_max": 0,
+    "capacity_reviewed": false,
     "min_age_note": "For ages 16 and above. Younger guests are welcome with a parent or guardian."
   },
   "checkin": {

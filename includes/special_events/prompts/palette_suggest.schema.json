@@ -1,0 +1,52 @@
+{
+  "type": "object",
+  "required": [
+    "palettes"
+  ],
+  "properties": {
+    "palettes": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "rationale",
+          "accent",
+          "mood_words"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "accent": {
+            "type": "string"
+          },
+          "background_hint": {
+            "type": "string"
+          },
+          "team_suggestions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "mood_words": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          }
+        }
+      }
+    }
+  }
+}
