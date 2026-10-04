@@ -255,7 +255,7 @@ export function DetailsTab() {
             <//>
 
             <${Card} title="About this event"
-                     subtitle="Markdown: # headings, **bold**, *italic*, - lists, [links](https://…).">
+                     subtitle="Markdown: # headings, **bold**, *italic*, `inline code`, [links](https://…), - bullet lists, 1. numbered lists, > quotes, --- dividers, blank-line paragraphs. Raw HTML and images are not allowed.">
                 <${Field} label="Description" name="description_md">
                     <${TextArea} name="description_md" rows="10" maxLength="20000"
                         value=${fieldValue('description_md', event.description_md || '')}

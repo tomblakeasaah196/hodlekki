@@ -432,12 +432,41 @@ flyer brought 40 people and Instagram brought 4.
 **✨ Suggest three** is the writing helper. Pick what you need — a tagline, the
 page description, a blurb, an FAQ answer, an SMS, a card headline — add a line
 of brief if you want ("mention that it ends by 9pm"), and you get three
-options that respect the length limit. Portal descriptions can now come back as
-three fuller 120-word options; if the AI cuts a JSON answer short, the system
-tries once more with clearer instructions and more output room. Nothing is ever
-applied for you: read them, pick one, edit it. The system does not put the raw
-prompt or AI output in the server logs. If the button is missing, no AI key is
-configured on the server, and you simply write it yourself.
+options that respect the length limit.
+
+Each purpose is briefed separately, so the helper knows the difference between
+a six-word card headline and the paragraph a first-time guest reads on the
+event page. **Portal descriptions** come back as three full paragraphs of
+roughly 70–110 words (never more than 120), and each one deliberately takes a
+different angle:
+
+1. a warm invitation written to a guest who has never been to this church,
+2. an activity-led one that leads with what will actually happen,
+3. one about the people in the room and belonging.
+
+The helper is also told to stay off the usual filler — "something for
+everyone", "good vibes", "you don't want to miss it" — and not to repeat your
+tagline as a sentence, because the page already shows it right above the
+description. If two options still come back almost identical, the near-copy is
+dropped rather than shown twice; you may then see two options instead of
+three. Press **✨ Suggest three** again for a fresh set.
+
+Under each description option you get its **word count**, and it turns red if
+it is over 120 words so you know to trim before saving.
+
+If the AI cuts a JSON answer short, the system tries once more with clearer
+instructions and more output room. Nothing is ever applied for you: read them,
+pick one, edit it. The system does not put the raw prompt or AI output in the
+server logs, and no guest's name, phone number or email is ever sent to the
+AI. If the button is missing, no AI key is configured on the server, and you
+simply write it yourself.
+
+**Markdown in the description.** The Description box on **Details** accepts
+headings (`#`, `##`, `###`), **bold**, *italic*, `inline code`, links,
+bullet lists (`-`), numbered lists (`1.`), quotes (`>`), dividers (`---`) and
+ordinary paragraphs separated by a blank line. Raw HTML and images are not
+allowed and are shown as plain text. The AI options come back as plain
+paragraphs; add any formatting yourself.
 
 ---
 

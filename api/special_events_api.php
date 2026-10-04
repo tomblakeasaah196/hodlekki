@@ -973,20 +973,29 @@ try {
             se_line($body['brief'] ?? '', 240) !== '' ? 'brief: ' . se_line($body['brief'], 240) : null,
         ]);
 
+        // Purpose-specific craft notes and three named angles replace the old
+        // single generic instruction, which produced three near-identical
+        // options (§15.8).
         $result = se_ai($pdo, 'copywrite', [
-            'count'     => 3,
-            'purpose'   => SE_COPYWRITE_LABELS[$purpose],
-            'limit'     => SE_COPYWRITE_LIMITS[$purpose],
-            'title'     => (string) $event['title'],
-            'edition'   => (string) ($event['edition_label'] ?? ''),
-            'organizer' => (string) ($event['organizer_label'] ?? 'Envision'),
-            'facts'     => implode('; ', $facts),
+            'count'       => 3,
+            'purpose'     => SE_COPYWRITE_LABELS[$purpose],
+            'limit'       => SE_COPYWRITE_LIMITS[$purpose],
+            'title'       => (string) $event['title'],
+            'edition'     => (string) ($event['edition_label'] ?? ''),
+            'organizer'   => (string) ($event['organizer_label'] ?? 'Envision'),
+            'facts'       => implode('; ', $facts),
+            'guidance'    => se_ai_copywrite_guidance($purpose),
+            'angles'      => se_ai_copywrite_angles($purpose),
+            'length_note' => se_ai_copywrite_length_note($purpose),
+            'banned'      => se_ai_copywrite_banned_list(),
         ], ['event_id' => (int) $event['id'], 'user_id' => $userId]);
 
         // Nothing is applied automatically: the Studio shows these for
         // human review. SMS copy must survive sms_segments() before use, while
         // portal descriptions keep enough room for the 120-word limit.
-        $variants = se_ai_copywrite_variants($result, $purpose);
+        $variants = se_ai_copywrite_variants($result, $purpose, [
+            'tagline' => (string) ($event['tagline'] ?? ''),
+        ]);
 
         se_api_success('Here are three.', ['variants' => $variants, 'purpose' => $purpose]);
     }

@@ -36,27 +36,60 @@ function se_ai_test_sqlite_pdo(): ?PDO
     return $pdo;
 }
 
-function se_ai_test_long_description(string $opening): string
+/**
+ * A long, realistic portal-description variant. Each call must produce copy
+ * that is genuinely different from the others, because the post-processor now
+ * drops near-duplicate options.
+ */
+function se_ai_test_long_description(string $opening, string $body): string
 {
-    return trim($opening . ' ' . implode(' ', array_fill(0, 6,
-        'Expect karaoke, Bible games, warm laughter, easy conversation, bright teams and a gentle welcome for friends who are visiting church for the first time.'
-    )));
+    return trim($opening . ' ' . trim($body));
+}
+
+/** Three distinct 100-ish word description variants, one per prompt angle. */
+function se_ai_test_long_variants(): array
+{
+    return [
+        se_ai_test_long_description(
+            'Chara is an evening built for anyone who wants somewhere easy to land on a Saturday.',
+            'If church is new territory, start here: nobody will put you on a stage, nobody will single you out, '
+            . 'and the room is friendly from the door. Come as you are, sit where you like, meet a few faces, '
+            . 'and leave knowing the names of people who were genuinely glad you turned up. Nobody here needs you to '
+            . 'perform, explain yourself or know a single song. There is food, there '
+            . 'is laughter, and there is plenty of space to simply watch the night unfold until you feel like '
+            . 'joining in yourself. Doors open early, so arrive whenever suits you best this weekend.'
+        ),
+        se_ai_test_long_description(
+            'Microphones, scoreboards and a very competitive room: that is the shape of the night.',
+            'Singers queue up for the mic while teams argue over scripture trivia answers, and between rounds the '
+            . 'hosts keep the pace fast enough that nobody checks their phone. Pick a colour, claim your round, '
+            . 'and see whether your table can hold the lead until the final buzzer. Expect loud choruses, '
+            . 'ridiculous tie-breakers and at least one performance nobody saw coming. Rounds reset often, so a slow start '
+            . 'costs your table almost nothing. Bring your voice, bring '
+            . 'your best guesses, and settle the question of who really runs this evening once and for all.'
+        ),
+        se_ai_test_long_description(
+            'Most people arrive with one friend and leave having met six more.',
+            'That is really what this gathering is about: a roomful of neighbours, students, young families and '
+            . 'colleagues sharing one long table and a lot of noise. Conversations start over a shared round, '
+            . 'carry on past the last song, and keep going long after the chairs are stacked. Whoever you bring '
+            . 'along, they will find somebody worth talking to before the night is over. Regulars make a point of looking '
+            . 'out for whoever walked in alone. It is the kind of '
+            . 'belonging that is hard to describe and very easy to recognise once you are standing inside it.'
+        ),
+    ];
 }
 
 echo "    copywriter prompt budget\n";
 $copyPrompt = se_ai_prompt('copywrite');
-is_same('copywrite prompt version is bumped', '2', $copyPrompt['version']);
+ok('copywrite prompt version is at least 3', (int) $copyPrompt['version'] >= 3, $copyPrompt['version']);
 ok('copywrite has enough visible output tokens', $copyPrompt['max_tokens'] >= 4096, (string) $copyPrompt['max_tokens']);
 is_same('copywrite disables Gemini Flash thinking', 0, $copyPrompt['thinking_budget']);
 ok('Gemini 2.5 Flash accepts the zero thinking budget', se_ai_model_allows_thinking_budget('gemini-2.5-flash', 0));
 ok('older text models do not receive thinkingConfig', !se_ai_model_allows_thinking_budget('gemini-1.5-flash', 0));
 
 echo "    long portal-description variants\n";
-$longVariants = [
-    se_ai_test_long_description('Chara is a relaxed night built for joy from the first hello.'),
-    se_ai_test_long_description('Step into Chara for a friendly evening where every guest can settle in quickly.'),
-    se_ai_test_long_description('Bring someone along to Chara and enjoy a full, cheerful night together.'),
-];
+$longVariants = se_ai_test_long_variants();
 
 foreach ($longVariants as $i => $variant) {
     ok('description variant ' . ($i + 1) . ' is longer than the old 600-char clamp', mb_strlen($variant, 'UTF-8') > 600);
@@ -77,6 +110,115 @@ ok('the copywrite schema rejects fewer than three variants', se_schema_validate(
 
 $tooLong = ['variants' => [$longVariants[0], $longVariants[1], str_repeat('x', 1201)]];
 ok('the copywrite schema rejects over-long variants', se_schema_validate($tooLong, $copyPrompt['schema']) !== []);
+
+echo "    purpose-specific prompt guidance\n";
+$descriptionSystem = se_ai_render_prompt($copyPrompt['system'], [
+    'count'       => 3,
+    'purpose'     => SE_COPYWRITE_LABELS['description'],
+    'limit'       => SE_COPYWRITE_LIMITS['description'],
+    'title'       => 'Chara',
+    'edition'     => '2026',
+    'organizer'   => 'Envision',
+    'facts'       => 'date Saturday; venue HOD Lekki; karaoke; Bible games and teams',
+    'guidance'    => se_ai_copywrite_guidance('description'),
+    'angles'      => se_ai_copywrite_angles('description'),
+    'length_note' => se_ai_copywrite_length_note('description'),
+    'banned'      => se_ai_copywrite_banned_list(),
+]);
+
+ok('no placeholder is left unrendered', !preg_match('/\{\{(?!link\}\})/', $descriptionSystem), $descriptionSystem);
+ok('the literal {{link}} token survives rendering', str_contains($descriptionSystem, '{{link}}'));
+ok('the description prompt names the three option angles',
+    str_contains($descriptionSystem, 'Option 1:')
+    && str_contains($descriptionSystem, 'Option 2:')
+    && str_contains($descriptionSystem, 'Option 3:'));
+ok('variant 1 is the guest-first invitation', str_contains($descriptionSystem, 'guest-first'));
+ok('variant 2 is activity-forward', str_contains($descriptionSystem, 'Activity-forward')
+    || str_contains($descriptionSystem, 'activity-forward'));
+ok('variant 3 is about belonging', str_contains($descriptionSystem, 'belonging'));
+ok('the description prompt asks for 70 to 110 words', str_contains($descriptionSystem, '70 to 110 words'));
+ok('the description prompt forbids restating the tagline',
+    stripos($descriptionSystem, 'tagline') !== false);
+ok('the description prompt bans the known clichés',
+    str_contains($descriptionSystem, 'something for everyone')
+    && str_contains($descriptionSystem, 'good vibes')
+    && str_contains($descriptionSystem, 'warm joy'));
+ok('the prompt still demands one complete JSON object',
+    str_contains($descriptionSystem, 'one complete JSON object'));
+
+$taglineSystem = se_ai_render_prompt($copyPrompt['system'], [
+    'count' => 3, 'purpose' => SE_COPYWRITE_LABELS['tagline'],
+    'limit' => SE_COPYWRITE_LIMITS['tagline'], 'title' => 'Chara', 'edition' => '2026',
+    'organizer' => 'Envision', 'facts' => 'karaoke',
+    'guidance' => se_ai_copywrite_guidance('tagline'),
+    'angles' => se_ai_copywrite_angles('tagline'),
+    'length_note' => se_ai_copywrite_length_note('tagline'),
+    'banned' => se_ai_copywrite_banned_list(),
+]);
+ok('each purpose gets its own guidance', $taglineSystem !== $descriptionSystem);
+ok('the tagline prompt keeps the 12-word limit', str_contains($taglineSystem, 'at most 12 words'));
+ok('every purpose has guidance and three angles', (function (): bool {
+    foreach (SE_COPYWRITE_PURPOSES as $purpose) {
+        if (trim(se_ai_copywrite_guidance($purpose)) === ''
+            || substr_count(se_ai_copywrite_angles($purpose), 'Option ') !== 3) {
+            return false;
+        }
+    }
+
+    return true;
+})());
+
+echo "    quality post-processing\n";
+foreach ($longVariants as $i => $variant) {
+    $words = count(preg_split('/\s+/u', trim($variant), -1, PREG_SPLIT_NO_EMPTY) ?: []);
+    ok('variant ' . ($i + 1) . ' is a full paragraph, not one thin sentence', $words >= 70, (string) $words);
+    ok('variant ' . ($i + 1) . ' stays inside the 120-word limit', $words <= 120, (string) $words);
+}
+
+ok('distinct variants are not treated as duplicates',
+    se_ai_copywrite_similarity($longVariants[0], $longVariants[1]) < SE_COPYWRITE_DUPLICATE_THRESHOLD,
+    (string) se_ai_copywrite_similarity($longVariants[0], $longVariants[1]));
+ok('an identical variant scores 1.0', se_ai_copywrite_similarity($longVariants[0], $longVariants[0]) >= 1.0);
+
+$nearDuplicate = str_replace(
+    ['evening built', 'somewhere easy to land'],
+    ['night built', 'a place easy to land'],
+    $longVariants[0]
+);
+ok('a reworded copy of a variant is detected as a near-duplicate',
+    se_ai_copywrite_similarity($longVariants[0], $nearDuplicate) >= SE_COPYWRITE_DUPLICATE_THRESHOLD,
+    (string) se_ai_copywrite_similarity($longVariants[0], $nearDuplicate));
+
+$withDuplicate = se_ai_copywrite_variants(
+    ['variants' => [$longVariants[0], $nearDuplicate, $longVariants[2]]],
+    'description'
+);
+is_same('the near-duplicate option is dropped', 2, count($withDuplicate));
+is_same('the first of the pair is the one kept', $longVariants[0], $withDuplicate[0]);
+
+is_same('three identical variants never collapse to nothing', 1, count(se_ai_copywrite_variants(
+    ['variants' => [$longVariants[1], $longVariants[1], $longVariants[1]]],
+    'description'
+)));
+is_same('no variants in still means no variants out, not a crash', 0,
+    count(se_ai_copywrite_variants(['variants' => []], 'description')));
+
+$tagline = 'Sing loud, play hard, belong here';
+$echoed  = $tagline . '. ' . $longVariants[2];
+$stripped = se_ai_copywrite_variants(['variants' => [$echoed]], 'description', ['tagline' => $tagline]);
+ok('an echoed tagline sentence is removed from a description',
+    !str_contains($stripped[0], $tagline), $stripped[0]);
+ok('the rest of the description survives tagline stripping',
+    str_contains($stripped[0], 'Most people arrive with one friend'));
+is_same('a description that is only the tagline is left alone for the human',
+    $tagline, se_ai_copywrite_variants(['variants' => [$tagline]], 'description', ['tagline' => $tagline])[0]);
+is_same('taglines themselves are never tagline-stripped', 1, count(
+    se_ai_copywrite_variants(['variants' => [$tagline]], 'tagline', ['tagline' => $tagline])
+));
+
+$longOne = $longVariants[0];
+ok('post-processing keeps long copy whole',
+    se_ai_copywrite_variants(['variants' => [$longOne]], 'description')[0] === $longOne);
 
 echo "    malformed/truncated JSON retry\n";
 $pdo = se_ai_test_sqlite_pdo();
