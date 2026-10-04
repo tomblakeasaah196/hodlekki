@@ -18,3 +18,49 @@ function se_game_answer(PDO $pdo,array $event,array $reg,array $in):array { $rou
 function se_game_suggest(PDO $pdo,array $event,array $reg,array $in):array { $round=se_int($in['round_id']??0,0);$choice=se_int($in['choice_index']??-1,-1);$s=$pdo->prepare("INSERT INTO se_answers(event_id,round_id,registration_id,team_id,role,choice_index,received_at,elapsed_ms) VALUES(?,?,?,?, 'suggestion',?,NOW(3),0) ON DUPLICATE KEY UPDATE choice_index=VALUES(choice_index),received_at=VALUES(received_at)");$s->execute([(int)$event['id'],$round,(int)$reg['id'],$reg['team_id']??null,$choice]);return ['accepted'=>true]; }
 function se_game_buzz(PDO $pdo,array $event,array $reg,array $in):array {if(empty($reg['team_id']))throw new SeRuleException('You need a team to buzz.','NOT_ELIGIBLE');$round=se_int($in['round_id']??0,0);$s=$pdo->prepare('SELECT * FROM se_rounds WHERE id=? AND event_id=?');$s->execute([$round,(int)$event['id']]);$r=$s->fetch(PDO::FETCH_ASSOC);if(!$r)throw new SeNotFoundException('Round not found.');$now=se_epoch_ms();$opens=strtotime($r['opens_at'])*1000+(int)substr($r['opens_at'],-3);$client=se_int($in['client_ms']??$now,0);$effective=se_buzz_effective($client,$opens,$now);$s=$pdo->prepare('INSERT INTO se_buzzes(event_id,round_id,attempt,team_id,registration_id,effective_ms,received_at) VALUES(?,?,?,?,?,?,NOW(3))');try{$s->execute([(int)$event['id'],$round,$r['attempt'],(int)$reg['team_id'],(int)$reg['id'],$effective]);}catch(PDOException $e){if((int)$e->errorInfo[1]===1062)throw new SeRuleException('Your team already buzzed.','ALREADY_BUZZED');throw $e;}return ['accepted'=>true,'effective_ms'=>$effective];}
 function se_live_game_payload(PDO $pdo,array $event):?array { if(!se_game_ready($pdo))return null;$s=$pdo->prepare("SELECT * FROM se_games WHERE event_id=? AND status IN ('live','ready') ORDER BY sort_order,id LIMIT 1");$s->execute([(int)$event['id']]);$g=$s->fetch(PDO::FETCH_ASSOC);if(!$g)return null;$q=$pdo->prepare("SELECT * FROM se_rounds WHERE game_id=? ORDER BY round_no DESC LIMIT 1");$q->execute([(int)$g['id']]);$r=$q->fetch(PDO::FETCH_ASSOC);return ['id'=>(int)$g['id'],'type'=>$g['type'],'title'=>$g['title'],'status'=>$g['status'],'settings'=>se_game_settings($g),'round'=>$r?se_round_public($pdo,$r,in_array($r['state'],['revealed','scored'],true)):null];}
+
+/** Live mutations that keep the host version and the round row atomic. */
+function se_game_status_set(PDO $pdo, array $event, int $gameId, string $status, ?int $expected, int $actor): array
+{
+    if (!in_array($status, ['live', 'paused', 'finished'], true)) {
+        throw new SeValidationException('Invalid game status.', ['status']);
+    }
+    return se_live_mutate($pdo, $event, $expected, static function () use ($pdo, $gameId, $event, $status): array {
+        $s = $pdo->prepare('UPDATE se_games SET status = ?, started_at = IF(? = \'live\', COALESCE(started_at, NOW()), started_at), finished_at = IF(? = \'finished\', NOW(), finished_at) WHERE id = ? AND event_id = ?');
+        $s->execute([$status, $status, $status, $gameId, (int) $event['id']]);
+        if (!$s->rowCount()) {
+            throw new SeNotFoundException('Game not found.');
+        }
+        return [];
+    }, 'game_op', ['game_id' => $gameId, 'status' => $status], $actor);
+}
+
+function se_round_transition_live(PDO $pdo, array $event, int $roundId, string $to, ?int $expected, int $actor, string $reason = ''): array
+{
+    return se_live_mutate($pdo, $event, $expected, static function () use ($pdo, $roundId, $to, $reason): array {
+        $s = $pdo->prepare('SELECT state FROM se_rounds WHERE id = ? FOR UPDATE');
+        $s->execute([$roundId]);
+        $old = $s->fetchColumn();
+        if ($old === false) throw new SeNotFoundException('Round not found.');
+        $allowed = ['pending' => ['armed', 'void'], 'armed' => ['open', 'locked', 'void'], 'open' => ['locked', 'void'], 'locked' => ['revealed', 'void'], 'revealed' => ['scored', 'void'], 'scored' => ['void']];
+        if (!in_array($to, $allowed[$old] ?? [], true)) throw new SeRuleException('That round cannot make that transition.', 'STALE_STATE');
+        $set = 'state = ?'; $args = [$to];
+        if ($to === 'locked') { $set .= ', locked_at = NOW(3)'; }
+        if ($to === 'revealed') { $set .= ', revealed_at = NOW(3)'; }
+        if ($to === 'void') { $set .= ', void_reason = ?'; $args[] = $reason; }
+        $args[] = $roundId; $args[] = $old;
+        $s = $pdo->prepare("UPDATE se_rounds SET {$set} WHERE id = ? AND state = ?"); $s->execute($args);
+        if (!$s->rowCount()) throw new SeRuleException('The round changed.', 'STALE_STATE');
+        return ['active_round_id' => $roundId];
+    }, 'round_op', ['round_id' => $roundId, 'to' => $to], $actor);
+}
+
+function se_round_arm_live(PDO $pdo, array $event, int $roundId, int $preroll, int $duration, ?int $expected, int $actor): array
+{
+    $result = [];
+    $out = se_live_mutate($pdo, $event, $expected, static function () use ($pdo, $event, $roundId, $preroll, $duration, &$result): array {
+        $result = se_round_arm($pdo, $event, $roundId, $preroll, $duration, null, 0);
+        return ['active_round_id' => $roundId, 'scene' => 'game'];
+    }, 'round_op', ['round_id' => $roundId, 'to' => 'armed'], $actor);
+    return $result + ['round' => $result];
+}

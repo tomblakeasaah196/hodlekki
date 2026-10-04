@@ -58,3 +58,41 @@ function se_game_list(PDO $pdo, int $eventId): array { if(!se_game_ready($pdo))r
 function se_game_save(PDO $pdo,array $event,array $in,int $actor):array { $type=se_enum($in['type']??'',SE_GAME_TYPES,''); if($type==='')throw new SeValidationException('Choose a game type.',['type']); $settings=$in['settings']??[]; if(!is_array($settings))$settings=[]; $s=$pdo->prepare('INSERT INTO se_games(event_id,type,title,settings_json,weight,status,sort_order,created_by) VALUES(?,?,?,?,?,"draft",?,?)');$s->execute([(int)$event['id'],$type,se_line($in['title']??ucwords(str_replace('_',' ',$type)),120),se_json_encode($settings),(float)($in['weight']??1),se_int($in['sort_order']??0,0),$actor]);return ['id'=>(int)$pdo->lastInsertId()]; }
 function se_deck_items_review(PDO $pdo,array $event,array $in,int $actor):array { $ids=$in['ids']??[];$status=se_enum($in['status']??'', ['draft','approved','rejected'],'draft');if(!is_array($ids)||!$ids)throw new SeValidationException('Choose at least one deck item.',['ids']);$q=$pdo->prepare("UPDATE se_deck_items i JOIN se_decks d ON d.id=i.deck_id SET i.review_status=?,i.reviewed_by=?,i.reviewed_at=NOW() WHERE i.id=? AND (d.scope='library' OR d.event_id=?)");$n=0;foreach($ids as $id){$q->execute([$status,$actor,(int)$id,(int)$event['id']]);$n+=$q->rowCount();}return ['updated'=>$n];}
 function se_game_items_save(PDO $pdo,array $event,array $in,int $actor):array { $game=se_int($in['game_id']??0,0);$items=$in['item_ids']??[];if(!is_array($items))throw new SeValidationException('item_ids must be a list.',['item_ids']);$pdo->prepare('DELETE FROM se_game_items WHERE game_id=?')->execute([$game]);$s=$pdo->prepare('INSERT INTO se_game_items(game_id,deck_item_id,sort_order) SELECT ?,id,? FROM se_deck_items WHERE id=? AND review_status="approved"');foreach(array_values($items) as $n=>$id)$s->execute([$game,$n,(int)$id]);return ['game_id'=>$game,'items'=>count($items)];}
+
+function se_deck_generate(PDO $pdo, array $event, array $in, int $actor): array
+{
+    $type = se_enum($in['content_type'] ?? '', SE_CONTENT_TYPES, 'mcq');
+    $count = se_int($in['count'] ?? 10, 1, 30, 10);
+    $result = se_ai($pdo, 'deck_generate', [
+        'content_type' => $type,
+        'topic' => se_line($in['topic'] ?? 'joy and Bible basics', 160),
+        'count' => $count,
+        'difficulty_mix' => se_line($in['difficulty_mix'] ?? 'easy, medium, hard', 80),
+        'avoid' => se_line($in['avoid_recent'] ?? '', 1000),
+        'translation' => 'KJV',
+    ], ['user_id' => $actor, 'event_id' => (int) $event['id']);
+    $job = se_ai_job_create($pdo, (int) $event['id'], 'deck_generate', $in, $result, $actor, 'ready');
+    return ['job_id' => $job, 'status' => 'ready', 'result' => $result];
+}
+
+function se_deck_generate_apply(PDO $pdo, array $event, int $jobId, int $deckId, int $actor): array
+{
+    $job = se_ai_job_find($pdo, $jobId, (int) $event['id']);
+    if (!$job || $job['status'] !== 'ready') throw new SeRuleException('That AI result is no longer awaiting review.', 'AI_JOB_INVALID');
+    $decoded = json_decode((string) $job['result_json'], true) ?: [];
+    $items = $decoded['items'] ?? [];
+    $deck = $pdo->prepare('SELECT content_type FROM se_decks WHERE id = ? AND (scope = "library" OR event_id = ?)');
+    $deck->execute([$deckId, (int) $event['id']]);
+    $type = (string) $deck->fetchColumn();
+    if (!in_array($type, SE_CONTENT_TYPES, true)) throw new SeNotFoundException('Deck not found.');
+    $created = 0;
+    foreach ($items as $item) {
+        if (!is_array($item)) continue;
+        $payload = $item['payload'] ?? [];
+        if (!is_array($payload) || se_game_payload_validate($type, $payload)) continue;
+        $ref = se_line($item['ref'] ?? '', 60); $verse = $ref !== '' ? se_bible_lookup($pdo, $ref, 'KJV') : null;
+        se_deck_item_save($pdo, $event, ['deck_id'=>$deckId,'content_type'=>$type,'payload'=>$payload,'scripture_ref'=>$verse['ref_display'] ?? $ref,'source'=>'ai'], $actor); $created++;
+    }
+    se_ai_job_mark_applied($pdo, $jobId, $actor);
+    return ['created' => $created, 'job_id' => $jobId];
+}

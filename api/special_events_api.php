@@ -1865,13 +1865,15 @@ try {
 
     // ====================================================================
 
-    case 'decks_list': case 'deck_list': case 'deck_save': case 'deck_item_save': case 'deck_items_review': case 'game_list': case 'games_save': case 'game_save': case 'game_items_save': {
+    case 'decks_list': case 'deck_list': case 'deck_save': case 'deck_item_save': case 'deck_items_review': case 'deck_generate': case 'deck_generate_apply': case 'game_list': case 'games_list': case 'games_save': case 'game_save': case 'game_items_save': {
         $event=se_studio_event($pdo,$body,'event.edit');
         if($action==='deck_list'||$action==='decks_list') se_api_success('OK',['decks'=>se_deck_list($pdo,(int)$event['id'],$body['content_type']??null)]);
-        if($action==='game_list') se_api_success('OK',['games'=>se_game_list($pdo,(int)$event['id'])]);
+        if($action==='game_list'||$action==='games_list') se_api_success('OK',['games'=>se_game_list($pdo,(int)$event['id'])]);
         if($action==='deck_save') se_api_success('Saved.',se_deck_save($pdo,$event,$body,$userId));
         if($action==='deck_item_save') se_api_success('Saved.',se_deck_item_save($pdo,$event,$body,$userId));
         if($action==='deck_items_review') se_api_success('Reviewed.',se_deck_items_review($pdo,$event,$body,$userId));
+        if($action==='deck_generate') se_api_success('Deck generation is ready for review.',se_deck_generate($pdo,$event,$body,$userId));
+        if($action==='deck_generate_apply') se_api_success('Reviewed deck items added.',se_deck_generate_apply($pdo,$event,se_int($body['job_id']??0,0),se_int($body['deck_id']??0,0),$userId));
         if($action==='game_items_save') se_api_success('Items attached.',se_game_items_save($pdo,$event,$body,$userId));
         se_api_success('Saved.',se_game_save($pdo,$event,$body,$userId));
     }
