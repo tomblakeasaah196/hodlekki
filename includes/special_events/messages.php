@@ -532,8 +532,11 @@ function se_message_audience(PDO $pdo, array $event, string $segment, ?array $da
             return [];
     }
 
-    // One message per phone, even when two registrations share a number.
-    $sql .= " GROUP BY c.phone_e164, r.id ORDER BY r.id ASC";
+    // One row per registration (the contact join is one-to-one). The "one
+    // message per phone" rule is applied below in PHP. A GROUP BY here broke
+    // the cron on MariaDB, whose ONLY_FULL_GROUP_BY does not accept r.* even
+    // when r.id is in the group.
+    $sql .= " ORDER BY r.id ASC";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($args);

@@ -27,17 +27,43 @@ $_ENV['SMS_VAULT_KEY']  = $_ENV['SMS_VAULT_KEY'] ?? str_repeat('ab', 32);
 
 $root = dirname(__DIR__, 3);
 
-require_once $root . '/includes/sms_functions.php';
-foreach (['constants', 'util', 'db', 'theme', 'settings', 'events', 'identity',
-          'capacity', 'registration', 'realtime', 'live', 'bible', 'verses',
-          'teams', 'checkin', 'messages', 'attendees', 'program', 'karaoke', 'after_event'] as $lib) {
-    require_once $root . '/includes/special_events/' . $lib . '.php';
-}
-
 // security.php wants the platform's client-IP helper; the module only ever
 // stores an HMAC of it, and in a test there is no request at all.
 if (!function_exists('security_client_ip')) {
     function security_client_ip(): string { return '127.0.0.1'; }
+}
+
+// The same libraries, in the same order, as includes/special_events/bootstrap.php
+// loads them. A shorter list hides real faults: without security.php every
+// se_audit() call failed on the missing se_ip_hash() and the audit assertions
+// below could never pass.
+require_once $root . '/includes/sms_functions.php';
+foreach (['constants', 'util', 'db', 'theme', 'settings', 'security', 'events', 'assets', 'ai',
+          'identity', 'capacity', 'registration', 'realtime', 'live', 'bible', 'verses',
+          'teams', 'checkin', 'program', 'karaoke', 'messages', 'attendees', 'cards', 'export',
+          'portal', 'games', 'games_engine', 'scoring', 'party_games', 'after_event'] as $lib) {
+    require_once $root . '/includes/special_events/' . $lib . '.php';
+}
+
+// Snapshots are written under <DOCUMENT_ROOT>/live/<public_id>/ (se_live_root()).
+// Point that at a scratch directory so a test run never litters the tree.
+$_SERVER['DOCUMENT_ROOT'] = sys_get_temp_dir() . '/se_it_docroot_' . getmypid();
+@mkdir($_SERVER['DOCUMENT_ROOT'] . '/live', 0775, true);
+
+/**
+ * End a forked worker WITHOUT running PHP's shutdown sequence.
+ *
+ * A child inherits the parent's open MySQL socket. A normal exit() destroys
+ * that inherited PDO, which sends COM_QUIT down the shared socket and kills
+ * the PARENT's session ("MySQL server has gone away"). Replacing the process
+ * image skips every destructor while keeping the exit code.
+ */
+function se_it_child_exit(int $code): never
+{
+    if (function_exists('pcntl_exec')) {
+        pcntl_exec('/bin/sh', ['-c', 'exit ' . $code]);
+    }
+    exit($code);
 }
 
 // --------------------------------------------------------------------------
@@ -179,6 +205,29 @@ function se_it_register(PDO $pdo, array $event, int $n): array
     ], ['now' => se_now(), 'ip_hash' => null, 'device' => null]);
 }
 
+/** Move an event's only day to "now", so its check-in window is open. */
+function se_it_open_doors(PDO $pdo, int $eventId): void
+{
+    $now = se_now();
+    $pdo->prepare(
+        "UPDATE se_event_days
+            SET day_date = ?, doors_open_at = ?, starts_at = ?, ends_at = ?, checkin_closes_at = ?
+          WHERE event_id = ?"
+    )->execute([
+        $now->format('Y-m-d'),
+        $now->modify('-30 minutes')->format('Y-m-d H:i:s'),
+        $now->modify('-10 minutes')->format('Y-m-d H:i:s'),
+        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
+        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
+        $eventId,
+    ]);
+    $pdo->prepare("UPDATE se_events SET starts_at = ?, ends_at = ? WHERE id = ?")->execute([
+        $now->modify('-10 minutes')->format('Y-m-d H:i:s'),
+        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
+        $eventId,
+    ]);
+}
+
 // ==========================================================================
 // Test 1 — the seat race (§22.2)
 // ==========================================================================
@@ -210,10 +259,10 @@ if ($canFork) {
                 $stmt  = $child->prepare("SELECT * FROM se_events WHERE id = ?");
                 $stmt->execute([$eventId]);
                 se_it_register($child, $stmt->fetch(), $i);
-                exit(0);
+                se_it_child_exit(0);
             } catch (Throwable $e) {
                 fwrite(STDERR, "    worker {$i}: " . $e->getMessage() . "\n");
-                exit(1);
+                se_it_child_exit(1);
             }
         }
         $children[] = $pid;
@@ -365,40 +414,21 @@ if (!se_checkin_ready($pdo) || !se_teams_ready($pdo)) {
     $raceEvent = se_it_event($pdo, ['online_capacity' => 60]);
     $raceId    = (int) $raceEvent['id'];
 
-    // Doors are open now, so the window lets everybody through.
-    $now = se_now();
-    $pdo->prepare(
-        "UPDATE se_event_days
-            SET day_date = ?, doors_open_at = ?, starts_at = ?, ends_at = ?, checkin_closes_at = ?
-          WHERE event_id = ?"
-    )->execute([
-        $now->format('Y-m-d'),
-        $now->modify('-30 minutes')->format('Y-m-d H:i:s'),
-        $now->modify('-10 minutes')->format('Y-m-d H:i:s'),
-        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
-        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
-        $raceId,
-    ]);
-    $pdo->prepare("UPDATE se_events SET starts_at = ?, ends_at = ? WHERE id = ?")->execute([
-        $now->modify('-10 minutes')->format('Y-m-d H:i:s'),
-        $now->modify('+3 hours')->format('Y-m-d H:i:s'),
-        $raceId,
-    ]);
-
-    $stmt = $pdo->prepare("SELECT * FROM se_events WHERE id = ?");
-    $stmt->execute([$raceId]);
-    $raceEvent = $stmt->fetch();
-
     // Four teams, the usual Envision palette.
     se_teams_save($pdo, $raceEvent, array_map(
         static fn(string $hex): array => ['color_hex' => $hex],
         ['#D11920', '#1D356A', '#1E9E62', '#F5C518']
     ), 1);
 
+    // Register while the event is still upcoming: once it is live, online
+    // registration is closed and newcomers come in as walk-ins (§10.4.2).
     $arrivals = 40;
     for ($i = 1; $i <= $arrivals; $i++) {
         se_it_register($pdo, $raceEvent, 5000 + $i);
     }
+
+    // Then open the doors, so the window lets everybody through.
+    se_it_open_doors($pdo, $raceId);
 
     $stmt = $pdo->prepare(
         "SELECT id FROM se_registrations WHERE event_id = ? AND status = 'confirmed' ORDER BY id"
@@ -436,10 +466,10 @@ if (!se_checkin_ready($pdo) || !se_teams_ready($pdo)) {
                     // second must be absorbed, not counted.
                     $checkIn($child, $raceId, $registrationId);
                     try { $checkIn($child, $raceId, $registrationId); } catch (Throwable $e) { /* expected */ }
-                    exit(0);
+                    se_it_child_exit(0);
                 } catch (Throwable $e) {
                     fwrite(STDERR, "    check-in worker {$registrationId}: " . $e->getMessage() . "\n");
-                    exit(1);
+                    se_it_child_exit(1);
                 }
             }
             $kids[] = $pid;
@@ -567,10 +597,10 @@ if (!se_karaoke_ready($pdo)) {
             if ($pid === 0) {
                 try {
                     $child = se_it_pdo();
-                    exit($pick($child, $kId, $registration, (int) $song['id']) ? 0 : 1);
+                    se_it_child_exit($pick($child, $kId, $registration, (int) $song['id']) ? 0 : 1);
                 } catch (Throwable $e) {
                     fwrite(STDERR, "    karaoke worker: " . $e->getMessage() . "\n");
-                    exit(2);
+                    se_it_child_exit(2);
                 }
             }
             $kids[] = $pid;
@@ -614,6 +644,8 @@ if (!se_karaoke_ready($pdo)) {
         $pick($pdo, $kId, $loser, (int) $other['id']));
 
     // And holds become queue numbers in arrival order at check-in (§10.8.2).
+    // Check-in only opens on the night (§10.5), so open the doors first.
+    se_it_open_doors($pdo, $kId);
     $stmt = $pdo->prepare("SELECT * FROM se_events WHERE id = ?");
     $stmt->execute([$kId]);
     $kEvent = $stmt->fetch();
@@ -650,14 +682,22 @@ if (!se_table_exists($pdo, 'se_message_runs')) {
     $mEvent = se_it_event($pdo, ['online_capacity' => 10]);
     $mId    = (int) $mEvent['id'];
 
-    // Pull the day back so that both reminders are already due.
-    $start = se_now()->modify('+30 minutes');
+    // Register while the event is a fortnight away (registration closes when
+    // the doors open, §10.4.2)…
+    for ($i = 1; $i <= 3; $i++) {
+        se_it_register($pdo, $mEvent, 8000 + $i);
+    }
+
+    // …then pull the day in so the same-day reminder (120 minutes before the
+    // start) fell due half an hour ago, inside the 90-minute lateness window.
+    $start = se_now()->modify('+90 minutes');
     $pdo->prepare(
-        "UPDATE se_event_days SET day_date = ?, doors_open_at = ?, starts_at = ?, ends_at = ? WHERE event_id = ?"
+        "UPDATE se_event_days SET day_date = ?, doors_open_at = ?, starts_at = ?, ends_at = ?, checkin_closes_at = ? WHERE event_id = ?"
     )->execute([
         $start->format('Y-m-d'),
         $start->modify('-30 minutes')->format('Y-m-d H:i:s'),
         $start->format('Y-m-d H:i:s'),
+        $start->modify('+3 hours')->format('Y-m-d H:i:s'),
         $start->modify('+3 hours')->format('Y-m-d H:i:s'),
         $mId,
     ]);
@@ -665,7 +705,6 @@ if (!se_table_exists($pdo, 'se_message_runs')) {
         $start->format('Y-m-d H:i:s'),
         se_json_encode(se_settings_normalize([
             'messages' => [
-                'max_lateness_min' => 10000,
                 'reminder_1' => ['enabled' => true, 'at' => '18:00'],
                 'reminder_2' => ['enabled' => true, 'minutes_before' => 120],
             ],
@@ -675,10 +714,6 @@ if (!se_table_exists($pdo, 'se_message_runs')) {
     $stmt = $pdo->prepare("SELECT * FROM se_events WHERE id = ?");
     $stmt->execute([$mId]);
     $mEvent = $stmt->fetch();
-
-    for ($i = 1; $i <= 3; $i++) {
-        se_it_register($pdo, $mEvent, 8000 + $i);
-    }
 
     $first  = se_messages_run_due($pdo, $mEvent, se_now(), null);
     $second = se_messages_run_due($pdo, $mEvent, se_now(), null);
@@ -695,12 +730,23 @@ if (!se_table_exists($pdo, 'se_message_runs')) {
     $stmt->execute([$mId]);
     is_same('…and every key is distinct', count($first), (int) $stmt->fetchColumn());
 
+    $queued = count(array_filter($first, static fn(array $r): bool => $r['status'] === 'queued'));
+    ok('the same-day reminder was queued for the three guests', $queued >= 1,
+        'statuses: ' . implode(', ', array_map(static fn(array $r): string => $r['status'] . ' (' . ($r['detail'] ?? '') . ')', $first)));
+
     if (se_table_exists($pdo, 'sms_campaigns')) {
         $stmt = $pdo->prepare(
             "SELECT COUNT(*) FROM sms_campaigns WHERE filters_json LIKE ?"
         );
         $stmt->execute(['%"se_event_id":' . $mId . '%']);
-        is_same('one SMS campaign per run, never two', count($first), (int) $stmt->fetchColumn());
+        // A skipped run (missed, or nobody to text) creates no campaign.
+        is_same('one SMS campaign per queued run, never two', $queued, (int) $stmt->fetchColumn());
+
+        $stmt = $pdo->prepare(
+            "SELECT COUNT(*) FROM sms_queue q JOIN sms_campaigns c ON c.id = q.campaign_id WHERE c.filters_json LIKE ?"
+        );
+        $stmt->execute(['%"se_event_id":' . $mId . '%']);
+        is_same('…holding one queued text per guest', 3 * $queued, (int) $stmt->fetchColumn());
     }
 }
 
