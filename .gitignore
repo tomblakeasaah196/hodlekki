@@ -15,9 +15,12 @@ error_log
 /.user.ini
 cgi-bin/
 
-# PHP dependencies (managed via composer.json / composer.lock)
-vendor/
-composer.phar
+# PHP dependencies (managed via composer.json / composer.lock).
+# ROOT-ANCHORED: an unanchored "vendor/" also swallowed assets/se/vendor/,
+# the Special Events module's vendored front-end libraries, which MUST be
+# committed because the cPanel host has no Node (guide §8.6.1, §21.3).
+/vendor/
+/composer.phar
 
 # Front-end tooling / node
 node_modules/
@@ -37,6 +40,12 @@ desktop.ini
 # Runtime / user uploads (member media, sermon audio, event banners, etc.)
 uploads/
 assets/uploads/
+
+# Special Events live snapshots (runtime). Keep the folder's .htaccess and
+# .keep tracked so the deploy creates the directory (guide §21.3, §23.1).
+live/*
+!live/.htaccess
+!live/.keep
 
 # Ad-hoc / staging folders
 gk/
