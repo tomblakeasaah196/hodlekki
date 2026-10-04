@@ -78,6 +78,17 @@ function se_insights(PDO $pdo, array $event): array
             WHERE e.series_id=? GROUP BY e.id ORDER BY e.starts_at");
         $stmt->execute([(int)$event['series_id']]); $series=$stmt->fetchAll() ?: [];
     }
+    $followup = [];
+    if (se_table_exists($pdo, 'se_handoff_items')) {
+        if (!function_exists('assim_attendance_union_sql') && is_file(__DIR__ . '/../assimilation_helpers.php')) require_once __DIR__ . '/../assimilation_helpers.php';
+        if (function_exists('assim_attendance_union_sql')) {
+            foreach ([30, 60, 90] as $daysAfter) {
+                $sql = "SELECT COUNT(DISTINCT hi.contact_id) FROM se_handoff_items hi JOIN " . assim_attendance_union_sql() . " att ON att.user_id=hi.target_id WHERE hi.event_id=? AND hi.target_table='users' AND att.attended_on>DATE(?) AND att.attended_on<=DATE_ADD(DATE(?),INTERVAL {$daysAfter} DAY)";
+                $q=$pdo->prepare($sql); $q->execute([$eventId,$event['ends_at'],$event['ends_at']]);
+                $followup[]=['label'=>$daysAfter.'-day church attendance','value'=>(int)$q->fetchColumn()];
+            }
+        }
+    }
     return [
         'counts'=>$counts,
         'funnel'=>[['label'=>'Portal views','value'=>$scalar("SELECT COALESCE(SUM(value),0) FROM se_metrics_daily WHERE event_id=? AND metric='view'",[$eventId])],['label'=>'Registration starts','value'=>$scalar("SELECT COALESCE(SUM(value),0) FROM se_metrics_daily WHERE event_id=? AND metric='reg_start'",[$eventId])],['label'=>'Registered','value'=>$counts['registrations']],['label'=>'Checked in','value'=>$counts['checked_in']]],
@@ -87,6 +98,7 @@ function se_insights(PDO $pdo, array $event): array
         'feedback'=>$feedback,
         'handoff'=>se_table_exists($pdo,'se_handoff_items') ? $group("SELECT CONCAT(destination, ': ', outcome) label, COUNT(*) value FROM se_handoff_items WHERE event_id=? GROUP BY destination,outcome ORDER BY value DESC",[$eventId]) : [],
         'series'=>$series,
+        'followup_attendance'=>$followup,
         'hall_of_fame'=>function_exists('se_finale_payload') ? (se_finale_payload($pdo,$event)['champion'] ?? null) : null,
     ];
 }
@@ -126,20 +138,46 @@ function se_handoff_push(PDO $pdo, array $event, array $options, array $override
     $overrideMap=[]; foreach($overrides as $o) if(isset($o['registration_id'])) $overrideMap[(int)$o['registration_id']]=$o;
     $pdo->prepare("INSERT INTO se_handoffs(event_id,summary_json,created_by) VALUES(?,?,?)")->execute([(int)$event['id'],se_json_encode($options),$actorId]);
     $handoffId=(int)$pdo->lastInsertId(); $reachCampaign=null; $counts=[];
-    foreach(array_chunk($preview['items'],50) as $batch) foreach($batch as $item) {
-        if(isset($overrideMap[$item['registration_id']])) { $o=$overrideMap[$item['registration_id']]; $item['destination']=se_enum($o['destination']??'none',['reach','embrace','none'],'none'); $item['reason']=$item['destination']==='none'?'skipped_excluded':'ready'; }
-        $outcome=$item['reason']; $targetTable=null; $targetId=null;
-        if($item['reason']==='ready') {
-            $stmt=$pdo->prepare("SELECT r.*,c.phone_e164,c.member_user_id,c.email contact_email FROM se_registrations r JOIN se_contacts c ON c.id=r.contact_id WHERE r.id=? AND r.event_id=?"); $stmt->execute([$item['registration_id'],(int)$event['id']]); $r=$stmt->fetch();
-            try {
-                if($item['destination']==='reach') { if(!$reachCampaign) $reachCampaign=se_handoff_reach_campaign($pdo,$event,$actorId); $targetId=se_handoff_reach_lead($pdo,$event,$r,$reachCampaign,$actorId); $targetTable='reach_leads'; }
-                else { [$targetId,$linked]=se_handoff_embrace($pdo,$event,$r); $targetTable='users'; $outcome=$linked?'linked_existing':'created'; }
-                if($outcome==='ready') $outcome=$targetId?'created':'already_handed_off';
-            } catch(PDOException $e) { if(se_is_duplicate_key($e)) $outcome='already_handed_off'; else throw $e; }
+    foreach (array_chunk($preview['items'], 50) as $batch) {
+        $pdo->beginTransaction();
+        try {
+            foreach ($batch as $item) {
+                if (isset($overrideMap[$item['registration_id']])) {
+                    $o = $overrideMap[$item['registration_id']];
+                    $item['destination'] = se_enum($o['destination'] ?? 'none', ['reach', 'embrace', 'none'], 'none');
+                    $item['reason'] = $item['destination'] === 'none' ? 'skipped_excluded' : 'ready';
+                }
+                $outcome = $item['reason'];
+                $targetTable = null;
+                $targetId = null;
+                if ($item['reason'] === 'ready') {
+                    $stmt = $pdo->prepare("SELECT r.*, c.phone_e164, c.member_user_id, c.email contact_email FROM se_registrations r JOIN se_contacts c ON c.id=r.contact_id WHERE r.id=? AND r.event_id=?");
+                    $stmt->execute([$item['registration_id'], (int) $event['id']]);
+                    $r = $stmt->fetch();
+                    try {
+                        if ($item['destination'] === 'reach') {
+                            if (!$reachCampaign) $reachCampaign = se_handoff_reach_campaign($pdo, $event, $actorId);
+                            $targetId = se_handoff_reach_lead($pdo, $event, $r, $reachCampaign, $actorId);
+                            $targetTable = 'reach_leads';
+                        } else {
+                            [$targetId, $linked] = se_handoff_embrace($pdo, $event, $r);
+                            $targetTable = 'users';
+                            $outcome = $linked ? 'linked_existing' : 'created';
+                        }
+                        if ($outcome === 'ready') $outcome = $targetId ? 'created' : 'already_handed_off';
+                    } catch (PDOException $e) {
+                        if (se_is_duplicate_key($e)) $outcome = 'already_handed_off'; else throw $e;
+                    }
+                }
+                $pdo->prepare("INSERT INTO se_handoff_items(handoff_id,event_id,registration_id,contact_id,destination,outcome,target_table,target_id,note) VALUES(?,?,?,?,?,?,?,?,?)")
+                    ->execute([$handoffId, (int) $event['id'], $item['registration_id'], $item['contact_id'], $item['destination'], $outcome, $targetTable, $targetId, se_line($overrideMap[$item['registration_id']]['reason'] ?? '', 160) ?: null]);
+                $counts[$outcome] = 1 + ($counts[$outcome] ?? 0);
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
         }
-        $pdo->prepare("INSERT INTO se_handoff_items(handoff_id,event_id,registration_id,contact_id,destination,outcome,target_table,target_id,note) VALUES(?,?,?,?,?,?,?,?,?)")
-            ->execute([$handoffId,(int)$event['id'],$item['registration_id'],$item['contact_id'],$item['destination'],$outcome,$targetTable,$targetId,se_line($overrideMap[$item['registration_id']]['reason']??'',160)?:null]);
-        $counts[$outcome]=1+($counts[$outcome]??0);
     }
     $pdo->prepare("UPDATE se_handoffs SET reach_campaign_id=?,summary_json=? WHERE id=?")->execute([$reachCampaign,se_json_encode(['options'=>$options,'counts'=>$counts]),$handoffId]);
     se_audit($pdo,(int)$event['id'],'handoff_run',['handoff_id'=>$handoffId,'counts'=>$counts],'handoff',$handoffId,$actorId);
