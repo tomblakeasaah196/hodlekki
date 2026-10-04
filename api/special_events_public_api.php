@@ -577,6 +577,16 @@ try {
             se_api_success('Done — we will not contact you again.', ['opted_out' => true]);
         }
 
+        // Games player actions (§12.2)
+        case 'join_games': case 'answer': case 'suggest': case 'buzz': {
+            $event=se_public_event($pdo,$body); se_public_require_writable($event); se_public_limit($pdo,$event,'games',60,3000,600); [$reg,$device]=se_public_actor($pdo,$event,$body);
+            if($action==='join_games') $out=se_game_join($pdo,$event,$reg);
+            elseif($action==='answer') $out=se_game_answer($pdo,$event,$reg,$body);
+            elseif($action==='suggest') $out=se_game_suggest($pdo,$event,$reg,$body);
+            else $out=se_game_buzz($pdo,$event,$reg,$body);
+            se_api_success('OK',$out);
+        }
+
         // ------------------------------------------------------------------
         // Karaoke (§10.8, §12.2)
         // ------------------------------------------------------------------

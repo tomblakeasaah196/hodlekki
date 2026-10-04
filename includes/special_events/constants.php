@@ -331,6 +331,18 @@ const SE_SCHEMA_EXPECTED = [
             'active_song_key', 'active_singer_key',
         ],
     ],
+    '20261020090000_se_games.sql' => [
+        'se_decks' => ['id','title','content_type','scope','event_id','translation'],
+        'se_deck_items' => ['id','deck_id','payload_json','review_status','scripture_ref','scripture_text','times_used'],
+        'se_games' => ['id','event_id','type','title','settings_json','weight','status','program_item_id'],
+        'se_game_items' => ['game_id','deck_item_id','sort_order'],
+        'se_rounds' => ['id','event_id','game_id','round_no','deck_item_id','state','attempt','opens_at','closes_at','eligible_json','result_json'],
+        'se_answers' => ['id','event_id','round_id','registration_id','role','choice_index','elapsed_ms'],
+        'se_buzzes' => ['id','event_id','round_id','attempt','team_id','registration_id','effective_ms','judged'],
+        'se_survey_responses' => ['id','event_id','deck_item_id','registration_id','answer_text','answer_norm','is_test'],
+        'se_feud_answers' => ['id','event_id','deck_item_id','label','points','approved'],
+        'se_score_events' => ['id','event_id','scope','team_id','registration_id','round_id','kind','points','idempotency_key','voided_at'],
+    ],
     '20261013090200_se_live_state.sql' => [
         'se_live_state' => ['event_id', 'version', 'scene', 'scene_payload_json', 'announcement_json', 'sfx_seq', 'sfx_cue', 'room_key', 'lobby_key', 'stage_key', 'dirty', 'last_published_at', 'updated_at', 'updated_by'],
     ],
@@ -379,7 +391,7 @@ const SE_STUDIO_TABS = [
  */
 const SE_STUDIO_TABS_READY = [
     'overview', 'details', 'brand', 'registration', 'checkin', 'program', 'teams',
-    'karaoke', 'messages', 'live', 'attendees', 'assets', 'crew', 'settings',
+    'karaoke', 'games', 'messages', 'live', 'attendees', 'assets', 'crew', 'settings',
 ];
 
 /**

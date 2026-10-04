@@ -17,7 +17,7 @@ if (defined('SE_BOOTSTRAPPED')) {
 define('SE_BOOTSTRAPPED', true);
 
 /** The module's own version, shown in Studio → Settings → Health. */
-const SE_MODULE_VERSION = '1.3.0-pr4';
+const SE_MODULE_VERSION = '1.4.0-pr5';
 
 // Session: db.php starts it, but a CLI script (cron, tests) may not have one.
 if (PHP_SAPI !== 'cli' && session_status() === PHP_SESSION_NONE) {
@@ -49,6 +49,9 @@ require_once __DIR__ . '/attendees.php';
 require_once __DIR__ . '/cards.php';
 require_once __DIR__ . '/export.php';
 require_once __DIR__ . '/portal.php';
+require_once __DIR__ . '/games.php';
+require_once __DIR__ . '/games_engine.php';
+require_once __DIR__ . '/scoring.php';
 
 // SMS goes out through SMS Studio's tables and worker (§16.1). Loading its
 // helpers here keeps sms_render(), sms_segments() and sms_health() available

@@ -884,3 +884,47 @@ checked in has no team and no player number yet.
 Not if test mode was on. **Live → Reset rehearsal** removes every test row.
 Check the red ribbon was showing during the rehearsal — if it was not, the
 rows are real and have to be removed one by one from Attendees.
+
+## 13. Games: decks, rounds and scoring (PR5)
+
+The **Games** tab is where the Producer prepares the night. A deck is a
+reusable library of reviewed questions; event decks are private to one event.
+Choose `mcq`, open answer, emoji, verse, charade, clues or survey content.
+Every item is saved as **Draft** until a crew reviewer approves it. AI can
+suggest Bible content, but it never supplies Bible text: references are
+looked up from KJV in the Studio, and a person reviews the result before it
+can be used. If AI or the Bible service is unavailable, enter and review an
+item by hand.
+
+Add games in the order they will run and attach approved deck items. The three
+PR5 game families are:
+
+- **Live Quiz** — every checked-in player answers on their phone. It uses a
+  shared countdown and scheduled reveal; the earlier a correct answer arrives,
+  the more points it earns.
+- **Bible Trivia** — each team captain submits for the team while teammates
+  send suggestions. Suggestions are private to that team. If a captain does
+  not answer, the configured team vote can be used.
+- **Buzzer** — Bible Buzzer, Finish the Verse and Emoji Bible use the same
+  buzzer round. A team can buzz once per attempt; effective times are clamped
+  to the server clock, and the host judges the winner.
+
+The `/e/<slug>/play` page is available only to a checked-in device. Guests tap
+**Join the games**, then wait for the host. The stage and phones use the same
+server `opens_at` clock, so polling delay does not change the scoring window.
+The question, choices and public reveal never contain a charades phrase or
+private answer before the host reveals it.
+
+### Running and rehearsing
+
+In the Host console, use **Next round**, **Arm**, **Lock**, **Reveal** and
+**Score**. A round is never scored twice: its ledger rows have idempotency
+keys. To correct a result, void the round or an individual ledger row with a
+reason, then award a new entry; points are never edited in place. Awards and
+penalties are visible in score history and in the team and MVP leaderboards.
+
+Turn on **Test mode** before rehearsal and use **Studio → Games → Rehearse**.
+Game rows marked `TEST` are removed by Reset rehearsal; real scores and
+registrations are left alone. Before the event, run the quiz load profile from
+`tests/special_events/load/quiz.k6.js` and check the static snapshot and answer
+thresholds in the engineering guide.
