@@ -1888,7 +1888,7 @@ try {
         $event = se_studio_event($pdo, $body, 'event.edit');
         $answers = $body['answers'] ?? [];
         if (!is_array($answers)) {
-            throw new SeValidationException('Answers must be a list.', ['answers']);
+            throw new SeValidationException(['answers' => 'Answers must be a list.'], 'Answers must be a list.');
         }
         se_api_success('Feud board saved.', se_feud_board_save(
             $pdo,

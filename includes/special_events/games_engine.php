@@ -49,7 +49,7 @@ function se_round_next(PDO $pdo, array $event, array $game, int $actor, bool $te
         $item = $s->fetchColumn();
 
         if (!$item) {
-            throw new SeRuleException('No approved deck item remains.', 'NO_ITEMS');
+            throw new SeRuleException('NO_ITEMS', 'No approved deck item remains.');
         }
         $s = $pdo->prepare('INSERT INTO se_rounds(event_id,game_id,round_no,deck_item_id,is_test) VALUES(?,?,?,?,?)');
         $s->execute([(int) $event['id'], (int) $game['id'], $no, (int) $item, $test ? 1 : 0]);
@@ -78,7 +78,7 @@ function se_round_arm(PDO $pdo, array $event, int $roundId, int $preroll, int $d
     }
 
     if ($r['state'] !== 'pending') {
-        throw new SeRuleException('That round has already started.', 'STALE_STATE');
+        throw new SeRuleException('STALE_STATE', 'That round has already started.');
     }
     $opens = $now + $preroll;
     $closes = $opens + $duration;
@@ -94,7 +94,7 @@ function se_round_arm(PDO $pdo, array $event, int $roundId, int $preroll, int $d
     $s->execute([$dt($now), $dt($opens), $dt($closes), se_json_encode($elig), $roundId]);
 
     if (!$s->rowCount()) {
-        throw new SeRuleException('The round changed. Refresh and try again.', 'STALE_STATE');
+        throw new SeRuleException('STALE_STATE', 'The round changed. Refresh and try again.');
     }
 
     return ['id' => $roundId, 'state' => 'armed', 'arm_ms' => $now, 'opens_ms' => $opens, 'closes_ms' => $closes];
@@ -111,7 +111,7 @@ function se_round_transition(PDO $pdo, int $roundId, string $to, int $actor, str
     }
 
     if (!in_array($to, $allowed[$r['state']] ?? [], true)) {
-        throw new SeRuleException('That round cannot make that transition.', 'STALE_STATE');
+        throw new SeRuleException('STALE_STATE', 'That round cannot make that transition.');
     }
     $col = ['locked' => 'locked_at', 'revealed' => 'revealed_at'][$to] ?? null;
     $sql = 'UPDATE se_rounds SET state=?';
@@ -132,7 +132,7 @@ function se_round_transition(PDO $pdo, int $roundId, string $to, int $actor, str
     $s->execute($args);
 
     if (!$s->rowCount()) {
-        throw new SeRuleException('The round changed.', 'STALE_STATE');
+        throw new SeRuleException('STALE_STATE', 'The round changed.');
     }
 
     return ['id' => $roundId, 'state' => $to];
@@ -203,13 +203,13 @@ function se_games_reset(PDO $pdo, array $event, int $actor): int
 function se_game_require_player(PDO $pdo, array $event, array $reg, ?array $device): void
 {
     if (!$device || ($device['mode'] ?? '') !== 'full' || (int) ($device['registration_id'] ?? 0) !== (int) $reg['id']) {
-        throw new SeRuleException('This phone is read-only. Ask the desk for a transfer code.', 'DEVICE_READONLY');
+        throw new SeRuleException('DEVICE_READONLY', 'This phone is read-only. Ask the desk for a transfer code.');
     }
     $stmt = $pdo->prepare('SELECT 1 FROM se_checkins WHERE event_id=? AND registration_id=? AND day_date=CURDATE() LIMIT 1');
     $stmt->execute([(int) $event['id'], (int) $reg['id']]);
 
     if (!$stmt->fetchColumn()) {
-        throw new SeRuleException('Check in first to join the games.', 'NOT_CHECKED_IN');
+        throw new SeRuleException('NOT_CHECKED_IN', 'Check in first to join the games.');
     }
 }
 
@@ -252,11 +252,11 @@ function se_game_answer(PDO $pdo, array $event, array $reg, array $in): array
     }
 
     if ($round['type'] === 'trivia' && !se_game_is_captain($pdo, $event, $reg)) {
-        throw new SeRuleException('Only your captain can submit the team answer.', 'NOT_CAPTAIN');
+        throw new SeRuleException('NOT_CAPTAIN', 'Only your captain can submit the team answer.');
     }
 
     if (empty($round['opens_at']) || empty($round['closes_at'])) {
-        throw new SeRuleException('That round is not open.', 'ROUND_CLOSED');
+        throw new SeRuleException('ROUND_CLOSED', 'That round is not open.');
     }
     $now = se_epoch_ms();
     $opens = se_epoch_ms(se_parse_datetime($round['opens_at']));
@@ -265,18 +265,18 @@ function se_game_answer(PDO $pdo, array $event, array $reg, array $in): array
     $grace = (int) ($settings['grace_ms'] ?? 1500);
 
     if ($now < $opens) {
-        throw new SeRuleException('Not yet — get ready.', 'TOO_EARLY');
+        throw new SeRuleException('TOO_EARLY', 'Not yet — get ready.');
     }
 
     if ($now > $closes + $grace || in_array($round['state'], ['locked', 'revealed', 'scored', 'void'], true)) {
-        throw new SeRuleException("Time's up.", 'ROUND_CLOSED');
+        throw new SeRuleException('ROUND_CLOSED', "Time's up.");
     }
     $item = se_round_item($pdo, $round);
     $choices = $item['payload']['choices'] ?? [];
     $choice = se_int($in['choice_index'] ?? -1, -1);
 
     if ($choice < 0 || $choice >= count($choices)) {
-        throw new SeValidationException('Choose one of the answers.', ['choice_index']);
+        throw new SeValidationException(['choice_index' => 'Choose one of the answers.'], 'Choose one of the answers.');
     }
     $duration = max(1, $closes - $opens);
     $serverElapsed = $now - $opens;
@@ -288,7 +288,7 @@ function se_game_answer(PDO $pdo, array $event, array $reg, array $in): array
         $stmt->execute([(int) $event['id'], $roundId, (int) $reg['id'], $reg['team_id'] ?? null, ($round['type'] === 'trivia' ? 'captain' : 'player'), $choice, date('Y-m-d H:i:s.v'), $clientElapsed, $elapsed, $in['device_id'] ?? null]);
     } catch (PDOException $e) {
         if ((int) $e->errorInfo[1] === 1062) {
-            throw new SeRuleException('Your answer is already locked in.', 'ALREADY_ANSWERED');
+            throw new SeRuleException('ALREADY_ANSWERED', 'Your answer is already locked in.');
         }
 
         throw $e;
@@ -310,13 +310,13 @@ function se_game_suggest(PDO $pdo, array $event, array $reg, array $in): array
     }
 
     if ($round['type'] !== 'trivia' || empty($round['closes_at']) || !in_array($round['state'], ['armed', 'open'], true) || se_epoch_ms() > se_epoch_ms(se_parse_datetime($round['closes_at']))) {
-        throw new SeRuleException("Time's up.", 'ROUND_CLOSED');
+        throw new SeRuleException('ROUND_CLOSED', "Time's up.");
     }
     $item = se_round_item($pdo, $round);
     $choices = $item['payload']['choices'] ?? [];
 
     if ($choice < 0 || $choice >= count($choices)) {
-        throw new SeValidationException('Choose one of the answers.', ['choice_index']);
+        throw new SeValidationException(['choice_index' => 'Choose one of the answers.'], 'Choose one of the answers.');
     }
     $stmt = $pdo->prepare("INSERT INTO se_answers(event_id,round_id,registration_id,team_id,role,choice_index,received_at,elapsed_ms) VALUES(?,?,?,?, 'suggestion',?,NOW(3),0) ON DUPLICATE KEY UPDATE choice_index=VALUES(choice_index),received_at=VALUES(received_at)");
     $stmt->execute([(int) $event['id'], $roundId, (int) $reg['id'], $reg['team_id'] ?? null, $choice]);
@@ -326,7 +326,7 @@ function se_game_suggest(PDO $pdo, array $event, array $reg, array $in): array
 function se_game_buzz(PDO $pdo, array $event, array $reg, array $in): array
 {
     if (empty($reg['team_id'])) {
-        throw new SeRuleException('You need a team to buzz.', 'NOT_ELIGIBLE');
+        throw new SeRuleException('NOT_ELIGIBLE', 'You need a team to buzz.');
     }
     $roundId = se_int($in['round_id'] ?? 0, 0);
     $stmt = $pdo->prepare('SELECT r.*,g.type game_type FROM se_rounds r JOIN se_games g ON g.id=r.game_id WHERE r.id=? AND r.event_id=?');
@@ -338,11 +338,11 @@ function se_game_buzz(PDO $pdo, array $event, array $reg, array $in): array
     }
 
     if (!in_array($round['state'], ['armed', 'open'], true) || !$round['opens_at'] || !$round['closes_at']) {
-        throw new SeRuleException('Buzzing is closed.', 'ROUND_CLOSED');
+        throw new SeRuleException('ROUND_CLOSED', 'Buzzing is closed.');
     }
 
     if (se_int($in['attempt'] ?? 0, 0) !== (int) $round['attempt']) {
-        throw new SeRuleException('That buzz window has moved on.', 'ROUND_CLOSED');
+        throw new SeRuleException('ROUND_CLOSED', 'That buzz window has moved on.');
     }
     $now = se_epoch_ms();
     $opens = se_epoch_ms(se_parse_datetime($round['opens_at']));
@@ -350,21 +350,21 @@ function se_game_buzz(PDO $pdo, array $event, array $reg, array $in): array
     $client = se_int($in['client_ms'] ?? $now, 0);
 
     if ($now < $opens || $client < $opens - 200) {
-        throw new SeRuleException('Not yet — get ready.', 'TOO_EARLY');
+        throw new SeRuleException('TOO_EARLY', 'Not yet — get ready.');
     }
 
     if ($now > $closes) {
-        throw new SeRuleException("Time's up.", 'ROUND_CLOSED');
+        throw new SeRuleException('ROUND_CLOSED', "Time's up.");
     }
     $state = se_round_state_data($round);
 
     if (($round['game_type'] ?? '') === 'feud' && ($state['phase'] ?? '') === 'faceoff'
         && !in_array((int) $reg['id'], array_map('intval', [$state['rep_a'] ?? 0, $state['rep_b'] ?? 0]), true)) {
-        throw new SeRuleException('Only the two face-off representatives can buzz.', 'NOT_ELIGIBLE');
+        throw new SeRuleException('NOT_ELIGIBLE', 'Only the two face-off representatives can buzz.');
     }
 
     if (in_array((int) $reg['team_id'], array_map('intval', $state['locked_out'] ?? []), true)) {
-        throw new SeRuleException('Your team is locked out until the next clue.', 'LOCKED_OUT');
+        throw new SeRuleException('LOCKED_OUT', 'Your team is locked out until the next clue.');
     }
 
     if ($client > $now + 200) {
@@ -377,7 +377,7 @@ function se_game_buzz(PDO $pdo, array $event, array $reg, array $in): array
         $stmt->execute([(int) $event['id'], $roundId, (int) $round['attempt'], (int) $reg['team_id'], (int) $reg['id'], $effective]);
     } catch (PDOException $e) {
         if ((int) $e->errorInfo[1] === 1062) {
-            throw new SeRuleException('Your team already buzzed.', 'ALREADY_BUZZED');
+            throw new SeRuleException('ALREADY_BUZZED', 'Your team already buzzed.');
         }
 
         throw $e;
@@ -428,7 +428,7 @@ function se_round_next_live(PDO $pdo, array $event, array $game, bool $test, ?in
         $itemId = $stmt->fetchColumn();
 
         if (!$itemId) {
-            throw new SeRuleException('No approved deck item remains.', 'NO_ITEMS');
+            throw new SeRuleException('NO_ITEMS', 'No approved deck item remains.');
         }
         $stmt = $pdo->prepare('INSERT INTO se_rounds(event_id,game_id,round_no,deck_item_id,is_test) VALUES(?,?,?,?,?)');
         $stmt->execute([(int) $event['id'], (int) $game['id'], $number, (int) $itemId, $test ? 1 : 0]);
@@ -443,7 +443,7 @@ function se_round_next_live(PDO $pdo, array $event, array $game, bool $test, ?in
 function se_game_status_set(PDO $pdo, array $event, int $gameId, string $status, ?int $expected, int $actor): array
 {
     if (!in_array($status, ['live', 'paused', 'finished'], true)) {
-        throw new SeValidationException('Invalid game status.', ['status']);
+        throw new SeValidationException(['status' => 'Invalid game status.'], 'Invalid game status.');
     }
 
     return se_live_mutate($pdo, $event, $expected, static function () use ($pdo, $gameId, $event, $status): array {
@@ -471,7 +471,7 @@ function se_round_transition_live(PDO $pdo, array $event, int $roundId, string $
         $allowed = ['pending' => ['armed', 'void'], 'armed' => ['open', 'locked', 'void'], 'open' => ['locked', 'void'], 'locked' => ['revealed', 'void'], 'revealed' => ['scored', 'void'], 'scored' => ['void']];
 
         if (!in_array($to, $allowed[$old] ?? [], true)) {
-            throw new SeRuleException('That round cannot make that transition.', 'STALE_STATE');
+            throw new SeRuleException('STALE_STATE', 'That round cannot make that transition.');
         }
         $set = 'state = ?';
         $args = [$to];
@@ -494,7 +494,7 @@ function se_round_transition_live(PDO $pdo, array $event, int $roundId, string $
         $s->execute($args);
 
         if (!$s->rowCount()) {
-            throw new SeRuleException('The round changed.', 'STALE_STATE');
+            throw new SeRuleException('STALE_STATE', 'The round changed.');
         }
 
         return ['active_round_id' => $roundId];

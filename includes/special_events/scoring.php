@@ -25,7 +25,7 @@ function se_score_insert(PDO $pdo, array $event, array $in, int $actor): array
     $scope = se_enum($in['scope'] ?? '', ['team', 'individual'], '');
 
     if ($scope === '') {
-        throw new SeValidationException('Score scope is required.', ['scope']);
+        throw new SeValidationException(['scope' => 'Score scope is required.'], 'Score scope is required.');
     }
     $points = (int) ($in['points'] ?? 0);
     $key = se_line($in['idempotency_key'] ?? '', 80) ?: null;
@@ -44,7 +44,7 @@ function se_score_insert(PDO $pdo, array $event, array $in, int $actor): array
 function se_score_void(PDO $pdo, array $event, int $id, string $reason, int $actor): void
 {
     if (mb_strlen(trim($reason)) < 3) {
-        throw new SeValidationException('Give a reason for voiding a score.', ['reason']);
+        throw new SeValidationException(['reason' => 'Give a reason for voiding a score.'], 'Give a reason for voiding a score.');
     }
     $s = $pdo->prepare('UPDATE se_score_events SET voided_at=NOW(),voided_by=?,void_reason=? WHERE id=? AND event_id=? AND voided_at IS NULL');
     $s->execute([$actor, $reason, $id, (int) $event['id']]);
@@ -74,7 +74,7 @@ function se_round_score(PDO $pdo, array $event, int $roundId, int $actor): array
     }
 
     if ($round['state'] !== 'revealed') {
-        throw new SeRuleException('Reveal the round before scoring.', 'ROUND_NOT_REVEALED');
+        throw new SeRuleException('ROUND_NOT_REVEALED', 'Reveal the round before scoring.');
     }
     $item = se_round_item($pdo, $round);
     $payload = $item['payload'] ?? [];
@@ -114,7 +114,7 @@ function se_round_score(PDO $pdo, array $event, int $roundId, int $actor): array
     $stmt->execute([$roundId]);
 
     if (!$stmt->rowCount()) {
-        throw new SeRuleException('That round was already scored.', 'STALE_STATE');
+        throw new SeRuleException('STALE_STATE', 'That round was already scored.');
     }
 
     return ['answers' => count($answers), 'leaderboard' => se_leaderboards($pdo, $event)];
@@ -127,7 +127,7 @@ function se_score_adjust_live(PDO $pdo, array $event, array $input, ?int $expect
         $reason = se_line($input['reason'] ?? '', 160);
 
         if (mb_strlen($reason) < 3) {
-            throw new SeValidationException('Give the award or penalty a name.', ['reason']);
+            throw new SeValidationException(['reason' => 'Give the award or penalty a name.'], 'Give the award or penalty a name.');
         }
         $saved = se_score_insert($pdo, $event, $input + ['reason' => $reason], $actor);
 

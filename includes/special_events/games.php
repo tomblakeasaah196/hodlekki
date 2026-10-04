@@ -86,7 +86,7 @@ function se_deck_save(PDO $pdo, array $event, array $in, int $actor): array
     $title = se_line($in['title'] ?? '', 120);
 
     if ($type === '' || $title === '') {
-        throw new SeValidationException('Deck title and content type are required.', ['title', 'content_type']);
+        throw new SeValidationException(['title' => 'Deck title and content type are required.', 'content_type' => 'Deck title and content type are required.'], 'Deck title and content type are required.');
     }
     $scope = ($in['scope'] ?? 'event') === 'library' ? 'library' : 'event';
     $id = se_int_or_null($in['id'] ?? null, 0);
@@ -110,7 +110,7 @@ function se_deck_item_save(PDO $pdo, array $event, array $in, int $actor): array
     $payload = $in['payload'] ?? [];
 
     if (!is_array($payload)) {
-        throw new SeValidationException('Payload must be an object.', ['payload']);
+        throw new SeValidationException(['payload' => 'Payload must be an object.'], 'Payload must be an object.');
     }
     $owner = $pdo->prepare("SELECT content_type FROM se_decks WHERE id=? AND (event_id=? OR scope='library')");
     $owner->execute([$deckId, (int) $event['id']]);
@@ -121,12 +121,12 @@ function se_deck_item_save(PDO $pdo, array $event, array $in, int $actor): array
     }
 
     if ((string) $ownedType !== $type) {
-        throw new SeValidationException('Item type must match its deck.', ['content_type']);
+        throw new SeValidationException(['content_type' => 'Item type must match its deck.'], 'Item type must match its deck.');
     }
     $bad = se_game_payload_validate($type, $payload);
 
     if ($bad) {
-        throw new SeValidationException(implode(' ', $bad), ['payload']);
+        throw new SeValidationException(['payload' => implode(' ', $bad)], implode(' ', $bad));
     }
     $json = se_json_encode($payload);
     $ref = se_line($in['scripture_ref'] ?? '', 60) ?: null;
@@ -157,7 +157,7 @@ function se_game_save(PDO $pdo, array $event, array $in, int $actor): array
     $type = se_enum($in['type'] ?? '', SE_GAME_TYPES, '');
 
     if ($type === '') {
-        throw new SeValidationException('Choose a game type.', ['type']);
+        throw new SeValidationException(['type' => 'Choose a game type.'], 'Choose a game type.');
     } $settings = $in['settings'] ?? [];
 
     if (!is_array($settings)) {
@@ -173,7 +173,7 @@ function se_deck_items_review(PDO $pdo, array $event, array $in, int $actor): ar
     $status = se_enum($in['status'] ?? '', ['draft', 'approved', 'rejected'], 'draft');
 
     if (!is_array($ids) || !$ids) {
-        throw new SeValidationException('Choose at least one deck item.', ['ids']);
+        throw new SeValidationException(['ids' => 'Choose at least one deck item.'], 'Choose at least one deck item.');
     }
     $q = $pdo->prepare("UPDATE se_deck_items i JOIN se_decks d ON d.id=i.deck_id SET i.review_status=?,i.reviewed_by=?,i.reviewed_at=NOW() WHERE i.id=? AND (d.scope='library' OR d.event_id=?)");
     $n = 0;
@@ -191,7 +191,7 @@ function se_game_items_save(PDO $pdo, array $event, array $in, int $actor): arra
     $items = $in['item_ids'] ?? [];
 
     if (!is_array($items)) {
-        throw new SeValidationException('item_ids must be a list.', ['item_ids']);
+        throw new SeValidationException(['item_ids' => 'item_ids must be a list.'], 'item_ids must be a list.');
     }
     $owns = $pdo->prepare('SELECT 1 FROM se_games WHERE id=? AND event_id=?');
     $owns->execute([$game, (int) $event['id']]);
@@ -212,7 +212,7 @@ function se_game_items_save(PDO $pdo, array $event, array $in, int $actor): arra
         }
 
         if ($added !== count($items)) {
-            throw new SeValidationException('One or more items are not approved for this event.', ['item_ids']);
+            throw new SeValidationException(['item_ids' => 'One or more items are not approved for this event.'], 'One or more items are not approved for this event.');
         }
         $pdo->commit();
 
@@ -248,7 +248,7 @@ function se_deck_generate_apply(PDO $pdo, array $event, int $jobId, int $deckId,
     $job = se_ai_job_find($pdo, $jobId, (int) $event['id']);
 
     if (!$job || $job['status'] !== 'ready') {
-        throw new SeRuleException('That AI result is no longer awaiting review.', 'AI_JOB_INVALID');
+        throw new SeRuleException('AI_JOB_INVALID', 'That AI result is no longer awaiting review.');
     }
     $decoded = json_decode((string) $job['result_json'], true) ?: [];
     $items = $decoded['items'] ?? [];
