@@ -70,7 +70,7 @@ function se_deck_generate(PDO $pdo, array $event, array $in, int $actor): array
         'difficulty_mix' => se_line($in['difficulty_mix'] ?? 'easy, medium, hard', 80),
         'avoid' => se_line($in['avoid_recent'] ?? '', 1000),
         'translation' => 'KJV',
-    ], ['user_id' => $actor, 'event_id' => (int) $event['id']);
+    ], ['user_id' => $actor, 'event_id' => (int) $event['id']]);
     $job = se_ai_job_create($pdo, (int) $event['id'], 'deck_generate', $in, $result, $actor, 'ready');
     return ['job_id' => $job, 'status' => 'ready', 'result' => $result];
 }
