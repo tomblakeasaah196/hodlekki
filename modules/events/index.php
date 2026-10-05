@@ -5,6 +5,8 @@ require_once '../../includes/header.php';
 <link rel="stylesheet" href="https://cdn.quilljs.com/1.3.7/quill.snow.css">
 <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- QR rendering for the "I'm New Here" first-timer path (same lib as Check-in QR module) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <div class="max-w-7xl mx-auto space-y-6 pb-12">
 
     <!-- Header -->
@@ -406,10 +408,19 @@ require_once '../../includes/header.php';
                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Select Event to Track</label>
                 <select id="attendanceEventSelect" class="w-full px-4 py-3.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hodBlue outline-none font-bold bg-gray-50 cursor-pointer"><option value="">-- Choose an active event --</option></select>
             </div>
-            <div class="w-full md:w-1/3 relative">
-                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Quick Search</label>
-                <input type="text" id="rosterSearch" placeholder="Type a name..." disabled class="w-full pl-10 pr-4 py-3.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-hodBlue outline-none disabled:bg-gray-100 disabled:cursor-not-allowed">
-                <svg class="w-5 h-5 text-gray-400 absolute left-3 top-9" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <div class="w-full md:w-1/3">
+                <label for="rosterSearch" class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Quick Search</label>
+                <div class="relative">
+                    <input type="text" id="rosterSearch" placeholder="Type a name..." autocomplete="off" role="combobox" aria-expanded="false" aria-controls="attSearchPopover" aria-autocomplete="list" disabled class="w-full pl-10 pr-4 py-3.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-hodBlue outline-none disabled:bg-gray-100 disabled:cursor-not-allowed">
+                    <svg class="w-5 h-5 text-gray-400 absolute left-3 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    <!-- Pending-only results, anchored to the search box: clock in
+                         without scrolling to the roster lists. -->
+                    <div id="attSearchPopover" class="hidden" role="region" aria-label="Quick search pending matches"></div>
+                </div>
+                <button type="button" id="attAddPersonLink" onclick="attSearchCtaAdd()" class="hidden mt-2.5 items-center gap-1.5 text-xs font-black text-hodBlue hover:text-hodRed transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 rounded-lg px-1 -ml-1 py-0.5">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+                    Can't find? Add to congregation
+                </button>
             </div>
         </div>
         
@@ -772,6 +783,74 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
+<!-- Verify Details Modal (Attendance tab) -->
+<div id="attVerifyModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[92vh]">
+        <div class="px-6 py-5 border-b border-gray-100 bg-blue-50/70 flex justify-between items-start gap-4 shrink-0">
+            <div class="min-w-0">
+                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-hodBlue mb-1">Verify details</p>
+                <h3 id="attVerifyName" class="text-xl md:text-2xl font-bold text-gray-900 truncate">Loading…</h3>
+                <div id="attVerifyBadges" class="flex flex-wrap items-center gap-2 mt-2"></div>
+            </div>
+            <button type="button" onclick="closeModal('attVerifyModal')" class="text-gray-400 hover:text-hodBlue transition-colors shrink-0" aria-label="Close">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div id="attVerifyBody" class="p-5 md:p-6 overflow-y-auto custom-scrollbar bg-gray-50/50 space-y-4"></div>
+        <div id="attVerifyActions" class="px-5 md:px-6 py-4 border-t border-gray-100 bg-white shrink-0"></div>
+    </div>
+</div>
+
+<!-- HOD-branded confirmation (replaces native confirm() for clock-out, etc.) -->
+<div id="hodConfirmModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[10005] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300">
+        <div class="p-6 md:p-8 text-center">
+            <div class="w-16 h-16 rounded-full bg-red-50 text-hodRed border border-red-100 flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <h3 id="hodConfirmTitle" class="text-xl font-black text-gray-900">Are you sure?</h3>
+            <p id="hodConfirmMessage" class="text-sm text-gray-500 font-medium mt-2 leading-relaxed"></p>
+            <p id="hodConfirmContext" class="hidden text-[10px] font-black uppercase tracking-widest text-gray-400 mt-3"></p>
+        </div>
+        <div class="px-6 pb-6 flex flex-col sm:flex-row-reverse gap-3">
+            <button type="button" id="hodConfirmOk" class="w-full sm:w-auto bg-hodRed hover:bg-[#A3151A] text-white px-6 py-3.5 rounded-xl font-black text-sm shadow-lg shadow-red-900/10 transition-all">Confirm</button>
+            <button type="button" id="hodConfirmCancel" class="w-full sm:w-auto bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 px-6 py-3.5 rounded-xl font-bold text-sm transition-colors">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add to Congregation Wizard (Attendance tab) -->
+<div id="attAddWizardModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[92vh]">
+        <div class="px-6 py-5 border-b border-gray-100 bg-red-50/60 flex justify-between items-start gap-4 shrink-0">
+            <div class="min-w-0">
+                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-hodRed mb-1">Can't find them?</p>
+                <h3 id="attWizardTitle" class="text-xl md:text-2xl font-bold text-gray-900">Add to congregation</h3>
+                <p id="attWizardSubtitle" class="text-sm text-gray-500 mt-1">Create their profile and clock them straight into this event.</p>
+                <div id="attWizardDots" class="flex gap-2 mt-3" aria-hidden="true"></div>
+            </div>
+            <button type="button" onclick="attWizardClose()" class="text-gray-400 hover:text-hodRed transition-colors shrink-0" aria-label="Close">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div id="attWizardError" class="hidden px-6 pt-5 shrink-0" role="alert" aria-live="assertive">
+            <div class="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl">
+                <svg class="w-5 h-5 text-hodRed shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <div class="flex-1 min-w-0">
+                    <p class="text-[10px] font-black text-hodRed uppercase tracking-widest mb-1">Please check this</p>
+                    <p id="attWizardErrorText" class="text-sm font-bold text-gray-900 leading-snug"></p>
+                    <div id="attWizardErrorActions" class="hidden flex-wrap gap-2 mt-3"></div>
+                </div>
+                <button type="button" onclick="attWizardDismissError()" class="text-gray-400 hover:text-hodRed p-1 -m-1 transition-colors" aria-label="Dismiss">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+        </div>
+        <div id="attWizardBody" class="p-6 overflow-y-auto custom-scrollbar bg-white flex-1"></div>
+        <div id="attWizardFooter" class="px-6 py-5 border-t border-gray-100 bg-gray-50/80 shrink-0 flex justify-between gap-3"></div>
+    </div>
+</div>
+
 <!-- Monthly Series Modal -->
 <div id="monthlyServicesModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform scale-95 transition-transform duration-300">
@@ -855,6 +934,42 @@ require_once '../../includes/header.php';
     @media (min-width:768px){ .event-tabs-area{ width:min(100%, 610px); } }
     @media (prefers-reduced-motion:reduce){ .event-tabs{ scroll-behavior:auto; } .event-tab, .event-tab.event-tab-active{ animation:none; transition:none; } }
 
+    /* Attendance tab — quick-search popover, KPI accordion, add-person wizard */
+    #attSearchPopover{ position:absolute; top:calc(100% + 10px); left:0; right:0; z-index:70; background:#fff; border:1px solid #EBEEF3; border-radius:22px; box-shadow:0 26px 60px -14px rgba(10,14,23,.28), 0 4px 14px rgba(10,14,23,.06); max-height:min(58vh, 420px); display:flex; flex-direction:column; overflow:hidden; }
+    @keyframes attPopIn{ from{ opacity:0; transform:translateY(-8px) scale(.985); } to{ opacity:1; transform:none; } }
+    #attSearchPopover.att-pop-open{ animation:attPopIn .18s cubic-bezier(.22,1,.36,1) both; }
+    .att-pop-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid #F3F4F6; transition:background .15s; }
+    .att-pop-row:last-child{ border-bottom:0; }
+    .att-pop-row:hover, .att-pop-row:focus-within{ background:#F8FAFC; }
+    .att-pop-status{ display:inline-block; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#475569; background:#F1F5F9; border-radius:999px; padding:2px 8px; }
+
+    .att-spin{ display:inline-block; width:13px; height:13px; border-radius:50%; border:2px solid #D1D5DB; border-top-color:#6B7280; animation:attSpin .7s linear infinite; flex-shrink:0; }
+    .att-spin-light{ border-color:rgba(255,255,255,.4); border-top-color:#fff; }
+    @keyframes attSpin{ to{ transform:rotate(360deg); } }
+
+    /* KPI details accordion (multi-group cards) */
+    .att-kpi-group-btn{ cursor:pointer; }
+    .att-kpi-pill{ display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:999px; background:#F3F4F6; color:#6B7280; font-size:10px; font-weight:900; letter-spacing:.07em; text-transform:uppercase; transition:background .18s, color .18s; }
+    .att-kpi-group-btn:hover .att-kpi-pill, .att-kpi-group-btn[aria-expanded="true"] .att-kpi-pill{ background:#EEF2FF; color:#1D356A; }
+    .att-kpi-chevron{ transition:transform .22s cubic-bezier(.22,1,.36,1); }
+    .att-kpi-group-btn[aria-expanded="true"] .att-kpi-chevron{ transform:rotate(180deg); }
+    @keyframes attKpiNudge{ 0%,100%{ transform:translateX(0); } 35%{ transform:translateX(3px); } 70%{ transform:translateX(-2px); } }
+    .att-kpi-pill .att-kpi-chevron{ animation:attKpiNudge 1.5s ease-in-out 2; }
+    @keyframes attGroupReveal{ from{ opacity:0; transform:translateY(-5px); } to{ opacity:1; transform:none; } }
+    .att-group-reveal{ animation:attGroupReveal .22s ease both; }
+
+    /* Add-to-congregation wizard */
+    .att-choice-card{ display:flex; align-items:flex-start; gap:14px; width:100%; text-align:left; background:#fff; border:2px solid #EBEEF3; border-radius:20px; padding:16px 18px; cursor:pointer; transition:border-color .15s, transform .15s, box-shadow .15s; }
+    .att-choice-card:hover{ border-color:#D11920; transform:translateY(-1px); box-shadow:0 12px 26px -14px rgba(209,25,32,.4); }
+    .att-choice-card.att-choice-blue:hover{ border-color:#1D356A; box-shadow:0 12px 26px -14px rgba(29,53,106,.4); }
+    .att-choice-card:focus-visible{ outline:3px solid rgba(209,25,32,.3); outline-offset:2px; }
+    .att-field-error{ border-color:#D11920 !important; background-color:#FEF2F2 !important; }
+    .att-field-msg{ margin-top:.35rem; font-size:.72rem; font-weight:700; color:#D11920; line-height:1.35; }
+    @media (prefers-reduced-motion:reduce){
+        #attSearchPopover.att-pop-open, .att-kpi-pill .att-kpi-chevron, .att-group-reveal{ animation:none; }
+        .att-kpi-chevron, .att-kpi-pill{ transition:none; }
+    }
+
     /* Analytics tab */
     .an-info-btn{ display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:9999px; background:#EEF2FF; color:#1D356A; font-size:11px; font-weight:900; line-height:1; border:none; cursor:pointer; flex-shrink:0; }
     .an-info-btn:hover{ background:#1D356A; color:#fff; }
@@ -926,6 +1041,12 @@ require_once '../../includes/header.php';
     let currentRegistrants = [];
     let descQuill = null;              // Quill instance for the Description editor
     let currentAttendanceKpis = null;
+    let currentAttendanceRoster = null;   // {eventId, loading, pending[], checkedIn[]} — feeds the Quick Search popover
+    let attSearchPopoverOpen = false;
+    let attVerifyPerson = null;           // last payload rendered in the Verify Details modal
+    let attWizardState = null;            // Add-to-congregation wizard state
+    let hodConfirmHandler = null;         // pending callback inside the branded confirm modal
+    const CONG_API_URL = '/api/congregation_api.php';
     const ATTENDANCE_EVENT_STORAGE_KEY = 'events.attendance.selectedEventId';
     const EVENTS_ACTIVE_SECTION_STORAGE_KEY = 'events.activeSection';
 
@@ -1040,7 +1161,10 @@ require_once '../../includes/header.php';
     // ---------- Helpers ----------
     function lockScreen(){ const b=$('#globalActionBlocker'); if(b.length){ b.removeClass('hidden').addClass('flex'); setTimeout(()=>b.removeClass('opacity-0'),10); } }
     function unlockScreen(){ const b=$('#globalActionBlocker'); if(b.length){ b.addClass('opacity-0'); setTimeout(()=>b.removeClass('flex').addClass('hidden'),300); } }
-    function showToast(msg, type='success'){ Toastify({ text:msg, gravity:"top", position:"center", duration:3000, style:{ background: type==='success'?"#10B981":"#EF4444", borderRadius:"10px", fontWeight:"bold" } }).showToast(); }
+    function showToast(msg, type='success'){
+        const bg = type === 'success' ? '#10B981' : type === 'warning' ? '#F59E0B' : type === 'info' ? '#3B82F6' : '#EF4444';
+        Toastify({ text:msg, gravity:"top", position:"center", duration:3000, style:{ background: bg, borderRadius:"10px", fontWeight:"bold" } }).showToast();
+    }
     function openModal(id){ const m=$('#'+id); if(!m) return; m.removeClass('hidden'); requestAnimationFrame(()=>{ m.removeClass('opacity-0'); m.children().first().removeClass('scale-95'); }); }
     function closeModal(id){ const m=$('#'+id); if(!m) return; m.addClass('opacity-0'); m.children().first().addClass('scale-95'); setTimeout(()=>m.addClass('hidden'),300); }
     const esc = s => (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1887,6 +2011,44 @@ require_once '../../includes/header.php';
         </div>`;
     }
 
+    function attKpiGroupShell(gid, label, count, bodyHtml, expanded){
+        // Accordion section for multi-group KPI cards: real <button> header with
+        // aria-expanded/aria-controls so keyboard + screen reader users can
+        // operate it naturally. Collapsed by default.
+        return `<div class="bg-white/70 border border-gray-100 rounded-3xl overflow-hidden" id="${gid}">
+            <button type="button" id="${gid}-btn" class="att-kpi-group-btn w-full px-5 py-4 bg-white flex items-center justify-between gap-3 text-left hover:bg-blue-50/40 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 transition-colors" aria-expanded="${expanded ? 'true' : 'false'}" aria-controls="${gid}-body">
+                <span class="font-black text-gray-900 text-sm sm:text-base min-w-0 truncate">${esc(label)}</span>
+                <span class="flex items-center gap-2.5 shrink-0">
+                    <span class="text-xs font-black text-hodBlue bg-blue-50 px-3 py-1 rounded-full">${attNum(count)}</span>
+                    <span class="att-kpi-pill">
+                        <span class="att-kpi-pill-label">${expanded ? 'Collapse' : 'Expand'}</span>
+                        <svg class="w-4 h-4 att-kpi-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="m19 9-7 7-7-7"></path></svg>
+                    </span>
+                </span>
+            </button>
+            <div id="${gid}-body" role="region" aria-labelledby="${gid}-btn"${expanded ? '' : ' hidden'} class="p-4 space-y-3 bg-gray-50/40 border-t border-gray-100">
+                ${bodyHtml}
+            </div>
+        </div>`;
+    }
+
+    function toggleAttKpiDetailGroup(gid){
+        const body = document.getElementById(gid + '-body');
+        const btn = document.getElementById(gid + '-btn');
+        if(!body || !btn) return;
+        const expand = body.hasAttribute('hidden');
+        if(expand){
+            body.removeAttribute('hidden');
+            body.classList.add('att-group-reveal');
+        } else {
+            body.setAttribute('hidden', '');
+            body.classList.remove('att-group-reveal');
+        }
+        btn.setAttribute('aria-expanded', expand ? 'true' : 'false');
+        const pillLabel = btn.querySelector('.att-kpi-pill-label');
+        if(pillLabel) pillLabel.textContent = expand ? 'Collapse' : 'Expand';
+    }
+
     function openAttKpiDetails(cardKey){
         if(!currentAttendanceKpis || !currentAttendanceKpis.details || !currentAttendanceKpis.details[cardKey]){
             showToast('Load an event first.', 'error');
@@ -1897,61 +2059,147 @@ require_once '../../includes/header.php';
         $('#attKpiDetailsSub').text(detail.subtitle || 'Filtered attendance details for this event.');
         const groups = detail.groups || [];
         let html = '';
-        groups.forEach(group => {
-            const rows = group.rows || [];
-            html += `<div class="bg-white/70 border border-gray-100 rounded-3xl overflow-hidden">
-                <div class="px-5 py-4 bg-white border-b border-gray-100 flex items-center justify-between gap-3">
-                    <h4 class="font-black text-gray-900">${esc(group.label || 'Details')}</h4>
-                    <span class="text-xs font-black text-hodBlue bg-blue-50 px-3 py-1 rounded-full">${attNum(rows.length)}</span>
-                </div>
-                <div class="p-4 space-y-3">${rows.length ? rows.map(attDetailRow).join('') : '<p class="text-center text-sm font-bold text-gray-400 py-6">No records in this segment.</p>'}</div>
+
+        if(groups.length > 1){
+            // Multiple segments (e.g. Gender Split: Male / Female / Unknown):
+            // collapse them so staff can jump straight to the group they need.
+            html += `<div class="flex items-start gap-2.5 bg-blue-50/70 border border-blue-100 rounded-2xl px-4 py-3">
+                <svg class="w-4 h-4 text-hodBlue mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <p class="text-xs font-bold text-hodBlue leading-relaxed">Sections are collapsed by default. Tap a section to expand.</p>
             </div>`;
-        });
+            groups.forEach((group, i) => {
+                const rows = group.rows || [];
+                const bodyHtml = rows.length
+                    ? rows.map(attDetailRow).join('')
+                    : '<p class="text-center text-sm font-bold text-gray-400 py-6">No records in this segment.</p>';
+                html += attKpiGroupShell(`attKpiGroup-${cardKey}-${i}`, group.label || 'Details', rows.length, bodyHtml, false);
+            });
+        } else {
+            // Single segment: keep it simple and expanded as before.
+            groups.forEach(group => {
+                const rows = group.rows || [];
+                html += `<div class="bg-white/70 border border-gray-100 rounded-3xl overflow-hidden">
+                    <div class="px-5 py-4 bg-white border-b border-gray-100 flex items-center justify-between gap-3">
+                        <h4 class="font-black text-gray-900">${esc(group.label || 'Details')}</h4>
+                        <span class="text-xs font-black text-hodBlue bg-blue-50 px-3 py-1 rounded-full">${attNum(rows.length)}</span>
+                    </div>
+                    <div class="p-4 space-y-3">${rows.length ? rows.map(attDetailRow).join('') : '<p class="text-center text-sm font-bold text-gray-400 py-6">No records in this segment.</p>'}</div>
+                </div>`;
+            });
+        }
         $('#attKpiDetailsBody').html(html || '<p class="text-center text-sm font-bold text-gray-400 py-10">No details available yet.</p>');
         openModal('attKpiDetailsModal');
+    }
+
+    function setAttAddPersonLink(visible){
+        const link = $('#attAddPersonLink');
+        if(visible) link.removeClass('hidden').addClass('inline-flex');
+        else link.addClass('hidden').removeClass('inline-flex');
     }
 
     $('#attendanceEventSelect').on('change', function(){
         const id = $(this).val();
         currentAttendanceKpis = null;
+        currentAttendanceRoster = null;
+        closeAttSearchPopover();
         if(!id){
             persistAttendanceSelection('');
             $('#rosterContainer').addClass('hidden');
             $('#attKpiContainer').addClass('hidden');
             $('#attMobileKpiToggle').addClass('hidden');
             $('#rosterSearch').prop('disabled',true).val('');
+            setAttAddPersonLink(false);
             return;
         }
         persistAttendanceSelection(id);
         $('#rosterSearch').prop('disabled',false);
         $('#rosterContainer').removeClass('hidden');
         setAttendanceKpiSearchMode(document.activeElement === document.getElementById('rosterSearch'));
+        setAttAddPersonLink(true);
         loadRoster(id);
         loadAttKPIs(id);
     });
 
+    function attClockTime(value){
+        if(!value) return '—';
+        const d = new Date(String(value).replace(' ', 'T'));
+        return Number.isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function renderRosterLists(){
+        if(!currentAttendanceRoster || currentAttendanceRoster.loading) return;
+        const id = currentAttendanceRoster.eventId;
+        const pending = currentAttendanceRoster.pending || [];
+        const checkedIn = currentAttendanceRoster.checkedIn || [];
+        $('#pendingCount').text(pending.length);
+        $('#checkedInCount').text(checkedIn.length);
+
+        let p = '';
+        pending.forEach(u => {
+            const name = attPersonName(u);
+            const search = `${name} ${u.phone || ''} ${u.spiritual_status || ''}`.toLowerCase();
+            p += `<div class="roster-card bg-white p-4 rounded-2xl shadow-sm border border-gray-100" data-name="${esc(search)}">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="font-bold text-gray-900 truncate">${esc(name)}</p>
+                        <p class="text-[11px] text-gray-500 mt-0.5">${esc(attStatusLabel(u.spiritual_status))}${u.phone ? ' · ' + esc(u.phone) : ' · <span class="text-gray-300">No phone</span>'}</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 shrink-0">
+                        <button type="button" onclick="clockIn(event,${id},${u.id})" class="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-colors">Clock In</button>
+                        <button type="button" onclick="openVerifyDetails(${u.id})" class="bg-white text-gray-600 hover:text-hodBlue border border-gray-200 hover:border-blue-200 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors">Verify Details</button>
+                    </div>
+                </div>
+            </div>`;
+        });
+        $('#pendingList').html(p || '<p class="text-center text-gray-400 py-4">All cleared!</p>');
+
+        let c = '';
+        checkedIn.forEach(u => {
+            const name = attPersonName(u);
+            const search = `${name} ${u.phone || ''} ${u.spiritual_status || ''}`.toLowerCase();
+            const t = attClockTime(u.check_in_time);
+            c += `<div class="roster-card bg-white p-4 rounded-2xl shadow-sm border border-gray-100" data-name="${esc(search)}">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="font-bold text-gray-900 truncate">${esc(name)}</p>
+                        <p class="text-[11px] text-gray-500 mt-0.5">${esc(attStatusLabel(u.spiritual_status))}${u.phone ? ' · ' + esc(u.phone) : ''}</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 shrink-0">
+                        <span class="inline-flex items-center gap-1.5 text-xs font-bold text-green-700 bg-green-50 border border-green-100 px-3 py-2 rounded-lg" title="Check-in time">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            ${t}
+                        </span>
+                        <button type="button" onclick="openVerifyDetails(${u.id})" class="bg-white text-gray-600 hover:text-hodBlue border border-gray-200 hover:border-blue-200 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors">Verify Details</button>
+                        <button type="button" onclick="requestClockOut(event,${id},${u.id})" title="Undo clock-in" class="bg-gray-50 text-gray-500 hover:bg-red-600 hover:text-white border border-gray-100 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors">Clock Out</button>
+                    </div>
+                </div>
+            </div>`;
+        });
+        $('#checkedInList').html(c || '<p class="text-center text-gray-400 py-4">Waiting…</p>');
+        applyRosterSearch();
+    }
+
     function loadRoster(id){
+        currentAttendanceRoster = { eventId: id, loading: true, pending: [], checkedIn: [] };
         $('#pendingList').html('<div class="text-center p-4 text-gray-400">Loading…</div>');
+        $('#checkedInList').html('<div class="text-center p-4 text-gray-400">Loading…</div>');
         $.post(API_URL, { action:'fetch_attendance_roster', event_id:id }, function(res){
-            if(res.status !== 'success') return;
-            $('#pendingCount').text(res.pending.length); $('#checkedInCount').text(res.checked_in.length);
-            let p = '';
-            res.pending.forEach(u => {
-                const name = `${u.first_name || ''} ${u.last_name || ''}`.trim();
-                const search = `${name} ${u.phone || ''} ${u.spiritual_status || ''}`.toLowerCase();
-                p += `<div class="roster-card flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100" data-name="${esc(search)}"><div><p class="font-bold text-gray-900">${esc(name)}</p><p class="text-[10px] text-gray-500">${esc(attStatusLabel(u.spiritual_status))}</p></div><button onclick="clockIn(event,${id},${u.id})" class="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors">Clock In</button></div>`;
-            });
-            $('#pendingList').html(p || '<p class="text-center text-gray-400 py-4">All cleared!</p>');
-            let c = '';
-            res.checked_in.forEach(u => {
-                const name = `${u.first_name || ''} ${u.last_name || ''}`.trim();
-                const search = `${name} ${u.phone || ''} ${u.spiritual_status || ''}`.toLowerCase();
-                const t = u.check_in_time ? new Date(String(u.check_in_time).replace(' ', 'T')).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '—';
-                c += `<div class="roster-card flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100" data-name="${esc(search)}"><div><p class="font-bold text-gray-900">${esc(name)}</p><p class="text-[10px] text-gray-500">${esc(attStatusLabel(u.spiritual_status))}</p></div><div class="flex items-center gap-2"><span class="text-xs font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg">${t}</span><button onclick="clockOut(event,${id},${u.id})" title="Undo clock-in" class="bg-gray-50 text-gray-500 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Clock Out</button></div></div>`;
-            });
-            $('#checkedInList').html(c || '<p class="text-center text-gray-400 py-4">Waiting…</p>');
-            applyRosterSearch();
-        }, 'json');
+            if(res.status !== 'success'){
+                currentAttendanceRoster = { eventId: id, loading: false, pending: [], checkedIn: [] };
+                $('#pendingList').html(`<p class="text-center text-red-400 py-4">${esc(res.message || 'Could not load the roster.')}</p>`);
+                $('#checkedInList').html('<p class="text-center text-gray-400 py-4">—</p>');
+                renderAttSearchPopover();
+                return;
+            }
+            currentAttendanceRoster = { eventId: id, loading: false, pending: res.pending || [], checkedIn: res.checked_in || [] };
+            renderRosterLists();
+            renderAttSearchPopover();
+        }, 'json').fail(function(){
+            currentAttendanceRoster = { eventId: id, loading: false, pending: [], checkedIn: [] };
+            $('#pendingList').html('<p class="text-center text-red-400 py-4">Could not load the roster. Please retry.</p>');
+            $('#checkedInList').html('<p class="text-center text-gray-400 py-4">—</p>');
+            renderAttSearchPopover();
+        });
     }
 
     function loadAttKPIs(id){
@@ -1962,25 +2210,104 @@ require_once '../../includes/header.php';
         },'json');
     }
 
-    function clockIn(ev, id, uid){
-        const btn = ev ? ev.currentTarget : null;
-        if(btn){ $(btn).replaceWith(`<span class="px-4 py-2 rounded-xl text-xs font-bold text-gray-400 border border-gray-100">Logging…</span>`); }
-        $.post(API_URL,{action:'mark_attendance',event_id:id,user_id:uid},function(res){
-            if(res.status === 'error') showToast(res.message,'error');
-            loadRoster(id);
-            loadAttKPIs(id);
-        },'json').fail(()=>{ showToast('Server Error','error'); loadRoster(id); loadAttKPIs(id); });
+    function attPersonName(p){
+        return `${(p && p.first_name) || ''} ${(p && p.last_name) || ''}`.trim() || 'Unnamed';
     }
 
-    function clockOut(ev, id, uid){
-        if(!confirm('Clock this person out? They will move back to Pending Clock-In.')) return;
+    function attFindRosterPerson(uid){
+        if(!currentAttendanceRoster) return null;
+        const all = (currentAttendanceRoster.pending || []).concat(currentAttendanceRoster.checkedIn || []);
+        return all.find(p => Number(p.id) === Number(uid)) || null;
+    }
+
+    function attRefreshAll(){
+        const id = $('#attendanceEventSelect').val();
+        if(id){ loadRoster(id); loadAttKPIs(id); }
+    }
+
+    // Shared clock-in used by the roster cards, the search popover, the Verify
+    // Details modal and the add-person wizard. Always refreshes roster + KPIs.
+    function attClockInUser(uid, name){
+        const eventId = $('#attendanceEventSelect').val();
+        return new Promise(resolve => {
+            if(!eventId){ showToast('Select an event first.', 'error'); resolve(null); return; }
+            $.post(API_URL, { action:'mark_attendance', event_id:eventId, user_id:uid }, function(res){
+                if(res.status === 'success') showToast(`${name} clocked in${res.clock_time ? ' at ' + res.clock_time : ''}.`);
+                else if(res.status === 'warning') showToast(res.message, 'warning');
+                else showToast(res.message || 'Could not clock in.', 'error');
+                attRefreshAll();
+                resolve(res);
+            }, 'json').fail(function(){
+                showToast('Server Error', 'error');
+                attRefreshAll();
+                resolve(null);
+            });
+        });
+    }
+
+    function attClockOutUser(uid, name){
+        const eventId = $('#attendanceEventSelect').val();
+        return new Promise(resolve => {
+            $.post(API_URL, { action:'clock_out', event_id:eventId, user_id:uid }, function(res){
+                if(res.status === 'success') showToast(`${name} moved back to pending.`);
+                else if(res.status === 'warning') showToast(res.message, 'warning');
+                else showToast(res.message || 'Could not clock out.', 'error');
+                attRefreshAll();
+                resolve(res);
+            }, 'json').fail(function(){
+                showToast('Server Error', 'error');
+                attRefreshAll();
+                resolve(null);
+            });
+        });
+    }
+
+    // ---- HOD-branded confirmation (no native confirm() anywhere in Attendance) ----
+    function showHodConfirm(opts){
+        $('#hodConfirmTitle').text(opts.title || 'Are you sure?');
+        $('#hodConfirmMessage').text(opts.message || '');
+        const ctx = $('#hodConfirmContext');
+        if(opts.context){ ctx.text(opts.context).removeClass('hidden'); } else { ctx.addClass('hidden').text(''); }
+        $('#hodConfirmOk').text(opts.confirmLabel || 'Confirm');
+        $('#hodConfirmCancel').text(opts.cancelLabel || 'Cancel');
+        hodConfirmHandler = typeof opts.onConfirm === 'function' ? opts.onConfirm : null;
+        openModal('hodConfirmModal');
+    }
+    $('#hodConfirmOk').on('click', function(){
+        const fn = hodConfirmHandler;
+        hodConfirmHandler = null;
+        closeModal('hodConfirmModal');
+        if(fn) fn();
+    });
+    $('#hodConfirmCancel').on('click', function(){
+        hodConfirmHandler = null;
+        closeModal('hodConfirmModal');
+    });
+
+    function requestClockOut(ev, id, uid){
+        const btn = ev && ev.currentTarget ? $(ev.currentTarget) : null;
+        const person = attFindRosterPerson(uid);
+        const name = person ? attPersonName(person) : 'this person';
+        showHodConfirm({
+            title: `Clock out ${name}?`,
+            message: 'Their check-in for this event will be removed and they will move back to Pending Clock-In on the roster.',
+            context: $('#attendanceEventSelect option:selected').text() || '',
+            confirmLabel: 'Confirm Clock Out',
+            onConfirm: function(){
+                if(btn){ btn.prop('disabled', true).text('Clocking out…'); }
+                attClockOutUser(uid, name);
+            }
+        });
+    }
+
+    function clockIn(ev, id, uid){
         const btn = ev ? ev.currentTarget : null;
-        if(btn){ $(btn).prop('disabled', true).text('…'); }
-        $.post(API_URL,{action:'clock_out',event_id:id,user_id:uid},function(res){
-            if(res.status === 'error') showToast(res.message,'error');
-            loadRoster(id);
-            loadAttKPIs(id);
-        },'json').fail(()=>{ showToast('Server Error','error'); loadRoster(id); loadAttKPIs(id); });
+        const person = attFindRosterPerson(uid);
+        const name = person ? attPersonName(person) : 'Attendee';
+        if(btn){
+            $(btn).replaceWith('<span class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-gray-400 bg-gray-50 border border-gray-100"><span class="att-spin"></span> Clocking in…</span>');
+        }
+        attClockInUser(uid, name);
     }
 
     function applyRosterSearch(){
@@ -1988,13 +2315,913 @@ require_once '../../includes/header.php';
         $('.roster-card').each(function(){ $(this).toggle(($(this).attr('data-name') || '').indexOf(v) > -1); });
     }
 
+    // ---------- Quick Search popover (pending people only) ----------
+    // The roster is already in memory (fetch_attendance_roster), so matching is
+    // instant and staff can clock in several similar names without scrolling
+    // between the KPI cards and the roster lists. Already-clocked-in people are
+    // deliberately excluded: the popover is a pending queue.
+    function openAttSearchPopover(){
+        if(!$('#attendanceEventSelect').val()) return;
+        attSearchPopoverOpen = true;
+        renderAttSearchPopover();
+    }
+
+    function closeAttSearchPopover(){
+        if(!attSearchPopoverOpen) return;
+        attSearchPopoverOpen = false;
+        $('#attSearchPopover').addClass('hidden').removeClass('att-pop-open');
+        $('#rosterSearch').attr('aria-expanded', 'false');
+    }
+
+    function attSearchMatches(query){
+        const q = (query || '').trim().toLowerCase();
+        if(!q || !currentAttendanceRoster) return [];
+        return (currentAttendanceRoster.pending || []).filter(u => {
+            const hay = `${attPersonName(u)} ${u.phone || ''}`.toLowerCase();
+            return hay.indexOf(q) > -1;
+        });
+    }
+
+    function attPopRow(u){
+        const name = attPersonName(u);
+        return `<div class="att-pop-row" id="attPopRow-${u.id}">
+            <div class="min-w-0 flex-1">
+                <p class="font-black text-gray-900 truncate text-sm">${esc(name)}</p>
+                <p class="text-[11px] text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
+                    <span class="att-pop-status">${esc(attStatusLabel(u.spiritual_status))}</span>
+                    ${u.phone
+                        ? `<span class="font-semibold">${esc(u.phone)}</span>`
+                        : '<span class="text-gray-300 font-semibold">No phone on file</span>'}
+                </p>
+            </div>
+            <div class="att-pop-actions flex flex-wrap items-center justify-end gap-2 shrink-0">
+                <button type="button" onclick="attSearchClockIn(${u.id})" class="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2.5 rounded-xl text-xs font-black transition-colors">Clock In</button>
+                <button type="button" onclick="openVerifyDetails(${u.id})" class="bg-gray-50 text-gray-500 hover:text-hodBlue border border-gray-100 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors">Verify Details</button>
+            </div>
+        </div>`;
+    }
+
+    function attSearchClockIn(uid){
+        const pending = (currentAttendanceRoster && currentAttendanceRoster.pending) || [];
+        const person = pending.find(p => Number(p.id) === Number(uid));
+        const name = person ? attPersonName(person) : 'Attendee';
+        const row = $('#attPopRow-' + uid);
+        if(row.length){
+            row.find('.att-pop-actions').html('<span class="inline-flex items-center gap-2 text-xs font-black text-gray-400 px-1"><span class="att-spin"></span> Clocking in…</span>');
+            row.css('opacity', '.65');
+        }
+        // The roster refresh re-renders the popover, which removes the person
+        // from pending results once the server confirms.
+        attClockInUser(uid, name);
+    }
+
+    function renderAttSearchPopover(){
+        const el = $('#attSearchPopover');
+        if(!attSearchPopoverOpen){ el.addClass('hidden'); return; }
+        const query = $('#rosterSearch').val() || '';
+        const q = query.trim().toLowerCase();
+        let html = '';
+
+        if(!currentAttendanceRoster || currentAttendanceRoster.loading){
+            // During a refresh (e.g. right after a clock-in) keep the current
+            // rows on screen — the clocked row already shows its loading state —
+            // and only show the loader when there is nothing rendered yet.
+            if(el.children().length){ el.removeClass('hidden'); return; }
+            html = `<div class="px-5 py-8 text-center text-sm font-bold text-gray-400 flex flex-col items-center gap-3"><span class="att-spin"></span> Loading roster…</div>`;
+        } else if(!q){
+            const count = (currentAttendanceRoster.pending || []).length;
+            html = `<div class="px-5 py-6 text-center">
+                <p class="text-sm font-bold text-gray-500">Start typing to search people waiting to clock in.</p>
+                <p class="text-[11px] text-gray-400 mt-1.5 font-semibold">${attNum(count)} pending · pending people only</p>
+            </div>`;
+        } else {
+            const matches = attSearchMatches(query);
+            if(!matches.length){
+                html = `<div class="px-5 py-7 text-center">
+                    <p class="text-sm font-black text-gray-800">No pending match for “${esc(query)}”</p>
+                    <p class="text-[11px] text-gray-400 mt-1.5 font-semibold leading-relaxed">They may already be checked in, or not on this roster yet.</p>
+                    <button type="button" onclick="attSearchCtaAdd()" class="mt-4 inline-flex items-center gap-1.5 bg-hodBlue hover:bg-[#152750] text-white text-xs font-black px-4 py-2.5 rounded-xl transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+                        Can't find? Add to congregation
+                    </button>
+                </div>`;
+            } else {
+                html = `<div class="px-4 py-2.5 bg-gray-50/80 border-b border-gray-100 flex items-center justify-between shrink-0">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-400">${matches.length} pending match${matches.length === 1 ? '' : 'es'}</p>
+                        <p class="text-[10px] font-bold text-gray-400">Pending only</p>
+                    </div>
+                    <div class="overflow-y-auto custom-scrollbar">${matches.map(attPopRow).join('')}</div>`;
+            }
+        }
+        el.html(html).removeClass('hidden').addClass('att-pop-open');
+        $('#rosterSearch').attr('aria-expanded', 'true');
+    }
+
+    function attSearchCtaAdd(){
+        const q = $('#rosterSearch').val() || '';
+        closeAttSearchPopover();
+        openAttAddWizard(q);
+    }
+
     let attKpiFocusTimer = null;
     $('#rosterSearch')
         .on('input keyup', applyRosterSearch)
-        .on('focus', function(){ clearTimeout(attKpiFocusTimer); setAttendanceKpiSearchMode(true); })
-        .on('blur', function(){ clearTimeout(attKpiFocusTimer); attKpiFocusTimer = setTimeout(() => setAttendanceKpiSearchMode(false), 220); });
+        // The popover opens on real input only — never on keyup, so Escape
+        // (handled on document keydown) cannot immediately re-open it.
+        .on('input', function(){
+            if(attSearchPopoverOpen || ($(this).val() || '').trim() !== '') renderAttSearchPopoverOpenState();
+        })
+        .on('focus', function(){
+            clearTimeout(attKpiFocusTimer);
+            setAttendanceKpiSearchMode(true);
+            if(($(this).val() || '').trim() !== '') openAttSearchPopover();
+        })
+        .on('blur', function(){
+            // KPI auto-collapse on mobile (PR #41) still applies; the popover
+            // itself only closes on Escape or an outside click.
+            clearTimeout(attKpiFocusTimer);
+            attKpiFocusTimer = setTimeout(() => setAttendanceKpiSearchMode(false), 220);
+        });
+    function renderAttSearchPopoverOpenState(){
+        if(!attSearchPopoverOpen) openAttSearchPopover();
+        else renderAttSearchPopover();
+    }
+    // Escape closes the popover; a click/tap outside closes it. Focus is never
+    // trapped — Tab moves through the popover rows and on down the page.
+    $(document).on('keydown.attSearchPopover', function(e){
+        if(e.key === 'Escape' && attSearchPopoverOpen) closeAttSearchPopover();
+    });
+    $(document).on('mousedown.attSearchPopover', function(e){
+        if(!attSearchPopoverOpen) return;
+        if($(e.target).closest('#attSearchPopover, #rosterSearch, #attAddPersonLink').length) return;
+        closeAttSearchPopover();
+    });
     $(window).on('resize', function(){ setAttendanceKpiSearchMode(document.activeElement === document.getElementById('rosterSearch')); });
     $('#searchClockedIn').on('keyup', function(){ const v=$(this).val().toLowerCase(); $('#clockedInTableBody tr').each(function(){ const t=$(this).text().toLowerCase(); $(this).toggle(t.indexOf(v)>-1); }); });
+
+    // ---------- Verify Details modal ----------
+    // Editable basics + attendance actions. Region / tribe / departments are shown
+    // read-only because the Congregation APIs have no save path for them.
+    const ATT_SPIRITUAL_OPTIONS = ['Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer', 'Member', 'Worker', 'Pastor', 'Non_Member'];
+    const ATT_ATTENDANCE_OPTIONS = ['New', 'Active', 'Inconsistent', 'Unknown', 'Relocated', 'Attends_Another_Church'];
+
+    function openVerifyDetails(uid){
+        const eventId = $('#attendanceEventSelect').val();
+        if(!eventId){ showToast('Select an event first.', 'error'); return; }
+        attVerifyPerson = null;
+        $('#attVerifyName').text('Loading…');
+        $('#attVerifyBadges').html('');
+        $('#attVerifyBody').html('<div class="flex flex-col items-center gap-3 py-10 text-gray-400"><span class="att-spin"></span><p class="text-sm font-bold">Loading details…</p></div>');
+        $('#attVerifyActions').html('');
+        openModal('attVerifyModal');
+        attFetchPersonDetails(uid, function(ok){
+            if(!ok) closeModal('attVerifyModal');
+        });
+    }
+
+    function attFetchPersonDetails(uid, done){
+        $.post(API_URL, { action:'fetch_person_details', event_id:$('#attendanceEventSelect').val(), user_id:uid }, function(res){
+            if(res.status !== 'success' || !res.data){
+                showToast(res.message || 'Could not load details.', 'error');
+                if(done) done(false);
+                return;
+            }
+            attVerifyPerson = res.data;
+            renderVerifyDetails();
+            if(done) done(true);
+        }, 'json').fail(function(){
+            showToast('Server Error', 'error');
+            if(done) done(false);
+        });
+    }
+
+    function attVerifyFieldHtml(id, label, controlHtml){
+        return `<div>
+            <label for="${id}" class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">${label}</label>
+            ${controlHtml}
+        </div>`;
+    }
+
+    function attVerifyInput(id, type, value, extra){
+        return `<input type="${type}" id="${id}" value="${esc(value || '')}" ${extra || ''} class="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-hodBlue focus:ring-2 focus:ring-blue-100 transition-all">`;
+    }
+
+    function attVerifySelect(id, options, value, allowBlank, blankLabel){
+        const opts = (allowBlank ? [`<option value="">${blankLabel || 'Not specified'}</option>`] : [])
+            .concat(options.map(o => `<option value="${esc(o)}" ${o === value ? 'selected' : ''}>${esc(attStatusLabel(o))}</option>`));
+        return `<select id="${id}" class="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-hodBlue focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer">${opts.join('')}</select>`;
+    }
+
+    function renderVerifyDetails(){
+        const p = attVerifyPerson;
+        if(!p) return;
+        $('#attVerifyName').text(attPersonName(p));
+
+        let badges = `<span class="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-blue-50 text-hodBlue">${esc(attStatusLabel(p.spiritual_status))}</span>`;
+        if(p.is_checked_in) badges += `<span class="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-green-100 text-green-700">Already Clocked In</span>`;
+        $('#attVerifyBadges').html(badges);
+
+        const churchContext = [
+            p.region_name ? { label: 'Region', value: p.region_name } : null,
+            p.tribe_name ? { label: 'Tribe', value: p.tribe_name } : null,
+            p.departments ? { label: 'Departments', value: p.departments } : null
+        ].filter(Boolean);
+
+        let bodyHtml = '';
+        if(churchContext.length){
+            bodyHtml += `<div class="bg-white border border-gray-100 rounded-2xl p-4">
+                <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2.5">Church context <span class="font-bold normal-case tracking-normal text-gray-300">(read-only — managed in Congregation Data)</span></p>
+                <div class="flex flex-wrap gap-2">
+                    ${churchContext.map(c => `<span class="text-[11px] font-bold bg-gray-50 border border-gray-100 text-gray-600 px-3 py-1.5 rounded-full"><span class="text-gray-400">${esc(c.label)}:</span> ${esc(c.value)}</span>`).join('')}
+                </div>
+            </div>`;
+        }
+
+        bodyHtml += `<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white border border-gray-100 rounded-2xl p-4">
+            ${attVerifyFieldHtml('attVfFirst', 'First name *', attVerifyInput('attVfFirst', 'text', p.first_name, 'maxlength="50" autocomplete="off"'))}
+            ${attVerifyFieldHtml('attVfLast', 'Last name *', attVerifyInput('attVfLast', 'text', p.last_name, 'maxlength="50" autocomplete="off"'))}
+            ${attVerifyFieldHtml('attVfPhone', 'Phone', attVerifyInput('attVfPhone', 'tel', p.phone, 'maxlength="25" inputmode="tel"'))}
+            ${attVerifyFieldHtml('attVfGender', 'Gender', attVerifySelect('attVfGender', ['Male', 'Female'], p.gender, true, 'Not specified'))}
+            ${attVerifyFieldHtml('attVfSpiritual', 'Spiritual status', attVerifySelect('attVfSpiritual', ATT_SPIRITUAL_OPTIONS, p.spiritual_status, false))}
+            ${attVerifyFieldHtml('attVfAttendance', 'Attendance status', attVerifySelect('attVfAttendance', ATT_ATTENDANCE_OPTIONS, p.attendance_status, false))}
+        </div>`;
+
+        if(p.is_checked_in && p.check_in_time){
+            const by = p.checked_in_by_first ? ` by ${esc(attPersonName({ first_name: p.checked_in_by_first, last_name: p.checked_in_by_last }))}` : '';
+            bodyHtml += `<p class="text-[11px] text-gray-400 font-bold text-center">Clocked in ${esc(attFormatTime(p.check_in_time))}${by}</p>`;
+        }
+
+        $('#attVerifyBody').html(bodyHtml);
+        renderVerifyActions();
+    }
+
+    function renderVerifyActions(){
+        const p = attVerifyPerson;
+        if(!p) return;
+        const saveBtn = `<button type="button" id="attVfSaveBtn" onclick="attVerifySave()" class="w-full sm:w-auto bg-hodBlue hover:bg-[#152750] text-white px-5 py-3 rounded-xl font-bold text-sm shadow-md transition-all">Save Details</button>`;
+        let right = '';
+        if(p.is_checked_in){
+            right = `<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                <span class="inline-flex items-center justify-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-green-700 bg-green-50 border border-green-100 px-3 py-2.5 rounded-xl">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                    Already Clocked In
+                </span>
+                <button type="button" onclick="attVerifyMaintain()" class="bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 px-4 py-3 rounded-xl font-bold text-sm transition-colors">Maintain Clock-In</button>
+                <button type="button" onclick="attVerifyClockOut()" class="bg-white hover:bg-red-50 text-red-600 border border-red-100 px-4 py-3 rounded-xl font-bold text-sm transition-colors">Clock Out</button>
+            </div>`;
+        } else {
+            right = `<button type="button" id="attVfClockInBtn" onclick="attVerifyClockIn()" class="w-full sm:w-auto bg-hodRed hover:bg-[#A3151A] text-white px-5 py-3 rounded-xl font-black text-sm shadow-md transition-all">Clock In</button>`;
+        }
+        $('#attVerifyActions').html(`<div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 w-full">${saveBtn}${right}</div>`);
+    }
+
+    function attVerifySave(){
+        const p = attVerifyPerson;
+        if(!p) return;
+        const first = ($('#attVfFirst').val() || '').trim();
+        const last = ($('#attVfLast').val() || '').trim();
+        const bad = !first ? $('#attVfFirst') : (!last ? $('#attVfLast') : null);
+        if(bad){ bad.addClass('att-field-error').focus(); showToast('First and last name are required.', 'error'); return; }
+        $('#attVfFirst, #attVfLast').removeClass('att-field-error');
+
+        const btn = $('#attVfSaveBtn');
+        btn.prop('disabled', true).text('Saving…');
+        $.post(API_URL, {
+            action: 'update_person_details',
+            user_id: p.id,
+            first_name: first,
+            last_name: last,
+            phone: ($('#attVfPhone').val() || '').trim(),
+            gender: $('#attVfGender').val() || '',
+            spiritual_status: $('#attVfSpiritual').val() || '',
+            attendance_status: $('#attVfAttendance').val() || ''
+        }, function(res){
+            btn.prop('disabled', false).text('Save Details');
+            if(res.status !== 'success'){ showToast(res.message || 'Could not save.', 'error'); return; }
+            showToast('Details saved.');
+            p.first_name = first;
+            p.last_name = last;
+            p.phone = ($('#attVfPhone').val() || '').trim();
+            p.gender = $('#attVfGender').val() || '';
+            p.spiritual_status = $('#attVfSpiritual').val() || '';
+            p.attendance_status = $('#attVfAttendance').val() || '';
+            renderVerifyDetails();
+            attRefreshAll();
+        }, 'json').fail(function(){
+            btn.prop('disabled', false).text('Save Details');
+            showToast('Server Error', 'error');
+        });
+    }
+
+    function attVerifyClockIn(){
+        const p = attVerifyPerson;
+        if(!p) return;
+        const btn = $('#attVfClockInBtn');
+        if(btn.length){
+            btn.prop('disabled', true).html('<span class="inline-flex items-center gap-2"><span class="att-spin att-spin-light"></span> Clocking in…</span>');
+        }
+        attClockInUser(p.id, attPersonName(p)).then(function(){
+            attFetchPersonDetails(p.id); // flip the modal into its checked-in state
+        });
+    }
+
+    function attVerifyMaintain(){
+        closeModal('attVerifyModal');
+    }
+
+    function attVerifyClockOut(){
+        const p = attVerifyPerson;
+        if(!p) return;
+        showHodConfirm({
+            title: `Clock out ${attPersonName(p)}?`,
+            message: 'Their check-in for this event will be removed and they will move back to Pending Clock-In on the roster.',
+            context: $('#attendanceEventSelect option:selected').text() || '',
+            confirmLabel: 'Confirm Clock Out',
+            onConfirm: function(){
+                attClockOutUser(p.id, attPersonName(p)).then(function(){
+                    attFetchPersonDetails(p.id); // flip the modal back to pending
+                });
+            }
+        });
+    }
+
+    // ---------- "Can't find? Add to congregation" wizard ----------
+    // Two paths from one quick Sunday-service flow:
+    //   A. First Timer — QR of the public "I'm New Here" form, or a
+    //      staff-assisted form with the same payload as the public card.
+    //   B. Congregation Member — the full Congregation create-member payload.
+    // Both paths clock the person into the selected event immediately after
+    // the profile is created, without leaving the Attendance tab.
+    function attWizardDefaults(){
+        return {
+            step: 'type',            // type -> mode -> basic -> profile -> review -> success
+            type: null,              // 'first_timer' | 'member'
+            mode: null,              // first_timer only: 'qr' | 'staff'
+            duplicate: null,         // person found by the phone pre-check
+            busy: false,
+            data: {
+                first_name: '', last_name: '', phone: '', gender: '',
+                email: '', dob: '', marital_status: 'Single', wedding_anniversary: '',
+                physical_address: '',
+                invited_by: '', prayer_requests: '', wants_to_join: false, wants_visitation: false,
+                spiritual_status: 'Member', attendance_status: 'New', comments: ''
+            }
+        };
+    }
+
+    function openAttAddWizard(prefillName){
+        const eventId = $('#attendanceEventSelect').val();
+        if(!eventId){
+            showToast('Select an event first — they will be clocked into it automatically.', 'error');
+            return;
+        }
+        attWizardState = attWizardDefaults();
+        if(prefillName){
+            const tokens = String(prefillName).trim().split(/\s+/).filter(Boolean);
+            attWizardState.data.first_name = tokens[0] || '';
+            attWizardState.data.last_name = tokens.slice(1).join(' ');
+        }
+        $('#attWizardError').addClass('hidden');
+        attWizardRender();
+        openModal('attAddWizardModal');
+    }
+
+    function attWizardClose(){
+        closeModal('attAddWizardModal');
+        attWizardState = null;
+    }
+
+    function attWizardError(message, existingUserId){
+        $('#attWizardErrorText').text(message || 'Something went wrong. Please try again.');
+        const actions = $('#attWizardErrorActions');
+        if(existingUserId){
+            actions.removeClass('hidden').addClass('flex').html(
+                `<button type="button" onclick="attWizardClockInExisting(${Number(existingUserId) || 0})" class="bg-hodRed hover:bg-[#A3151A] text-white px-4 py-2 rounded-lg font-black uppercase tracking-wider text-[10px] shadow-sm transition-colors">Clock that profile in</button>`
+            );
+        } else {
+            actions.addClass('hidden').removeClass('flex').html('');
+        }
+        $('#attWizardError').removeClass('hidden');
+        $('#attWizardBody').scrollTop(0);
+    }
+
+    function attWizardDismissError(){
+        $('#attWizardError').addClass('hidden');
+        $('#attWizardErrorActions').addClass('hidden').removeClass('flex').html('');
+    }
+
+    function attWizardClockInExisting(uid){
+        if(!uid) return;
+        const btn = $('#attWizardErrorActions button');
+        if(btn.length) btn.prop('disabled', true).text('Clocking in…');
+        attClockInUser(uid, 'Existing profile').then(function(res){
+            closeModal('attAddWizardModal');
+            attWizardState = null;
+        });
+    }
+
+    function attWizardGo(step){
+        const w = attWizardState;
+        if(!w) return;
+        w.step = step;
+        attWizardDismissError();
+        attWizardRender();
+        $('#attWizardBody').scrollTop(0);
+    }
+
+    function attWizardChooseType(type){
+        const w = attWizardState;
+        if(!w) return;
+        w.type = type;
+        attWizardGo(type === 'first_timer' ? 'mode' : 'basic');
+    }
+
+    function attWizardChooseMode(mode){
+        const w = attWizardState;
+        if(!w) return;
+        w.mode = mode;
+        attWizardGo(mode === 'qr' ? 'qr' : 'basic');
+    }
+
+    function attWizardRenderDots(){
+        const w = attWizardState;
+        const map = { type: 0, mode: 0, basic: 1, profile: 2, review: 3 };
+        const idx = map[w.step];
+        let html = '';
+        if(idx !== undefined){
+            for(let i = 0; i < 4; i++){
+                html += `<div class="h-1.5 w-8 rounded-full ${i <= idx ? 'bg-hodRed' : 'bg-gray-200'} transition-all"></div>`;
+            }
+        }
+        $('#attWizardDots').html(html);
+    }
+
+    // ---- field builders ----
+    function attWizText(id, value, type, attrs){
+        return `<input type="${type || 'text'}" id="${id}" value="${esc(value || '')}" ${attrs || ''} class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-hodBlue focus:ring-2 focus:ring-blue-100 transition-all">`;
+    }
+    function attWizSelect(id, options, value, allowBlank, blankLabel){
+        const opts = (allowBlank ? [`<option value="">${blankLabel || 'Not specified'}</option>`] : [])
+            .concat(options.map(o => `<option value="${esc(o)}" ${o === value ? 'selected' : ''}>${esc(attStatusLabel(o))}</option>`));
+        return `<select id="${id}" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-hodBlue focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer">${opts.join('')}</select>`;
+    }
+    function attWizField(id, label, control, required, hint){
+        return `<div>
+            <label for="${id}" class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">${label}${required ? ' *' : ''}</label>
+            ${control}
+            ${hint ? `<p class="text-[10px] text-gray-400 font-semibold mt-1">${hint}</p>` : ''}
+        </div>`;
+    }
+    function attWizSetError(inputId, message){
+        const input = $('#' + inputId);
+        if(!input.length) return;
+        if(message){
+            input.addClass('att-field-error').attr('aria-invalid', 'true');
+            let msg = input.siblings('.att-field-msg');
+            if(!msg.length) msg = $('<p class="att-field-msg"></p>').insertAfter(input);
+            msg.text(message);
+        } else {
+            input.removeClass('att-field-error').removeAttr('aria-invalid');
+            input.siblings('.att-field-msg').remove();
+        }
+    }
+
+    function attWizardCollect(){
+        const w = attWizardState;
+        if(!w) return;
+        const d = w.data;
+        if(w.step === 'basic'){
+            d.first_name = ($('#attWizFirst').val() || '').trim();
+            d.last_name = ($('#attWizLast').val() || '').trim();
+            d.phone = ($('#attWizPhone').val() || '').trim();
+            d.gender = $('#attWizGender').val() || '';
+        } else if(w.step === 'profile'){
+            d.email = ($('#attWizEmail').val() || '').trim();
+            d.dob = $('#attWizDob').val() || '';
+            d.marital_status = $('#attWizMarital').val() || 'Single';
+            d.wedding_anniversary = $('#attWizAnniversary').val() || '';
+            d.physical_address = ($('#attWizAddress').val() || '').trim();
+            if(w.type === 'first_timer'){
+                d.invited_by = ($('#attWizInvitedBy').val() || '').trim();
+                d.prayer_requests = ($('#attWizPrayer').val() || '').trim();
+                d.wants_to_join = $('#attWizJoin').is(':checked');
+                d.wants_visitation = $('#attWizVisitation').is(':checked');
+            } else {
+                d.spiritual_status = $('#attWizSpiritual').val() || 'Member';
+                d.attendance_status = $('#attWizAttendance').val() || 'New';
+                d.comments = ($('#attWizComments').val() || '').trim();
+            }
+        }
+    }
+
+    function attWizardValidateBasic(){
+        const w = attWizardState;
+        const d = w.data;
+        let ok = true;
+        if(!d.first_name){ attWizSetError('attWizFirst', 'First name is required.'); ok = false; } else attWizSetError('attWizFirst', null);
+        if(!d.last_name){ attWizSetError('attWizLast', 'Last name is required.'); ok = false; } else attWizSetError('attWizLast', null);
+        const digits = (d.phone.match(/\d/g) || []).join('');
+        if(!d.phone){ attWizSetError('attWizPhone', 'Phone number is required — it prevents duplicate profiles.'); ok = false; }
+        else if(digits.length < 9 || digits.length > 15){ attWizSetError('attWizPhone', 'Enter a valid phone number (9 to 15 digits).'); ok = false; }
+        else attWizSetError('attWizPhone', null);
+        return ok;
+    }
+
+    function attWizardNext(){
+        const w = attWizardState;
+        if(!w || w.busy) return;
+        attWizardCollect();
+        if(w.step === 'basic'){
+            if(!attWizardValidateBasic()) return;
+            // Duplicate-phone pre-check (both paths create a profile). If the
+            // number already exists we surface the person so staff can clock
+            // them in instead of creating a second profile.
+            w.busy = true;
+            const btn = $('#attWizNextBtn').prop('disabled', true).text('Checking…');
+            $.post(API_URL, { action:'check_attendee_phone', phone:w.data.phone }, function(res){
+                w.busy = false;
+                btn.prop('disabled', false).text('Next');
+                if(res.status === 'success' && res.found && res.person){
+                    w.duplicate = res.person;
+                    attWizardShowDuplicate();
+                    return;
+                }
+                w.duplicate = null;
+                attWizardGo('profile');
+            }, 'json').fail(function(){
+                w.busy = false;
+                btn.prop('disabled', false).text('Next');
+                attWizardGo('profile'); // never block the flow on a failed pre-check
+            });
+            return;
+        }
+        if(w.step === 'profile'){
+            attWizardCollect();
+            if(w.data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(w.data.email)){
+                attWizSetError('attWizEmail', 'That email doesn\'t look right. Please check it, or leave it blank.');
+                return;
+            }
+            attWizSetError('attWizEmail', null);
+            attWizardGo('review');
+            return;
+        }
+    }
+
+    function attWizardBack(){
+        const w = attWizardState;
+        if(!w) return;
+        attWizardCollect();
+        if(w.step === 'review') attWizardGo('profile');
+        else if(w.step === 'profile') attWizardGo('basic');
+        else if(w.step === 'basic') attWizardGo(w.type === 'first_timer' ? 'mode' : 'type');
+        else if(w.step === 'mode' || w.step === 'qr') attWizardGo('type');
+    }
+
+    function attWizardShowDuplicate(){
+        const w = attWizardState;
+        if(!w || !w.duplicate) return;
+        const p = w.duplicate;
+        const panel = $('#attWizDupPanel');
+        panel.removeClass('hidden').html(`
+            <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                <p class="text-[10px] font-black uppercase tracking-widest text-amber-700">This phone is already in the database</p>
+                <p class="text-sm font-bold text-gray-900 mt-1.5">${esc(attPersonName(p))} <span class="text-gray-400 font-semibold">· ${esc(attStatusLabel(p.spiritual_status))}</span></p>
+                <p class="text-xs text-gray-500 font-semibold mt-1 leading-relaxed">Change the phone number above to create a new profile, or clock the existing one into this event now.</p>
+                <button type="button" onclick="attWizardClockInDuplicate()" class="mt-3 inline-flex items-center gap-1.5 bg-hodRed hover:bg-[#A3151A] text-white px-4 py-2.5 rounded-xl text-xs font-black transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Clock In ${esc(p.first_name || 'them')} (existing profile)
+                </button>
+            </div>`);
+        panel[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    function attWizardClockInDuplicate(){
+        const w = attWizardState;
+        if(!w || !w.duplicate) return;
+        const p = w.duplicate;
+        const btn = $('#attWizDupPanel button');
+        if(btn.length) btn.prop('disabled', true).html('<span class="inline-flex items-center gap-2"><span class="att-spin att-spin-light"></span> Clocking in…</span>');
+        attClockInUser(p.id, attPersonName(p)).then(function(res){
+            attWizardRenderSuccess(attPersonName(p), res, true);
+        });
+    }
+
+    function attWizardRender(){
+        const w = attWizardState;
+        if(!w) return;
+        attWizardRenderDots();
+        const body = $('#attWizardBody');
+        const footer = $('#attWizardFooter');
+        let footerHtml = '';
+        const cancelBtn = `<button type="button" onclick="attWizardClose()" class="ml-auto bg-white hover:bg-gray-100 text-gray-500 border border-gray-200 px-5 py-3 rounded-xl font-bold text-sm transition-colors">Cancel</button>`;
+        const backBtn = `<button type="button" onclick="attWizardBack()" class="bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 px-5 py-3 rounded-xl font-bold text-sm transition-colors shadow-sm">Back</button>`;
+
+        if(w.step === 'type'){
+            $('#attWizardTitle').text('Add to congregation');
+            $('#attWizardSubtitle').text('Create their profile and clock them straight into this event.');
+            body.html(`<div class="space-y-4">
+                <button type="button" onclick="attWizardChooseType('first_timer')" class="att-choice-card">
+                    <span class="w-11 h-11 rounded-2xl bg-red-50 text-hodRed flex items-center justify-center shrink-0">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block font-black text-gray-900">First Timer</span>
+                        <span class="block text-xs text-gray-500 font-semibold mt-1 leading-relaxed">A guest worshipping with us. Defaults to 1st Timer status and enters the Embrace follow-up flow.</span>
+                    </span>
+                    <svg class="w-5 h-5 text-gray-300 ml-auto shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="m9 5 7 7-7 7"></path></svg>
+                </button>
+                <button type="button" onclick="attWizardChooseType('member')" class="att-choice-card att-choice-blue">
+                    <span class="w-11 h-11 rounded-2xl bg-blue-50 text-hodBlue flex items-center justify-center shrink-0">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block font-black text-gray-900">Congregation Member</span>
+                        <span class="block text-xs text-gray-500 font-semibold mt-1 leading-relaxed">A known member of the house. Full profile with their spiritual & attendance status.</span>
+                    </span>
+                    <svg class="w-5 h-5 text-gray-300 ml-auto shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="m9 5 7 7-7 7"></path></svg>
+                </button>
+            </div>`);
+            footerHtml = cancelBtn;
+        }
+
+        else if(w.step === 'mode'){
+            $('#attWizardTitle').text('Adding a first timer');
+            $('#attWizardSubtitle').text('How would you like to capture their details?');
+            body.html(`<div class="space-y-4">
+                <button type="button" onclick="attWizardChooseMode('qr')" class="att-choice-card">
+                    <span class="w-11 h-11 rounded-2xl bg-gray-100 text-gray-700 flex items-center justify-center shrink-0">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h6v6H3V3zm12 0h6v6h-6V3zM3 15h6v6H3v-6zm12 0h2v2h-2v-2zm4 0h2v6h-6v-2h4v-4zm-2 4h2v2h-2v-2zM13 15v-2h-2v-2h4v4h-2zm-6 0H7v2H5v-4h2v2z"></path></svg>
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block font-black text-gray-900">They can fill it themselves</span>
+                        <span class="block text-xs text-gray-500 font-semibold mt-1 leading-relaxed">Show a QR code for the "I'm New Here" Connect form and let them complete it on their phone.</span>
+                    </span>
+                    <svg class="w-5 h-5 text-gray-300 ml-auto shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="m9 5 7 7-7 7"></path></svg>
+                </button>
+                <button type="button" onclick="attWizardChooseMode('staff')" class="att-choice-card att-choice-blue">
+                    <span class="w-11 h-11 rounded-2xl bg-blue-50 text-hodBlue flex items-center justify-center shrink-0">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block font-black text-gray-900">Staff-assisted</span>
+                        <span class="block text-xs text-gray-500 font-semibold mt-1 leading-relaxed">Fill the Connect card with them now — same details as the public form.</span>
+                    </span>
+                    <svg class="w-5 h-5 text-gray-300 ml-auto shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="m9 5 7 7-7 7"></path></svg>
+                </button>
+            </div>`);
+            footerHtml = backBtn + cancelBtn;
+        }
+
+        else if(w.step === 'qr'){
+            $('#attWizardTitle').text('I\'m New Here — QR');
+            $('#attWizardSubtitle').text('Let them fill the Connect form on their own phone.');
+            body.html(`<div class="text-center">
+                <div id="attWizQrHost" class="mx-auto w-fit p-4 bg-white border-2 border-gray-100 rounded-3xl shadow-sm"></div>
+                <p class="font-black text-gray-900 mt-5">Scan to open the "I'm New Here" form</p>
+                <p class="text-xs text-gray-500 font-semibold mt-2 leading-relaxed max-w-md mx-auto">When they submit, their 1st Timer profile is created automatically. Come back here and search their name to clock them in. The form itself doesn't link to this event — attendance is clocked from this tab.</p>
+                <div class="mt-4">
+                    <input type="text" id="attWizQrUrl" readonly class="w-full max-w-sm mx-auto px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 text-center outline-none">
+                </div>
+                <div class="mt-4 flex flex-wrap justify-center gap-2">
+                    <button type="button" onclick="attWizCopyUrl()" class="bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors">Copy link</button>
+                    <button type="button" onclick="attWizOpenForm()" class="bg-hodBlue hover:bg-[#152750] text-white px-4 py-2.5 rounded-xl text-xs font-black transition-colors">Open form on this device</button>
+                    <button type="button" onclick="attWizardChooseMode('staff')" class="bg-white hover:bg-red-50 text-hodRed border border-red-100 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors">Switch to staff-assisted</button>
+                </div>
+            </div>`);
+            attWizardBuildQr();
+            footerHtml = backBtn + cancelBtn;
+        }
+
+        else if(w.step === 'basic'){
+            $('#attWizardTitle').text('Basic details');
+            $('#attWizardSubtitle').text(w.type === 'member' ? 'Who are we adding to the congregation?' : 'Who is joining us today?');
+            const d = w.data;
+            body.html(`<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                ${attWizField('attWizFirst', 'First name', attWizText('attWizFirst', d.first_name, 'text', 'maxlength="50" autocomplete="off"'), true)}
+                ${attWizField('attWizLast', 'Last name', attWizText('attWizLast', d.last_name, 'text', 'maxlength="50" autocomplete="off"'), true)}
+                ${attWizField('attWizPhone', 'Phone', attWizText('attWizPhone', d.phone, 'tel', 'maxlength="25" inputmode="tel" autocomplete="off"'), true, 'Used to prevent duplicate profiles.')}
+                ${attWizField('attWizGender', 'Gender', attWizSelect('attWizGender', ['Male', 'Female'], d.gender, true, 'Not specified'), false)}
+            </div>
+            <div id="attWizDupPanel" class="hidden mt-4"></div>`);
+            if(w.duplicate) attWizardShowDuplicate();
+            // Editing the phone invalidates the previous duplicate finding.
+            $('#attWizPhone').on('input', function(){
+                if(w.duplicate){ w.duplicate = null; $('#attWizDupPanel').addClass('hidden'); }
+            });
+            footerHtml = backBtn + `<button type="button" id="attWizNextBtn" onclick="attWizardNext()" class="bg-hodBlue hover:bg-[#152750] text-white px-6 py-3 rounded-xl font-black text-sm shadow-md transition-all">Next</button>`;
+        }
+
+        else if(w.step === 'profile'){
+            const d = w.data;
+            if(w.type === 'first_timer'){
+                $('#attWizardTitle').text('A little more (optional)');
+                $('#attWizardSubtitle').text('Same details as the public "I\'m New Here" card — skip anything you don\'t have.');
+                body.html(`<div class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        ${attWizField('attWizEmail', 'Personal email', attWizText('attWizEmail', d.email, 'email', 'maxlength="100" inputmode="email" autocomplete="off"'), false)}
+                        ${attWizField('attWizDob', 'Date of birth', attWizText('attWizDob', d.dob, 'date', 'max="' + new Date().toISOString().slice(0, 10) + '"'), false)}
+                        ${attWizField('attWizMarital', 'Marital status', attWizSelect('attWizMarital', ['Single', 'Married', 'Separated', 'Divorced'], d.marital_status, false), false)}
+                        ${attWizField('attWizAddress', 'Where do they live?', attWizText('attWizAddress', d.physical_address, 'text', 'maxlength="255" autocomplete="off"'), false)}
+                        ${attWizField('attWizInvitedBy', 'Who invited them?', attWizText('attWizInvitedBy', d.invited_by, 'text', 'maxlength="150" autocomplete="off"'), false)}
+                    </div>
+                    <div class="space-y-2.5 pt-1">
+                        <label class="flex items-center gap-3.5 p-4 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-white hover:border-blue-200 transition-colors group">
+                            <input type="checkbox" id="attWizJoin" ${d.wants_to_join ? 'checked' : ''} class="w-5 h-5 rounded border-gray-300 text-hodRed focus:ring-hodRed cursor-pointer">
+                            <span class="font-bold text-gray-800 text-sm group-hover:text-hodBlue transition-colors">They are looking to make HOD their home church.</span>
+                        </label>
+                        <label class="flex items-center gap-3.5 p-4 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-white hover:border-blue-200 transition-colors group">
+                            <input type="checkbox" id="attWizVisitation" ${d.wants_visitation ? 'checked' : ''} class="w-5 h-5 rounded border-gray-300 text-hodBlue focus:ring-hodBlue cursor-pointer">
+                            <span class="font-bold text-gray-800 text-sm group-hover:text-hodBlue transition-colors">They would like a Pastor or minister to call/visit.</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label for="attWizPrayer" class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">How can we pray for them?</label>
+                        <textarea id="attWizPrayer" rows="3" maxlength="2000" placeholder="Optional — the Zoe Intercessory team is ready to agree…" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-hodBlue focus:ring-2 focus:ring-blue-100 transition-all resize-none">${esc(d.prayer_requests)}</textarea>
+                    </div>
+                </div>`);
+            } else {
+                $('#attWizardTitle').text('Church & profile details');
+                $('#attWizardSubtitle').text('Their statuses in the house — same fields as Congregation Data.');
+                body.html(`<div class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        ${attWizField('attWizSpiritual', 'Spiritual status', attWizSelect('attWizSpiritual', ATT_SPIRITUAL_OPTIONS, d.spiritual_status, false), true)}
+                        ${attWizField('attWizAttendance', 'Attendance status', attWizSelect('attWizAttendance', ATT_ATTENDANCE_OPTIONS, d.attendance_status, false), true)}
+                        ${attWizField('attWizEmail', 'Personal email', attWizText('attWizEmail', d.email, 'email', 'maxlength="100" inputmode="email" autocomplete="off"'), false, 'A church email is auto-generated if left blank.')}
+                        ${attWizField('attWizDob', 'Date of birth', attWizText('attWizDob', d.dob, 'date', 'max="' + new Date().toISOString().slice(0, 10) + '"'), false)}
+                        ${attWizField('attWizMarital', 'Marital status', attWizSelect('attWizMarital', ['Single', 'Married', 'Separated', 'Divorced'], d.marital_status, false), false)}
+                        <div id="attWizAnniversaryWrap" class="${d.marital_status === 'Married' ? '' : 'hidden'}">
+                            ${attWizField('attWizAnniversary', 'Wedding anniversary', attWizText('attWizAnniversary', d.wedding_anniversary, 'date'), false)}
+                        </div>
+                        ${attWizField('attWizAddress', 'Physical address', attWizText('attWizAddress', d.physical_address, 'text', 'maxlength="255" autocomplete="off"'), false)}
+                    </div>
+                    <div>
+                        <label for="attWizComments" class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Pastoral comments / notes</label>
+                        <textarea id="attWizComments" rows="2" maxlength="1000" placeholder="Optional welfare notes, family details, etc." class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-hodBlue focus:ring-2 focus:ring-blue-100 transition-all resize-none">${esc(d.comments)}</textarea>
+                    </div>
+                </div>`);
+                $('#attWizMarital').on('change', function(){
+                    $('#attWizAnniversaryWrap').toggleClass('hidden', $(this).val() !== 'Married');
+                });
+            }
+            footerHtml = backBtn + `<button type="button" id="attWizNextBtn" onclick="attWizardNext()" class="bg-hodBlue hover:bg-[#152750] text-white px-6 py-3 rounded-xl font-black text-sm shadow-md transition-all">Next</button>`;
+        }
+
+        else if(w.step === 'review'){
+            const d = w.data;
+            $('#attWizardTitle').text('Review & add');
+            $('#attWizardSubtitle').text('Double-check, then we\'ll clock them straight in.');
+            const row = (label, value) => `<div class="flex justify-between gap-4 py-2 border-b border-gray-50">
+                <span class="text-[11px] font-black uppercase tracking-wider text-gray-400 shrink-0 pt-0.5">${label}</span>
+                <span class="text-sm font-bold text-gray-900 text-right min-w-0 break-words">${value ? esc(value) : '<span class="text-gray-300">Not provided</span>'}</span>
+            </div>`;
+            let rows = row('Name', `${d.first_name} ${d.last_name}`.trim()) + row('Phone', d.phone) + row('Gender', d.gender || '') + row('Email', d.email) + row('DOB', d.dob) + row('Marital', d.marital_status) + row('Address', d.physical_address);
+            if(w.type === 'first_timer'){
+                rows += row('Invited by', d.invited_by)
+                    + row('Wants to join HOD', d.wants_to_join ? 'Yes' : '')
+                    + row('Wants visitation', d.wants_visitation ? 'Yes' : '')
+                    + row('Prayer request', d.prayer_requests ? 'Provided' : '');
+            } else {
+                rows += row('Spiritual status', attStatusLabel(d.spiritual_status)) + row('Attendance status', attStatusLabel(d.attendance_status)) + row('Notes', d.comments);
+            }
+            body.html(`<div class="space-y-4">
+                <div class="bg-white border border-gray-100 rounded-2xl p-4 divide-y divide-gray-50">${rows}</div>
+                <div class="bg-blue-50/70 border border-blue-100 rounded-2xl px-4 py-3.5 flex items-start gap-2.5">
+                    <svg class="w-5 h-5 text-hodBlue mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <p class="text-xs font-bold text-hodBlue leading-relaxed">On confirm, their profile is created and they are clocked into <span class="font-black">${esc($('#attendanceEventSelect option:selected').text() || 'the selected event')}</span> immediately.</p>
+                </div>
+            </div>`);
+            footerHtml = backBtn + `<button type="button" id="attWizSubmitBtn" onclick="attWizardSubmit()" class="bg-hodRed hover:bg-[#A3151A] text-white px-6 py-3 rounded-xl font-black text-sm shadow-md transition-all">Add & Clock In</button>`;
+        }
+
+        footer.html(footerHtml).toggleClass('hidden', footerHtml === '');
+    }
+
+    function attWizardBuildQr(){
+        // The public Connect form (/connect.php) takes no event context parameter —
+        // it always creates a plain 1st Timer profile — so we link it plainly
+        // rather than inventing a token the form does not support.
+        const url = window.location.origin + '/connect.php';
+        const host = document.getElementById('attWizQrHost');
+        if(!host) return;
+        host.innerHTML = '';
+        $('#attWizQrUrl').val(url);
+        if(typeof QRCode !== 'undefined'){
+            new QRCode(host, { text: url, width: 190, height: 190, correctLevel: QRCode.CorrectLevel.H });
+        } else {
+            host.innerHTML = `<p class="text-xs font-bold text-gray-500 break-all max-w-[190px] text-center leading-relaxed">${esc(url)}</p>`;
+        }
+    }
+
+    function attWizCopyUrl(){
+        const url = $('#attWizQrUrl').val() || (window.location.origin + '/connect.php');
+        const fallback = () => {
+            const input = document.getElementById('attWizQrUrl');
+            if(input){ input.focus(); input.select(); try { document.execCommand('copy'); showToast('Link copied.'); } catch(e){ showToast('Select the link and copy it manually.', 'warning'); } }
+        };
+        if(navigator.clipboard && navigator.clipboard.writeText){
+            navigator.clipboard.writeText(url).then(() => showToast('Link copied.')).catch(fallback);
+        } else fallback();
+    }
+
+    function attWizOpenForm(){
+        window.open((window.location.origin + '/connect.php'), '_blank', 'noopener');
+    }
+
+    function attWizardSubmit(){
+        const w = attWizardState;
+        if(!w || w.busy) return;
+        w.busy = true;
+        const btn = $('#attWizSubmitBtn');
+        btn.prop('disabled', true).html('<span class="inline-flex items-center gap-2"><span class="att-spin att-spin-light"></span> Adding & clocking in…</span>');
+        const d = w.data;
+        const shared = {
+            first_name: d.first_name, last_name: d.last_name, phone: d.phone,
+            gender: d.gender, marital_status: d.marital_status, dob: d.dob,
+            physical_address: d.physical_address
+        };
+        if(w.type === 'first_timer'){
+            $.post(API_URL, Object.assign({
+                action: 'create_first_timer',
+                email: d.email,
+                invited_by: d.invited_by,
+                prayer_requests: d.prayer_requests,
+                wants_to_join: d.wants_to_join ? '1' : '0',
+                wants_visitation: d.wants_visitation ? '1' : '0'
+            }, shared), attWizardCreated, 'json').fail(attWizardSubmitFailed);
+        } else {
+            // Reuses the Congregation module's create action (auto church email,
+            // QR hash, IDI notification) — it now returns the new user_id.
+            $.post(CONG_API_URL, Object.assign({
+                action: 'create_member',
+                email: '',
+                real_email: d.email,
+                wedding_anniversary: d.marital_status === 'Married' ? d.wedding_anniversary : '',
+                spiritual_status: d.spiritual_status,
+                attendance_status: d.attendance_status,
+                comments: d.comments
+            }, shared), attWizardCreated, 'json').fail(attWizardSubmitFailed);
+        }
+    }
+
+    function attWizardSubmitFailed(){
+        const w = attWizardState;
+        if(!w) return;
+        w.busy = false;
+        const btn = $('#attWizSubmitBtn');
+        if(btn.length) btn.prop('disabled', false).text('Add & Clock In');
+        attWizardError('Server Error — could not create the profile. Please try again.');
+    }
+
+    function attWizardCreated(res){
+        const w = attWizardState;
+        if(!w) return;
+        if(res.status !== 'success'){
+            w.busy = false;
+            const btn = $('#attWizSubmitBtn');
+            if(btn.length) btn.prop('disabled', false).text('Add & Clock In');
+            attWizardError(res.message || 'Could not create the profile.', res.existing_user_id);
+            return;
+        }
+        const name = `${w.data.first_name} ${w.data.last_name}`.trim() || res.name || 'New profile';
+        attClockInUser(res.user_id, name).then(function(clockRes){
+            w.busy = false;
+            attWizardRenderSuccess(name, clockRes, false);
+        });
+    }
+
+    function attWizardRenderSuccess(name, clockRes, existing){
+        const w = attWizardState;
+        if(!w) return;
+        w.step = 'success';
+        attWizardRenderDots();
+        let line1, line2;
+        if(clockRes && clockRes.status === 'success'){
+            line1 = existing ? 'Existing profile clocked into this event.' : 'Profile created and clocked in.';
+            line2 = clockRes.clock_time ? `Clocked in at ${clockRes.clock_time} · they are in the Checked In list.` : 'They are in the Checked In list.';
+        } else if(clockRes && clockRes.status === 'warning'){
+            line1 = existing ? 'Existing profile kept.' : 'Profile created.';
+            line2 = clockRes.message || 'They were already checked in.';
+        } else {
+            line1 = existing ? 'Existing profile found.' : 'Profile created.';
+            line2 = 'The clock-in could not be confirmed — check the Checked In list before retrying.';
+        }
+        $('#attWizardTitle').text('They\'re in!');
+        $('#attWizardSubtitle').text(existing ? 'Existing profile clocked in.' : 'Profile created & clocked in.');
+        $('#attWizardBody').html(`<div class="text-center py-4">
+            <div class="w-20 h-20 bg-green-50 text-green-600 border border-green-100 rounded-full flex items-center justify-center mx-auto mb-5">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+            <h4 class="text-2xl font-black text-gray-900">${esc(name)} is in!</h4>
+            <p class="text-sm text-gray-500 font-semibold mt-2">${esc(line1)}</p>
+            <p class="text-xs text-gray-400 font-bold mt-1">${esc(line2)}</p>
+            <div class="mt-6 flex flex-col sm:flex-row justify-center gap-3">
+                <button type="button" onclick="openAttAddWizard('')" class="bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 px-5 py-3 rounded-xl font-bold text-sm transition-colors">Add another</button>
+                <button type="button" onclick="attWizardClose()" class="bg-hodBlue hover:bg-[#152750] text-white px-6 py-3 rounded-xl font-black text-sm shadow-md transition-all">Done</button>
+            </div>
+        </div>`);
+        $('#attWizardFooter').addClass('hidden').html('');
+        attRefreshAll();
+    }
 
     // ---------- Search ----------
     $('#searchEvents').on('keyup', function(){ const v=$(this).val().toLowerCase(); $('#eventsGrid > div').each(function(){ const card=$(this); if(card.find('h4').length) card.toggle(card.text().toLowerCase().indexOf(v)>-1); }); });
