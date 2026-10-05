@@ -184,6 +184,7 @@
             <form id="resolveWelfareForm" class="space-y-4">
                 <input type="hidden" name="action" value="resolve_awol_case">
                 <input type="hidden" name="user_id" id="resolveWelfareUserId">
+                <input type="hidden" name="followup_id" id="resolveWelfareFollowupId" value="0">
                 <div class="bg-green-50 border border-green-200 rounded-xl p-4">
                     <p class="text-xs font-black text-green-800 uppercase tracking-wider mb-2">✓ Resolve &amp; Remove from AWOL List</p>
                     <p class="text-xs text-green-700 mb-3">This permanently closes the case for this cycle. The member's name will leave the AWOL list.</p>
@@ -268,7 +269,7 @@
         <div class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-gray-50/50" id="existingCharisNotesContainer">
             </div>
 
-        <div class="p-6 border-t border-gray-100 bg-white shrink-0">
+        <div id="charisNoteComposer" class="p-6 border-t border-gray-100 bg-white shrink-0">
             <form id="saveCharisNoteForm" class="space-y-4">
                 <input type="hidden" name="action" value="save_charis_note">
                 <input type="hidden" name="target_user_id" id="note_target_user_id">

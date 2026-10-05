@@ -3,6 +3,8 @@
 
 // 1. Core Includes & Headers
 require_once '../includes/db.php';
+require_once '../includes/charis_helpers.php';
+require_once '../includes/assimilation_helpers.php';
 header('Content-Type: application/json');
 
 // 2. Security Check
@@ -11,20 +13,28 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$user_id = $_SESSION['user_id'];
+$user_id = (int) $_SESSION['user_id'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
-// 3. Robust RBAC Check (The Lanyard System)
-$allowed_roles = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD'];
-$is_charis_admin = false;
+// 3. Charis access and request-integrity gate. This mirrors the sidebar's
+// pastors/IDI/Charis rule and does not treat a Director badge from an unrelated
+// department as permission to read confidential welfare records.
+$charis_access = charis_access_context($pdo, $user_id);
+if (!$charis_access['can_access']) {
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'message' => 'You do not have access to the Charis module.']);
+    exit;
+}
+$is_charis_admin = $charis_access['is_manager'];
+$is_pastor = $charis_access['is_pastor'];
 
-// Check ALL roles the user possesses, not just their primary active one
-if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
-    foreach ($_SESSION['roles'] as $role) {
-        if (isset($role['role_name']) && in_array($role['role_name'], $allowed_roles)) {
-            $is_charis_admin = true;
-            break; // Found an admin badge! Stop checking.
-        }
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    $sentCsrf = (string) ($_SERVER['HTTP_X_CHARIS_CSRF'] ?? ($_POST['_csrf'] ?? ''));
+    $haveCsrf = (string) ($_SESSION['charis_csrf'] ?? '');
+    if ($sentCsrf === '' || $haveCsrf === '' || !hash_equals($haveCsrf, $sentCsrf)) {
+        http_response_code(403);
+        echo json_encode(['status' => 'error', 'message' => 'Your session expired. Reload the page and try again.']);
+        exit;
     }
 }
 
@@ -103,61 +113,106 @@ try {
         // ACTION: FETCH CHARIS DASHBOARD DATA
         // ==========================================
         case 'fetch_dashboard':
-            // A. Fetch Upcoming Birthdays
+            // A. Fetch every birthday in the remainder of this month and
+            // all of next month. The relative-month sort keeps January after
+            // December, and the assignment year follows the actual occurrence.
             $bdayStmt = $pdo->query("
                 SELECT * FROM (
-                    SELECT u.id as target_user_id, u.first_name, u.last_name, u.phone, u.dob as event_date, 
-                           u.picture_path, DATE_FORMAT(u.dob, '%M %D') as formatted_date,
-                           ca.id as assignment_id, ca.status as assignment_status, 
+                    SELECT u.id as target_user_id, u.first_name, u.last_name, u.phone,
+                           u.dob as event_date, u.picture_path,
+                           DATE_FORMAT(u.dob, '%M %D') as formatted_date,
+                           ca.id as assignment_id, ca.status as assignment_status, ca.assigned_worker_id,
                            w.first_name as worker_fname, w.last_name as worker_lname
-                    FROM users u
-                    LEFT JOIN charis_assignments ca ON u.id = ca.target_user_id AND ca.event_type = 'Birthday' AND ca.assignment_year = YEAR(CURDATE())
-                    LEFT JOIN users w ON ca.assigned_worker_id = w.id
-                    WHERE u.dob IS NOT NULL
-                    AND ((MONTH(u.dob) = MONTH(CURDATE()) AND DAY(u.dob) >= DAY(CURDATE())) OR (MONTH(u.dob) = MONTH(DATE_ADD(CURDATE(), INTERVAL 1 MONTH))))
+                      FROM users u
+                      LEFT JOIN charis_assignments ca
+                        ON u.id = ca.target_user_id
+                       AND ca.event_type = 'Birthday'
+                       AND ca.assignment_year = YEAR(CURDATE()) + (MONTH(u.dob) < MONTH(CURDATE()))
+                      LEFT JOIN users w ON ca.assigned_worker_id = w.id
+                     WHERE u.dob IS NOT NULL
+                       AND u.spiritual_status IN ('Member', 'Worker', 'Pastor')
+                       AND COALESCE(u.attendance_status, '') NOT IN ('Relocated', 'Attends_Another_Church')
+                       AND (
+                            (MONTH(u.dob) = MONTH(CURDATE()) AND DAY(u.dob) >= DAY(CURDATE()))
+                            OR MONTH(u.dob) = MONTH(DATE_ADD(CURDATE(), INTERVAL 1 MONTH))
+                       )
 
                     UNION ALL
 
-                    SELECT CONCAT('jc_', jc.id) as target_user_id, jc.child_first_name as first_name, CONCAT(jc.child_last_name, ' (JC)') as last_name, 
-                           p.phone, jc.dob as event_date, 
-                           jc.picture_path, DATE_FORMAT(jc.dob, '%M %D') as formatted_date,
-                           ca.id as assignment_id, ca.status as assignment_status, 
+                    SELECT CONCAT('jc_', jc.id) as target_user_id,
+                           jc.child_first_name as first_name,
+                           CONCAT(jc.child_last_name, ' (JC)') as last_name,
+                           p.phone, jc.dob as event_date, jc.picture_path,
+                           DATE_FORMAT(jc.dob, '%M %D') as formatted_date,
+                           ca.id as assignment_id, ca.status as assignment_status, ca.assigned_worker_id,
                            w.first_name as worker_fname, w.last_name as worker_lname
-                    FROM junior_church_roster jc
-                    LEFT JOIN users p ON jc.parent_id = p.id
-                    LEFT JOIN charis_assignments ca ON jc.id = ca.target_user_id AND ca.event_type = 'JC_Birthday' AND ca.assignment_year = YEAR(CURDATE())
-                    LEFT JOIN users w ON ca.assigned_worker_id = w.id
-                    WHERE jc.dob IS NOT NULL
-                    AND ((MONTH(jc.dob) = MONTH(CURDATE()) AND DAY(jc.dob) >= DAY(CURDATE())) OR (MONTH(jc.dob) = MONTH(DATE_ADD(CURDATE(), INTERVAL 1 MONTH))))
+                      FROM junior_church_roster jc
+                      LEFT JOIN users p ON jc.parent_id = p.id
+                      LEFT JOIN charis_assignments ca
+                        ON jc.id = ca.target_user_id
+                       AND ca.event_type = 'JC_Birthday'
+                       AND ca.assignment_year = YEAR(CURDATE()) + (MONTH(jc.dob) < MONTH(CURDATE()))
+                      LEFT JOIN users w ON ca.assigned_worker_id = w.id
+                     WHERE jc.dob IS NOT NULL
+                       AND (
+                            (MONTH(jc.dob) = MONTH(CURDATE()) AND DAY(jc.dob) >= DAY(CURDATE()))
+                            OR MONTH(jc.dob) = MONTH(DATE_ADD(CURDATE(), INTERVAL 1 MONTH))
+                       )
                 ) as combined_bdays
-                ORDER BY MONTH(event_date) ASC, DAY(event_date) ASC LIMIT 20
+                ORDER BY CASE WHEN MONTH(event_date) = MONTH(CURDATE()) THEN 0 ELSE 1 END,
+                         DAY(event_date), first_name, last_name
             ");
             $birthdays = $bdayStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // B. Fetch Upcoming Anniversaries
+            // B. Fetch recurring wedding anniversaries plus one-time life
+            // events that actually occur between today and the end of next
+            // month. One-time milestones must not repeat every year.
             $annivStmt = $pdo->query("
-                SELECT u.id as target_user_id, 'Wedding_Anniversary' as event_type, u.wedding_anniversary as event_date, 
-                       DATE_FORMAT(u.wedding_anniversary, '%M %D') as formatted_date,
-                       u.first_name, u.last_name, u.phone, u.picture_path, u.wedding_picture_path,
-                       ca.id as assignment_id, ca.status as assignment_status, w.first_name as worker_fname, w.last_name as worker_lname
-                FROM users u
-                LEFT JOIN charis_assignments ca ON u.id = ca.target_user_id AND ca.event_type = 'Wedding_Anniversary' AND ca.assignment_year = YEAR(CURDATE())
-                LEFT JOIN users w ON ca.assigned_worker_id = w.id
-                WHERE u.wedding_anniversary IS NOT NULL
-                AND ((MONTH(u.wedding_anniversary) = MONTH(CURDATE()) AND DAY(u.wedding_anniversary) >= DAY(CURDATE())) OR (MONTH(u.wedding_anniversary) = MONTH(DATE_ADD(CURDATE(), INTERVAL 1 MONTH))))
-                
-                UNION ALL
-                
-                SELECT le.user_id as target_user_id, le.event_type, le.event_date, 
-                       DATE_FORMAT(le.event_date, '%M %D') as formatted_date,
-                       u.first_name, u.last_name, u.phone, u.picture_path, u.wedding_picture_path,
-                       ca.id as assignment_id, ca.status as assignment_status, w.first_name as worker_fname, w.last_name as worker_lname
-                FROM life_events le
-                JOIN users u ON le.user_id = u.id
-                LEFT JOIN charis_assignments ca ON le.user_id = ca.target_user_id AND ca.event_type = le.event_type AND ca.assignment_year = YEAR(CURDATE())
-                LEFT JOIN users w ON ca.assigned_worker_id = w.id
-                WHERE ((MONTH(le.event_date) = MONTH(CURDATE()) AND DAY(le.event_date) >= DAY(CURDATE())) OR (MONTH(le.event_date) = MONTH(DATE_ADD(CURDATE(), INTERVAL 1 MONTH))))
-                ORDER BY MONTH(event_date) ASC, DAY(event_date) ASC LIMIT 20
+                SELECT * FROM (
+                    SELECT u.id as target_user_id,
+                           'Wedding_Anniversary' as event_type,
+                           u.wedding_anniversary as event_date,
+                           DATE_FORMAT(u.wedding_anniversary, '%M %D') as formatted_date,
+                           u.first_name, u.last_name, u.phone, u.picture_path,
+                           u.wedding_picture_path, ca.id as assignment_id,
+                           ca.status as assignment_status, ca.assigned_worker_id,
+                           w.first_name as worker_fname, w.last_name as worker_lname
+                      FROM users u
+                      LEFT JOIN charis_assignments ca
+                        ON u.id = ca.target_user_id
+                       AND ca.event_type = 'Wedding_Anniversary'
+                       AND ca.assignment_year = YEAR(CURDATE()) + (MONTH(u.wedding_anniversary) < MONTH(CURDATE()))
+                      LEFT JOIN users w ON ca.assigned_worker_id = w.id
+                     WHERE u.wedding_anniversary IS NOT NULL
+                       AND u.spiritual_status IN ('Member', 'Worker', 'Pastor')
+                       AND COALESCE(u.attendance_status, '') NOT IN ('Relocated', 'Attends_Another_Church')
+                       AND (
+                            (MONTH(u.wedding_anniversary) = MONTH(CURDATE()) AND DAY(u.wedding_anniversary) >= DAY(CURDATE()))
+                            OR MONTH(u.wedding_anniversary) = MONTH(DATE_ADD(CURDATE(), INTERVAL 1 MONTH))
+                       )
+
+                    UNION ALL
+
+                    SELECT le.user_id as target_user_id, le.event_type,
+                           le.event_date, DATE_FORMAT(le.event_date, '%M %D') as formatted_date,
+                           u.first_name, u.last_name, u.phone, u.picture_path,
+                           u.wedding_picture_path, ca.id as assignment_id,
+                           ca.status as assignment_status, ca.assigned_worker_id,
+                           w.first_name as worker_fname, w.last_name as worker_lname
+                      FROM life_events le
+                      JOIN users u ON le.user_id = u.id
+                      LEFT JOIN charis_assignments ca
+                        ON le.user_id = ca.target_user_id
+                       AND ca.event_type = le.event_type
+                       AND ca.assignment_year = YEAR(le.event_date)
+                      LEFT JOIN users w ON ca.assigned_worker_id = w.id
+                     WHERE DATE(le.event_date) BETWEEN CURDATE()
+                                                   AND LAST_DAY(DATE_ADD(CURDATE(), INTERVAL 1 MONTH))
+                       AND u.spiritual_status IN ('Member', 'Worker', 'Pastor')
+                       AND COALESCE(u.attendance_status, '') NOT IN ('Relocated', 'Attends_Another_Church')
+                ) as combined_life_events
+                ORDER BY CASE WHEN MONTH(event_date) = MONTH(CURDATE()) THEN 0 ELSE 1 END,
+                         DAY(event_date), first_name, last_name
             ");
             $anniversaries = $annivStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -167,8 +222,9 @@ try {
                 FROM users u
                 JOIN user_departments ud ON u.id = ud.user_id
                 JOIN departments d ON ud.department_id = d.id
-                WHERE (d.name LIKE '%Charis%' OR d.name LIKE '%Welfare%') AND ud.is_active = 1
-                ORDER BY u.first_name ASC
+                WHERE (ud.department_id IN (1, 10) OR d.name LIKE '%Charis%' OR d.name LIKE '%Welfare%' OR d.name = 'IDI')
+                  AND ud.is_active = 1
+                ORDER BY u.first_name ASC, u.last_name ASC
             ");
             $charis_workers = $workersStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -196,7 +252,13 @@ try {
             $past_events = $pastEventsStmt->fetchAll(PDO::FETCH_ASSOC);
 
             // E. Fetch all Members
-            $membersStmt = $pdo->query("SELECT id, first_name, last_name FROM users ORDER BY first_name ASC");
+            $membersStmt = $pdo->query("
+                SELECT id, first_name, last_name
+                  FROM users
+                 WHERE spiritual_status IN ('Member', 'Worker', 'Pastor')
+                   AND COALESCE(attendance_status, '') NOT IN ('Relocated', 'Attends_Another_Church')
+                 ORDER BY first_name ASC, last_name ASC
+            ");
             $members = $membersStmt->fetchAll(PDO::FETCH_ASSOC);
 
             // F. Fetch Urgent Welfare Checks (Manual pushes)
@@ -212,39 +274,70 @@ try {
             ");
             $manual_checks = $manualStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // G. Dynamic 3-week absences (Explicitly exempting 1st/2nd/3rd timers)
+            // G. Dynamic 3-service absences. Attendance is recorded in both
+            // QR checkins and the Events roster, so use the shared de-duplicated
+            // attendance union rather than reading `attendance` alone.
             $awol_checks = [];
-            $last3EventsStmt = $pdo->query("SELECT id FROM events WHERE event_category = 'Sunday_Service' AND event_date <= CURDATE() ORDER BY event_date DESC LIMIT 3");
-            $last3EventIds = $last3EventsStmt->fetchAll(PDO::FETCH_COLUMN);
+            $last3EventsStmt = $pdo->query("
+                SELECT DISTINCT DATE(event_date) AS service_date
+                  FROM events
+                 WHERE event_category = 'Sunday_Service'
+                   AND event_date <= NOW()
+                 ORDER BY service_date DESC
+                 LIMIT 3
+            ");
+            $last3ServiceDates = $last3EventsStmt->fetchAll(PDO::FETCH_COLUMN);
 
-            if (count($last3EventIds) == 3) {
-                $placeholders = implode(',', array_fill(0, count($last3EventIds), '?'));
+            if (count($last3ServiceDates) === 3) {
+                $placeholders = implode(',', array_fill(0, 3, '?'));
+                $attendanceUnion = assim_attendance_union_sql();
+                $resolvedMarker = charis_column_exists($pdo, 'charis_welfare_assignments', 'resolved_at')
+                    ? 'COALESCE(cwa2.resolved_at, cwa2.created_at)'
+                    : 'cwa2.created_at';
                 $awolStmt = $pdo->prepare("
-                    SELECT 0 as followup_id, 'AWOL' as alert_type, CURDATE() as followup_date, u.id as target_user_id, u.first_name, u.last_name, u.phone, u.physical_address,
-                           cwa.id as assignment_id, cwa.worker_id, cwa.status as assignment_status, w.first_name as worker_fname, w.last_name as worker_lname
-                    FROM users u
-                    LEFT JOIN charis_welfare_assignments cwa ON cwa.target_user_id = u.id AND cwa.followup_id = 0 AND cwa.status != 'Resolved'
-                    LEFT JOIN users w ON cwa.worker_id = w.id
-                    WHERE u.spiritual_status IN ('Member', 'Worker', 'Pastor')
-                    AND u.spiritual_status NOT IN ('Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer')
-                    AND u.attendance_status NOT IN ('Relocated', 'Attends_Another_Church', 'Unknown')
-                    AND u.id NOT IN (
-                        SELECT user_id FROM attendance WHERE event_id IN ($placeholders) AND status = 'Present'
-                    )
-                    AND NOT EXISTS (
-                        SELECT 1 FROM charis_welfare_assignments cwa2
-                        WHERE cwa2.target_user_id = u.id AND cwa2.followup_id = 0 AND cwa2.status = 'Resolved'
-                        AND cwa2.created_at >= (SELECT MIN(event_date) FROM events WHERE id IN ($placeholders))
-                    )
+                    SELECT 0 as followup_id, 'AWOL' as alert_type, CURDATE() as followup_date,
+                           u.id as target_user_id, u.first_name, u.last_name, u.phone,
+                           u.physical_address, cwa.id as assignment_id, cwa.worker_id,
+                           cwa.status as assignment_status, w.first_name as worker_fname,
+                           w.last_name as worker_lname
+                      FROM users u
+                      LEFT JOIN charis_welfare_assignments cwa
+                        ON cwa.target_user_id = u.id
+                       AND cwa.followup_id = 0
+                       AND cwa.status != 'Resolved'
+                      LEFT JOIN users w ON cwa.worker_id = w.id
+                     WHERE u.spiritual_status IN ('Member', 'Worker', 'Pastor')
+                       AND COALESCE(u.attendance_status, '') NOT IN ('Relocated', 'Attends_Another_Church', 'Unknown')
+                       AND NOT EXISTS (
+                            SELECT 1
+                              FROM {$attendanceUnion} attended
+                             WHERE attended.user_id = u.id
+                               AND attended.attended_on IN ({$placeholders})
+                       )
+                       AND NOT EXISTS (
+                            SELECT 1
+                              FROM charis_welfare_assignments cwa2
+                             WHERE cwa2.target_user_id = u.id
+                               AND cwa2.followup_id = 0
+                               AND cwa2.status = 'Resolved'
+                               AND {$resolvedMarker} >= ?
+                       )
                 ");
-                $awolStmt->execute(array_merge($last3EventIds, $last3EventIds));
+                $oldestServiceDate = min($last3ServiceDates);
+                $awolStmt->execute(array_merge($last3ServiceDates, [$oldestServiceDate]));
                 $awol_checks = $awolStmt->fetchAll(PDO::FETCH_ASSOC);
             }
-            
+
             $welfare_checks = [];
             $seen_users = [];
             foreach (array_merge($manual_checks, $awol_checks) as $check) {
                 if (!isset($seen_users[$check['target_user_id']])) {
+                    $check['secure_notes'] = charis_secure_welfare_notes(
+                        $pdo,
+                        (int) $check['target_user_id'],
+                        $user_id,
+                        $charis_access
+                    );
                     $welfare_checks[] = $check;
                     $seen_users[$check['target_user_id']] = true;
                 }
@@ -253,6 +346,7 @@ try {
             echo json_encode([
                 'status' => 'success',
                 'is_charis_admin' => $is_charis_admin,
+                'is_pastor' => $is_pastor || $charis_access['is_super_admin'],
                 'current_user_id' => $user_id,
                 'birthdays' => $birthdays,
                 'anniversaries' => $anniversaries,
@@ -847,27 +941,49 @@ try {
                 exit(json_encode(['status' => 'error', 'message' => 'Unauthorized.']));
             }
 
-            $target = strip_tags($_POST['target_user_id'] ?? '');
-$type = strip_tags($_POST['event_type'] ?? '');
+            $rawTarget = trim((string) ($_POST['target_user_id'] ?? ''));
+            $type = trim(strip_tags((string) ($_POST['event_type'] ?? '')));
+            $eventDate = charis_parse_date(trim((string) ($_POST['event_date'] ?? '')));
             $worker = filter_var($_POST['worker_id'] ?? '', FILTER_VALIDATE_INT);
-            
-            if (empty($target) || empty($type) || !$worker) {
-                exit(json_encode(['status' => 'error', 'message' => 'Missing required assignment data.']));
+            $targetSource = 'user';
+
+            if (str_starts_with($rawTarget, 'jc_')) {
+                $targetSource = 'jc';
+                $rawTarget = substr($rawTarget, 3);
+                $type = 'JC_Birthday';
+            }
+            $target = filter_var($rawTarget, FILTER_VALIDATE_INT);
+
+            if (!$target || $type === '' || strlen($type) > 80 || !$worker || !$eventDate) {
+                exit(json_encode(['status' => 'error', 'message' => 'Invalid celebration assignment data.']));
+            }
+            if (!charis_is_team_worker($pdo, (int) $worker)) {
+                exit(json_encode(['status' => 'error', 'message' => 'Select an active Charis worker.']));
             }
 
-            if (strpos($target, 'jc_') === 0) { 
-                $target = str_replace('jc_', '', $target); 
-                $type = 'JC_Birthday'; 
+            $targetTable = $targetSource === 'jc' ? 'junior_church_roster' : 'users';
+            $targetStmt = $pdo->prepare("SELECT 1 FROM {$targetTable} WHERE id = ?");
+            $targetStmt->execute([$target]);
+            if (!$targetStmt->fetchColumn()) {
+                exit(json_encode(['status' => 'error', 'message' => 'The celebrant could not be found.']));
+            }
+
+            $recurringTypes = ['Birthday', 'JC_Birthday', 'Wedding_Anniversary'];
+            if (in_array($type, $recurringTypes, true)) {
+                $eventMonth = (int) $eventDate->format('n');
+                $assignmentYear = (int) date('Y') + ($eventMonth < (int) date('n') ? 1 : 0);
+            } else {
+                $assignmentYear = (int) $eventDate->format('Y');
             }
 
             $stmt = $pdo->prepare("
-                INSERT INTO charis_assignments (target_user_id, event_type, assignment_year, assigned_worker_id, status) 
-                VALUES (?, ?, YEAR(CURDATE()), ?, 'Assigned') 
+                INSERT INTO charis_assignments
+                    (target_user_id, event_type, assignment_year, assigned_worker_id, status)
+                VALUES (?, ?, ?, ?, 'Assigned')
                 ON DUPLICATE KEY UPDATE assigned_worker_id = VALUES(assigned_worker_id), status = 'Assigned'
             ");
-            $stmt->execute([$target, $type, $worker]);
+            $stmt->execute([$target, $type, $assignmentYear, $worker]);
 
-            // NOTIFICATION TRIGGER: Alert the assigned worker
             $cleanType = str_replace('_', ' ', $type);
             $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Celebration Task', ?, '/modules/charis/index.php')")
                 ->execute([$worker, "You have been assigned to coordinate a {$cleanType} celebration. Please check your Charis dashboard."]);
@@ -880,25 +996,42 @@ $type = strip_tags($_POST['event_type'] ?? '');
         // ==========================================
         case 'assign_welfare_case':
             if (!$is_charis_admin) {
-                exit(json_encode(['status' => 'error', 'message' => 'Unauthorized mapping.']));
+                exit(json_encode(['status' => 'error', 'message' => 'Only Charis leadership can assign cases.']));
             }
-            
+
             $target = filter_var($_POST['target_user_id'] ?? '', FILTER_VALIDATE_INT);
             $followup = empty($_POST['followup_id']) ? 0 : filter_var($_POST['followup_id'], FILTER_VALIDATE_INT);
             $worker = filter_var($_POST['worker_id'] ?? '', FILTER_VALIDATE_INT);
-            
-            if (!$target || !$worker) {
-                exit(json_encode(['status' => 'error', 'message' => 'Missing worker or target ID.']));
+
+            if (!$target || $followup === false || !$worker) {
+                exit(json_encode(['status' => 'error', 'message' => 'Missing worker or case information.']));
             }
-            
+            if (!charis_is_team_worker($pdo, (int) $worker)) {
+                exit(json_encode(['status' => 'error', 'message' => 'Select an active Charis worker.']));
+            }
+            $targetStmt = $pdo->prepare('SELECT 1 FROM users WHERE id = ?');
+            $targetStmt->execute([$target]);
+            if (!$targetStmt->fetchColumn()) {
+                exit(json_encode(['status' => 'error', 'message' => 'The welfare member could not be found.']));
+            }
+            if ($followup > 0) {
+                $followupStmt = $pdo->prepare('SELECT 1 FROM embrace_followups WHERE id = ? AND visitor_id = ?');
+                $followupStmt->execute([$followup, $target]);
+                if (!$followupStmt->fetchColumn()) {
+                    exit(json_encode(['status' => 'error', 'message' => 'The follow-up does not belong to this member.']));
+                }
+            }
+
+            $resolvedReset = charis_column_exists($pdo, 'charis_welfare_assignments', 'resolved_at')
+                ? ', resolved_at = NULL'
+                : '';
             $stmt = $pdo->prepare("
-                INSERT INTO charis_welfare_assignments (followup_id, target_user_id, worker_id, status) 
-                VALUES (?, ?, ?, 'Assigned') 
-                ON DUPLICATE KEY UPDATE worker_id = VALUES(worker_id), status = 'Assigned'
+                INSERT INTO charis_welfare_assignments (followup_id, target_user_id, worker_id, status)
+                VALUES (?, ?, ?, 'Assigned')
+                ON DUPLICATE KEY UPDATE worker_id = VALUES(worker_id), status = 'Assigned' {$resolvedReset}
             ");
             $stmt->execute([$followup, $target, $worker]);
 
-            // NOTIFICATION TRIGGER: Alert the assigned worker
             $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Welfare Assignment', 'You have been assigned a new welfare/follow-up case. Please review the details on your dashboard.', '/modules/charis/index.php')")
                 ->execute([$worker]);
 
@@ -906,20 +1039,39 @@ $type = strip_tags($_POST['event_type'] ?? '');
             break;
 
         // ==========================================
-        // ACTION: UPDATE ASSIGNMENT STATUS
+        // ACTION: UPDATE CELEBRATION ASSIGNMENT STATUS
         // ==========================================
         case 'update_assignment_status':
-            $assignment_id = filter_var($_POST['assignment_id'] ?? '', FILTER_VALIDATE_INT);
-            $new_status = strip_tags($_POST['status'] ?? '');
-
-            if (!$assignment_id || empty($new_status)) {
+            $assignmentId = filter_var($_POST['assignment_id'] ?? '', FILTER_VALIDATE_INT);
+            $newStatus = trim((string) ($_POST['status'] ?? ''));
+            if (!$assignmentId || !in_array($newStatus, ['Flyer_Posted', 'Completed'], true)) {
                 exit(json_encode(['status' => 'error', 'message' => 'Invalid status update.']));
             }
 
-            $stmt = $pdo->prepare("UPDATE charis_assignments SET status = ? WHERE id = ?");
-            $stmt->execute([$new_status, $assignment_id]);
+            $assignmentStmt = $pdo->prepare('SELECT assigned_worker_id, status FROM charis_assignments WHERE id = ?');
+            $assignmentStmt->execute([$assignmentId]);
+            $assignment = $assignmentStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$assignment) {
+                exit(json_encode(['status' => 'error', 'message' => 'Celebration assignment not found.']));
+            }
+            if (!$is_charis_admin && (int) $assignment['assigned_worker_id'] !== $user_id) {
+                exit(json_encode(['status' => 'error', 'message' => 'This celebration is assigned to another worker.']));
+            }
 
-            $msg = $new_status === 'Flyer_Posted' ? 'Flyer marked as posted!' : 'Celebration marked as fully completed!';
+            $allowedNext = ['Assigned' => 'Flyer_Posted', 'Flyer_Posted' => 'Completed'];
+            if (($allowedNext[$assignment['status']] ?? null) !== $newStatus) {
+                exit(json_encode(['status' => 'error', 'message' => 'That celebration status transition is not allowed.']));
+            }
+
+            $stmt = $pdo->prepare('UPDATE charis_assignments SET status = ? WHERE id = ? AND status = ?');
+            $stmt->execute([$newStatus, $assignmentId, $assignment['status']]);
+            if ($stmt->rowCount() !== 1) {
+                exit(json_encode(['status' => 'error', 'message' => 'The assignment changed. Refresh and try again.']));
+            }
+
+            $msg = $newStatus === 'Flyer_Posted'
+                ? 'Flyer marked as posted!'
+                : 'Celebration marked as fully completed!';
             echo json_encode(['status' => 'success', 'message' => $msg]);
             break;
 
@@ -927,70 +1079,116 @@ $type = strip_tags($_POST['event_type'] ?? '');
         // ACTION: ADD MANUAL LIFE EVENT
         // ==========================================
         case 'add_life_event':
-            $target_id = filter_var($_POST['user_id'] ?? '', FILTER_VALIDATE_INT);
-            $event_date = strip_tags($_POST['event_date'] ?? '');
-$type = strip_tags($_POST['event_type'] ?? '');
-if ($type === 'Other') {
-    $type = trim(strip_tags($_POST['custom_event_type'] ?? 'Special Milestone'));
-}
-
-            if (!$target_id || empty($type) || empty($event_date)) {
-                exit(json_encode(['status' => 'error', 'message' => 'All fields are required.']));
+            $targetId = filter_var($_POST['user_id'] ?? '', FILTER_VALIDATE_INT);
+            $eventDate = charis_parse_date(trim((string) ($_POST['event_date'] ?? '')));
+            $type = trim(strip_tags((string) ($_POST['event_type'] ?? '')));
+            if ($type === 'Other') {
+                $type = trim(strip_tags((string) ($_POST['custom_event_type'] ?? '')));
             }
 
-            $stmt = $pdo->prepare("INSERT INTO life_events (user_id, event_type, event_date) VALUES (?, ?, ?)");
-            $stmt->execute([$target_id, $type, $event_date]);
+            if (!$targetId || !$eventDate || $type === '' || strlen($type) > 80) {
+                exit(json_encode(['status' => 'error', 'message' => 'A member, valid date, and event type are required.']));
+            }
+            $targetStmt = $pdo->prepare("
+                SELECT 1 FROM users
+                 WHERE id = ? AND spiritual_status IN ('Member', 'Worker', 'Pastor')
+            ");
+            $targetStmt->execute([$targetId]);
+            if (!$targetStmt->fetchColumn()) {
+                exit(json_encode(['status' => 'error', 'message' => 'Select an active church member.']));
+            }
+
+            $duplicateStmt = $pdo->prepare('SELECT 1 FROM life_events WHERE user_id = ? AND event_type = ? AND event_date = ? LIMIT 1');
+            $duplicateStmt->execute([$targetId, $type, $eventDate->format('Y-m-d')]);
+            if ($duplicateStmt->fetchColumn()) {
+                exit(json_encode(['status' => 'error', 'message' => 'This life event has already been logged.']));
+            }
+
+            $stmt = $pdo->prepare('INSERT INTO life_events (user_id, event_type, event_date) VALUES (?, ?, ?)');
+            $stmt->execute([$targetId, $type, $eventDate->format('Y-m-d')]);
 
             echo json_encode(['status' => 'success', 'message' => 'Life event securely added.']);
             break;
 
         // ==========================================
-        // ACTION: RESOLVE WELFARE
+        // ACTION: RESOLVE LEGACY MANUAL WELFARE FOLLOW-UP
         // ==========================================
         case 'resolve_welfare':
-            $followup_id = filter_var($_POST['followup_id'] ?? '', FILTER_VALIDATE_INT);
-            if (!$followup_id) {
+            $followupId = filter_var($_POST['followup_id'] ?? '', FILTER_VALIDATE_INT);
+            if (!$followupId) {
                 exit(json_encode(['status' => 'error', 'message' => 'Missing case identifier.']));
             }
+            $caseStmt = $pdo->prepare('SELECT visitor_id FROM embrace_followups WHERE id = ?');
+            $caseStmt->execute([$followupId]);
+            $targetId = (int) $caseStmt->fetchColumn();
+            if (!$targetId || !charis_welfare_assignment_access($pdo, $user_id, $targetId, $followupId, $is_charis_admin)) {
+                exit(json_encode(['status' => 'error', 'message' => 'You are not assigned to this welfare case.']));
+            }
 
-            $stmt = $pdo->prepare("
-                UPDATE embrace_followups 
-                SET status = 'Completed', 
-                    followup_notes = CONCAT(IFNULL(followup_notes,''), '\n\n[RESOLVED BY CHARIS TEAM]') 
-                WHERE id = ?
-            ");
-            $stmt->execute([$followup_id]);
+            $pdo->beginTransaction();
+            try {
+                $pdo->prepare("
+                    UPDATE embrace_followups
+                       SET status = 'Completed',
+                           followup_notes = CONCAT(IFNULL(followup_notes,''), '\n\n[RESOLVED BY CHARIS TEAM]')
+                     WHERE id = ?
+                ")->execute([$followupId]);
+                $resolvedSet = charis_column_exists($pdo, 'charis_welfare_assignments', 'resolved_at')
+                    ? ", resolved_at = NOW()"
+                    : '';
+                $resolveStmt = $pdo->prepare("
+                    UPDATE charis_welfare_assignments SET status = 'Resolved' {$resolvedSet}
+                     WHERE target_user_id = ? AND followup_id = ? AND status = 'Assigned'
+                ");
+                $resolveStmt->execute([$targetId, $followupId]);
+                if ($resolveStmt->rowCount() < 1) {
+                    throw new RuntimeException('The welfare assignment is no longer active.');
+                }
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                if ($e instanceof RuntimeException) {
+                    exit(json_encode(['status' => 'error', 'message' => $e->getMessage()]));
+                }
+                throw $e;
+            }
 
             echo json_encode(['status' => 'success', 'message' => 'Welfare check marked as resolved.']);
             break;
 
         // ==========================================
-        // ACTION: UPDATE AWOL STATUS
+        // ACTION: SAVE WELFARE FINDINGS WITHOUT CLOSING THE CASE
         // ==========================================
         case 'update_awol_status':
-            $target_id = filter_var($_POST['user_id'] ?? '', FILTER_VALIDATE_INT);
-            $followup_id = filter_var($_POST['followup_id'] ?? '', FILTER_VALIDATE_INT);
-            $status = strip_tags($_POST['attendance_status'] ?? '');
-$comments = trim(strip_tags($_POST['comments'] ?? ''));
+            $targetId = filter_var($_POST['user_id'] ?? '', FILTER_VALIDATE_INT);
+            $followupId = empty($_POST['followup_id']) ? 0 : filter_var($_POST['followup_id'], FILTER_VALIDATE_INT);
+            $status = trim((string) ($_POST['attendance_status'] ?? ''));
+            $comments = trim(strip_tags((string) ($_POST['comments'] ?? '')));
 
-            if (!$target_id) {
-                exit(json_encode(['status' => 'error', 'message' => 'User ID missing.']));
+            if (!$targetId || $followupId === false || $comments === '') {
+                exit(json_encode(['status' => 'error', 'message' => 'A welfare finding is required.']));
+            }
+            if (!charis_welfare_assignment_access($pdo, $user_id, $targetId, (int) $followupId, $is_charis_admin)) {
+                exit(json_encode(['status' => 'error', 'message' => 'You are not assigned to this welfare case.']));
+            }
+            if ($status !== '' && !in_array($status, CHARIS_ATTENDANCE_STATUSES, true)) {
+                exit(json_encode(['status' => 'error', 'message' => 'Invalid attendance status.']));
             }
 
-            if (!empty($status)) {
-                $stmt = $pdo->prepare("UPDATE users SET attendance_status = ?, comments = CONCAT(IFNULL(comments,''), '\n\n[Welfare Update]: ', ?) WHERE id = ?");
-                $stmt->execute([$status, $comments, $target_id]);
-            } else if (!empty($comments)) {
-                $stmt = $pdo->prepare("UPDATE users SET comments = CONCAT(IFNULL(comments,''), '\n\n[Welfare Update]: ', ?) WHERE id = ?");
-                $stmt->execute([$comments, $target_id]);
+            $pdo->beginTransaction();
+            try {
+                if ($status !== '') {
+                    $pdo->prepare('UPDATE users SET attendance_status = ? WHERE id = ?')
+                        ->execute([$status, $targetId]);
+                }
+                charis_insert_welfare_note($pdo, $targetId, $user_id, $comments, ['All']);
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                throw $e;
             }
 
-            if ($followup_id) {
-                $stmt = $pdo->prepare("UPDATE embrace_followups SET status = 'Completed', followup_notes = CONCAT(IFNULL(followup_notes,''), '\n\n[RESOLVED VIA WELFARE MODAL]') WHERE id = ?");
-                $stmt->execute([$followup_id]);
-            }
-
-            echo json_encode(['status' => 'success', 'message' => 'Welfare status successfully updated!']);
+            echo json_encode(['status' => 'success', 'message' => 'Welfare note saved. The case remains open.']);
             break;
 
         // ==========================================
@@ -999,19 +1197,83 @@ $comments = trim(strip_tags($_POST['comments'] ?? ''));
         case 'request_welfare_case':
             $target = filter_var($_POST['target_user_id'] ?? '', FILTER_VALIDATE_INT);
             $followup = empty($_POST['followup_id']) ? 0 : filter_var($_POST['followup_id'], FILTER_VALIDATE_INT);
-            
-            if (!$target) exit(json_encode(['status' => 'error', 'message' => 'Missing target ID.']));
+            if (!$target || $followup === false) {
+                exit(json_encode(['status' => 'error', 'message' => 'Missing case information.']));
+            }
+            if ($followup > 0) {
+                $followupStmt = $pdo->prepare('SELECT 1 FROM embrace_followups WHERE id = ? AND visitor_id = ?');
+                $followupStmt->execute([$followup, $target]);
+                if (!$followupStmt->fetchColumn()) {
+                    exit(json_encode(['status' => 'error', 'message' => 'The follow-up does not belong to this member.']));
+                }
+            }
 
-            $assignment_status = $is_charis_admin ? 'Assigned' : 'Requested';
-            
-            $stmt = $pdo->prepare("
-                INSERT INTO charis_welfare_assignments (followup_id, target_user_id, worker_id, status) 
-                VALUES (?, ?, ?, ?) 
-                ON DUPLICATE KEY UPDATE worker_id=VALUES(worker_id), status=VALUES(status)
-            ");
-            $stmt->execute([$followup, $target, $user_id, $assignment_status]);
-            
-            $msg = $is_charis_admin ? 'Case auto-assigned to you successfully.' : 'Request submitted! Awaiting HOD approval.';
+            $assignmentStatus = $is_charis_admin ? 'Assigned' : 'Requested';
+            $pdo->beginTransaction();
+            try {
+                $existingStmt = $pdo->prepare("
+                    SELECT id, worker_id, status
+                      FROM charis_welfare_assignments
+                     WHERE target_user_id = ? AND followup_id = ?
+                     LIMIT 1 FOR UPDATE
+                ");
+                $existingStmt->execute([$target, $followup]);
+                $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($existing && $existing['status'] !== 'Resolved') {
+                    if ((int) $existing['worker_id'] === $user_id) {
+                        $pdo->rollBack();
+                        $message = $existing['status'] === 'Assigned'
+                            ? 'This case is already assigned to you.'
+                            : 'Your request is already awaiting approval.';
+                        exit(json_encode(['status' => 'success', 'message' => $message]));
+                    }
+                    $pdo->rollBack();
+                    exit(json_encode(['status' => 'error', 'message' => 'Another worker is already handling or requesting this case.']));
+                }
+
+                $resolvedReset = charis_column_exists($pdo, 'charis_welfare_assignments', 'resolved_at')
+                    ? ', resolved_at = NULL'
+                    : '';
+                if ($existing) {
+                    $stmt = $pdo->prepare("
+                        UPDATE charis_welfare_assignments
+                           SET worker_id = ?, status = ? {$resolvedReset}
+                         WHERE id = ? AND status = 'Resolved'
+                    ");
+                    $stmt->execute([$user_id, $assignmentStatus, $existing['id']]);
+                } else {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO charis_welfare_assignments
+                            (followup_id, target_user_id, worker_id, status)
+                        VALUES (?, ?, ?, ?)
+                    ");
+                    $stmt->execute([$followup, $target, $user_id, $assignmentStatus]);
+                }
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                throw $e;
+            }
+
+            if ($assignmentStatus === 'Requested') {
+                $managerStmt = $pdo->query("
+                    SELECT DISTINCT ud.user_id
+                      FROM user_departments ud
+                      JOIN departments d ON d.id = ud.department_id
+                     WHERE ud.is_active = 1
+                       AND ud.role_in_dept IN ('Director', 'HOD')
+                       AND (ud.department_id IN (1,10) OR d.name LIKE '%Charis%' OR d.name LIKE '%Welfare%' OR d.name = 'IDI')
+                ");
+                $notifyStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Welfare Case Request', 'A Charis worker requested a welfare case. Review it in the Welfare master list.', '/modules/charis/index.php')");
+                foreach ($managerStmt->fetchAll(PDO::FETCH_COLUMN) as $managerId) {
+                    if ((int) $managerId !== $user_id) $notifyStmt->execute([$managerId]);
+                }
+            }
+
+            $msg = $is_charis_admin
+                ? 'Case assigned to you successfully.'
+                : 'Request submitted! Awaiting HOD approval.';
             echo json_encode(['status' => 'success', 'message' => $msg]);
             break;
 
@@ -1019,26 +1281,120 @@ $comments = trim(strip_tags($_POST['comments'] ?? ''));
         // ACTION: APPROVE WELFARE CASE (HOD INITIATED)
         // ==========================================
         case 'approve_welfare_case':
-            if (!$is_charis_admin) exit(json_encode(['status' => 'error', 'message' => 'Unauthorized.']));
-            
-            $assign_id = filter_var($_POST['assignment_id'] ?? '', FILTER_VALIDATE_INT);
-            if (!$assign_id) exit(json_encode(['status' => 'error', 'message' => 'Missing assignment ID.']));
-
-            // Get the worker ID before updating
-            $wStmt = $pdo->prepare("SELECT worker_id FROM charis_welfare_assignments WHERE id = ?");
-            $wStmt->execute([$assign_id]);
-            $assigned_worker = $wStmt->fetchColumn();
-
-            $stmt = $pdo->prepare("UPDATE charis_welfare_assignments SET status = 'Assigned' WHERE id = ?");
-            $stmt->execute([$assign_id]);
-
-            // NOTIFICATION TRIGGER: Alert the worker who requested the case
-            if ($assigned_worker) {
-                $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Welfare Request Approved', 'Your request to handle a welfare case has been approved by the HOD. You may now proceed with the follow-up.', '/modules/charis/index.php')")
-                    ->execute([$assigned_worker]);
+            if (!$is_charis_admin) {
+                exit(json_encode(['status' => 'error', 'message' => 'Only Charis leadership can approve requests.']));
             }
 
+            $assignId = filter_var($_POST['assignment_id'] ?? '', FILTER_VALIDATE_INT);
+            if (!$assignId) {
+                exit(json_encode(['status' => 'error', 'message' => 'Missing assignment ID.']));
+            }
+
+            $wStmt = $pdo->prepare("SELECT worker_id FROM charis_welfare_assignments WHERE id = ? AND status = 'Requested'");
+            $wStmt->execute([$assignId]);
+            $assignedWorker = $wStmt->fetchColumn();
+            if (!$assignedWorker) {
+                exit(json_encode(['status' => 'error', 'message' => 'This request is no longer pending.']));
+            }
+
+            $stmt = $pdo->prepare("UPDATE charis_welfare_assignments SET status = 'Assigned' WHERE id = ? AND status = 'Requested'");
+            $stmt->execute([$assignId]);
+            if ($stmt->rowCount() !== 1) {
+                exit(json_encode(['status' => 'error', 'message' => 'The request changed. Refresh and try again.']));
+            }
+
+            $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Welfare Request Approved', 'Your request to handle a welfare case has been approved by the HOD. You may now proceed with the follow-up.', '/modules/charis/index.php')")
+                ->execute([$assignedWorker]);
+
             echo json_encode(['status' => 'success', 'message' => 'Case officially assigned.']);
+            break;
+
+        // ==========================================
+        // ACTION: SAVE OR EDIT A SECURE WELFARE NOTE
+        // ==========================================
+        case 'save_charis_note':
+            $targetId = filter_var($_POST['target_user_id'] ?? '', FILTER_VALIDATE_INT);
+            $noteId = empty($_POST['note_id']) ? 0 : filter_var($_POST['note_id'], FILTER_VALIDATE_INT);
+            $noteText = trim(strip_tags((string) ($_POST['note_text'] ?? '')));
+            $pastorOnly = !empty($_POST['pastor_only']);
+            if (!$targetId || $noteId === false || $noteText === '') {
+                exit(json_encode(['status' => 'error', 'message' => 'A member and note are required.']));
+            }
+            $assignmentSql = "
+                SELECT 1 FROM charis_welfare_assignments
+                 WHERE target_user_id = ? AND status = 'Assigned'
+            ";
+            $assignmentParams = [$targetId];
+            if (!$is_charis_admin) {
+                $assignmentSql .= ' AND worker_id = ?';
+                $assignmentParams[] = $user_id;
+            }
+            $assignmentSql .= ' LIMIT 1';
+            $assignedStmt = $pdo->prepare($assignmentSql);
+            $assignedStmt->execute($assignmentParams);
+            if (!$assignedStmt->fetchColumn()) {
+                exit(json_encode(['status' => 'error', 'message' => 'There is no active welfare assignment you can update for this member.']));
+            }
+
+            $visibility = $pastorOnly && ($charis_access['is_pastor'] || $charis_access['is_super_admin'])
+                ? ['Pastors']
+                : ['All'];
+            if ($noteId > 0) {
+                if ((function_exists('mb_strlen') ? mb_strlen($noteText) : strlen($noteText)) > 5000) {
+                    exit(json_encode(['status' => 'error', 'message' => 'Welfare notes cannot exceed 5,000 characters.']));
+                }
+                $ownerStmt = $pdo->prepare("
+                    SELECT 1 FROM charis_welfare_notes
+                     WHERE id = ? AND target_user_id = ? AND author_id = ?
+                ");
+                $ownerStmt->execute([$noteId, $targetId, $user_id]);
+                if (!$ownerStmt->fetchColumn()) {
+                    exit(json_encode(['status' => 'error', 'message' => 'You can only edit your own note.']));
+                }
+                $stmt = $pdo->prepare("
+                    UPDATE charis_welfare_notes
+                       SET note_text = ?, visible_to = ?
+                     WHERE id = ? AND target_user_id = ? AND author_id = ?
+                ");
+                $stmt->execute([$noteText, json_encode($visibility), $noteId, $targetId, $user_id]);
+                $message = 'Welfare note updated.';
+            } else {
+                charis_insert_welfare_note($pdo, $targetId, $user_id, $noteText, $visibility);
+                $message = 'Welfare note saved.';
+            }
+            echo json_encode(['status' => 'success', 'message' => $message]);
+            break;
+
+        // ==========================================
+        // ACTION: FETCH RESOLVED WELFARE ARCHIVE
+        // ==========================================
+        case 'fetch_welfare_archive':
+            $hasResolvedAt = charis_column_exists($pdo, 'charis_welfare_assignments', 'resolved_at');
+            $archiveDate = $hasResolvedAt
+                ? 'COALESCE(cwa.resolved_at, cwa.created_at)'
+                : 'cwa.created_at';
+            $archiveStmt = $pdo->query("
+                SELECT cwa.id as assignment_id, cwa.followup_id, cwa.target_user_id,
+                       {$archiveDate} as archive_date, u.first_name, u.last_name,
+                       u.phone, w.first_name as worker_fname, w.last_name as worker_lname
+                  FROM charis_welfare_assignments cwa
+                  JOIN users u ON u.id = cwa.target_user_id
+                  LEFT JOIN users w ON w.id = cwa.worker_id
+                 WHERE cwa.status = 'Resolved'
+                 ORDER BY archive_date DESC, cwa.id DESC
+                 LIMIT 250
+            ");
+            $archived = $archiveStmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($archived as &$archiveCase) {
+                $archiveCase['secure_notes'] = charis_secure_welfare_notes(
+                    $pdo,
+                    (int) $archiveCase['target_user_id'],
+                    $user_id,
+                    $charis_access
+                );
+            }
+            unset($archiveCase);
+            echo json_encode(['status' => 'success', 'data' => $archived]);
             break;
 
         // ==========================================
@@ -1217,27 +1573,59 @@ $comments = trim(strip_tags($_POST['comments'] ?? ''));
             break;
         
         // =====================================================================================
-        // ACTION: RESOLVE AWOL CASE (marks assignment Resolved - removes from AWOL list)
+        // ACTION: RESOLVE WELFARE CASE
         // =====================================================================================
         case 'resolve_awol_case':
-            $target_id  = filter_var($_POST['user_id'] ?? '', FILTER_VALIDATE_INT);
-            $att_status = strip_tags($_POST['attendance_status'] ?? '');
-            $comments   = trim(strip_tags($_POST['comments'] ?? ''));
+            $targetId = filter_var($_POST['user_id'] ?? '', FILTER_VALIDATE_INT);
+            $followupId = empty($_POST['followup_id']) ? 0 : filter_var($_POST['followup_id'], FILTER_VALIDATE_INT);
+            $attendanceStatus = trim((string) ($_POST['attendance_status'] ?? ''));
+            $comments = trim(strip_tags((string) ($_POST['comments'] ?? '')));
 
-            if (!$target_id) exit(json_encode(['status' => 'error', 'message' => 'User ID missing.']));
+            $finalStatuses = ['Active', 'Relocated', 'Attends_Another_Church', 'Unknown'];
+            if (!$targetId || $followupId === false || !in_array($attendanceStatus, $finalStatuses, true) || $comments === '') {
+                exit(json_encode(['status' => 'error', 'message' => 'A valid final status and summary note are required.']));
+            }
+            if (!charis_welfare_assignment_access($pdo, $user_id, $targetId, (int) $followupId, $is_charis_admin)) {
+                exit(json_encode(['status' => 'error', 'message' => 'You are not assigned to this welfare case.']));
+            }
 
             $pdo->beginTransaction();
-            if (!empty($att_status)) {
-                $pdo->prepare("UPDATE users SET attendance_status = ?, comments = CONCAT(IFNULL(comments,''), '\n\n[Welfare Resolved]: ', ?) WHERE id = ?")
-                    ->execute([$att_status, $comments, $target_id]);
-            } elseif (!empty($comments)) {
-                $pdo->prepare("UPDATE users SET comments = CONCAT(IFNULL(comments,''), '\n\n[Welfare Resolved]: ', ?) WHERE id = ?")
-                    ->execute([$comments, $target_id]);
+            try {
+                $pdo->prepare('UPDATE users SET attendance_status = ? WHERE id = ?')
+                    ->execute([$attendanceStatus, $targetId]);
+                charis_insert_welfare_note($pdo, $targetId, $user_id, $comments, ['All']);
+
+                $resolvedSet = charis_column_exists($pdo, 'charis_welfare_assignments', 'resolved_at')
+                    ? ', resolved_at = NOW()'
+                    : '';
+                $resolveStmt = $pdo->prepare("
+                    UPDATE charis_welfare_assignments
+                       SET status = 'Resolved' {$resolvedSet}
+                     WHERE target_user_id = ? AND followup_id = ? AND status = 'Assigned'
+                ");
+                $resolveStmt->execute([$targetId, $followupId]);
+                if ($resolveStmt->rowCount() < 1) {
+                    throw new RuntimeException('The welfare assignment is no longer active.');
+                }
+
+                if ($followupId > 0) {
+                    $pdo->prepare("
+                        UPDATE embrace_followups
+                           SET status = 'Completed',
+                               followup_notes = CONCAT(IFNULL(followup_notes,''), '\n\n[RESOLVED VIA CHARIS WELFARE]')
+                         WHERE id = ? AND visitor_id = ?
+                    ")->execute([$followupId, $targetId]);
+                }
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                if ($e instanceof RuntimeException) {
+                    exit(json_encode(['status' => 'error', 'message' => $e->getMessage()]));
+                }
+                throw $e;
             }
-            $pdo->prepare("UPDATE charis_welfare_assignments SET status = 'Resolved' WHERE target_user_id = ? AND followup_id = 0")
-                ->execute([$target_id]);
-            $pdo->commit();
-            echo json_encode(['status' => 'success', 'message' => 'Case resolved. Member removed from the AWOL list.']);
+
+            echo json_encode(['status' => 'success', 'message' => 'Case resolved and moved to the welfare archive.']);
             break;
 
         // =====================================================================================
@@ -1552,8 +1940,11 @@ $comments = trim(strip_tags($_POST['comments'] ?? ''));
             break;
     }
 
-} catch (PDOException $e) {
+} catch (InvalidArgumentException $e) {
+    echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
     error_log("Charis API Error: " . $e->getMessage());
-    echo json_encode(['status' => 'error', 'message' => 'A database error occurred.']);
+    echo json_encode(['status' => 'error', 'message' => 'The Charis request could not be completed.']);
 }
 ?>

@@ -5,6 +5,7 @@
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/charis_helpers.php';
 
 // ─── Auth Guard ───────────────────────────────────────────
 if (!isset($_SESSION['user_id'])) {
@@ -12,49 +13,39 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// ─── Role Guard ───────────────────────────────────────────
-$session_roles = array_column($_SESSION['roles'] ?? [], 'role_name');
-$is_privileged = array_intersect($session_roles, ['Super_Admin','Resident_Pastor','Assoc_Pastor','Director','HOD']) !== [];
-if (!$is_privileged) {
+// ─── Charis Access Guard ──────────────────────────────────
+$current_user_id = (int) $_SESSION['user_id'];
+$charis_access = charis_access_context($pdo, $current_user_id);
+if (!$charis_access['is_manager']) {
     http_response_code(403);
     die('<h2 style="font-family:sans-serif;color:#c00">Access Denied.</h2>');
 }
 
 // ─── PDF Zero-Trust Notes Fetcher ─────────────────────────
-$current_user_id = $_SESSION['user_id'];
-$is_pastor = in_array('Resident_Pastor', $session_roles) || in_array('Assoc_Pastor', $session_roles);
-$is_director = in_array('Director', $session_roles) || in_array('HOD', $session_roles);
-
-function getSecurePdfNotes($pdo, $target_user_id, $current_user_id, $is_pastor, $is_director) {
-    $notesStmt = $pdo->prepare("SELECT n.*, u.first_name, u.last_name FROM charis_welfare_notes n JOIN users u ON n.author_id = u.id WHERE n.target_user_id = ? ORDER BY n.created_at ASC");
-    $notesStmt->execute([$target_user_id]);
-    $all_notes = $notesStmt->fetchAll(PDO::FETCH_ASSOC);
-
-    $formatted_notes = "";
-    foreach ($all_notes as $note) {
-        if ($note['author_id'] != $current_user_id) {
-            $visibility = json_decode($note['visible_to'], true) ?? ['All'];
-            $has_access = false;
-            
-            if (in_array('All', $visibility)) $has_access = true;
-            if (in_array('Pastors', $visibility) && $is_pastor) $has_access = true;
-            if (in_array('Directors', $visibility) && $is_director) $has_access = true;
-            
-            if (!$has_access && in_array('Assigned_Worker', $visibility)) {
-                $wStmt = $pdo->prepare("SELECT id FROM charis_welfare_assignments WHERE target_user_id = ? AND worker_id = ? AND status != 'Resolved' LIMIT 1");
-                $wStmt->execute([$target_user_id, $current_user_id]);
-                if ($wStmt->fetch()) $has_access = true;
-            }
-
-            if (!$has_access) continue; // Strip unauthorized note
-        }
-        
+function getSecurePdfNotes(
+    PDO $pdo,
+    int $targetUserId,
+    int $currentUserId,
+    array $access,
+    string $createdOnOrBefore
+): string {
+    $allNotes = charis_secure_welfare_notes(
+        $pdo,
+        $targetUserId,
+        $currentUserId,
+        $access,
+        $createdOnOrBefore
+    );
+    $formattedNotes = '';
+    foreach ($allNotes as $note) {
         $date = date('d M Y', strtotime($note['created_at']));
         $author = htmlspecialchars($note['first_name'] . ' ' . $note['last_name'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $text = nl2br(htmlspecialchars(strip_tags($note['note_text']), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-        $formatted_notes .= "<div style='margin-bottom:8px;'><strong>[{$date}] {$author}:</strong> {$text}</div>";
+        $formattedNotes .= "<div style='margin-bottom:8px;'><strong>[{$date}] {$author}:</strong> {$text}</div>";
     }
-    return empty($formatted_notes) ? "<em style='color:#94a3b8;'>No restricted notes available for your clearance level.</em>" : $formatted_notes;
+    return $formattedNotes !== ''
+        ? $formattedNotes
+        : "<em style='color:#94a3b8;'>No notes are available for your clearance level.</em>";
 }
 
 // ─── dompdf Bootstrap ─────────────────────────────────────
@@ -67,30 +58,64 @@ use Dompdf\Dompdf;
 use Dompdf\Options;
 
 // ─── Parameters ───────────────────────────────────────────
-$mode       = $_GET['mode'] ?? 'month';   // 'month' or 'range'
-$rep_month  = max(1, min(12, (int)($_GET['month']  ?? date('n'))));
-$rep_year   = (int)($_GET['year']   ?? date('Y'));
-$date_start = trim($_GET['date_start'] ?? '');
-$date_end   = trim($_GET['date_end']   ?? '');
+$mode = (string) ($_GET['mode'] ?? 'month');
+if (!in_array($mode, ['month', 'range'], true)) {
+    http_response_code(400);
+    die('Invalid report mode.');
+}
 
 if ($mode === 'month') {
-    $date_start = "$rep_year-" . str_pad($rep_month, 2, '0', STR_PAD_LEFT) . "-01";
-    $date_end   = date('Y-m-t', strtotime($date_start));
-    $period_label = date('F Y', strtotime($date_start));
+    $repMonth = filter_var($_GET['month'] ?? date('n'), FILTER_VALIDATE_INT);
+    $repYear = filter_var($_GET['year'] ?? date('Y'), FILTER_VALIDATE_INT);
+    if (!$repMonth || $repMonth < 1 || $repMonth > 12
+        || !$repYear || $repYear < 2000 || $repYear > ((int) date('Y') + 1)) {
+        http_response_code(400);
+        die('Invalid report month or year.');
+    }
+    $startDate = new DateTimeImmutable(sprintf('%04d-%02d-01', $repYear, $repMonth));
+    $endDate = $startDate->modify('last day of this month');
 } else {
-    $period_label = date('d M Y', strtotime($date_start)) . ' — ' . date('d M Y', strtotime($date_end));
+    $startDate = charis_parse_date(trim((string) ($_GET['date_start'] ?? '')));
+    $endDate = charis_parse_date(trim((string) ($_GET['date_end'] ?? '')));
+    if (!$startDate || !$endDate || $startDate > $endDate || $startDate->diff($endDate)->days > 366) {
+        http_response_code(400);
+        die('Choose a valid date range of no more than 366 days.');
+    }
 }
 
-if (empty($date_start) || empty($date_end)) {
-    die('Date range is required.');
-}
+$date_start = $startDate->format('Y-m-d');
+$date_end = $endDate->format('Y-m-d');
+$period_label = $mode === 'month'
+    ? $startDate->format('F Y')
+    : $startDate->format('d M Y') . ' — ' . $endDate->format('d M Y');
 
 // ─── Pull Records ─────────────────────────────────────────
+$columnStmt = $pdo->prepare("
+    SELECT COUNT(*) FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'charis_welfare_assignments'
+       AND column_name = 'resolved_at'
+");
+$columnStmt->execute();
+$hasResolvedAt = (bool) $columnStmt->fetchColumn();
+$resolvedSelect = $hasResolvedAt ? 'cwa.resolved_at' : 'NULL';
+$resolutionStatusSelect = $hasResolvedAt
+    ? "CASE WHEN cwa.status = 'Resolved' AND cwa.resolved_at > :status_as_of THEN 'Assigned' ELSE cwa.status END"
+    : 'cwa.status';
+$periodWhere = $hasResolvedAt
+    ? '(cwa.created_at BETWEEN :created_start AND :created_end'
+        . ' OR cwa.resolved_at BETWEEN :resolved_start AND :resolved_end'
+        . ' OR (cwa.created_at <= :pending_end'
+        . ' AND (cwa.resolved_at IS NULL OR cwa.resolved_at > :pending_resolved_after)))'
+    : "(cwa.created_at BETWEEN :created_start AND :created_end"
+        . " OR (cwa.status != 'Resolved' AND cwa.created_at <= :pending_end))";
+
 $stmt = $pdo->prepare("
     SELECT
         u.id, u.first_name, u.last_name, u.phone, u.physical_address, u.email,
-        u.spiritual_status, u.attendance_status, u.comments,
-        cwa.status as resolution_status, cwa.created_at as assigned_at,
+        u.spiritual_status, u.attendance_status,
+        {$resolutionStatusSelect} as resolution_status, cwa.created_at as assigned_at,
+        {$resolvedSelect} as resolved_at,
         w.first_name as worker_first, w.last_name as worker_last, w.phone as worker_phone,
         r.name as region_name
     FROM charis_welfare_assignments cwa
@@ -98,15 +123,26 @@ $stmt = $pdo->prepare("
     LEFT JOIN users w ON cwa.worker_id = w.id
     LEFT JOIN regions r ON u.region_id = r.id
     WHERE cwa.followup_id = 0
-      AND cwa.created_at BETWEEN :ds AND :de
-    ORDER BY cwa.status ASC, cwa.created_at ASC
+      AND {$periodWhere}
+    ORDER BY cwa.status ASC, COALESCE({$resolvedSelect}, cwa.created_at) ASC
 ");
-$stmt->execute([':ds' => $date_start, ':de' => $date_end . ' 23:59:59']);
+$params = [
+    ':created_start' => $date_start . ' 00:00:00',
+    ':created_end' => $date_end . ' 23:59:59',
+    ':pending_end' => $date_end . ' 23:59:59',
+];
+if ($hasResolvedAt) {
+    $params[':resolved_start'] = $date_start . ' 00:00:00';
+    $params[':resolved_end'] = $date_end . ' 23:59:59';
+    $params[':pending_resolved_after'] = $date_end . ' 23:59:59';
+    $params[':status_as_of'] = $date_end . ' 23:59:59';
+}
+$stmt->execute($params);
 $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$total    = count($records);
+$total = count($records);
 $resolved = count(array_filter($records, fn($r) => $r['resolution_status'] === 'Resolved'));
-$pending  = $total - $resolved;
+$pending = $total - $resolved;
 
 // ─── Helper functions ─────────────────────────────────────
 function esc(string $s): string { return htmlspecialchars($s, ENT_QUOTES | ENT_HTML5, 'UTF-8'); }
@@ -120,7 +156,7 @@ function fd(?string $ds): string {
 $logo_path = __DIR__ . '/../assets/images/logo_hod.png';
 $logo_b64  = '';
 if (file_exists($logo_path)) {
-    $logo_b64 = 'data:image/svg+xml;base64,' . base64_encode(file_get_contents($logo_path));
+    $logo_b64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logo_path));
 }
 
 // ─── Build HTML ───────────────────────────────────────────
@@ -214,7 +250,7 @@ body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 8.5pt; color: #1e
                 Charis (Welfare) Department
             </div>
         </td>
-        
+
         <td style="width:30%; text-align:center;">
             <?php if ($logo_b64): ?>
             <img src="<?= $logo_b64 ?>" class="logo-img" alt="HOD Logo">
@@ -222,7 +258,7 @@ body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 8.5pt; color: #1e
             <div style="font-size:16pt;font-weight:900;color:#1D356A;text-align:center;">HODLC</div>
             <?php endif; ?>
         </td>
-        
+
         <td style="width:35%; text-align:right;">
             <div class="doc-ref"><?= esc($ref_code) ?></div>
             <div style="margin:4px 0;"><span class="badge badge-report">AWOL REPORT</span></div>
@@ -253,9 +289,10 @@ body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 8.5pt; color: #1e
 </div>
 
 <p style="font-size:8pt; color:#475569; line-height:1.6; margin-bottom:6px;">
-    This report documents all AWOL welfare cases tracked and acted upon by the Charis team during the period
-    <strong><?= esc($period_label) ?></strong>. Each entry below represents a member who was absent for
-    three or more consecutive Sunday services and was subsequently followed up by a Charis worker.
+    This report documents AWOL welfare cases opened or resolved during
+    <strong><?= esc($period_label) ?></strong>, together with the unresolved backlog as at the end of that period.
+    Each entry represents a member who was absent for three or more consecutive Sunday services and whose case
+    was claimed or assigned for follow-up by the Charis team.
     The pastor is advised to review all pending cases and determine next-level pastoral intervention where necessary.
 </p>
 
@@ -304,8 +341,8 @@ $pending_records  = array_filter($records, fn($r) => $r['resolution_status'] !==
                 <div class="case-val"><?= esc($r['worker_first'] . ' ' . $r['worker_last']) ?> <?php if ($r['worker_phone']): ?><span style="color:#64748b; font-weight:normal;">(<?= esc($r['worker_phone']) ?>)</span><?php endif; ?></div>
             </td>
             <td>
-                <div class="case-lbl">Case Assigned On</div>
-                <div class="case-val"><?= fd($r['assigned_at']) ?></div>
+                <div class="case-lbl">Resolved On</div>
+                <div class="case-val"><?= fd($r['resolved_at']) ?></div>
             </td>
         </tr>
         <tr>
@@ -319,9 +356,9 @@ $pending_records  = array_filter($records, fn($r) => $r['resolution_status'] !==
             </td>
         </tr>
     </table>
-    
-    <?php 
-    $safe_notes = getSecurePdfNotes($pdo, $r['id'], $current_user_id, $is_pastor, $is_director); 
+
+    <?php
+    $safe_notes = getSecurePdfNotes($pdo, (int) $r['id'], $current_user_id, $charis_access, $date_end . ' 23:59:59');
     ?>
     <div class="notes-outer">
         <div class="notes-hd">Secure Worker Notes &amp; Findings</div>
@@ -345,6 +382,8 @@ $pending_records  = array_filter($records, fn($r) => $r['resolution_status'] !==
         <span class="case-name"><?= esc($r['first_name'] . ' ' . $r['last_name']) ?></span>
         <?php if ($r['resolution_status'] === 'Assigned'): ?>
         <span class="case-badge badge-asg">Assigned — In Progress</span>
+        <?php elseif ($r['resolution_status'] === 'Requested'): ?>
+        <span class="case-badge badge-pen">Awaiting Assignment Approval</span>
         <?php else: ?>
         <span class="case-badge badge-pen">Unassigned</span>
         <?php endif; ?>
@@ -381,9 +420,9 @@ $pending_records  = array_filter($records, fn($r) => $r['resolution_status'] !==
             </td>
         </tr>
     </table>
-    
-    <?php 
-    $safe_notes = getSecurePdfNotes($pdo, $r['id'], $current_user_id, $is_pastor, $is_director); 
+
+    <?php
+    $safe_notes = getSecurePdfNotes($pdo, (int) $r['id'], $current_user_id, $charis_access, $date_end . ' 23:59:59');
     ?>
     <div class="notes-outer">
         <div class="notes-hd">Secure Worker Notes &amp; Findings</div>
