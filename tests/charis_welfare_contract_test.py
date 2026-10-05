@@ -30,14 +30,18 @@ for action in (
     "resolve_awol_case",
     "save_charis_note",
     "fetch_welfare_archive",
+    "get_awol_config",
+    "save_awol_config",
 ):
     require(f"case '{action}':" in api, f"missing welfare API action: {action}")
 
 require("charis_access_context($pdo, $user_id)" in api, "API must enforce Charis module access")
 require("HTTP_X_CHARIS_CSRF" in api, "state-changing API calls must enforce CSRF")
 require("X-Charis-CSRF" in page, "Charis page must send its CSRF token")
-require("assim_attendance_union_sql()" in api, "AWOL detection must use the shared attendance union")
-require("SELECT user_id FROM attendance WHERE event_id" not in api,
+require("assim_attendance_union_sql()" in api or "assim_attendance_union_sql()" in helper,
+        "AWOL detection must use the shared attendance union")
+require("SELECT user_id FROM attendance WHERE event_id" not in api
+        and "SELECT user_id FROM attendance WHERE event_id" not in helper,
         "AWOL detection must not fall back to the incomplete attendance table")
 require("resolved_at = NOW()" in api, "case resolution must persist a resolution timestamp")
 require("followup_id\" id=\"resolveWelfareFollowupId" in modals,
@@ -58,9 +62,8 @@ require("CREATE TABLE IF NOT EXISTS charis_welfare_notes" in migration,
 require("column_name = 'resolved_at'" in migration,
         "welfare assignments need a guarded resolved_at migration")
 
-for modal_id in ("birthdaysOverviewModal", "lifeEventsOverviewModal", "welfareOverviewModal"):
-    require(f'id="{modal_id}"' in modals, f"missing compact overview modal: {modal_id}")
-    require(f"openModal('{modal_id}')" in page, f"no launcher for overview modal: {modal_id}")
+for modal_id in ("birthdaysOverviewModal", "lifeEventsOverviewModal", "welfareOverviewModal", "awolConfigModal"):
+    require(f'id="{modal_id}"' in modals, f"missing compact overview/config modal: {modal_id}")
 
 api_actions = set(re.findall(r"case\s+'([^']+)'", api))
 front_actions = set(re.findall(

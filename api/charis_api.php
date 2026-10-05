@@ -272,89 +272,68 @@ try {
                 WHERE ef.status = 'Pending' AND ef.followup_notes LIKE '%SYSTEM FLAG%'
                 ORDER BY ef.followup_date DESC
             ");
-            $manual_checks = $manualStmt->fetchAll(PDO::FETCH_ASSOC);
-
-            // G. Dynamic 3-service absences. Attendance is recorded in both
-            // QR checkins and the Events roster, so use the shared de-duplicated
-            // attendance union rather than reading `attendance` alone.
-            $awol_checks = [];
-            $last3EventsStmt = $pdo->query("
-                SELECT DISTINCT DATE(event_date) AS service_date
-                  FROM events
-                 WHERE event_category = 'Sunday_Service'
-                   AND event_date <= NOW()
-                 ORDER BY service_date DESC
-                 LIMIT 3
-            ");
-            $last3ServiceDates = $last3EventsStmt->fetchAll(PDO::FETCH_COLUMN);
-
-            if (count($last3ServiceDates) === 3) {
-                $placeholders = implode(',', array_fill(0, 3, '?'));
-                $attendanceUnion = assim_attendance_union_sql();
-                $resolvedMarker = charis_column_exists($pdo, 'charis_welfare_assignments', 'resolved_at')
-                    ? 'COALESCE(cwa2.resolved_at, cwa2.created_at)'
-                    : 'cwa2.created_at';
-                $awolStmt = $pdo->prepare("
-                    SELECT 0 as followup_id, 'AWOL' as alert_type, CURDATE() as followup_date,
-                           u.id as target_user_id, u.first_name, u.last_name, u.phone,
-                           u.physical_address, cwa.id as assignment_id, cwa.worker_id,
-                           cwa.status as assignment_status, w.first_name as worker_fname,
-                           w.last_name as worker_lname
-                      FROM users u
-                      LEFT JOIN charis_welfare_assignments cwa
-                        ON cwa.target_user_id = u.id
-                       AND cwa.followup_id = 0
-                       AND cwa.status != 'Resolved'
-                      LEFT JOIN users w ON cwa.worker_id = w.id
-                     WHERE u.spiritual_status IN ('Member', 'Worker', 'Pastor')
-                       AND COALESCE(u.attendance_status, '') NOT IN ('Relocated', 'Attends_Another_Church', 'Unknown')
-                       AND NOT EXISTS (
-                            SELECT 1
-                              FROM {$attendanceUnion} attended
-                             WHERE attended.user_id = u.id
-                               AND attended.attended_on IN ({$placeholders})
-                       )
-                       AND NOT EXISTS (
-                            SELECT 1
-                              FROM charis_welfare_assignments cwa2
-                             WHERE cwa2.target_user_id = u.id
-                               AND cwa2.followup_id = 0
-                               AND cwa2.status = 'Resolved'
-                               AND {$resolvedMarker} >= ?
-                       )
-                ");
-                $oldestServiceDate = min($last3ServiceDates);
-                $awolStmt->execute(array_merge($last3ServiceDates, [$oldestServiceDate]));
-                $awol_checks = $awolStmt->fetchAll(PDO::FETCH_ASSOC);
+            $manual_raw = $manualStmt->fetchAll(PDO::FETCH_ASSOC);
+            $manual_checks = [];
+            foreach ($manual_raw as $m) {
+                $m['secure_notes'] = charis_secure_welfare_notes(
+                    $pdo,
+                    (int) $m['target_user_id'],
+                    $user_id,
+                    $charis_access
+                );
+                $manual_checks[] = $m;
             }
 
-            $welfare_checks = [];
-            $seen_users = [];
-            foreach (array_merge($manual_checks, $awol_checks) as $check) {
-                if (!isset($seen_users[$check['target_user_id']])) {
-                    $check['secure_notes'] = charis_secure_welfare_notes(
+            // G. Configurable AWOL Monitoring calculation
+            $awol_config = charis_get_awol_config($pdo);
+            $is_awol_configured = ($awol_config !== null);
+            $awol_checks = [];
+            $awol_summary = null;
+
+            if ($is_awol_configured) {
+                $computedAwol = charis_compute_awol_list($pdo, $awol_config);
+                foreach ($computedAwol['awol_checks'] as $ac) {
+                    $ac['secure_notes'] = charis_secure_welfare_notes(
                         $pdo,
-                        (int) $check['target_user_id'],
+                        (int) $ac['target_user_id'],
                         $user_id,
                         $charis_access
                     );
-                    $welfare_checks[] = $check;
-                    $seen_users[$check['target_user_id']] = true;
+                    $awol_checks[] = $ac;
                 }
+                $awol_summary = [
+                    'services_missed'           => $awol_config['services_missed'],
+                    'missed_threshold'          => $awol_config['missed_threshold'],
+                    'period_weeks'              => $awol_config['period_weeks'],
+                    'service_types'             => $awol_config['service_types'],
+                    'spiritual_statuses'        => $awol_config['spiritual_statuses'],
+                    'total_qualifying_services' => $computedAwol['total_qualifying_services'],
+                    'has_services'              => $computedAwol['has_services'],
+                    'matching_count'            => count($awol_checks),
+                    'manual_count'              => count($manual_checks),
+                ];
             }
 
+            $welfare_checks = array_merge($manual_checks, $awol_checks);
+
             echo json_encode([
-                'status' => 'success',
-                'is_charis_admin' => $is_charis_admin,
-                'is_pastor' => $is_pastor || $charis_access['is_super_admin'],
-                'current_user_id' => $user_id,
-                'birthdays' => $birthdays,
-                'anniversaries' => $anniversaries,
-                'charis_workers' => $charis_workers,
-                'upcoming_events' => $upcoming_events,
-                'past_events' => $past_events,
-                'members' => $members,
-                'welfare_checks' => $welfare_checks
+                'status'             => 'success',
+                'is_charis_admin'    => $is_charis_admin,
+                'is_pastor'          => $is_pastor || $charis_access['is_super_admin'],
+                'can_configure_awol' => $charis_access['can_configure_awol'],
+                'is_awol_configured' => $is_awol_configured,
+                'awol_config'        => $awol_config,
+                'awol_summary'       => $awol_summary,
+                'awol_checks'        => $awol_checks,
+                'manual_checks'      => $manual_checks,
+                'current_user_id'    => $user_id,
+                'birthdays'          => $birthdays,
+                'anniversaries'      => $anniversaries,
+                'charis_workers'     => $charis_workers,
+                'upcoming_events'    => $upcoming_events,
+                'past_events'        => $past_events,
+                'members'            => $members,
+                'welfare_checks'     => $welfare_checks
             ]);
             break;
 
@@ -1930,6 +1909,83 @@ try {
             ")->execute([json_encode($stamp_data), $user_id, $hash_code, $verify_code, $event_id]);
 
             echo json_encode(['status' => 'success', 'message' => 'Finance countersignature applied. Report fully sealed.', 'stamp' => $stamp_data]);
+            break;
+
+        // =====================================================================================
+        // ACTION: GET AWOL CONFIGURATION
+        // =====================================================================================
+        case 'get_awol_config':
+            $config = charis_get_awol_config($pdo);
+            echo json_encode([
+                'status'             => 'success',
+                'is_configured'      => ($config !== null),
+                'config'             => $config,
+                'can_configure_awol' => $charis_access['can_configure_awol'],
+            ]);
+            break;
+
+        // =====================================================================================
+        // ACTION: SAVE AWOL CONFIGURATION
+        // =====================================================================================
+        case 'save_awol_config':
+            if (!charis_can_configure_awol($pdo, $current_user_id, $roles) && empty($charis_access['can_configure_awol'])) {
+                http_response_code(403);
+                echo json_encode(['status' => 'error', 'message' => 'Unauthorized to configure AWOL Monitoring. Super Admin or IDI/Charis/Welfare Director/HOD access required.']);
+                exit;
+            }
+
+            $servicesMissed = filter_var($_POST['services_missed'] ?? $_POST['missed_threshold'] ?? null, FILTER_VALIDATE_INT);
+            $periodWeeks = filter_var($_POST['period_weeks'] ?? null, FILTER_VALIDATE_INT);
+
+            $rawServiceTypes = $_POST['service_types'] ?? [];
+            if (is_string($rawServiceTypes)) {
+                $decoded = json_decode($rawServiceTypes, true);
+                $rawServiceTypes = is_array($decoded) ? $decoded : explode(',', $rawServiceTypes);
+            }
+            if (!is_array($rawServiceTypes)) $rawServiceTypes = [];
+            $rawServiceTypes = array_values(array_filter(array_map('trim', $rawServiceTypes)));
+
+            $rawSpiritualStatuses = $_POST['spiritual_statuses'] ?? [];
+            if (is_string($rawSpiritualStatuses)) {
+                $decoded = json_decode($rawSpiritualStatuses, true);
+                $rawSpiritualStatuses = is_array($decoded) ? $decoded : explode(',', $rawSpiritualStatuses);
+            }
+            if (!is_array($rawSpiritualStatuses)) $rawSpiritualStatuses = [];
+            $rawSpiritualStatuses = array_values(array_filter(array_map('trim', $rawSpiritualStatuses)));
+
+            if ($servicesMissed === false || $servicesMissed === null || $servicesMissed <= 0) {
+                exit(json_encode(['status' => 'error', 'message' => 'Services missed must be a positive number.']));
+            }
+            if ($periodWeeks === false || $periodWeeks === null || $periodWeeks <= 0) {
+                exit(json_encode(['status' => 'error', 'message' => 'Period of focus must be a positive number of weeks.']));
+            }
+            if ($servicesMissed > 52) {
+                exit(json_encode(['status' => 'error', 'message' => 'Services missed cannot exceed 52.']));
+            }
+            if ($periodWeeks > 104) {
+                exit(json_encode(['status' => 'error', 'message' => 'Period of focus cannot exceed 104 weeks.']));
+            }
+            if (empty($rawServiceTypes)) {
+                exit(json_encode(['status' => 'error', 'message' => 'Please select at least one service type.']));
+            }
+            if (empty($rawSpiritualStatuses)) {
+                exit(json_encode(['status' => 'error', 'message' => 'Please select at least one spiritual status.']));
+            }
+
+            $savedConfig = charis_save_awol_config(
+                $pdo,
+                $servicesMissed,
+                $periodWeeks,
+                $rawServiceTypes,
+                $rawSpiritualStatuses,
+                $user_id
+            );
+
+            echo json_encode([
+                'status'  => 'success',
+                'message' => 'AWOL Monitoring configuration saved successfully.',
+                'config'  => $savedConfig,
+            ]);
             break;
 
         // =====================================================================================

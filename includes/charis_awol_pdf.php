@@ -144,6 +144,23 @@ $total = count($records);
 $resolved = count(array_filter($records, fn($r) => $r['resolution_status'] === 'Resolved'));
 $pending = $total - $resolved;
 
+// ─── Fetch Config for Truthful Report Description ─────────
+$awolConfig = charis_get_historical_awol_config($pdo, $date_end . ' 23:59:59');
+$servicesMissedRule = $awolConfig ? (int) ($awolConfig['services_missed'] ?? $awolConfig['missed_threshold'] ?? 2) : 2;
+$periodWeeksRule    = $awolConfig ? (int) ($awolConfig['period_weeks'] ?? 5) : 5;
+$serviceTypesRule   = $awolConfig ? ($awolConfig['service_types'] ?? ['Sunday_Service']) : ['Sunday_Service'];
+$spiritualStatusesRule = $awolConfig ? ($awolConfig['spiritual_statuses'] ?? ['Member', 'Worker', 'Pastor']) : ['Member', 'Worker', 'Pastor'];
+
+$serviceNames = array_map(function($st) {
+    return CHARIS_AWOL_CANONICAL_SERVICES[$st] ?? str_replace('_', ' ', $st);
+}, $serviceTypesRule);
+$serviceListStr = implode(' or ', $serviceNames);
+
+$statusNames = array_map(function($st) {
+    return CHARIS_AWOL_CANONICAL_STATUSES[$st] ?? str_replace('_', ' ', $st);
+}, $spiritualStatusesRule);
+$statusListStr = implode(', ', $statusNames);
+
 // ─── Helper functions ─────────────────────────────────────
 function esc(string $s): string { return htmlspecialchars($s, ENT_QUOTES | ENT_HTML5, 'UTF-8'); }
 
@@ -286,12 +303,16 @@ body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 8.5pt; color: #1e
             </td>
         </tr>
     </table>
+    <div style="margin-top:8px; padding-top:6px; border-top:1px solid #e2e8f0; font-size:6.5pt; color:#475569; text-align:center;">
+        <strong style="color:#0f172a; text-transform:uppercase;">Active Rule:</strong>
+        <?= $servicesMissedRule ?>+ missed services &bull; <?= $periodWeeksRule ?> rolling weeks &bull; <?= esc($serviceListStr) ?> &bull; <?= esc($statusListStr) ?>
+    </div>
 </div>
 
 <p style="font-size:8pt; color:#475569; line-height:1.6; margin-bottom:6px;">
     This report documents AWOL welfare cases opened or resolved during
     <strong><?= esc($period_label) ?></strong>, together with the unresolved backlog as at the end of that period.
-    Each entry represents a member who was absent for three or more consecutive Sunday services and whose case
+    Each entry represents a member eligible under the active rule (<?= esc($statusListStr) ?> who missed at least <?= $servicesMissedRule ?> qualifying <?= esc($serviceListStr) ?> services during the <?= $periodWeeksRule ?> rolling weeks focus period) whose case
     was claimed or assigned for follow-up by the Charis team.
     The pastor is advised to review all pending cases and determine next-level pastoral intervention where necessary.
 </p>

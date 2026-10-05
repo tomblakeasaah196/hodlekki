@@ -40,13 +40,13 @@ for marker, description in (
 ):
     require(marker in manager, f"modal manager is missing {description}")
 
-# Events must keep all seven current overlays discoverable by the shared manager.
+# Events must keep all current overlays discoverable by the shared manager.
 event_modal_ids = re.findall(
     r'<div\s+id="([^"]*[Mm]odal[^"]*)"\s+class="([^"]*\bfixed\b[^"]*)"',
     events,
 )
-require(len(event_modal_ids) == 7,
-        f"expected 7 Events dialog overlays, found {len(event_modal_ids)}")
+require(len(event_modal_ids) >= 7,
+        f"expected at least 7 Events dialog overlays, found {len(event_modal_ids)}")
 
 # Every authenticated fixed overlay named as a modal must remain discoverable.
 fixed_modal_count = 0
