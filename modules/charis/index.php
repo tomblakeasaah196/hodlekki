@@ -75,11 +75,11 @@ require_once '../../includes/header.php';
                 <span id="lifeEventsCardCount" class="mt-1 block text-[9px] sm:text-[10px] font-bold text-red-600">Loading…</span>
             </button>
 
-            <button type="button" onclick="openModal('welfareOverviewModal')" aria-haspopup="dialog" class="group min-w-0 min-h-[116px] sm:min-h-[128px] rounded-2xl sm:rounded-3xl border border-orange-100 bg-gradient-to-br from-white to-orange-50 p-2.5 sm:p-4 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2">
+            <button type="button" onclick="handleOpenAwolMonitoring()" aria-haspopup="dialog" class="group min-w-0 min-h-[116px] sm:min-h-[128px] rounded-2xl sm:rounded-3xl border border-orange-100 bg-gradient-to-br from-white to-orange-50 p-2.5 sm:p-4 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2">
                 <span class="mx-auto flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl border border-orange-100 bg-white text-orange-500 shadow-sm transition-transform group-hover:scale-105">
                     <svg class="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 </span>
-                <span class="mt-2 block text-[10px] sm:text-xs font-black leading-tight text-gray-900">Welfare</span>
+                <span class="mt-2 block text-[10px] sm:text-xs font-black leading-tight text-gray-900">AWOL Monitoring</span>
                 <span id="welfareCardCount" class="mt-1 block text-[9px] sm:text-[10px] font-bold text-orange-600">Loading…</span>
             </button>
         </div>
@@ -154,19 +154,35 @@ require_once '../../includes/header.php';
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <div>
-                        <h3 class="text-lg font-display font-bold text-gray-900">Urgent Welfare</h3>
-                        <p class="text-[10px] font-bold uppercase tracking-wider text-orange-500 mt-0.5">AWOL Alerts</p>
+                        <h3 class="text-lg font-display font-bold text-gray-900">AWOL Monitoring</h3>
+                        <p class="text-[10px] font-bold uppercase tracking-wider text-orange-500 mt-0.5">Absence alerts &amp; follow-up</p>
                     </div>
                 </div>
-                <div role="tablist" aria-label="Welfare views" class="flex bg-orange-50/50 p-1 rounded-xl border border-orange-100/50 overflow-x-auto no-scrollbar snap-x">
+                <div role="tablist" aria-label="AWOL Monitoring views" class="flex bg-orange-50/50 p-1 rounded-xl border border-orange-100/50 overflow-x-auto no-scrollbar snap-x">
                     <button type="button" role="tab" aria-selected="true" data-welfare-tab="my_cases" onclick="toggleWelfareTab('my_cases')" id="tabWelMyCases" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold bg-white text-orange-600 shadow-sm transition-all whitespace-nowrap flex-1">My Cases</button>
-                    <button type="button" role="tab" aria-selected="false" data-welfare-tab="master" onclick="toggleWelfareTab('master')" id="tabWelMaster" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Master List</button>
+                    <button type="button" role="tab" aria-selected="false" data-welfare-tab="awol_list" onclick="toggleWelfareTab('awol_list')" id="tabWelAwolList" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">AWOL List</button>
+                    <button type="button" role="tab" aria-selected="false" data-welfare-tab="manual_flags" onclick="toggleWelfareTab('manual_flags')" id="tabWelManualFlags" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Manual Flags</button>
                     <button type="button" role="tab" aria-selected="false" data-welfare-tab="archive" onclick="toggleWelfareTab('archive')" id="tabWelArchive" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Archive</button>
                 </div>
             </div>
             <div class="p-4 flex-1 overflow-y-auto custom-scrollbar bg-gray-50/30">
+                <div id="desktopAwolPillsContainer" class="hidden mb-3.5 p-4 bg-white border border-orange-100 rounded-2xl shadow-sm">
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-orange-600">Active Church-wide Rule</span>
+                        <span id="desktopAwolMatchingCount" class="text-[10px] font-bold text-gray-500">0 matching</span>
+                    </div>
+                    <div id="desktopAwolPillsList" class="flex flex-wrap gap-1.5"></div>
+                </div>
                 <ul id="welfareList" class="welfare-list space-y-3"></ul>
             </div>
+            <?php if (!empty($charisPageAccess['can_configure_awol'])): ?>
+            <div id="desktopAwolEditorFooter" class="p-4 border-t border-gray-200/80 bg-white shrink-0">
+                <button type="button" onclick="openAwolConfigModal()" class="btn-awol-config w-full bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    Change AWOL List
+                </button>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -686,7 +702,9 @@ function loadDashboardData() {
             window.canConfigureAwol = res.can_configure_awol || false;
             window.awolConfig = res.awol_config || null;
             window.awolConfigHistory = res.awol_config_history || [];
-            window.qualifyingServicesCount = res.qualifying_services_count || 0;
+            window.qualifyingServicesCount = res.qualifying_services_count
+                ?? (res.awol_summary ? res.awol_summary.total_qualifying_services : 0)
+                ?? 0;
             globalWorkers = res.charis_workers || [];
             globalMembers = res.members || [];
 
@@ -725,32 +743,40 @@ function handleOpenAwolMonitoring() {
     if (!window.awolConfig && window.canConfigureAwol) {
         openAwolConfigModal(true);
     } else {
+        // Keep the modal rule pills and editor footer in sync before opening.
+        renderAwolPills();
         openModal('welfareOverviewModal');
     }
 }
 
 function renderAwolPills() {
     const cfg = window.awolConfig;
-    const canEdit = window.canConfigureAwol;
-    
+    // Super Admins and Charis/IDI/Welfare HODs always keep the editor entry
+    // point visible on both the mobile modal and the desktop card.
+    const canEdit = !!window.canConfigureAwol;
+    const awolMatchingCount = (window.welfareData || []).filter(w => w.alert_type === 'AWOL').length;
+
     document.querySelectorAll('.btn-awol-config').forEach(el => {
         el.classList.toggle('hidden', !canEdit);
     });
-    const desktopFooter = document.getElementById('desktopAwolEditorFooter');
-    if (desktopFooter) {
-        desktopFooter.classList.toggle('hidden', !canEdit);
-    }
+    ['awolModalEditorFooter', 'desktopAwolEditorFooter'].forEach(id => {
+        const footer = document.getElementById(id);
+        if (footer) footer.classList.toggle('hidden', !canEdit);
+    });
+
+    // Both the mobile overview modal and the desktop card share one summary.
+    $('#awolModalPillsContainer, #desktopAwolPillsContainer').removeClass('hidden');
+    $('#awolModalMatchingCount, #desktopAwolMatchingCount').text(awolMatchingCount + ' matching');
 
     if (!cfg) {
-        $('#awolPillsList, #desktopAwolPillsList').html('<span class="text-xs text-orange-600 font-bold bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200">Default Rule: Missed 3+ services in 4 weeks</span>');
-        $('#desktopAwolPillsContainer').removeClass('hidden');
-        $('#desktopAwolMatchingCount').text(((window.welfareData||[]).filter(w=>w.alert_type==='AWOL').length) + ' matching');
+        const defaultPill = '<span class="text-xs text-orange-600 font-bold bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200">Default Rule: Missed '
+            + <?= (int) CHARIS_AWOL_DEFAULT_SERVICES_MISSED ?> + '+ services in ' + <?= (int) CHARIS_AWOL_DEFAULT_PERIOD_WEEKS ?> + ' weeks</span>';
+        $('#awolModalPillsList, #desktopAwolPillsList').html(defaultPill);
         return;
     }
 
     const typesStr = (cfg.service_types || []).map(t => t.replace(/_/g, ' ')).join(', ');
     const statusesStr = (cfg.spiritual_statuses || []).map(s => s.replace(/_/g, ' ')).join(', ');
-    const awolMatching = (window.welfareData || []).filter(w => w.alert_type === 'AWOL').length;
     const qualifying = window.qualifyingServicesCount || 0;
 
     const pillsHtml = `
@@ -773,28 +799,27 @@ function renderAwolPills() {
         </span>
     `;
 
-    $('#awolPillsList, #desktopAwolPillsList').html(pillsHtml);
-    $('#desktopAwolPillsContainer').removeClass('hidden');
-    $('#desktopAwolMatchingCount').text(awolMatching + ' matching');
+    $('#awolModalPillsList, #desktopAwolPillsList').html(pillsHtml);
 }
 
 function openAwolConfigModal(isFirstTime = false) {
-    const cfg = window.awolConfig || {
-        services_missed: 3,
-        period_weeks: 4,
-        service_types: ['Sunday_Service'],
+    const defaults = {
+        services_missed: <?= (int) CHARIS_AWOL_DEFAULT_SERVICES_MISSED ?>,
+        period_weeks: <?= (int) CHARIS_AWOL_DEFAULT_PERIOD_WEEKS ?>,
+        service_types: ['Sunday_Service', 'Midweek_Service'],
         spiritual_statuses: ['Member', 'Worker', 'Pastor']
     };
-    $('#awolCfgServicesMissed').val(cfg.services_missed || 3);
-    $('#awolCfgPeriodWeeks').val(cfg.period_weeks || 4);
-    
-    const types = Array.isArray(cfg.service_types) ? cfg.service_types : ['Sunday_Service'];
-    $('input[name="awol_service_types[]"]').each(function() {
+    const cfg = window.awolConfig || defaults;
+    $('#awolCfgServicesMissed').val(cfg.services_missed || defaults.services_missed);
+    $('#awolCfgPeriodWeeks').val(cfg.period_weeks || defaults.period_weeks);
+
+    const types = Array.isArray(cfg.service_types) && cfg.service_types.length ? cfg.service_types : defaults.service_types;
+    $('input[name="service_types[]"]').each(function() {
         $(this).prop('checked', types.includes($(this).val()));
     });
 
-    const statuses = Array.isArray(cfg.spiritual_statuses) ? cfg.spiritual_statuses : ['Member', 'Worker', 'Pastor'];
-    $('input[name="awol_spiritual_statuses[]"]').each(function() {
+    const statuses = Array.isArray(cfg.spiritual_statuses) && cfg.spiritual_statuses.length ? cfg.spiritual_statuses : defaults.spiritual_statuses;
+    $('input[name="spiritual_statuses[]"]').each(function() {
         $(this).prop('checked', statuses.includes($(this).val()));
     });
 
@@ -811,11 +836,11 @@ function updateAwolConfigSentencePreview() {
     const missed = parseInt($('#awolCfgServicesMissed').val(), 10) || 1;
     const weeks = parseInt($('#awolCfgPeriodWeeks').val(), 10) || 1;
     const selectedTypes = [];
-    $('input[name="awol_service_types[]"]:checked').each(function() {
+    $('input[name="service_types[]"]:checked').each(function() {
         selectedTypes.push($(this).val().replace(/_/g, ' '));
     });
     const selectedStatuses = [];
-    $('input[name="awol_spiritual_statuses[]"]:checked').each(function() {
+    $('input[name="spiritual_statuses[]"]:checked').each(function() {
         selectedStatuses.push($(this).val().replace(/_/g, ' '));
     });
 
@@ -1703,9 +1728,13 @@ $(document).ready(function() {
     handleAjaxForm('resolveWelfareForm', ()=>{ closeModal('manageWelfareModal'); loadDashboardData(); });
 
     // Save AWOL Monitoring Configuration
-    handleAjaxForm('saveAwolConfigForm', (res)=>{ 
-        closeModal('awolConfigModal'); 
-        loadDashboardData(); 
+    // The AWOL rule editor posts save_awol_config, then the dashboard is
+    // reloaded so the recomputed AWOL list and summary pills appear at once.
+    handleAjaxForm('awolConfigForm', (res)=>{
+        closeModal('awolConfigModal');
+        if (res && res.config) window.awolConfig = res.config;
+        if (res && Array.isArray(res.history)) window.awolConfigHistory = res.history;
+        loadDashboardData();
     });
 
     $(document).on('input change', '#awolConfigForm input', function() {

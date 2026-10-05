@@ -1,6 +1,10 @@
 <?php
 // /includes/charis_modals.php
 // All modals for the Charis module (welfare, events, finance, library)
+require_once __DIR__ . '/charis_helpers.php';
+
+// Super Admins and Charis/IDI/Welfare Directors/HODs may change the AWOL rule.
+$charisCanConfigureAwol = !empty($charisPageAccess['can_configure_awol']);
 ?>
 
 <!-- Compact welfare overview modals (opened by the phone/tablet section cards). -->
@@ -94,8 +98,8 @@
                 <div id="awolModalPillsList" class="flex flex-wrap gap-1.5"></div>
             </div>
             <ul id="welfareModalList" class="welfare-list space-y-3"></ul>
-            <div id="awolModalEditorFooter" class="hidden pt-4 mt-4 border-t border-gray-200/80">
-                <button type="button" onclick="openAwolConfigModal()" class="w-full bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2">
+            <div id="awolModalEditorFooter" class="<?= $charisCanConfigureAwol ? '' : 'hidden ' ?>pt-4 mt-4 border-t border-gray-200/80">
+                <button type="button" onclick="openAwolConfigModal()" class="btn-awol-config w-full bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                     Change AWOL List
                 </button>
@@ -129,13 +133,13 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label for="awolCfgServicesMissed" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Services Missed (N) *</label>
-                    <input type="number" name="services_missed" id="awolCfgServicesMissed" min="1" max="52" required value="3" class="w-full px-4 py-3 border border-gray-200 rounded-xl text-lg font-black text-gray-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all">
+                    <input type="number" name="services_missed" id="awolCfgServicesMissed" min="1" max="52" required value="<?= (int) CHARIS_AWOL_DEFAULT_SERVICES_MISSED ?>" class="w-full px-4 py-3 border border-gray-200 rounded-xl text-lg font-black text-gray-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all">
                     <p class="text-[11px] text-gray-400 font-medium mt-1">Minimum total services missed</p>
                 </div>
                 <div>
                     <label for="awolCfgPeriodWeeks" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Period of Focus (W weeks) *</label>
                     <div class="relative">
-                        <input type="number" name="period_weeks" id="awolCfgPeriodWeeks" min="1" max="104" required value="4" class="w-full px-4 py-3 pr-16 border border-gray-200 rounded-xl text-lg font-black text-gray-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all">
+                        <input type="number" name="period_weeks" id="awolCfgPeriodWeeks" min="1" max="104" required value="<?= (int) CHARIS_AWOL_DEFAULT_PERIOD_WEEKS ?>" class="w-full px-4 py-3 pr-16 border border-gray-200 rounded-xl text-lg font-black text-gray-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all">
                         <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 uppercase pointer-events-none">weeks</span>
                     </div>
                     <p class="text-[11px] text-gray-400 font-medium mt-1">Rolling calendar weeks in Lagos time</p>
@@ -203,7 +207,7 @@
             <div class="p-3.5 bg-orange-50 border border-orange-200 rounded-2xl">
                 <p class="text-[10px] font-black uppercase tracking-wider text-orange-600 mb-1">Live Rule Preview</p>
                 <p id="awolConfigSentencePreview" class="text-xs font-bold text-gray-800 leading-relaxed">
-                    Flag members with spiritual status (Member, Worker, Pastor) who missed 3 or more qualifying Sunday Service(s) in the last 4 rolling calendar weeks.
+                    Flag members with spiritual status (Member, Worker, Pastor) who missed <?= (int) CHARIS_AWOL_DEFAULT_SERVICES_MISSED ?> or more qualifying Sunday Service or Midweek Service in the last <?= (int) CHARIS_AWOL_DEFAULT_PERIOD_WEEKS ?> rolling calendar weeks.
                 </p>
             </div>
 
