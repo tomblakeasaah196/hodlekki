@@ -157,8 +157,18 @@ function isBrowserImage(file) {
 }
 
 function unavailableImportMessage(error) {
-    if (['AI_UNAVAILABLE', 'AI_RETRYABLE', 'AI_LIMIT'].includes(error?.code)) {
-        return 'Image and PDF reading is unavailable right now. Keep or paste the programme text and try again later, or add the rows manually — nothing has been saved.';
+    const tail = ' Keep or paste the programme text and try again later, or add the rows manually — nothing has been saved.';
+
+    // A used-up allowance is not a broken service, and a configuration fault
+    // needs naming: a Producer who only ever sees "unavailable right now"
+    // cannot tell an administrator what to fix.
+    if (error?.code === 'AI_LIMIT') {
+        return (error.message || 'The AI allowance for this hour is used up.') + tail;
+    }
+    if (['AI_UNAVAILABLE', 'AI_RETRYABLE'].includes(error?.code)) {
+        return 'Image and PDF reading is unavailable right now.'
+            + (error?.message ? ' (' + error.message + ')' : '')
+            + tail;
     }
     return error?.message || 'We could not read that programme. You can still add the rows manually.';
 }

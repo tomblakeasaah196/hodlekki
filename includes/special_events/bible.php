@@ -225,7 +225,7 @@ function se_bible_lookup(PDO $pdo, string $ref, string $translation = 'KJV'): ?a
  */
 function se_bible_fetch(string $refNorm, string $translation): ?array
 {
-    $base = rtrim((string) ($_ENV['SE_BIBLE_API_BASE'] ?? 'https://bible-api.com'), '/');
+    $base = rtrim(se_env('SE_BIBLE_API_BASE', 'https://bible-api.com'), '/');
     $url  = $base . '/' . rawurlencode($refNorm) . '?translation=' . rawurlencode(strtolower($translation));
 
     $body = null;

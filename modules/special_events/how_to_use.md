@@ -739,9 +739,16 @@ editable. Choose **Add to programme** to append the reviewed rows, or
 **Replace this day** and select the day you mean. **Apply** is the only button
 that writes the rows; discarding the review leaves the programme unchanged.
 
-If image/PDF reading is temporarily unavailable, the tab says so plainly. Keep
-or paste the text and try again later, or use **Add a row manually** — the
-night can always be built without AI.
+If image/PDF reading is temporarily unavailable, the tab says so plainly, and
+now also shows the reason it was given. Keep or paste the text and try again
+later, or use **Add a row manually** — the night can always be built without
+AI. Two reasons are worth knowing apart:
+
+- *"The AI allowance for this hour is used up"* — nothing is broken. Wait, or
+  an administrator raises the limits in Settings.
+- Anything naming a **model** — a configuration fault, not a bad photo. Send
+  an administrator to **Settings → Health** and read them the two AI model
+  lines (§20).
 
 On the night, the host presses Start and Finish on the console and the times
 everywhere follow. If the night is running late, the portal says so.
@@ -864,6 +871,13 @@ write to about their data, how long guest details are kept, and the AI limits.
 whether AI is on, whether the token key is configured, and — most usefully —
 **Schema**: whether every table the module needs actually exists. Green means
 the database is up to date. Red names what is missing.
+
+**AI reads as three lines, not one.** *AI* only says a Gemini key is present.
+**AI model (text)** and **AI model (image/PDF)** say which model each job
+actually calls — the second is the one that reads a programme screenshot or a
+PDF. Both show `gemini-2.5-flash` unless an administrator has deliberately
+named another in `.env`; `MISSING` there explains an "unavailable" message on
+the Programme tab even while *AI* says *ready*.
 
 ---
 
