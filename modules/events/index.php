@@ -48,48 +48,89 @@ require_once '../../includes/header.php';
 
     <!-- ============================ SECTION: EVENTS ============================ -->
     <section id="section-events" role="tabpanel" aria-labelledby="btn-events" class="space-y-6 animate-fade-in-up">
-        <div class="flex flex-col sm:flex-row sm:flex-wrap justify-between items-stretch sm:items-center gap-3 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-            <div class="relative w-full sm:w-80">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+            <div class="relative w-full md:w-80 lg:w-96">
                 <input type="text" id="searchEvents" placeholder="Search events..." class="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-hodBlue focus:border-transparent outline-none transition-all bg-gray-50">
                 <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </div>
-            <button onclick="startNewEvent()" class="bg-hodBlue hover:bg-[#152750] text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 text-sm shrink-0">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                New Event
-            </button>
-            <button onclick="openMonthlyServicesModal()" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 text-sm shrink-0" title="Create all Total Experience and Mercy Experience services for a month">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                Monthly
-            </button>
-            <a href="/modules/event_qr/index.php"
-               class="inline-flex items-center gap-2 bg-[#123b8c] hover:bg-[#152750] text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all shrink-0"
-               title="Generate a branded event QR poster">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4h4v4H7V4zm6 0h4v4h-4V4zM3 14h4v4H3v-4zm12 0h6v6h-6v-6zm-2 0v-2h-2v-2h4v4h-2zm-6 0H7v2H5v-4h2v2zm6 4h2v-2h2v4h-4v-2z"/></svg>
-                Branded QR
-            </a>
-            <a href="/modules/event_report/index.php"
-               class="inline-flex items-center gap-2 bg-[#123b8c] hover:bg-[#152750] text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all shrink-0"
-               title="Open Event Data & Engagement Report (SMS, registration, attendance, IDI)">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                Event Report
-            </a>
-            <details class="relative shrink-0 group">
-                <summary class="list-none cursor-pointer inline-flex w-full items-center justify-center gap-2 bg-[#123b8c] hover:bg-[#152750] text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all text-sm [&::-webkit-details-marker]:hidden">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4m11-5a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                    Check-in
-                    <svg class="w-4 h-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                </summary>
-                <div class="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-xl border border-gray-100 bg-white p-1.5 shadow-xl">
-                    <a href="/modules/checkin_qr/index.php" class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold text-gray-700 hover:bg-blue-50 hover:text-hodBlue" title="Generate the check-in QR code for this event">
-                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h6v6H3V3zm12 0h6v6h-6V3zM3 15h6v6H3v-6zm12 0h2v2h-2v-2zm4 0h2v6h-6v-2h4v-4z"/></svg>
-                        Check-in QR
-                    </a>
-                    <a href="/modules/checkin_monitor/index.php" class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold text-gray-700 hover:bg-blue-50 hover:text-hodBlue" title="View live check-in KPIs">
-                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19V9m5 10V5m5 14v-7m5 7V3"/></svg>
-                        Check-in Monitor
-                    </a>
-                </div>
-            </details>
+
+            <div class="flex w-full md:w-auto items-center justify-end gap-2">
+                <details id="eventCreateActions" data-event-action-menu class="relative flex-1 md:flex-none group">
+                    <summary class="list-none cursor-pointer inline-flex h-11 w-full md:w-auto items-center justify-center gap-2 bg-hodBlue hover:bg-[#152750] text-white px-4 sm:px-5 rounded-xl font-bold shadow-md transition-all text-sm [&::-webkit-details-marker]:hidden" aria-haspopup="menu" title="Create an event">
+                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        <span>Create Event</span>
+                        <svg class="w-4 h-4 shrink-0 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </summary>
+                    <div class="absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-gray-100 bg-white p-2 shadow-2xl" role="menu" aria-label="Create event options">
+                        <button type="button" onclick="closeEventActionMenus(); startNewEvent();" class="w-full flex items-start gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-gray-700 hover:bg-blue-50 hover:text-hodBlue transition-colors" role="menuitem">
+                            <span class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-hodBlue">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                            </span>
+                            <span>
+                                <span class="block">One-off Event</span>
+                                <span class="block text-xs font-semibold text-gray-500">Create a standalone event with its own setup.</span>
+                            </span>
+                        </button>
+                        <button type="button" onclick="closeEventActionMenus(); openMonthlyServicesModal();" class="w-full flex items-start gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-gray-700 hover:bg-red-50 hover:text-red-700 transition-colors" role="menuitem" title="Create all Total Experience and Mercy Experience services for a month">
+                            <span class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            </span>
+                            <span>
+                                <span class="block">Monthly Series</span>
+                                <span class="block text-xs font-semibold text-gray-500">Generate Sunday and Thursday services for a month.</span>
+                            </span>
+                        </button>
+                    </div>
+                </details>
+
+                <details id="eventMoreActions" data-event-action-menu class="relative shrink-0 group">
+                    <summary class="list-none cursor-pointer inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-hodBlue hover:bg-blue-50 hover:border-blue-100 shadow-sm transition-all [&::-webkit-details-marker]:hidden" aria-label="More event actions" aria-haspopup="menu" title="More actions">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                    </summary>
+                    <div class="absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-gray-100 bg-white p-2 shadow-2xl" role="menu" aria-label="More event actions">
+                        <div class="px-3 py-2">
+                            <p class="text-[10px] font-black uppercase tracking-[0.16em] text-gray-400">More actions</p>
+                        </div>
+                        <a href="/modules/event_qr/index.php" class="flex items-start gap-3 rounded-xl px-3 py-3 text-sm font-bold text-gray-700 hover:bg-blue-50 hover:text-hodBlue transition-colors" role="menuitem" title="Generate a branded event QR poster">
+                            <span class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-hodBlue">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4h4v4H7V4zm6 0h4v4h-4V4zM3 14h4v4H3v-4zm12 0h6v6h-6v-6zm-2 0v-2h-2v-2h4v4h-2zm-6 0H7v2H5v-4h2v2zm6 4h2v-2h2v4h-4v-2z"/></svg>
+                            </span>
+                            <span>
+                                <span class="block">Branded QR Poster</span>
+                                <span class="block text-xs font-semibold text-gray-500">Create a shareable event QR design.</span>
+                            </span>
+                        </a>
+                        <a href="/modules/event_report/index.php" class="flex items-start gap-3 rounded-xl px-3 py-3 text-sm font-bold text-gray-700 hover:bg-blue-50 hover:text-hodBlue transition-colors" role="menuitem" title="Open Event Data & Engagement Report (SMS, registration, attendance, IDI)">
+                            <span class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-hodBlue">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                            </span>
+                            <span>
+                                <span class="block">Event Report</span>
+                                <span class="block text-xs font-semibold text-gray-500">Review registration, attendance and engagement.</span>
+                            </span>
+                        </a>
+                        <div class="my-1 border-t border-gray-100"></div>
+                        <a href="/modules/checkin_qr/index.php" class="flex items-start gap-3 rounded-xl px-3 py-3 text-sm font-bold text-gray-700 hover:bg-blue-50 hover:text-hodBlue transition-colors" role="menuitem" title="Generate the check-in QR code for this event">
+                            <span class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-hodBlue">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h6v6H3V3zm12 0h6v6h-6V3zM3 15h6v6H3v-6zm12 0h2v2h-2v-2zm4 0h2v6h-6v-2h4v-4z"/></svg>
+                            </span>
+                            <span>
+                                <span class="block">Check-in QR</span>
+                                <span class="block text-xs font-semibold text-gray-500">Open the check-in QR generator.</span>
+                            </span>
+                        </a>
+                        <a href="/modules/checkin_monitor/index.php" class="flex items-start gap-3 rounded-xl px-3 py-3 text-sm font-bold text-gray-700 hover:bg-blue-50 hover:text-hodBlue transition-colors" role="menuitem" title="View live check-in KPIs">
+                            <span class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-hodBlue">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19V9m5 10V5m5 14v-7m5 7V3"/></svg>
+                            </span>
+                            <span>
+                                <span class="block">Check-in Monitor</span>
+                                <span class="block text-xs font-semibold text-gray-500">Watch live check-in activity.</span>
+                            </span>
+                        </a>
+                    </div>
+                </details>
+            </div>
         </div>
         <div id="eventsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"></div>
     </section>
@@ -372,23 +413,35 @@ require_once '../../includes/header.php';
             </div>
         </div>
         
-                <!-- Attendance KPIs -->
-        <div id="attKpiContainer" class="hidden grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in-up">
-            <div class="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-                <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total Checked In</p>
-                <h3 id="attKpiTotal" class="text-3xl font-black text-gray-900">0</h3>
-                <p class="text-[11px] text-gray-400 mt-1" id="attKpiTotalSub">0 registered total</p>
-            </div>
-            <div class="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-center relative overflow-hidden">
-                <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Checked In Today</p>
-                <h3 id="attKpiToday" class="text-3xl font-black text-gray-900">0</h3>
-                <div id="attKpiTrendBadge" class="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 w-fit mt-2"><span>--</span></div>
-            </div>
-            <div class="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-                <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Members / Walk-ins</p>
-                <h3 class="text-2xl font-black text-gray-900"><span id="attKpiMembers" class="text-[#1D356A]">0</span> <span class="text-gray-300 text-lg">/</span> <span id="attKpiWalkins" class="text-[#D11920]">0</span></h3>
-                <p class="text-[11px] text-gray-400 mt-1">members / walk-ins</p>
-            </div>
+        <!-- Attendance KPIs -->
+        <div id="attMobileKpiToggle" class="hidden md:hidden">
+            <button type="button" onclick="showAttendanceKpisFromToggle()" class="w-full bg-white border border-blue-100 text-hodBlue rounded-2xl px-4 py-3 shadow-sm font-black text-sm flex items-center justify-between gap-3">
+                <span class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    View KPI Cards
+                </span>
+                <span id="attMobileKpiSummary" class="text-xs text-gray-400 font-bold">Hidden while searching</span>
+            </button>
+        </div>
+        <div id="attKpiContainer" class="hidden grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 animate-fade-in-up">
+            <button type="button" onclick="openAttKpiDetails('card1')" class="att-kpi-card bg-white p-6 rounded-3xl border border-gray-100 shadow-sm text-left transition-all hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100">
+                <span id="attKpiTotalLabel" class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total Checked In</span>
+                <span id="attKpiTotal" class="block text-3xl font-black text-gray-900">0</span>
+                <span class="mt-3 inline-flex items-center gap-1.5 text-[11px] font-black text-hodBlue bg-blue-50 px-2.5 py-1 rounded-full">View details</span>
+                <span id="attKpiTotalSub" class="block text-[11px] text-gray-400 mt-2">0 registered total</span>
+            </button>
+            <button type="button" onclick="openAttKpiDetails('card2')" class="att-kpi-card bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-center relative overflow-hidden text-left transition-all hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100">
+                <span id="attKpiTodayLabel" class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Checked In Today</span>
+                <span id="attKpiToday" class="block text-3xl font-black text-gray-900">0</span>
+                <span id="attKpiTrendBadge" class="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 w-fit mt-2"><span>--</span></span>
+                <span class="mt-3 inline-flex items-center gap-1.5 text-[11px] font-black text-hodBlue bg-blue-50 px-2.5 py-1 rounded-full">View details</span>
+            </button>
+            <button type="button" onclick="openAttKpiDetails('card3')" class="att-kpi-card bg-white p-6 rounded-3xl border border-gray-100 shadow-sm text-left transition-all hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100">
+                <span id="attKpiMembersLabel" class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Members / Walk-ins</span>
+                <span class="block text-2xl font-black text-gray-900"><span id="attKpiMembers" class="text-[#1D356A]">0</span> <span class="text-gray-300 text-lg">/</span> <span id="attKpiWalkins" class="text-[#D11920]">0</span></span>
+                <span class="mt-3 inline-flex items-center gap-1.5 text-[11px] font-black text-hodBlue bg-blue-50 px-2.5 py-1 rounded-full">View details</span>
+                <span id="attKpiMembersSub" class="block text-[11px] text-gray-400 mt-2">members / walk-ins</span>
+            </button>
         </div>
         <div id="rosterContainer" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             <div class="bg-white border border-gray-100 rounded-3xl shadow-sm overflow-hidden flex flex-col h-[600px]">
@@ -702,14 +755,31 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
-<!-- Monthly Services Modal -->
+<!-- Attendance KPI Details Modal -->
+<div id="attKpiDetailsModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]">
+        <div class="px-6 py-5 border-b border-gray-100 bg-blue-50/70 flex justify-between items-start gap-4 shrink-0">
+            <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-hodBlue mb-1">Attendance insight</p>
+                <h3 id="attKpiDetailsTitle" class="text-xl md:text-2xl font-bold text-gray-900">KPI Details</h3>
+                <p id="attKpiDetailsSub" class="text-sm text-gray-500 mt-1">Filtered attendance details for this event.</p>
+            </div>
+            <button type="button" onclick="closeModal('attKpiDetailsModal')" class="text-gray-400 hover:text-hodBlue transition-colors shrink-0" aria-label="Close">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div id="attKpiDetailsBody" class="p-5 md:p-6 overflow-y-auto custom-scrollbar space-y-4 bg-gray-50/50"></div>
+    </div>
+</div>
+
+<!-- Monthly Series Modal -->
 <div id="monthlyServicesModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform scale-95 transition-transform duration-300">
         <div class="px-6 py-5 border-b border-gray-100 bg-red-50/60 flex justify-between items-start gap-4">
             <div>
                 <p class="text-[10px] font-black uppercase tracking-[0.18em] text-red-600 mb-1">Monthly schedule</p>
-                <h3 class="text-xl md:text-2xl font-bold text-gray-900">Create Monthly Services</h3>
-                <p class="text-sm text-gray-500 mt-1">Add every Sunday and Thursday service in one click.</p>
+                <h3 class="text-xl md:text-2xl font-bold text-gray-900">Create Monthly Series</h3>
+                <p class="text-sm text-gray-500 mt-1">Add every Sunday and Thursday service for the selected month in one click.</p>
             </div>
             <button type="button" onclick="closeMonthlyServicesModal()" class="text-gray-400 hover:text-red-500 transition-colors shrink-0" aria-label="Close">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -746,7 +816,7 @@ require_once '../../includes/header.php';
 
             <div class="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pt-1">
                 <button type="button" onclick="closeMonthlyServicesModal()" class="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">Cancel</button>
-                <button type="submit" id="monthlyServicesSubmit" class="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-md transition-all">Create Monthly Services</button>
+                <button type="submit" id="monthlyServicesSubmit" class="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-md transition-all">Create Monthly Series</button>
             </div>
         </form>
     </div>
@@ -855,6 +925,9 @@ require_once '../../includes/header.php';
     let workingMinisters = [];         // [{name, imageUrl, file}] repeatable ministers
     let currentRegistrants = [];
     let descQuill = null;              // Quill instance for the Description editor
+    let currentAttendanceKpis = null;
+    const ATTENDANCE_EVENT_STORAGE_KEY = 'events.attendance.selectedEventId';
+    const EVENTS_ACTIVE_SECTION_STORAGE_KEY = 'events.activeSection';
 
     // ---------- Section switching ----------
     const EVENT_SECTIONS = ['events', 'configure', 'registrations', 'attendance', 'analytics'];
@@ -943,6 +1016,8 @@ require_once '../../includes/header.php';
 
     function switchSection(id, shouldFocus = false){
         if(!EVENT_SECTIONS.includes(id)) return;
+        try { sessionStorage.setItem(EVENTS_ACTIVE_SECTION_STORAGE_KEY, id); } catch(e) {}
+        updateEventsModuleUrl(id);
         EVENT_SECTIONS.forEach(s => {
             $('#section-' + s).addClass('hidden');
             $('#btn-' + s)
@@ -970,6 +1045,84 @@ require_once '../../includes/header.php';
     function closeModal(id){ const m=$('#'+id); if(!m) return; m.addClass('opacity-0'); m.children().first().addClass('scale-95'); setTimeout(()=>m.addClass('hidden'),300); }
     const esc = s => (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+    function closeEventActionMenus(except = null){
+        document.querySelectorAll('[data-event-action-menu]').forEach(menu => {
+            if(menu !== except) menu.removeAttribute('open');
+        });
+    }
+
+    function initEventActionMenus(){
+        const menus = document.querySelectorAll('[data-event-action-menu]');
+        menus.forEach(menu => {
+            menu.addEventListener('toggle', () => {
+                if(menu.open) closeEventActionMenus(menu);
+            });
+        });
+        document.addEventListener('click', event => {
+            if(!event.target.closest('[data-event-action-menu]')) closeEventActionMenus();
+        });
+        document.addEventListener('keydown', event => {
+            if(event.key === 'Escape') closeEventActionMenus();
+        });
+    }
+
+    function updateEventsModuleUrl(sectionId = null, attendanceEventId){
+        if(!window.history || !window.URL) return;
+        try {
+            const url = new URL(window.location.href);
+            if(sectionId) url.searchParams.set('section', sectionId);
+            if(arguments.length > 1){
+                if(attendanceEventId) url.searchParams.set('attendance_event', attendanceEventId);
+                else url.searchParams.delete('attendance_event');
+            }
+            window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+        } catch(e) {}
+    }
+
+    function persistAttendanceSelection(id){
+        try {
+            if(id) sessionStorage.setItem(ATTENDANCE_EVENT_STORAGE_KEY, String(id));
+            else sessionStorage.removeItem(ATTENDANCE_EVENT_STORAGE_KEY);
+        } catch(e) {}
+        updateEventsModuleUrl('attendance', id || '');
+    }
+
+    function restoreAttendanceSelection(){
+        const select = $('#attendanceEventSelect');
+        if(!select.length) return;
+        let preferredId = '';
+        let preferredSection = '';
+        let urlEventId = '';
+        let urlSection = '';
+        try {
+            const url = new URL(window.location.href);
+            urlEventId = url.searchParams.get('attendance_event') || '';
+            urlSection = url.searchParams.get('section') || '';
+            preferredId = urlEventId;
+            preferredSection = urlSection;
+        } catch(e) {}
+        try {
+            preferredId = preferredId || sessionStorage.getItem(ATTENDANCE_EVENT_STORAGE_KEY) || '';
+            preferredSection = preferredSection || sessionStorage.getItem(EVENTS_ACTIVE_SECTION_STORAGE_KEY) || '';
+        } catch(e) {}
+
+        if(!preferredId){
+            if(preferredSection === 'attendance') switchSection('attendance');
+            return;
+        }
+
+        const hasOption = select.find('option').filter(function(){ return this.value === String(preferredId); }).length > 0;
+        if(!hasOption){
+            try { sessionStorage.removeItem(ATTENDANCE_EVENT_STORAGE_KEY); } catch(e) {}
+            return;
+        }
+
+        select.val(String(preferredId));
+        const shouldOpenAttendance = preferredSection === 'attendance' || (!!urlEventId && !urlSection);
+        if(!shouldOpenAttendance) return;
+        switchSection('attendance');
+    }
+
     // Strip everything except basic formatting for the live preview
     function sanitizeRich(html){
         const d = document.createElement('div'); d.innerHTML = html || '';
@@ -988,7 +1141,7 @@ require_once '../../includes/header.php';
             globalEvents = res.data;
             let html = '';
             if(res.data.length === 0){
-                html = `<div class="col-span-full bg-white rounded-3xl border border-gray-100 p-10 text-center text-gray-400">No events yet. Click <b>New Event</b> to create one.</div>`;
+                html = `<div class="col-span-full bg-white rounded-3xl border border-gray-100 p-10 text-center text-gray-400">No events yet. Use <b>Create Event</b> to create one.</div>`;
             } else {
                 res.data.forEach(e => {
                     const d = new Date(e.event_date);
@@ -1026,6 +1179,7 @@ require_once '../../includes/header.php';
             });
             $('#regEventSelect').html(regOpts);
             $('#attendanceEventSelect').html(attOpts);
+            restoreAttendanceSelection();
         }, 'json');
     }
 
@@ -1175,7 +1329,7 @@ require_once '../../includes/header.php';
             btn.prop('disabled', false).text(original);
             unlockScreen();
             if(res.status !== 'success'){
-                showToast(res.message || 'Could not create the monthly services.', 'error');
+                showToast(res.message || 'Could not create the monthly series.', 'error');
                 return;
             }
             closeMonthlyServicesModal();
@@ -1184,7 +1338,7 @@ require_once '../../includes/header.php';
         }, 'json').fail(function(){
             btn.prop('disabled', false).text(original);
             unlockScreen();
-            showToast('Server Error. The monthly services were not created.', 'error');
+            showToast('Server Error. The monthly series was not created.', 'error');
         });
     });
 
@@ -1632,60 +1786,190 @@ require_once '../../includes/header.php';
     }
 
     // ---------- Attendance ----------
-    function loadAttendanceSelect(){ /* populated in loadEvents */ }
-        $('#attendanceEventSelect').on('change', function(){
+    function loadAttendanceSelect(){
+        const select = $('#attendanceEventSelect');
+        if(select.val() && $('#rosterContainer').hasClass('hidden')) select.trigger('change');
+    }
+
+    function attNum(value){ return Number(value || 0).toLocaleString(); }
+    function attIsMobile(){ return window.matchMedia ? window.matchMedia('(max-width: 767px)').matches : window.innerWidth < 768; }
+    function attStatusLabel(status){ return (status || 'Unspecified').toString().replace(/_/g, ' '); }
+    function attFormatTime(value){
+        if(!value) return '—';
+        const d = new Date(String(value).replace(' ', 'T'));
+        if(Number.isNaN(d.getTime())) return value;
+        return d.toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+    }
+
+    function setAttendanceKpiSearchMode(active){
+        const selected = !!$('#attendanceEventSelect').val();
+        if(!selected){
+            $('#attMobileKpiToggle').addClass('hidden');
+            $('#attKpiContainer').addClass('hidden');
+            return;
+        }
+        if(active && attIsMobile()){
+            $('#attKpiContainer').addClass('hidden');
+            $('#attMobileKpiToggle').removeClass('hidden');
+        } else {
+            $('#attMobileKpiToggle').addClass('hidden');
+            $('#attKpiContainer').removeClass('hidden');
+        }
+    }
+
+    function showAttendanceKpisFromToggle(){
+        $('#rosterSearch').blur();
+        setAttendanceKpiSearchMode(false);
+        const el = document.getElementById('attKpiContainer');
+        if(el){
+            const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            el.scrollIntoView({ block:'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+        }
+    }
+
+    function renderAttendanceKpis(k){
+        currentAttendanceKpis = k;
+        const mode = k.mode || 'workflow';
+        if(mode === 'attendance'){
+            const gender = k.gender || {};
+            const mix = k.member_mix || {};
+            $('#attKpiTotalLabel').text('Attendance');
+            $('#attKpiTotal').text(attNum(k.total));
+            $('#attKpiTotalSub').text('people marked present' + (k.registered ? ` · ${attNum(k.registered)} registered` : ''));
+
+            $('#attKpiTodayLabel').text('Gender Split');
+            $('#attKpiToday').html(`<span class="text-[#1D356A]">${attNum(gender.male)}</span> <span class="text-gray-300 text-2xl">/</span> <span class="text-[#D11920]">${attNum(gender.female)}</span>`);
+            const unknown = Number(gender.unknown || 0);
+            $('#attKpiTrendBadge')
+                .attr('class', 'flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full w-fit mt-2 ' + (unknown ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-hodBlue'))
+                .html(unknown ? `${attNum(unknown)} unknown gender` : 'Male / Female');
+
+            $('#attKpiMembersLabel').text('Members / 1st–3rd Timers');
+            $('#attKpiMembers').text(attNum(mix.members));
+            $('#attKpiWalkins').text(attNum(mix.timers));
+            $('#attKpiMembersSub').text('church members / 1st, 2nd & 3rd timers');
+            $('#attMobileKpiSummary').text(`${attNum(k.total)} present`);
+            return;
+        }
+
+        $('#attKpiTotalLabel').text('Total Checked In');
+        $('#attKpiTotal').text(attNum(k.total));
+        $('#attKpiTotalSub').text(`${attNum(k.registered)} registered total`);
+        $('#attKpiTodayLabel').text('Checked In Today');
+        $('#attKpiToday').text(attNum(k.today));
+        $('#attKpiMembersLabel').text('Members / Walk-ins');
+        $('#attKpiMembers').text(attNum(k.members));
+        $('#attKpiWalkins').text(attNum(k.walkins));
+        $('#attKpiMembersSub').text('members / walk-ins');
+        $('#attMobileKpiSummary').text(`${attNum(k.today || k.total)} checked in`);
+
+        const g = Number(k.growth || 0);
+        let trend = '<span>--</span>';
+        let cls = 'bg-gray-100 text-gray-500';
+        if(g > 0){ trend = '▲ +'+g+'%'; cls = 'bg-green-100 text-green-700'; }
+        else if(g < 0){ trend = '▼ '+g+'%'; cls = 'bg-red-100 text-red-600'; }
+        else { trend = 'Same as yesterday'; cls = 'bg-gray-100 text-gray-500'; }
+        $('#attKpiTrendBadge').attr('class','flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full w-fit mt-2 '+cls).html(trend);
+    }
+
+    function attDetailRow(row){
+        const name = row.name || `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Unnamed attendee';
+        const phone = row.phone || 'No phone on file';
+        const status = attStatusLabel(row.spiritual_status || row.status || 'Unspecified');
+        const gender = row.gender || '—';
+        const time = attFormatTime(row.marked_at || row.checked_in_at || row.check_in_time);
+        return `<div class="bg-white border border-gray-100 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
+            <div>
+                <p class="font-black text-gray-900">${esc(name)}</p>
+                <p class="text-xs text-gray-500 mt-1">${esc(phone)} · ${esc(status)} · ${esc(gender)}</p>
+            </div>
+            <span class="text-[11px] font-black uppercase tracking-wider text-hodBlue bg-blue-50 px-3 py-1.5 rounded-full w-fit">${esc(time)}</span>
+        </div>`;
+    }
+
+    function openAttKpiDetails(cardKey){
+        if(!currentAttendanceKpis || !currentAttendanceKpis.details || !currentAttendanceKpis.details[cardKey]){
+            showToast('Load an event first.', 'error');
+            return;
+        }
+        const detail = currentAttendanceKpis.details[cardKey];
+        $('#attKpiDetailsTitle').text(detail.title || 'KPI Details');
+        $('#attKpiDetailsSub').text(detail.subtitle || 'Filtered attendance details for this event.');
+        const groups = detail.groups || [];
+        let html = '';
+        groups.forEach(group => {
+            const rows = group.rows || [];
+            html += `<div class="bg-white/70 border border-gray-100 rounded-3xl overflow-hidden">
+                <div class="px-5 py-4 bg-white border-b border-gray-100 flex items-center justify-between gap-3">
+                    <h4 class="font-black text-gray-900">${esc(group.label || 'Details')}</h4>
+                    <span class="text-xs font-black text-hodBlue bg-blue-50 px-3 py-1 rounded-full">${attNum(rows.length)}</span>
+                </div>
+                <div class="p-4 space-y-3">${rows.length ? rows.map(attDetailRow).join('') : '<p class="text-center text-sm font-bold text-gray-400 py-6">No records in this segment.</p>'}</div>
+            </div>`;
+        });
+        $('#attKpiDetailsBody').html(html || '<p class="text-center text-sm font-bold text-gray-400 py-10">No details available yet.</p>');
+        openModal('attKpiDetailsModal');
+    }
+
+    $('#attendanceEventSelect').on('change', function(){
         const id = $(this).val();
+        currentAttendanceKpis = null;
         if(!id){
+            persistAttendanceSelection('');
             $('#rosterContainer').addClass('hidden');
             $('#attKpiContainer').addClass('hidden');
+            $('#attMobileKpiToggle').addClass('hidden');
             $('#rosterSearch').prop('disabled',true).val('');
             return;
         }
+        persistAttendanceSelection(id);
         $('#rosterSearch').prop('disabled',false);
         $('#rosterContainer').removeClass('hidden');
-        $('#attKpiContainer').removeClass('hidden');
+        setAttendanceKpiSearchMode(document.activeElement === document.getElementById('rosterSearch'));
         loadRoster(id);
         loadAttKPIs(id);
     });
+
     function loadRoster(id){
         $('#pendingList').html('<div class="text-center p-4 text-gray-400">Loading…</div>');
         $.post(API_URL, { action:'fetch_attendance_roster', event_id:id }, function(res){
             if(res.status !== 'success') return;
             $('#pendingCount').text(res.pending.length); $('#checkedInCount').text(res.checked_in.length);
-            let p = ''; res.pending.forEach(u => { p += `<div class="roster-card flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100" data-name="${(u.first_name+' '+u.last_name).toLowerCase()}"><div><p class="font-bold text-gray-900">${esc(u.first_name)} ${esc(u.last_name)}</p><p class="text-[10px] text-gray-500">${esc(u.spiritual_status)}</p></div><button onclick="clockIn(event,${id},${u.id})" class="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors">Clock In</button></div>`; });
+            let p = '';
+            res.pending.forEach(u => {
+                const name = `${u.first_name || ''} ${u.last_name || ''}`.trim();
+                const search = `${name} ${u.phone || ''} ${u.spiritual_status || ''}`.toLowerCase();
+                p += `<div class="roster-card flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100" data-name="${esc(search)}"><div><p class="font-bold text-gray-900">${esc(name)}</p><p class="text-[10px] text-gray-500">${esc(attStatusLabel(u.spiritual_status))}</p></div><button onclick="clockIn(event,${id},${u.id})" class="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors">Clock In</button></div>`;
+            });
             $('#pendingList').html(p || '<p class="text-center text-gray-400 py-4">All cleared!</p>');
-            let c = ''; res.checked_in.forEach(u => { const t=new Date(u.check_in_time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); c += `<div class="roster-card flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100" data-name="${(u.first_name+' '+u.last_name).toLowerCase()}"><div><p class="font-bold text-gray-900">${esc(u.first_name)} ${esc(u.last_name)}</p><p class="text-[10px] text-gray-500">${esc(u.spiritual_status)}</p></div><div class="flex items-center gap-2"><span class="text-xs font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg">${t}</span><button onclick="clockOut(event,${id},${u.id})" title="Undo clock-in" class="bg-gray-50 text-gray-500 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Clock Out</button></div></div>`; });
+            let c = '';
+            res.checked_in.forEach(u => {
+                const name = `${u.first_name || ''} ${u.last_name || ''}`.trim();
+                const search = `${name} ${u.phone || ''} ${u.spiritual_status || ''}`.toLowerCase();
+                const t = u.check_in_time ? new Date(String(u.check_in_time).replace(' ', 'T')).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '—';
+                c += `<div class="roster-card flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100" data-name="${esc(search)}"><div><p class="font-bold text-gray-900">${esc(name)}</p><p class="text-[10px] text-gray-500">${esc(attStatusLabel(u.spiritual_status))}</p></div><div class="flex items-center gap-2"><span class="text-xs font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg">${t}</span><button onclick="clockOut(event,${id},${u.id})" title="Undo clock-in" class="bg-gray-50 text-gray-500 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Clock Out</button></div></div>`;
+            });
             $('#checkedInList').html(c || '<p class="text-center text-gray-400 py-4">Waiting…</p>');
+            applyRosterSearch();
         }, 'json');
     }
-    
-        function loadAttKPIs(id){
-        $.post(API_URL, { action:'attendance_kpis', event_id:id }, function(res){
-            if(res.status!=='success' || !res.kpis) return;
-            const k = res.kpis;
-            $('#attKpiTotal').text(k.total.toLocaleString());
-            $('#attKpiToday').text(k.today.toLocaleString());
-            $('#attKpiMembers').text(k.members);
-            $('#attKpiWalkins').text(k.walkins);
-            $('#attKpiTotalSub').text(k.registered.toLocaleString()+' registered total');
 
-            // trend badge
-            const g = k.growth;
-            let trend = '<span>--</span>';
-            let cls = 'bg-gray-100 text-gray-500';
-            if(g>0){ trend = '▲ +'+g+'%'; cls = 'bg-green-100 text-green-700'; }
-            else if(g<0){ trend = '▼ '+g+'%'; cls = 'bg-red-100 text-red-600'; }
-            else { trend = 'Same as yesterday'; cls = 'bg-gray-100 text-gray-500'; }
-            $('#attKpiTrendBadge').attr('class','flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full w-fit mt-2 '+cls).html(trend);
+    function loadAttKPIs(id){
+        $.post(API_URL, { action:'attendance_kpis', event_id:id }, function(res){
+            if(res.status !== 'success' || !res.kpis) return;
+            renderAttendanceKpis(res.kpis);
+            setAttendanceKpiSearchMode(document.activeElement === document.getElementById('rosterSearch'));
         },'json');
     }
+
     function clockIn(ev, id, uid){
         const btn = ev ? ev.currentTarget : null;
         if(btn){ $(btn).replaceWith(`<span class="px-4 py-2 rounded-xl text-xs font-bold text-gray-400 border border-gray-100">Logging…</span>`); }
         $.post(API_URL,{action:'mark_attendance',event_id:id,user_id:uid},function(res){
-            if(res.status==='error') showToast(res.message,'error');
+            if(res.status === 'error') showToast(res.message,'error');
             loadRoster(id);
-        },'json').fail(()=>{ showToast('Server Error','error'); loadRoster(id); });
+            loadAttKPIs(id);
+        },'json').fail(()=>{ showToast('Server Error','error'); loadRoster(id); loadAttKPIs(id); });
     }
 
     function clockOut(ev, id, uid){
@@ -1693,12 +1977,23 @@ require_once '../../includes/header.php';
         const btn = ev ? ev.currentTarget : null;
         if(btn){ $(btn).prop('disabled', true).text('…'); }
         $.post(API_URL,{action:'clock_out',event_id:id,user_id:uid},function(res){
-            if(res.status==='error') showToast(res.message,'error');
+            if(res.status === 'error') showToast(res.message,'error');
             loadRoster(id);
-        },'json').fail(()=>{ showToast('Server Error','error'); loadRoster(id); });
+            loadAttKPIs(id);
+        },'json').fail(()=>{ showToast('Server Error','error'); loadRoster(id); loadAttKPIs(id); });
     }
 
-    $('#rosterSearch').on('keyup', function(){ const v=$(this).val().toLowerCase(); $('.roster-card').each(function(){ $(this).toggle($(this).attr('data-name').indexOf(v)>-1); }); });
+    function applyRosterSearch(){
+        const v = ($('#rosterSearch').val() || '').toLowerCase();
+        $('.roster-card').each(function(){ $(this).toggle(($(this).attr('data-name') || '').indexOf(v) > -1); });
+    }
+
+    let attKpiFocusTimer = null;
+    $('#rosterSearch')
+        .on('input keyup', applyRosterSearch)
+        .on('focus', function(){ clearTimeout(attKpiFocusTimer); setAttendanceKpiSearchMode(true); })
+        .on('blur', function(){ clearTimeout(attKpiFocusTimer); attKpiFocusTimer = setTimeout(() => setAttendanceKpiSearchMode(false), 220); });
+    $(window).on('resize', function(){ setAttendanceKpiSearchMode(document.activeElement === document.getElementById('rosterSearch')); });
     $('#searchClockedIn').on('keyup', function(){ const v=$(this).val().toLowerCase(); $('#clockedInTableBody tr').each(function(){ const t=$(this).text().toLowerCase(); $(this).toggle(t.indexOf(v)>-1); }); });
 
     // ---------- Search ----------
@@ -2328,6 +2623,7 @@ require_once '../../includes/header.php';
             });
         }
         initEventTabs();
+        initEventActionMenus();
         loadEvents(); renderPreview();
     });
 </script>
