@@ -195,6 +195,24 @@ try {
                 exit;
             }
 
+            // Duplicate phone guard (same last-10-digits match as the public Connect
+            // form) so quick-adds from other modules (e.g. Events attendance) get a
+            // friendly error with the existing profile id instead of a crash.
+            $phone_key = substr(preg_replace('/\D/', '', $phone), -10);
+            if ($phone_key !== '') {
+                $dupStmt = $pdo->prepare("SELECT id, first_name, last_name FROM users WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '') LIKE ? LIMIT 1");
+                $dupStmt->execute(['%' . $phone_key . '%']);
+                $existing = $dupStmt->fetch(PDO::FETCH_ASSOC);
+                if ($existing) {
+                    echo json_encode([
+                        'status' => 'error',
+                        'message' => 'This phone number is already registered to ' . $existing['first_name'] . ' ' . $existing['last_name'] . '. Please use a different number, or open the existing profile.',
+                        'existing_user_id' => (int)$existing['id'],
+                    ]);
+                    exit;
+                }
+            }
+
             // Generate QR Code Hash for Future Check-ins
             $qr_hash = hash('sha256', uniqid($phone, true));
 
@@ -213,6 +231,7 @@ try {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([$first_name, $last_name, $email, $phone, $dob, $gender, $marital_status, $spiritual_status, $attendance_status, $address, $latitude, $longitude, $anniversary, $comments, $qr_hash, $pic_path]);
+            $new_user_id = (int)$pdo->lastInsertId();
 
             // NOTIFICATION TRIGGER: Alert IDI (Department ID 1) of the new master roster entry
             $idiStmt = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 1 AND is_active = 1");
@@ -227,7 +246,11 @@ try {
                 }
             }
 
-            echo json_encode(['status' => 'success', 'message' => 'New profile successfully created in the master database.']);
+            echo json_encode([
+                'status' => 'success',
+                'message' => 'New profile successfully created in the master database.',
+                'user_id' => $new_user_id, // used by Events attendance to clock the new person straight in
+            ]);
             break;
 
         // =====================================================================================

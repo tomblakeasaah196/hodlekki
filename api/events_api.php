@@ -91,6 +91,20 @@ function buildMinistersPayload() {
     return ['json' => json_encode($final), 'primary_image' => $primary];
 }
 
+/**
+ * Attendance UX helpers (staff-side Verify Details / quick-add flows).
+ * Phone matching uses the last 10 digits so 0803 123 4567, +234 803 123 4567
+ * and 2348031234567 all resolve to the same profile — the same semantics as
+ * the public Connect form in api/embrace_public_api.php.
+ */
+function att_phone_key(string $phone): string {
+    return substr(preg_replace('/\D/', '', $phone), -10);
+}
+
+function att_phone_matches_sql(): string {
+    return "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '')";
+}
+
 // 2. Security Check (Internal Module)
 if (!isset($_SESSION['user_id'])) {
     echo json_encode(['status' => 'error', 'message' => 'Unauthorized access. Please log in.']);
@@ -499,16 +513,26 @@ try {
             ";
             $params = ['eid' => $event_id];
 
+            // Roster scoping (workers / department / tribe). Anyone already checked
+            // in for THIS event stays on the roster even when they fall outside the
+            // scope — e.g. a first timer created and clocked in from the Attendance
+            // tab would otherwise disappear from the Checked In list on a scoped
+            // event and leave staff unsure whether the clock-in worked.
+            $scopeSql = '';
             if ($event['event_category'] === 'Workers_Meeting' || stripos($event['title'], 'worker') !== false) {
-                $baseQuery .= " AND u.spiritual_status IN ('Worker', 'Pastor')";
+                $scopeSql = "u.spiritual_status IN ('Worker', 'Pastor')";
             } elseif (!empty($event['department_id'])) {
-                $baseQuery .= " AND u.id IN (SELECT user_id FROM user_departments WHERE department_id = :dept_id AND is_active = 1)";
+                $scopeSql = "u.id IN (SELECT user_id FROM user_departments WHERE department_id = :dept_id AND is_active = 1)";
                 $params['dept_id'] = $event['department_id'];
             } elseif (!empty($event['tribe_id'])) {
                 $currentSeason = date('Y');
-                $baseQuery .= " AND u.id IN (SELECT user_id FROM user_tribes WHERE tribe_id = :tribe_id AND season = :season)";
+                $scopeSql = "u.id IN (SELECT user_id FROM user_tribes WHERE tribe_id = :tribe_id AND season = :season)";
                 $params['tribe_id'] = $event['tribe_id'];
                 $params['season'] = $currentSeason;
+            }
+            if ($scopeSql !== '') {
+                $baseQuery .= " AND ($scopeSql OR u.id IN (SELECT user_id FROM attendance WHERE event_id = :eid_present))";
+                $params['eid_present'] = $event_id;
             }
 
             $baseQuery .= " ORDER BY a.check_in_time DESC, u.first_name ASC";
@@ -590,6 +614,317 @@ try {
             }
 
             echo json_encode(['status' => 'success', 'message' => 'Attendee moved back to pending.']);
+            break;
+
+        // =====================================================================================
+        // ACTION 4C: FETCH PERSON DETAILS (Attendance "Verify Details" modal)
+        // Lightweight read: the editable basics plus read-only region/tribe/department
+        // context and this event's check-in state. Region, tribe and department
+        // assignments have no save path in the Congregation APIs, so the modal shows
+        // them as read-only and staff manage them from Congregation Data.
+        // =====================================================================================
+        case 'fetch_person_details':
+            $event_id = $_POST['event_id'] ?? '';
+            $target_user_id = (int)($_POST['user_id'] ?? 0);
+            if (empty($event_id) || empty($target_user_id)) {
+                echo json_encode(['status' => 'error', 'message' => 'Missing event or user data.']);
+                exit;
+            }
+
+            $stmt = $pdo->prepare("
+                SELECT u.id, u.first_name, u.last_name, u.phone, u.gender,
+                       u.spiritual_status, u.attendance_status,
+                       r.name AS region_name,
+                       (SELECT t.name FROM user_tribes ut JOIN tribes t ON ut.tribe_id = t.id
+                        WHERE ut.user_id = u.id ORDER BY ut.joined_at DESC LIMIT 1) AS tribe_name,
+                       (SELECT GROUP_CONCAT(d.name SEPARATOR ', ')
+                        FROM user_departments ud JOIN departments d ON ud.department_id = d.id
+                        WHERE ud.user_id = u.id AND ud.is_active = 1) AS departments,
+                       a.check_in_time, checker.first_name AS checked_in_by_first, checker.last_name AS checked_in_by_last
+                FROM users u
+                LEFT JOIN regions r ON r.id = u.region_id
+                LEFT JOIN attendance a ON a.user_id = u.id AND a.event_id = :eid
+                LEFT JOIN users checker ON checker.id = a.checked_in_by
+                WHERE u.id = :uid
+                LIMIT 1
+            ");
+            $stmt->execute(['eid' => $event_id, 'uid' => $target_user_id]);
+            $person = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$person) {
+                echo json_encode(['status' => 'error', 'message' => 'Profile not found.']);
+                exit;
+            }
+            $person['is_checked_in'] = !empty($person['check_in_time']);
+            echo json_encode(['status' => 'success', 'data' => $person]);
+            break;
+
+        // =====================================================================================
+        // ACTION 4D: UPDATE PERSON DETAILS (Attendance "Verify Details" modal)
+        // Deliberately lightweight: only the handful of fields the Verify Details
+        // modal edits. Kept here instead of reusing congregation_api update_member
+        // because the Attendance tab is also cleared for Sub_Unit_Head, which the
+        // Congregation API denies; the full profile editor stays in Congregation
+        // Data. An empty phone keeps the current one so the unique key is never
+        // blanked.
+        // =====================================================================================
+        case 'update_person_details':
+            $target_user_id = (int)($_POST['user_id'] ?? 0);
+            $first_name = trim($_POST['first_name'] ?? '');
+            $last_name = trim($_POST['last_name'] ?? '');
+            $phone = trim($_POST['phone'] ?? '');
+            $gender = $_POST['gender'] ?? '';
+            $spiritual_status = $_POST['spiritual_status'] ?? '';
+            $attendance_status = $_POST['attendance_status'] ?? '';
+
+            if (empty($target_user_id) || $first_name === '' || $last_name === '') {
+                echo json_encode(['status' => 'error', 'message' => 'First name and last name cannot be blank.']);
+                exit;
+            }
+            if (mb_strlen($first_name) > 50 || mb_strlen($last_name) > 50) {
+                echo json_encode(['status' => 'error', 'message' => 'Names must be 50 characters or less.']);
+                exit;
+            }
+            if ($gender !== '' && !in_array($gender, ['Male', 'Female'], true)) {
+                echo json_encode(['status' => 'error', 'message' => 'Gender must be Male or Female.']);
+                exit;
+            }
+            $spiritual_options = ['Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer', 'Member', 'Worker', 'Pastor', 'Non_Member'];
+            if ($spiritual_status !== '' && !in_array($spiritual_status, $spiritual_options, true)) {
+                echo json_encode(['status' => 'error', 'message' => 'Invalid spiritual status selected.']);
+                exit;
+            }
+            $attendance_options = ['New', 'Active', 'Inconsistent', 'Unknown', 'Relocated', 'Attends_Another_Church'];
+            if ($attendance_status !== '' && !in_array($attendance_status, $attendance_options, true)) {
+                echo json_encode(['status' => 'error', 'message' => 'Invalid attendance status selected.']);
+                exit;
+            }
+
+            $existsStmt = $pdo->prepare("SELECT id FROM users WHERE id = ?");
+            $existsStmt->execute([$target_user_id]);
+            if (!$existsStmt->fetch()) {
+                echo json_encode(['status' => 'error', 'message' => 'Profile not found.']);
+                exit;
+            }
+
+            if ($phone !== '') {
+                $digits = preg_replace('/\D/', '', $phone);
+                if (strlen($digits) < 9 || strlen($digits) > 15) {
+                    echo json_encode(['status' => 'error', 'message' => 'Please enter a valid phone number (9 to 15 digits).']);
+                    exit;
+                }
+                $dupStmt = $pdo->prepare("SELECT id FROM users WHERE " . att_phone_matches_sql() . " LIKE ? AND id <> ? LIMIT 1");
+                $dupStmt->execute(['%' . att_phone_key($phone) . '%', $target_user_id]);
+                if ($dupStmt->fetch()) {
+                    echo json_encode(['status' => 'error', 'message' => 'That phone number is already on another profile.']);
+                    exit;
+                }
+            }
+
+            if ($phone !== '') {
+                $upd = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, phone = ?, gender = ?, spiritual_status = ?, attendance_status = ? WHERE id = ?");
+                $upd->execute([$first_name, $last_name, $phone, $gender !== '' ? $gender : null, $spiritual_status ?: 'Visitor', $attendance_status ?: 'New', $target_user_id]);
+            } else {
+                $upd = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, gender = ?, spiritual_status = ?, attendance_status = ? WHERE id = ?");
+                $upd->execute([$first_name, $last_name, $gender !== '' ? $gender : null, $spiritual_status ?: 'Visitor', $attendance_status ?: 'New', $target_user_id]);
+            }
+
+            echo json_encode(['status' => 'success', 'message' => 'Details updated.']);
+            break;
+
+        // =====================================================================================
+        // ACTION 4E: CHECK ATTENDEE PHONE (Add-to-congregation wizard pre-check)
+        // Runs while staff are still filling the wizard so a duplicate profile is
+        // caught BEFORE create, with the existing person returned so they can be
+        // clocked straight in instead.
+        // =====================================================================================
+        case 'check_attendee_phone':
+            $phone = trim($_POST['phone'] ?? '');
+            $key = att_phone_key($phone);
+            if ($key === '') {
+                echo json_encode(['status' => 'error', 'message' => 'A phone number is required.']);
+                exit;
+            }
+
+            $stmt = $pdo->prepare("SELECT id, first_name, last_name, phone, gender, spiritual_status FROM users WHERE " . att_phone_matches_sql() . " LIKE ? LIMIT 1");
+            $stmt->execute(['%' . $key . '%']);
+            $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            echo json_encode([
+                'status' => 'success',
+                'found' => (bool)$existing,
+                'person' => $existing ?: null,
+            ]);
+            break;
+
+        // =====================================================================================
+        // ACTION 4F: CREATE FIRST TIMER (staff-assisted Connect card)
+        // Staff-side sibling of the public "I'm New Here" card
+        // (api/embrace_public_api.php submit_connect_card). It exists because staff
+        // need the new user id back to clock the person straight into the selected
+        // event — the public endpoint returns no ids and speaks to visitors. The
+        // payload mirrors the public card; the address is free text (the public
+        // Geoapify coordinates are not collected in the speed-focused staff form).
+        // =====================================================================================
+        case 'create_first_timer':
+            $first_name = trim($_POST['first_name'] ?? '');
+            $last_name = trim($_POST['last_name'] ?? '');
+            $phone = trim($_POST['phone'] ?? '');
+            $email = strtolower(trim($_POST['email'] ?? ''));
+            $gender = trim($_POST['gender'] ?? '');
+            $marital = trim($_POST['marital_status'] ?? '') ?: 'Single';
+            $dob = trim($_POST['dob'] ?? '');
+            $address = trim($_POST['physical_address'] ?? '');
+            $invited_by = trim($_POST['invited_by'] ?? '');
+            $prayer = trim($_POST['prayer_requests'] ?? '');
+            $wants_to_join = ($_POST['wants_to_join'] ?? '') === '1' ? 1 : 0;
+            $wants_visitation = ($_POST['wants_visitation'] ?? '') === '1' ? 1 : 0;
+
+            if ($first_name === '' || $last_name === '') {
+                echo json_encode(['status' => 'error', 'message' => 'First name and last name are required.', 'field' => 'first_name']);
+                exit;
+            }
+            if (mb_strlen($first_name) > 50 || mb_strlen($last_name) > 50) {
+                echo json_encode(['status' => 'error', 'message' => 'Names must be 50 characters or less.', 'field' => 'first_name']);
+                exit;
+            }
+
+            $digits = preg_replace('/\D/', '', $phone);
+            if ($phone === '' || strlen($digits) < 9 || strlen($digits) > 15) {
+                echo json_encode(['status' => 'error', 'message' => 'Please enter a valid phone number (9 to 15 digits).', 'field' => 'phone']);
+                exit;
+            }
+
+            if ($email !== '') {
+                if (mb_strlen($email) > 100 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    echo json_encode(['status' => 'error', 'message' => 'That email address doesn\'t look right. Please check it, or leave it blank.', 'field' => 'email']);
+                    exit;
+                }
+                if (str_ends_with($email, '@hodlc.com')) {
+                    echo json_encode(['status' => 'error', 'message' => '@hodlc.com addresses are issued by the church. Enter their personal email, or leave it blank.', 'field' => 'email']);
+                    exit;
+                }
+            }
+
+            if ($gender !== '' && !in_array($gender, ['Male', 'Female'], true)) {
+                echo json_encode(['status' => 'error', 'message' => 'Gender must be Male or Female.', 'field' => 'gender']);
+                exit;
+            }
+            if (!in_array($marital, ['Single', 'Married', 'Separated', 'Divorced'], true)) {
+                $marital = 'Single';
+            }
+            if ($dob !== '') {
+                $date = DateTime::createFromFormat('!Y-m-d', $dob);
+                if (!$date || $date->format('Y-m-d') !== $dob) {
+                    echo json_encode(['status' => 'error', 'message' => 'Please enter a valid date of birth, or leave it blank.', 'field' => 'dob']);
+                    exit;
+                }
+                if ($date > new DateTime('today')) {
+                    echo json_encode(['status' => 'error', 'message' => 'The date of birth can\'t be in the future.', 'field' => 'dob']);
+                    exit;
+                }
+            }
+            if (mb_strlen($address) > 255) {
+                echo json_encode(['status' => 'error', 'message' => 'The address is too long. Please shorten it (255 characters max).', 'field' => 'physical_address']);
+                exit;
+            }
+            if (mb_strlen($invited_by) > 150) $invited_by = mb_substr($invited_by, 0, 150);
+            if (mb_strlen($prayer) > 2000) $prayer = mb_substr($prayer, 0, 2000);
+
+            // Duplicate guard before insert, with the existing profile handed back
+            // so the UI can offer "clock them in instead".
+            $dupStmt = $pdo->prepare("SELECT id, first_name, last_name FROM users WHERE " . att_phone_matches_sql() . " LIKE ? LIMIT 1");
+            $dupStmt->execute(['%' . att_phone_key($phone) . '%']);
+            $existing = $dupStmt->fetch(PDO::FETCH_ASSOC);
+            if ($existing) {
+                echo json_encode([
+                    'status' => 'error',
+                    'message' => 'This phone number is already on ' . $existing['first_name'] . ' ' . $existing['last_name'] . "'s profile. Clock them in instead, or use a different number.",
+                    'field' => 'phone',
+                    'existing_user_id' => (int)$existing['id'],
+                ]);
+                exit;
+            }
+            if ($email !== '') {
+                $emailStmt = $pdo->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
+                $emailStmt->execute([$email]);
+                if ($emailStmt->fetch()) {
+                    echo json_encode(['status' => 'error', 'message' => 'This email is already linked to another profile. Use a different email, or leave it blank.', 'field' => 'email']);
+                    exit;
+                }
+            }
+
+            $qr_hash = hash('sha256', random_bytes(16) . $phone);
+
+            try {
+                $stmt = $pdo->prepare("
+                    INSERT INTO users (first_name, last_name, email, phone, gender, dob, marital_status,
+                                       physical_address, spiritual_status, attendance_status,
+                                       invited_by, wants_to_join, visitation_preference, prayer_requests, qr_code_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, '1st_Timer', 'New', ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $first_name, $last_name,
+                    $email !== '' ? $email : null,
+                    $phone,
+                    $gender !== '' ? $gender : null,
+                    $dob !== '' ? $dob : null,
+                    $marital,
+                    $address !== '' ? $address : null,
+                    $invited_by !== '' ? $invited_by : null,
+                    $wants_to_join,
+                    $wants_visitation ? 'In-Person' : 'None',
+                    $prayer !== '' ? $prayer : null,
+                    $qr_hash,
+                ]);
+            } catch (PDOException $e) {
+                error_log('Events API (create_first_timer): ' . $e->getMessage());
+                $friendly = stripos($e->getMessage(), 'Duplicate entry') !== false
+                    ? 'This phone or email is already on another profile. Clock that person in instead, or use different details.'
+                    : 'A system error occurred while creating the profile. Please try again.';
+                echo json_encode(['status' => 'error', 'message' => $friendly]);
+                exit;
+            }
+            $new_id = (int)$pdo->lastInsertId();
+
+            // Everything below is best-effort, mirroring the public Connect card:
+            // a failure is logged, never reported, so staff aren't told to retry a
+            // profile that actually went through.
+            try {
+                require_once __DIR__ . '/../includes/reach_helpers.php';
+                reach_mark_visited_church($pdo, $phone, $new_id);
+            } catch (Throwable $e) {
+                error_log("Events API (create_first_timer reach sync, user {$new_id}): " . $e->getMessage());
+            }
+
+            try {
+                $safe_name = htmlspecialchars("{$first_name} {$last_name}", ENT_QUOTES, 'UTF-8');
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, ?, ?, ?)");
+
+                $embraceStmt = $pdo->query("
+                    SELECT ud.user_id
+                    FROM user_departments ud
+                    JOIN departments d ON ud.department_id = d.id
+                    WHERE d.name LIKE '%Embrace%' AND ud.role_in_dept IN ('Director', 'HOD') AND ud.is_active = 1
+                ");
+                foreach ($embraceStmt->fetchAll(PDO::FETCH_COLUMN) as $uid) {
+                    $notifStmt->execute([$uid, 'New First Timer', "{$safe_name} was added as a first timer from the Events Attendance desk and is waiting in the queue to be assigned.", '/modules/embrace/index.php']);
+                }
+
+                $idiStmt = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 1 AND is_active = 1");
+                foreach ($idiStmt->fetchAll(PDO::FETCH_COLUMN) as $uid) {
+                    $notifStmt->execute([$uid, 'New Connect Card Profile', "A new profile for {$safe_name} was generated from the Events Attendance desk. Please review the entry.", '/modules/congregation/index.php']);
+                }
+            } catch (Throwable $e) {
+                error_log("Events API (create_first_timer notifications, user {$new_id}): " . $e->getMessage());
+            }
+
+            echo json_encode([
+                'status' => 'success',
+                'message' => 'First timer profile created.',
+                'user_id' => $new_id,
+                'name' => "{$first_name} {$last_name}",
+            ]);
             break;
 
         // =====================================================================================
