@@ -31,36 +31,62 @@ if (!isset($_SESSION['user_id'])) { echo "<script>window.location.href='/auth/lo
 <!-- ════════════════════════════════════════════════════════
      VIEW 1 — WELFARE
 ════════════════════════════════════════════════════════ -->
-<div id="view-welfare" class="space-y-8">
+<div id="view-welfare" class="space-y-4 xl:space-y-8">
 
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100/60 relative overflow-hidden">
-        <div class="absolute top-0 right-0 w-64 h-64 bg-red-50/60 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none z-0"></div>
-        <div class="relative z-10 flex items-center gap-4">
-            <div class="w-14 h-14 bg-hodRed rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0">
-                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
-            </div>
-            <div>
-                <h2 class="text-2xl md:text-3xl font-display font-bold text-gray-900 tracking-tight">Charis — Welfare</h2>
-                <p class="text-gray-500 text-sm mt-1">Birthdays, life events, and AWOL welfare tracking.</p>
-            </div>
-        </div>
-        <div class="relative z-10 flex flex-wrap gap-3">
-            <button onclick="openModal('awolReportModal')" class="bg-orange-600 hover:bg-orange-700 text-white px-5 py-3 rounded-xl font-bold transition-all shadow-lg flex items-center gap-2 shrink-0">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                AWOL Report
+    <!-- Compact section launchers keep every welfare area visible at first glance on phones and tablets. -->
+    <section class="xl:hidden" aria-label="Welfare sections">
+        <div class="grid grid-cols-3 gap-2 sm:gap-3">
+            <button type="button" onclick="openModal('birthdaysOverviewModal')" aria-haspopup="dialog" class="group min-w-0 min-h-[116px] sm:min-h-[128px] rounded-2xl sm:rounded-3xl border border-blue-100 bg-gradient-to-br from-white to-blue-50 p-2.5 sm:p-4 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                <span class="mx-auto flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl border border-blue-100 bg-white text-hodBlue shadow-sm transition-transform group-hover:scale-105">
+                    <svg class="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18zm-3-9v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2h12z"></path></svg>
+                </span>
+                <span class="mt-2 block text-[10px] sm:text-xs font-black leading-tight text-gray-900">Upcoming Birthdays</span>
+                <span id="birthdayCardCount" class="mt-1 block text-[9px] sm:text-[10px] font-bold text-blue-600">Loading…</span>
             </button>
-            <button onclick="openModal('envisionRecapModal'); loadEnvisionRecap();" class="bg-gray-900 hover:bg-black text-white px-5 py-3 rounded-xl font-bold transition-all shadow-lg flex items-center gap-2 shrink-0">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                Monthly Recap
-            </button>
-            <button onclick="openModal('addLifeEventModal')" class="bg-hodRed hover:bg-red-700 text-white px-5 py-3 rounded-xl font-bold transition-all shadow-lg hover:-translate-y-0.5 flex items-center gap-2 shrink-0">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                Log Life Event
-            </button>
-        </div>
-    </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <button type="button" onclick="openModal('lifeEventsOverviewModal')" aria-haspopup="dialog" class="group min-w-0 min-h-[116px] sm:min-h-[128px] rounded-2xl sm:rounded-3xl border border-red-100 bg-gradient-to-br from-white to-red-50 p-2.5 sm:p-4 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">
+                <span class="mx-auto flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl border border-red-100 bg-white text-hodRed shadow-sm transition-transform group-hover:scale-105">
+                    <svg class="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                </span>
+                <span class="mt-2 block text-[10px] sm:text-xs font-black leading-tight text-gray-900">Life Events</span>
+                <span id="lifeEventsCardCount" class="mt-1 block text-[9px] sm:text-[10px] font-bold text-red-600">Loading…</span>
+            </button>
+
+            <button type="button" onclick="openModal('welfareOverviewModal')" aria-haspopup="dialog" class="group min-w-0 min-h-[116px] sm:min-h-[128px] rounded-2xl sm:rounded-3xl border border-orange-100 bg-gradient-to-br from-white to-orange-50 p-2.5 sm:p-4 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2">
+                <span class="mx-auto flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl border border-orange-100 bg-white text-orange-500 shadow-sm transition-transform group-hover:scale-105">
+                    <svg class="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </span>
+                <span class="mt-2 block text-[10px] sm:text-xs font-black leading-tight text-gray-900">Welfare</span>
+                <span id="welfareCardCount" class="mt-1 block text-[9px] sm:text-[10px] font-bold text-orange-600">Loading…</span>
+            </button>
+        </div>
+    </section>
+
+    <!-- Small, equal action tiles replace the former oversized title and button banner. -->
+    <section class="rounded-2xl sm:rounded-3xl border border-gray-100 bg-white p-2 sm:p-3 shadow-sm" aria-label="Welfare actions">
+        <div class="mx-auto grid max-w-2xl grid-cols-3 gap-1.5 sm:gap-3">
+            <button type="button" onclick="openModal('awolReportModal')" class="group flex min-w-0 flex-col items-center justify-center rounded-xl sm:rounded-2xl px-1.5 py-2.5 sm:py-3 text-center transition-colors hover:bg-orange-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500">
+                <span class="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-600 transition-colors group-hover:bg-orange-100">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6m4 6V7m4 10v-3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                </span>
+                <span class="mt-1.5 text-[9px] sm:text-[10px] font-bold leading-tight text-gray-700">AWOL Report</span>
+            </button>
+            <button type="button" onclick="openModal('envisionRecapModal'); loadEnvisionRecap();" class="group flex min-w-0 flex-col items-center justify-center rounded-xl sm:rounded-2xl px-1.5 py-2.5 sm:py-3 text-center transition-colors hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                <span class="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 transition-colors group-hover:bg-indigo-100">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4m10-2v4m-2-2h4M6 17v4m-2-2h4m4-12l1.1 3.4a2 2 0 001.3 1.3L18 13l-3.6 1.2a2 2 0 00-1.3 1.3L12 19l-1.1-3.5a2 2 0 00-1.3-1.3L6 13l3.6-1.3a2 2 0 001.3-1.3L12 7z"></path></svg>
+                </span>
+                <span class="mt-1.5 text-[9px] sm:text-[10px] font-bold leading-tight text-gray-700">Monthly Recap</span>
+            </button>
+            <button type="button" onclick="openModal('addLifeEventModal')" class="group flex min-w-0 flex-col items-center justify-center rounded-xl sm:rounded-2xl px-1.5 py-2.5 sm:py-3 text-center transition-colors hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+                <span class="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-red-50 text-hodRed transition-colors group-hover:bg-red-100">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10m-5 4v6m-3-3h6M5 13V7a2 2 0 012-2h10a2 2 0 012 2v6"></path></svg>
+                </span>
+                <span class="mt-1.5 text-[9px] sm:text-[10px] font-bold leading-tight text-gray-700">Log Life Event</span>
+            </button>
+        </div>
+    </section>
+
+    <div class="hidden xl:grid xl:grid-cols-3 gap-8">
         <!-- Birthdays -->
         <div class="relative bg-white rounded-3xl shadow-sm border border-gray-100/60 overflow-hidden flex flex-col h-[550px] group">
             <div class="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50/40 to-sky-100/60 transition-transform duration-700 group-hover:scale-105"></div>
@@ -109,14 +135,14 @@ if (!isset($_SESSION['user_id'])) { echo "<script>window.location.href='/auth/lo
                         <p class="text-[10px] font-bold uppercase tracking-wider text-orange-500 mt-0.5">AWOL Alerts</p>
                     </div>
                 </div>
-                <div class="flex bg-orange-50/50 p-1 rounded-xl border border-orange-100/50 overflow-x-auto no-scrollbar snap-x">
-                    <button onclick="toggleWelfareTab('my_cases')" id="tabWelMyCases" class="px-4 py-2 rounded-lg text-xs font-bold bg-white text-orange-600 shadow-sm transition-all whitespace-nowrap flex-1">My Cases</button>
-                    <button onclick="toggleWelfareTab('master')"   id="tabWelMaster"  class="px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Master List</button>
-                    <button onclick="toggleWelfareTab('archive')"  id="tabWelArchive" class="px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Archive</button>
+                <div role="tablist" aria-label="Welfare views" class="flex bg-orange-50/50 p-1 rounded-xl border border-orange-100/50 overflow-x-auto no-scrollbar snap-x">
+                    <button type="button" role="tab" aria-selected="true" data-welfare-tab="my_cases" onclick="toggleWelfareTab('my_cases')" id="tabWelMyCases" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold bg-white text-orange-600 shadow-sm transition-all whitespace-nowrap flex-1">My Cases</button>
+                    <button type="button" role="tab" aria-selected="false" data-welfare-tab="master" onclick="toggleWelfareTab('master')" id="tabWelMaster" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Master List</button>
+                    <button type="button" role="tab" aria-selected="false" data-welfare-tab="archive" onclick="toggleWelfareTab('archive')" id="tabWelArchive" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Archive</button>
                 </div>
             </div>
             <div class="p-4 flex-1 overflow-y-auto custom-scrollbar bg-gray-50/30">
-                <ul id="welfareList" class="space-y-3"></ul>
+                <ul id="welfareList" class="welfare-list space-y-3"></ul>
             </div>
         </div>
     </div>
@@ -570,7 +596,10 @@ function closeModal(id) {
     if(!m) return;
     m.classList.add('opacity-0');
     m.querySelector('.transform')?.classList.add('scale-95');
-    setTimeout(() => { m.classList.add('hidden'); if(!document.querySelectorAll('.backdrop-blur-md:not(.hidden), .backdrop-blur-md.opacity-0').length) document.body.style.overflow=''; }, 300);
+    setTimeout(() => {
+        m.classList.add('hidden');
+        if (!document.querySelector('.backdrop-blur-md:not(.hidden)')) document.body.style.overflow = '';
+    }, 300);
 }
 
 // ── Toast ─────────────────────────────────────────────────
@@ -633,9 +662,12 @@ function loadDashboardData() {
 
             globalEvents = { upcoming: res.upcoming_events||[], past: res.past_events||[] };
 
-            renderBirthdays(res.birthdays||[]);
-            renderAnniversaries(res.anniversaries||[]);
-            window.welfareData = res.welfare_checks||[];
+            renderBirthdays(res.birthdays || []);
+            renderAnniversaries(res.anniversaries || []);
+            window.welfareData = res.welfare_checks || [];
+            const welfareCount = window.welfareData.length;
+            $('#welfareCardCount').text(welfareCount + (welfareCount === 1 ? ' alert' : ' alerts'));
+            $('#welfareModalCount').text(welfareCount);
             renderWelfareList();
             renderLogisticsTable(currentLogisticsType);
         }
@@ -661,7 +693,9 @@ function renderBirthdays(birthdays) {
             </li>`;
         });
     }
-    $('#birthdaysList').html(html);
+    $('#birthdaysList, #birthdaysModalList').html(html);
+    $('#birthdayCardCount').text(birthdays.length + ' upcoming');
+    $('#birthdaysModalCount').text(birthdays.length);
 }
 
 function renderAnniversaries(items) {
@@ -679,7 +713,9 @@ function renderAnniversaries(items) {
             </li>`;
         });
     }
-    $('#anniversariesList').html(html);
+    $('#anniversariesList, #anniversariesModalList').html(html);
+    $('#lifeEventsCardCount').text(items.length + (items.length === 1 ? ' event' : ' events'));
+    $('#lifeEventsModalCount').text(items.length);
 }
 
 function generateActionBlock(item, type) {
@@ -712,10 +748,13 @@ function updateAssignmentStatus(id, status, btn) {
 // ═══════════════════════════════════════════════════════════
 function toggleWelfareTab(tab) {
     currentWelfareTab = tab;
-    document.getElementById('tabWelMyCases').className = 'px-4 py-2 rounded-lg text-xs font-bold ' + (tab==='my_cases'?'bg-white text-orange-600 shadow-sm':'text-gray-500 hover:text-gray-900') + ' transition-all whitespace-nowrap flex-1';
-    document.getElementById('tabWelMaster').className  = 'px-4 py-2 rounded-lg text-xs font-bold ' + (tab==='master'?'bg-white text-orange-600 shadow-sm':'text-gray-500 hover:text-gray-900') + ' transition-all whitespace-nowrap flex-1';
-    document.getElementById('tabWelArchive').className = 'px-4 py-2 rounded-lg text-xs font-bold ' + (tab==='archive'?'bg-white text-orange-600 shadow-sm':'text-gray-500 hover:text-gray-900') + ' transition-all whitespace-nowrap flex-1';
-    
+    document.querySelectorAll('[data-welfare-tab]').forEach(button => {
+        const isActive = button.dataset.welfareTab === tab;
+        button.className = 'welfare-tab-button px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold transition-all whitespace-nowrap flex-1 '
+            + (isActive ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-900');
+        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+
     if (tab === 'archive') {
         loadWelfareArchive();
     } else {
@@ -755,7 +794,7 @@ function renderWelfareList() {
             </li>`;
         });
     }
-    $('#welfareList').html(html);
+    $('.welfare-list').html(html);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -832,7 +871,7 @@ function resetCharisNoteForm() {
 // handleAjaxForm('saveCharisNoteForm', ()=>{ closeModal('manageCharisNotesModal'); loadDashboardData(); toggleWelfareTab(currentWelfareTab); });
 
 function loadWelfareArchive() {
-    $('#welfareList').html('<li class="text-center py-10 text-gray-400"><svg class="animate-spin h-8 w-8 mx-auto mb-3 text-orange-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Fetching archives...</li>');
+    $('.welfare-list').html('<li class="text-center py-10 text-gray-400"><svg class="animate-spin h-8 w-8 mx-auto mb-3 text-orange-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Fetching archives...</li>');
     
     $.getJSON(API_URL, { action: 'fetch_welfare_archive' }, res => {
         if(res.status === 'success') {
@@ -856,14 +895,14 @@ function loadWelfareArchive() {
                     </li>`;
                 });
             }
-            $('#welfareList').html(html);
+            $('.welfare-list').html(html);
         } else {
             // Failsafe: Shows the backend error message instead of hanging
-            $('#welfareList').html(`<li class="text-center py-10 text-red-500 font-bold text-sm">Error: ${res.message}</li>`);
+            $('.welfare-list').html(`<li class="text-center py-10 text-red-500 font-bold text-sm">Error: ${res.message}</li>`);
         }
     }).fail(() => {
         // Failsafe: Catches 500 fatal server crashes
-        $('#welfareList').html('<li class="text-center py-10 text-red-500 font-bold text-sm">Server Error. Check logs.</li>');
+        $('.welfare-list').html('<li class="text-center py-10 text-red-500 font-bold text-sm">Server Error. Check logs.</li>');
     });
 }
 

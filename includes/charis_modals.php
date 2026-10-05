@@ -3,6 +3,93 @@
 // All modals for the Charis module (welfare, events, finance, library)
 ?>
 
+<!-- Compact welfare overview modals (opened by the phone/tablet section cards). -->
+<div id="birthdaysOverviewModal" role="dialog" aria-modal="true" aria-labelledby="birthdaysOverviewTitle" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-3 sm:p-6 opacity-0 transition-opacity duration-300 overscroll-contain">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90dvh] transform scale-95 transition-transform duration-300 overflow-hidden flex flex-col">
+        <div class="px-5 sm:px-6 py-4 sm:py-5 border-b border-blue-100 flex items-center justify-between gap-4 bg-blue-50/60 shrink-0">
+            <div class="flex items-center gap-3 min-w-0">
+                <span class="h-10 w-10 rounded-xl bg-white border border-blue-100 text-hodBlue flex items-center justify-center shadow-sm shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18zm-3-9v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2h12z"></path></svg>
+                </span>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <h3 id="birthdaysOverviewTitle" class="text-base sm:text-lg font-bold text-gray-900 truncate">Upcoming Birthdays</h3>
+                        <span id="birthdaysModalCount" class="text-[9px] font-black text-blue-700 bg-white border border-blue-100 rounded-full px-2 py-1 shrink-0">—</span>
+                    </div>
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-blue-500 mt-0.5">This month &amp; next</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeModal('birthdaysOverviewModal')" aria-label="Close upcoming birthdays" class="text-gray-400 hover:text-red-500 bg-white border border-gray-200 p-2.5 rounded-xl shadow-sm shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="p-4 sm:p-5 flex-1 overflow-y-auto custom-scrollbar bg-gray-50/40">
+            <ul id="birthdaysModalList" class="space-y-3">
+                <li class="flex flex-col items-center justify-center py-12 text-gray-400"><svg class="animate-spin h-8 w-8 text-hodBlue mb-3" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg><span class="text-sm font-medium">Loading...</span></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div id="lifeEventsOverviewModal" role="dialog" aria-modal="true" aria-labelledby="lifeEventsOverviewTitle" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-3 sm:p-6 opacity-0 transition-opacity duration-300 overscroll-contain">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90dvh] transform scale-95 transition-transform duration-300 overflow-hidden flex flex-col">
+        <div class="px-5 sm:px-6 py-4 sm:py-5 border-b border-red-100 flex items-center justify-between gap-4 bg-red-50/60 shrink-0">
+            <div class="flex items-center gap-3 min-w-0">
+                <span class="h-10 w-10 rounded-xl bg-white border border-red-100 text-hodRed flex items-center justify-center shadow-sm shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                </span>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <h3 id="lifeEventsOverviewTitle" class="text-base sm:text-lg font-bold text-gray-900 truncate">Life Events</h3>
+                        <span id="lifeEventsModalCount" class="text-[9px] font-black text-red-700 bg-white border border-red-100 rounded-full px-2 py-1 shrink-0">—</span>
+                    </div>
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-red-500 mt-0.5">Weddings &amp; milestones</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeModal('lifeEventsOverviewModal')" aria-label="Close life events" class="text-gray-400 hover:text-red-500 bg-white border border-gray-200 p-2.5 rounded-xl shadow-sm shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="p-4 sm:p-5 flex-1 overflow-y-auto custom-scrollbar bg-gray-50/40">
+            <ul id="anniversariesModalList" class="space-y-3">
+                <li class="flex flex-col items-center justify-center py-12 text-gray-400"><svg class="animate-spin h-8 w-8 text-hodRed mb-3" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg><span class="text-sm font-medium">Loading...</span></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div id="welfareOverviewModal" role="dialog" aria-modal="true" aria-labelledby="welfareOverviewTitle" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-3 sm:p-6 opacity-0 transition-opacity duration-300 overscroll-contain">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92dvh] transform scale-95 transition-transform duration-300 overflow-hidden flex flex-col">
+        <div class="px-5 sm:px-6 pt-4 sm:pt-5 pb-3 border-b border-orange-100 bg-orange-50/60 shrink-0">
+            <div class="flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3 min-w-0">
+                    <span class="h-10 w-10 rounded-xl bg-white border border-orange-100 text-orange-500 flex items-center justify-center shadow-sm shrink-0">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </span>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2">
+                            <h3 id="welfareOverviewTitle" class="text-base sm:text-lg font-bold text-gray-900 truncate">Welfare</h3>
+                            <span id="welfareModalCount" class="text-[9px] font-black text-orange-700 bg-white border border-orange-100 rounded-full px-2 py-1 shrink-0">—</span>
+                        </div>
+                        <p class="text-[10px] font-bold uppercase tracking-wider text-orange-500 mt-0.5">AWOL alerts &amp; follow-up</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('welfareOverviewModal')" aria-label="Close welfare" class="text-gray-400 hover:text-red-500 bg-white border border-gray-200 p-2.5 rounded-xl shadow-sm shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div role="tablist" aria-label="Welfare views" class="mt-3 flex bg-orange-100/60 p-1 rounded-xl overflow-x-auto no-scrollbar">
+                <button type="button" role="tab" aria-selected="true" data-welfare-tab="my_cases" onclick="toggleWelfareTab('my_cases')" class="welfare-tab-button px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold bg-white text-orange-600 shadow-sm transition-all whitespace-nowrap flex-1">My Cases</button>
+                <button type="button" role="tab" aria-selected="false" data-welfare-tab="master" onclick="toggleWelfareTab('master')" class="welfare-tab-button px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Master List</button>
+                <button type="button" role="tab" aria-selected="false" data-welfare-tab="archive" onclick="toggleWelfareTab('archive')" class="welfare-tab-button px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Archive</button>
+            </div>
+        </div>
+        <div class="p-4 sm:p-5 flex-1 overflow-y-auto custom-scrollbar bg-gray-50/40">
+            <ul id="welfareModalList" class="welfare-list space-y-3"></ul>
+        </div>
+    </div>
+</div>
+
 <div id="envisionRecapModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 sm:p-6 opacity-0 transition-opacity duration-300 overscroll-contain">
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-y-auto custom-scrollbar max-h-[80vh] transform scale-95 transition-transform duration-300 flex flex-col">
         <div class="px-6 py-5 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50 shrink-0 sticky top-0 z-50">
