@@ -59,6 +59,7 @@ node_modules
 # docs/.htaccess also denies web access as a fallback.
 ./DEPLOY.md
 ./AGENTS.md
+./CLAUDE.md
 ./docs
 
 # Developer test scripts - never serve these from the docroot
