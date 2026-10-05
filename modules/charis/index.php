@@ -429,39 +429,40 @@ require_once '../../includes/header.php';
         <!-- Guide Sections -->
         <div class="space-y-6">
 
-            <!-- WELFARE -->
+            <!-- AWOL MONITORING -->
             <details class="group bg-orange-50/50 border border-orange-100 rounded-2xl overflow-hidden" open>
                 <summary class="flex items-center justify-between p-5 cursor-pointer list-none">
                     <div class="flex items-center gap-3">
                         <span class="w-8 h-8 bg-orange-500 text-white rounded-lg flex items-center justify-center text-sm font-black">1</span>
-                        <span class="font-bold text-gray-900 text-base">Welfare Tab — AWOL Alerts &amp; Tracking</span>
+                        <span class="font-bold text-gray-900 text-base">AWOL Monitoring Tab — Configurable Rules &amp; Follow-up</span>
                     </div>
                     <svg class="w-5 h-5 text-gray-400 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </summary>
                 <div class="px-5 pb-5 space-y-4 text-sm text-gray-700 leading-relaxed border-t border-orange-100">
                     <div class="bg-red-50 border border-red-200 rounded-xl p-4 mt-4">
-                        <p class="font-black text-red-700 text-xs uppercase tracking-wider mb-2">⚠ Why Names Stay on the AWOL List — Read This First</p>
-                        <p>A member stays on the <strong>AWOL list</strong> as long as they have been absent from the last 3 consecutive Sunday services. Simply contacting them or writing a report <em>does not automatically remove them</em>. To remove a name, you must do one of two things:</p>
+                        <p class="font-black text-red-700 text-xs uppercase tracking-wider mb-2">⚠ How the AWOL List Works</p>
+                        <p>Members appear on the <strong>AWOL list</strong> automatically when they miss <em>N or more qualifying services</em> within the focus period (rolling calendar weeks) defined by leadership in the AWOL configuration rule. Simply contacting them or writing a note does not remove them from the rule calculation. To resolve a case, do one of the following:</p>
                         <ul class="list-disc pl-5 mt-2 space-y-1">
-                            <li><strong>Click "Manage Case" → Choose a Status → Click "Resolve &amp; Close Case"</strong> — this marks the assignment Resolved and removes the name from the active list.</li>
-                            <li><strong>Change their Attendance Status</strong> to <code class="bg-red-100 px-1 rounded">Relocated</code>, <code class="bg-red-100 px-1 rounded">Attends_Another_Church</code>, or <code class="bg-red-100 px-1 rounded">Unknown</code> — these tell the system this person is no longer expected to attend regularly.</li>
+                            <li><strong>Click "Manage Case" → Choose a Status → Click "Resolve &amp; Close Case"</strong> — this marks the assignment Resolved and removes the case from active follow-up.</li>
+                            <li><strong>Update Attendance Status</strong> to <code class="bg-red-100 px-1 rounded">Relocated</code>, <code class="bg-red-100 px-1 rounded">Attends Another Church</code>, or <code class="bg-red-100 px-1 rounded">Unknown</code> — these exclude the person from future AWOL calculations.</li>
                         </ul>
-                        <p class="mt-2 text-red-600 font-semibold">If you only save a note without resolving, they will remain on the list until they physically return to church or their case is resolved.</p>
                     </div>
 
                     <div class="space-y-3">
                         <p class="font-bold text-gray-900">Step-by-step: How to handle an AWOL case</p>
-                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">1</span><p><strong>Open the Welfare card, then check "My Cases".</strong> These are cases assigned directly to you by Charis leadership.</p></div>
+                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">1</span><p><strong>Open AWOL Monitoring, then check "My Cases" or "AWOL List".</strong> Authorized leadership can click "Change AWOL List" to adjust missed services, focus period, service types, and spiritual statuses at any time.</p></div>
                         <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">2</span><p><strong>Click "Manage Case"</strong>. Use the Call or WhatsApp buttons to contact the member directly from the modal.</p></div>
-                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">3</span><p><strong>Fill in your findings</strong> — what did the member say? Are they coming back? Did they relocate?</p></div>
+                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">3</span><p><strong>Fill in your findings</strong> — record notes securely with optional Pastors-Only visibility.</p></div>
                         <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">4</span><p><strong>Select the final Attendance Status</strong>: Active (re-engaged), Unknown, Relocated, or Attends Another Church.</p></div>
-                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">5</span><p><strong>Click "Resolve &amp; Close Case"</strong>. The member's name will disappear from the AWOL list for this cycle.</p></div>
+                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">5</span><p><strong>Click "Resolve &amp; Close Case"</strong>. The resolved case is saved to the searchable Archive with a full timestamp and note trail.</p></div>
                     </div>
 
                     <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
                         <p class="font-bold text-blue-800 mb-1">Generating the AWOL Report</p>
-                        <p>Tap <strong>"AWOL Report"</strong> in the compact action row. Choose a Month &amp; Year or a custom range of up to one year. A confidential PDF downloads with tracked AWOL cases created or resolved in that period, including pending and completed work.</p>
+                        <p>Tap <strong>"AWOL Report"</strong> in the compact action row. Choose a Month &amp; Year or a custom range. A confidential PDF downloads with tracked AWOL cases and the active configuration rule snapshot.</p>
                     </div>
+                </div>
+            </details>
                 </div>
             </details>
 
@@ -682,6 +683,10 @@ function loadDashboardData() {
             window.isCharisAdmin  = res.is_charis_admin;
             window.isPastor = res.is_pastor;
             window.loggedInUserId = res.current_user_id;
+            window.canConfigureAwol = res.can_configure_awol || false;
+            window.awolConfig = res.awol_config || null;
+            window.awolConfigHistory = res.awol_config_history || [];
+            window.qualifyingServicesCount = res.qualifying_services_count || 0;
             globalWorkers = res.charis_workers || [];
             globalMembers = res.members || [];
 
@@ -702,9 +707,11 @@ function loadDashboardData() {
             renderBirthdays(res.birthdays || []);
             renderAnniversaries(res.anniversaries || []);
             window.welfareData = res.welfare_checks || [];
-            const welfareCount = window.welfareData.length;
-            $('#welfareCardCount').text(welfareCount + (welfareCount === 1 ? ' alert' : ' alerts'));
-            $('#welfareModalCount').text(welfareCount);
+            const awolOnlyCount = (window.welfareData || []).filter(w => w.alert_type === 'AWOL').length;
+            $('#welfareCardCount').text(awolOnlyCount + (awolOnlyCount === 1 ? ' alert' : ' alerts'));
+            $('#welfareModalCount').text(awolOnlyCount);
+            
+            renderAwolPills();
             renderWelfareList();
             renderLogisticsTable(currentLogisticsType);
         },
@@ -712,6 +719,137 @@ function loadDashboardData() {
             showToast('Unable to load the Charis dashboard. Please try again.', 'error');
         }
     });
+}
+
+function handleOpenAwolMonitoring() {
+    if (!window.awolConfig && window.canConfigureAwol) {
+        openAwolConfigModal(true);
+    } else {
+        openModal('welfareOverviewModal');
+    }
+}
+
+function renderAwolPills() {
+    const cfg = window.awolConfig;
+    const canEdit = window.canConfigureAwol;
+    
+    document.querySelectorAll('.btn-awol-config').forEach(el => {
+        el.classList.toggle('hidden', !canEdit);
+    });
+    const desktopFooter = document.getElementById('desktopAwolEditorFooter');
+    if (desktopFooter) {
+        desktopFooter.classList.toggle('hidden', !canEdit);
+    }
+
+    if (!cfg) {
+        $('#awolPillsList, #desktopAwolPillsList').html('<span class="text-xs text-orange-600 font-bold bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200">Default Rule: Missed 3+ services in 4 weeks</span>');
+        $('#desktopAwolPillsContainer').removeClass('hidden');
+        $('#desktopAwolMatchingCount').text(((window.welfareData||[]).filter(w=>w.alert_type==='AWOL').length) + ' matching');
+        return;
+    }
+
+    const typesStr = (cfg.service_types || []).map(t => t.replace(/_/g, ' ')).join(', ');
+    const statusesStr = (cfg.spiritual_statuses || []).map(s => s.replace(/_/g, ' ')).join(', ');
+    const awolMatching = (window.welfareData || []).filter(w => w.alert_type === 'AWOL').length;
+    const qualifying = window.qualifyingServicesCount || 0;
+
+    const pillsHtml = `
+        <span class="inline-flex items-center gap-1 text-[10px] font-bold bg-orange-50 text-orange-700 px-2.5 py-1 rounded-lg border border-orange-200 shadow-2xs">
+            <svg class="w-3 h-3 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Missed: <strong class="font-black">${htmlEscape(cfg.services_missed)}+ services</strong>
+        </span>
+        <span class="inline-flex items-center gap-1 text-[10px] font-bold bg-orange-50 text-orange-700 px-2.5 py-1 rounded-lg border border-orange-200 shadow-2xs">
+            <svg class="w-3 h-3 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            Period: <strong class="font-black">Last ${htmlEscape(cfg.period_weeks)} weeks</strong>
+        </span>
+        <span class="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs">
+            Types: <strong class="font-black">${htmlEscape(typesStr)}</strong>
+        </span>
+        <span class="inline-flex items-center gap-1 text-[10px] font-bold bg-purple-50 text-purple-700 px-2.5 py-1 rounded-lg border border-purple-200 shadow-2xs">
+            Statuses: <strong class="font-black">${htmlEscape(statusesStr)}</strong>
+        </span>
+        <span class="inline-flex items-center gap-1 text-[10px] font-bold bg-gray-100 text-gray-700 px-2.5 py-1 rounded-lg border border-gray-200 shadow-2xs">
+            Qualifying Held: <strong class="font-black">${qualifying}</strong>
+        </span>
+    `;
+
+    $('#awolPillsList, #desktopAwolPillsList').html(pillsHtml);
+    $('#desktopAwolPillsContainer').removeClass('hidden');
+    $('#desktopAwolMatchingCount').text(awolMatching + ' matching');
+}
+
+function openAwolConfigModal(isFirstTime = false) {
+    const cfg = window.awolConfig || {
+        services_missed: 3,
+        period_weeks: 4,
+        service_types: ['Sunday_Service'],
+        spiritual_statuses: ['Member', 'Worker', 'Pastor']
+    };
+    $('#awolCfgServicesMissed').val(cfg.services_missed || 3);
+    $('#awolCfgPeriodWeeks').val(cfg.period_weeks || 4);
+    
+    const types = Array.isArray(cfg.service_types) ? cfg.service_types : ['Sunday_Service'];
+    $('input[name="awol_service_types[]"]').each(function() {
+        $(this).prop('checked', types.includes($(this).val()));
+    });
+
+    const statuses = Array.isArray(cfg.spiritual_statuses) ? cfg.spiritual_statuses : ['Member', 'Worker', 'Pastor'];
+    $('input[name="awol_spiritual_statuses[]"]').each(function() {
+        $(this).prop('checked', statuses.includes($(this).val()));
+    });
+
+    $('#awolConfigIsFirstTime').val(isFirstTime ? '1' : '0');
+    $('#awolConfigModalTitle').text(isFirstTime ? 'Configure AWOL Monitoring Rule' : 'Change AWOL Monitoring Rule');
+    $('#awolConfigReason').val('');
+    
+    updateAwolConfigSentencePreview();
+    renderAwolConfigHistory();
+    openModal('awolConfigModal');
+}
+
+function updateAwolConfigSentencePreview() {
+    const missed = parseInt($('#awolCfgServicesMissed').val(), 10) || 1;
+    const weeks = parseInt($('#awolCfgPeriodWeeks').val(), 10) || 1;
+    const selectedTypes = [];
+    $('input[name="awol_service_types[]"]:checked').each(function() {
+        selectedTypes.push($(this).val().replace(/_/g, ' '));
+    });
+    const selectedStatuses = [];
+    $('input[name="awol_spiritual_statuses[]"]:checked').each(function() {
+        selectedStatuses.push($(this).val().replace(/_/g, ' '));
+    });
+
+    const typesStr = selectedTypes.length > 0 ? selectedTypes.join(' or ') : 'selected services';
+    const statusesStr = selectedStatuses.length > 0 ? selectedStatuses.join(', ') : 'selected statuses';
+
+    const sentence = `Flag members with spiritual status (${statusesStr}) who missed ${missed} or more qualifying ${typesStr} in the last ${weeks} rolling calendar weeks.`;
+    $('#awolConfigSentencePreview').text(sentence);
+}
+
+function renderAwolConfigHistory() {
+    const container = $('#awolConfigHistoryList');
+    if (!container.length) return;
+    const history = window.awolConfigHistory || [];
+    if (!history.length) {
+        container.html('<p class="text-xs text-gray-400 italic">No previous rule changes recorded.</p>');
+        return;
+    }
+    let html = '';
+    history.slice(0, 5).forEach(h => {
+        const types = Array.isArray(h.service_types) ? h.service_types.map(t=>t.replace(/_/g,' ')).join(', ') : '';
+        const statuses = Array.isArray(h.spiritual_statuses) ? h.spiritual_statuses.map(s=>s.replace(/_/g,' ')).join(', ') : '';
+        const dateStr = parseServerDate(h.created_at)?.toLocaleString() || h.created_at || '';
+        html += `<div class="p-3 bg-gray-50 border border-gray-100 rounded-xl text-xs space-y-1">
+            <div class="flex items-center justify-between text-gray-500 text-[10px]">
+                <span class="font-bold text-gray-700">${htmlEscape(h.created_by_name || 'Admin')}</span>
+                <span>${htmlEscape(dateStr)}</span>
+            </div>
+            <p class="text-gray-800 font-medium">Missed ${h.services_missed}+ across ${htmlEscape(types)} in ${h.period_weeks} weeks</p>
+            <p class="text-gray-500 text-[10px]">Statuses: ${htmlEscape(statuses)}</p>
+            ${h.change_reason ? `<p class="text-gray-400 text-[10px] italic">"${htmlEscape(h.change_reason)}"</p>` : ''}
+        </div>`;
+    });
+    container.html(html);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -790,7 +928,7 @@ function updateAssignmentStatus(id, status, btn) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// WELFARE LIST
+// WELFARE / AWOL LIST
 // ═══════════════════════════════════════════════════════════
 function toggleWelfareTab(tab) {
     currentWelfareTab = tab;
@@ -810,38 +948,92 @@ function toggleWelfareTab(tab) {
 
 function renderWelfareList() {
     let data = window.welfareData || [];
-    if (currentWelfareTab === 'my_cases') data = data.filter(w => w.worker_id == window.loggedInUserId && w.assignment_status === 'Assigned');
+    if (currentWelfareTab === 'my_cases') {
+        data = data.filter(w => w.worker_id == window.loggedInUserId && w.assignment_status === 'Assigned');
+    } else if (currentWelfareTab === 'awol_list') {
+        data = data.filter(w => w.alert_type === 'AWOL');
+    } else if (currentWelfareTab === 'manual_flags') {
+        data = data.filter(w => w.alert_type === 'Manual_Check');
+    }
+
     let html = '';
-    if (!data.length) { html = '<li class="text-center py-12 text-gray-400 text-sm">No alerts in this view.</li>'; }
-    else {
+    if (!data.length) {
+        if (currentWelfareTab === 'awol_list' && (window.qualifyingServicesCount || 0) === 0) {
+            html = `<li class="text-center py-10 px-4 bg-white border border-gray-100 rounded-2xl shadow-sm">
+                <div class="w-10 h-10 mx-auto mb-2 text-gray-400 bg-gray-50 rounded-full flex items-center justify-center">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
+                <p class="text-xs font-bold text-gray-800">No qualifying services in focus period</p>
+                <p class="text-[10px] text-gray-500 mt-1 max-w-xs mx-auto">No qualifying services were held in the last ${window.awolConfig?.period_weeks || 4} rolling weeks matching the configured service types.</p>
+            </li>`;
+        } else if (currentWelfareTab === 'awol_list') {
+            html = '<li class="text-center py-12 text-gray-400 text-sm">No members currently match the active AWOL criteria.</li>';
+        } else if (currentWelfareTab === 'manual_flags') {
+            html = '<li class="text-center py-12 text-gray-400 text-sm">No manual follow-up flags recorded.</li>';
+        } else if (currentWelfareTab === 'my_cases') {
+            html = '<li class="text-center py-12 text-gray-400 text-sm">No cases currently assigned to you.</li>';
+        } else {
+            html = '<li class="text-center py-12 text-gray-400 text-sm">No alerts in this view.</li>';
+        }
+    } else {
         data.forEach(w => {
-            const badge = w.alert_type==='AWOL' ? '<span class="text-[9px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold border border-red-200 uppercase">3 Services AWOL</span>' : '<span class="text-[9px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded font-bold border border-orange-200 uppercase">Manual</span>';
+            const isAwol = w.alert_type === 'AWOL';
+            const badge = isAwol
+                ? `<span class="text-[9px] bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold border border-red-200 uppercase">${htmlEscape(w.missed_services_count || w.missed_count || 0)} Missed</span>`
+                : '<span class="text-[9px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold border border-amber-200 uppercase">Manual Flag</span>';
+
+            const statusBadge = w.spiritual_status
+                ? `<span class="text-[9px] bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-semibold border border-gray-200">${htmlEscape(w.spiritual_status.replace(/_/g, ' '))}</span>`
+                : '';
+
+            let detailsRow = '';
+            if (isAwol) {
+                const lastAtt = w.last_attended_date ? `Last Attended: <strong>${htmlEscape(w.last_attended_date)}</strong>` : 'No qualifying attendance on record';
+                const missedDates = Array.isArray(w.missed_service_dates) && w.missed_service_dates.length > 0
+                    ? `Missed: ${htmlEscape(w.missed_service_dates.slice(0, 3).join(', '))}${w.missed_service_dates.length > 3 ? '...' : ''}`
+                    : '';
+                detailsRow = `<div class="text-[10px] text-gray-500 bg-orange-50/50 p-2 rounded-xl border border-orange-100/60 space-y-0.5">
+                    <p class="text-orange-950">${lastAtt}</p>
+                    ${missedDates ? `<p class="text-gray-500 text-[9px]">${missedDates}</p>` : ''}
+                </div>`;
+            } else {
+                const reason = w.flag_reason || w.notes || 'Manual welfare check flag';
+                detailsRow = `<div class="text-[10px] text-gray-600 bg-amber-50/50 p-2 rounded-xl border border-amber-100/60">
+                    <span class="font-bold text-amber-900">Reason:</span> ${htmlEscape(reason)}
+                </div>`;
+            }
+
             let action = '';
             if (currentWelfareTab === 'my_cases') {
-                action = `<button onclick="openManageWelfareModal(${w.target_user_id},${w.followup_id || 0},${inlineArg(`${w.first_name || ''} ${w.last_name || ''}`.trim())},${inlineArg(w.phone || '')})" class="w-full text-xs font-bold text-white bg-hodBlue hover:bg-blue-900 px-4 py-2.5 rounded-xl transition-all mb-2">Manage Case</button>`;
-            } else if (w.assignment_status==='Assigned') {
-                action = `<div class="flex items-center justify-between bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl mb-2"><span class="text-[10px] font-bold text-gray-500">Assigned: <span class="text-hodBlue">${htmlEscape(w.worker_fname)}</span></span>${window.isCharisAdmin?`<button onclick="openAssignWelfareModal(${w.target_user_id},${w.followup_id||0})" class="text-[10px] font-bold text-gray-400 hover:text-hodBlue underline">Reassign</button>`:''}</div>`;
-            } else if (w.assignment_status==='Requested') {
-                action = window.isCharisAdmin ? `<div class="flex gap-2 mb-2"><div class="flex-1 bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl flex items-center justify-center"><span class="text-[10px] font-bold text-blue-700">Req: ${htmlEscape(w.worker_fname)}</span></div><button onclick="approveWelfareCase(${w.assignment_id})" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-xl text-[10px] font-bold">Approve</button></div>` : '<div class="bg-orange-50 border border-orange-200 px-3 py-2 rounded-xl text-center mb-2"><span class="text-[10px] font-bold text-orange-600">Pending HOD Approval</span></div>';
+                action = `<button onclick="openManageWelfareModal(${w.target_user_id},${w.followup_id || 0},${inlineArg(`${w.first_name || ''} ${w.last_name || ''}`.trim())},${inlineArg(w.phone || '')})" class="w-full text-xs font-bold text-white bg-hodBlue hover:bg-blue-900 px-4 py-2.5 rounded-xl transition-all mb-2 shadow-sm">Manage Case</button>`;
+            } else if (w.assignment_status === 'Assigned') {
+                action = `<div class="flex items-center justify-between bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl mb-2"><span class="text-[10px] font-bold text-gray-500">Assigned: <span class="text-hodBlue">${htmlEscape(w.worker_fname || 'Worker')}</span></span>${window.isCharisAdmin ? `<button onclick="openAssignWelfareModal(${w.target_user_id},${w.followup_id||0})" class="text-[10px] font-bold text-gray-400 hover:text-hodBlue underline">Reassign</button>` : ''}</div>`;
+            } else if (w.assignment_status === 'Requested') {
+                action = window.isCharisAdmin ? `<div class="flex gap-2 mb-2"><div class="flex-1 bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl flex items-center justify-center"><span class="text-[10px] font-bold text-blue-700">Req: ${htmlEscape(w.worker_fname || 'Worker')}</span></div><button onclick="approveWelfareCase(${w.assignment_id})" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-xl text-[10px] font-bold">Approve</button></div>` : '<div class="bg-orange-50 border border-orange-200 px-3 py-2 rounded-xl text-center mb-2"><span class="text-[10px] font-bold text-orange-600">Pending HOD Approval</span></div>';
             } else {
                 action = window.isCharisAdmin ? `<button onclick="openAssignWelfareModal(${w.target_user_id},${w.followup_id||0})" class="w-full text-[11px] font-bold text-gray-700 bg-gray-50 border border-gray-200 hover:border-hodBlue hover:text-hodBlue px-4 py-2.5 rounded-xl transition-all mb-2">Assign Case</button>` : `<button onclick="requestWelfareCase(${w.target_user_id},${w.followup_id||0})" class="w-full text-[11px] font-bold text-hodBlue bg-blue-50 border border-blue-200 hover:bg-blue-100 px-4 py-2.5 rounded-xl transition-all mb-2">Request to Handle</button>`;
             }
 
-            // Secure notes are readable according to their audience. Only
-            // Charis leadership or the assigned worker gets the note composer.
             const canManageNotes = w.assignment_status === 'Assigned'
                 && (window.isCharisAdmin || w.worker_id == window.loggedInUserId);
             const notesPayload = JSON.stringify(w.secure_notes || []);
             const notesLabel = canManageNotes ? 'Manage Notes' : 'View Notes';
             const memberName = `${w.first_name || ''} ${w.last_name || ''}`.trim();
-            let notesHtml = `<button onclick="prepManageCharisNotes(JSON.parse(${inlineArg(notesPayload)}),${w.target_user_id},${inlineArg(memberName)},${canManageNotes})" class="text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-xl border border-blue-100 flex items-center justify-center gap-1 w-full transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg> ${notesLabel} (${(w.secure_notes || []).length})</button>`;
+            const notesHtml = `<button onclick="prepManageCharisNotes(JSON.parse(${inlineArg(notesPayload)}),${w.target_user_id},${inlineArg(memberName)},${canManageNotes})" class="text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-xl border border-blue-100 flex items-center justify-center gap-1 w-full transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg> ${notesLabel} (${(w.secure_notes || []).length})</button>`;
 
-            html += `<li class="flex flex-col p-4 bg-white border border-orange-100/60 rounded-2xl shadow-sm gap-3 hover:shadow-md transition-shadow">
+            html += `<li class="flex flex-col p-4 bg-white border border-orange-100/60 rounded-2xl shadow-sm gap-2.5 hover:shadow-md transition-shadow">
                 <div class="flex justify-between items-start gap-2">
-                    <div class="truncate"><p class="text-sm font-bold text-gray-900 truncate">${htmlEscape(w.first_name)} ${htmlEscape(w.last_name)}</p><p class="text-[10px] font-bold text-orange-500 mt-0.5 truncate">${htmlEscape(w.phone||'No phone')} <span class="text-gray-400 font-medium">• ${htmlEscape(w.physical_address||'Unknown')}</span></p></div>
+                    <div class="truncate">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <p class="text-sm font-bold text-gray-900 truncate">${htmlEscape(w.first_name)} ${htmlEscape(w.last_name)}</p>
+                            ${statusBadge}
+                        </div>
+                        <p class="text-[10px] font-bold text-orange-500 mt-0.5 truncate">${htmlEscape(w.phone||'No phone')} <span class="text-gray-400 font-medium">• ${htmlEscape(w.physical_address||'Unknown')}</span></p>
+                    </div>
                     <div class="shrink-0">${badge}</div>
                 </div>
-                <div>${action} ${notesHtml}</div>
+                ${detailsRow}
+                <div class="pt-1">${action} ${notesHtml}</div>
             </li>`;
         });
     }
@@ -1509,6 +1701,16 @@ $(document).ready(function() {
 
     // Manage Welfare — Resolve & Close
     handleAjaxForm('resolveWelfareForm', ()=>{ closeModal('manageWelfareModal'); loadDashboardData(); });
+
+    // Save AWOL Monitoring Configuration
+    handleAjaxForm('saveAwolConfigForm', (res)=>{ 
+        closeModal('awolConfigModal'); 
+        loadDashboardData(); 
+    });
+
+    $(document).on('input change', '#awolConfigForm input', function() {
+        updateAwolConfigSentencePreview();
+    });
 
     handleAjaxForm('bulkServiceForm', ()=>{ loadDashboardData(); });
 });

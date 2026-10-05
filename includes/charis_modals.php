@@ -68,25 +68,157 @@
                     </span>
                     <div class="min-w-0">
                         <div class="flex items-center gap-2">
-                            <h3 id="welfareOverviewTitle" class="text-base sm:text-lg font-bold text-gray-900 truncate">Welfare</h3>
+                            <h3 id="welfareOverviewTitle" class="text-base sm:text-lg font-bold text-gray-900 truncate">AWOL Monitoring</h3>
                             <span id="welfareModalCount" class="text-[9px] font-black text-orange-700 bg-white border border-orange-100 rounded-full px-2 py-1 shrink-0">—</span>
                         </div>
-                        <p class="text-[10px] font-bold uppercase tracking-wider text-orange-500 mt-0.5">AWOL alerts &amp; follow-up</p>
+                        <p class="text-[10px] font-bold uppercase tracking-wider text-orange-500 mt-0.5">Absence alerts &amp; follow-up</p>
                     </div>
                 </div>
-                <button type="button" onclick="closeModal('welfareOverviewModal')" aria-label="Close welfare" class="text-gray-400 hover:text-red-500 bg-white border border-gray-200 p-2.5 rounded-xl shadow-sm shrink-0">
+                <button type="button" onclick="closeModal('welfareOverviewModal')" aria-label="Close AWOL Monitoring" class="text-gray-400 hover:text-red-500 bg-white border border-gray-200 p-2.5 rounded-xl shadow-sm shrink-0">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
-            <div role="tablist" aria-label="Welfare views" class="mt-3 flex bg-orange-100/60 p-1 rounded-xl overflow-x-auto no-scrollbar">
+            <div role="tablist" aria-label="AWOL Monitoring views" class="mt-3 flex bg-orange-100/60 p-1 rounded-xl overflow-x-auto no-scrollbar gap-1">
                 <button type="button" role="tab" aria-selected="true" data-welfare-tab="my_cases" onclick="toggleWelfareTab('my_cases')" class="welfare-tab-button px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold bg-white text-orange-600 shadow-sm transition-all whitespace-nowrap flex-1">My Cases</button>
-                <button type="button" role="tab" aria-selected="false" data-welfare-tab="master" onclick="toggleWelfareTab('master')" class="welfare-tab-button px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Master List</button>
+                <button type="button" role="tab" aria-selected="false" data-welfare-tab="awol_list" onclick="toggleWelfareTab('awol_list')" class="welfare-tab-button px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">AWOL List</button>
+                <button type="button" role="tab" aria-selected="false" data-welfare-tab="manual_flags" onclick="toggleWelfareTab('manual_flags')" class="welfare-tab-button px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Manual Flags</button>
                 <button type="button" role="tab" aria-selected="false" data-welfare-tab="archive" onclick="toggleWelfareTab('archive')" class="welfare-tab-button px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Archive</button>
             </div>
         </div>
         <div class="p-4 sm:p-5 flex-1 overflow-y-auto custom-scrollbar bg-gray-50/40">
+            <div id="awolModalPillsContainer" class="hidden mb-3.5 p-3 sm:p-4 bg-white border border-orange-100 rounded-2xl shadow-sm">
+                <div class="flex items-center justify-between gap-2 mb-2">
+                    <span class="text-[10px] font-black uppercase tracking-wider text-orange-600">Active Church-wide Rule</span>
+                    <span id="awolModalMatchingCount" class="text-[10px] font-bold text-gray-500">0 matching</span>
+                </div>
+                <div id="awolModalPillsList" class="flex flex-wrap gap-1.5"></div>
+            </div>
             <ul id="welfareModalList" class="welfare-list space-y-3"></ul>
+            <div id="awolModalEditorFooter" class="hidden pt-4 mt-4 border-t border-gray-200/80">
+                <button type="button" onclick="openAwolConfigModal()" class="w-full bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    Change AWOL List
+                </button>
+            </div>
         </div>
+    </div>
+</div>
+
+<!-- Configurable AWOL Rule Setup / Editor Modal -->
+<div id="awolConfigModal" role="dialog" aria-modal="true" aria-labelledby="awolConfigModalTitle" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[10000] flex items-center justify-center p-3 sm:p-6 opacity-0 transition-opacity duration-300 overscroll-contain">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-xl max-h-[92dvh] transform scale-95 transition-transform duration-300 overflow-hidden flex flex-col">
+        <div class="px-5 sm:px-6 py-4 sm:py-5 border-b border-orange-100 flex items-center justify-between gap-4 bg-orange-50/60 shrink-0">
+            <div class="flex items-center gap-3 min-w-0">
+                <span class="h-10 w-10 rounded-xl bg-white border border-orange-100 text-orange-600 flex items-center justify-center shadow-sm shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                </span>
+                <div class="min-w-0">
+                    <h3 id="awolConfigModalTitle" class="text-base sm:text-lg font-bold text-gray-900 truncate">Configure AWOL Monitoring Rule</h3>
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-orange-500 mt-0.5">Church-wide absence rule</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeModal('awolConfigModal')" aria-label="Close AWOL configuration" class="text-gray-400 hover:text-red-500 bg-white border border-gray-200 p-2.5 rounded-xl shadow-sm shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+
+        <form id="awolConfigForm" class="p-5 sm:p-6 overflow-y-auto custom-scrollbar space-y-5 bg-white">
+            <input type="hidden" name="action" value="save_awol_config">
+            <input type="hidden" name="is_first_time" id="awolConfigIsFirstTime" value="0">
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label for="awolCfgServicesMissed" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Services Missed (N) *</label>
+                    <input type="number" name="services_missed" id="awolCfgServicesMissed" min="1" max="52" required value="3" class="w-full px-4 py-3 border border-gray-200 rounded-xl text-lg font-black text-gray-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all">
+                    <p class="text-[11px] text-gray-400 font-medium mt-1">Minimum total services missed</p>
+                </div>
+                <div>
+                    <label for="awolCfgPeriodWeeks" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Period of Focus (W weeks) *</label>
+                    <div class="relative">
+                        <input type="number" name="period_weeks" id="awolCfgPeriodWeeks" min="1" max="104" required value="4" class="w-full px-4 py-3 pr-16 border border-gray-200 rounded-xl text-lg font-black text-gray-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all">
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 uppercase pointer-events-none">weeks</span>
+                    </div>
+                    <p class="text-[11px] text-gray-400 font-medium mt-1">Rolling calendar weeks in Lagos time</p>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Qualifying Service Types *</label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5" id="awolServiceTypesGroup">
+                    <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50/50 hover:border-orange-200 transition-all has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50/40">
+                        <input type="checkbox" name="service_types[]" value="Sunday_Service" checked class="cfg-awol-service-type w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500">
+                        <span class="text-xs font-bold text-gray-800">Sunday Service</span>
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50/50 hover:border-orange-200 transition-all has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50/40">
+                        <input type="checkbox" name="service_types[]" value="Midweek_Service" checked class="cfg-awol-service-type w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500">
+                        <span class="text-xs font-bold text-gray-800">Thursday Midweek Service</span>
+                    </label>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Spiritual Statuses to Monitor *</label>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2" id="awolSpiritualStatusesGroup">
+                    <label class="flex items-center gap-2 p-2.5 border border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50/50 has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50/40">
+                        <input type="checkbox" name="spiritual_statuses[]" value="Member" checked class="cfg-awol-status w-3.5 h-3.5 text-orange-600 rounded border-gray-300 focus:ring-orange-500">
+                        <span class="text-xs font-bold text-gray-800">Member</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2.5 border border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50/50 has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50/40">
+                        <input type="checkbox" name="spiritual_statuses[]" value="Worker" checked class="cfg-awol-status w-3.5 h-3.5 text-orange-600 rounded border-gray-300 focus:ring-orange-500">
+                        <span class="text-xs font-bold text-gray-800">Worker</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2.5 border border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50/50 has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50/40">
+                        <input type="checkbox" name="spiritual_statuses[]" value="Pastor" checked class="cfg-awol-status w-3.5 h-3.5 text-orange-600 rounded border-gray-300 focus:ring-orange-500">
+                        <span class="text-xs font-bold text-gray-800">Pastor</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2.5 border border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50/50 has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50/40">
+                        <input type="checkbox" name="spiritual_statuses[]" value="1st_Timer" class="cfg-awol-status w-3.5 h-3.5 text-orange-600 rounded border-gray-300 focus:ring-orange-500">
+                        <span class="text-xs font-bold text-gray-800">1st Timer</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2.5 border border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50/50 has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50/40">
+                        <input type="checkbox" name="spiritual_statuses[]" value="2nd_Timer" class="cfg-awol-status w-3.5 h-3.5 text-orange-600 rounded border-gray-300 focus:ring-orange-500">
+                        <span class="text-xs font-bold text-gray-800">2nd Timer</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2.5 border border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50/50 has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50/40">
+                        <input type="checkbox" name="spiritual_statuses[]" value="3rd_Timer" class="cfg-awol-status w-3.5 h-3.5 text-orange-600 rounded border-gray-300 focus:ring-orange-500">
+                        <span class="text-xs font-bold text-gray-800">3rd Timer</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2.5 border border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50/50 has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50/40">
+                        <input type="checkbox" name="spiritual_statuses[]" value="Visitor" class="cfg-awol-status w-3.5 h-3.5 text-orange-600 rounded border-gray-300 focus:ring-orange-500">
+                        <span class="text-xs font-bold text-gray-800">Visitor</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2.5 border border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50/50 has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50/40">
+                        <input type="checkbox" name="spiritual_statuses[]" value="Non_Member" class="cfg-awol-status w-3.5 h-3.5 text-orange-600 rounded border-gray-300 focus:ring-orange-500">
+                        <span class="text-xs font-bold text-gray-800">Non-Member</span>
+                    </label>
+                </div>
+            </div>
+
+            <div>
+                <label for="awolConfigReason" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Reason for Rule Change (optional)</label>
+                <input type="text" name="change_reason" id="awolConfigReason" placeholder="e.g. Adjusted focus period for end-of-year review" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all">
+            </div>
+
+            <!-- Dynamic Live Rule Sentence Preview -->
+            <div class="p-3.5 bg-orange-50 border border-orange-200 rounded-2xl">
+                <p class="text-[10px] font-black uppercase tracking-wider text-orange-600 mb-1">Live Rule Preview</p>
+                <p id="awolConfigSentencePreview" class="text-xs font-bold text-gray-800 leading-relaxed">
+                    Flag members with spiritual status (Member, Worker, Pastor) who missed 3 or more qualifying Sunday Service(s) in the last 4 rolling calendar weeks.
+                </p>
+            </div>
+
+            <!-- Configuration History -->
+            <div class="pt-2">
+                <p class="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-2">Recent Rule History</p>
+                <div id="awolConfigHistoryList" class="space-y-2 max-h-36 overflow-y-auto custom-scrollbar">
+                    <p class="text-xs text-gray-400 italic">No previous rule changes recorded.</p>
+                </div>
+            </div>
+
+            <button type="submit" id="awolConfigSubmitBtn" class="w-full bg-orange-600 hover:bg-orange-700 text-white py-3.5 rounded-xl font-black text-sm shadow-lg transition-all flex items-center justify-center gap-2">
+                Save &amp; Apply AWOL List
+            </button>
+        </form>
     </div>
 </div>
 
