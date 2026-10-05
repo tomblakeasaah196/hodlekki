@@ -2016,7 +2016,7 @@ require_once '../../includes/header.php';
         // aria-expanded/aria-controls so keyboard + screen reader users can
         // operate it naturally. Collapsed by default.
         return `<div class="bg-white/70 border border-gray-100 rounded-3xl overflow-hidden" id="${gid}">
-            <button type="button" id="${gid}-btn" class="att-kpi-group-btn w-full px-5 py-4 bg-white flex items-center justify-between gap-3 text-left hover:bg-blue-50/40 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 transition-colors" aria-expanded="${expanded ? 'true' : 'false'}" aria-controls="${gid}-body">
+            <button type="button" id="${gid}-btn" onclick="toggleAttKpiDetailGroup('${gid}')" class="att-kpi-group-btn w-full px-5 py-4 bg-white flex items-center justify-between gap-3 text-left hover:bg-blue-50/40 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 transition-colors" aria-expanded="${expanded ? 'true' : 'false'}" aria-controls="${gid}-body">
                 <span class="font-black text-gray-900 text-sm sm:text-base min-w-0 truncate">${esc(label)}</span>
                 <span class="flex items-center gap-2.5 shrink-0">
                     <span class="text-xs font-black text-hodBlue bg-blue-50 px-3 py-1 rounded-full">${attNum(count)}</span>
