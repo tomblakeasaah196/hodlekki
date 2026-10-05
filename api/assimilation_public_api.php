@@ -140,6 +140,8 @@ function assim_pub_card(PDO $pdo, array $row, array $sparklines, array $notes): 
         'is_mine'        => $row['assigned_to'] !== null,
         'last_note'      => $notes[$id] ?? null,
         'prior'          => $row['prior'] ?? null,
+        'watchlist'      => $row['watchlist_name'] ?? null,
+        'watchlist_open' => !empty($row['watchlist_open']),
         'trend'          => array_map(fn($m) => $m['count'], assim_months_frame($sparklines[(int) $row['user_id']] ?? [], 12)),
     ];
 }
@@ -190,17 +192,22 @@ try {
 
             $pool = [];
             if ($self) {
+                // Pre-migration deploys have no is_open column: degrade, don't die.
+                $has_open = assim_has_open_watchlists($pdo);
                 $poolStmt = $pdo->prepare("
                     SELECT c.id, c.user_id, c.status, c.next_touch_date, c.last_attended_on,
                            c.assigned_to, c.first_contact_at, 0 AS is_overdue,
                            u.first_name, u.last_name, u.phone, u.spiritual_status,
+                           w.name AS watchlist_name, " . ($has_open ? "w.is_open" : "0") . " AS watchlist_open,
                            (SELECT GROUP_CONCAT(d.name ORDER BY d.name SEPARATOR ', ')
                               FROM user_departments ud JOIN departments d ON d.id = ud.department_id
                              WHERE ud.user_id = c.user_id AND ud.is_active = 1) AS departments,
                            (SELECT COUNT(*) FROM assimilation_follow_ups f WHERE f.case_id = c.id) AS touches
-                      FROM assimilation_cases c JOIN users u ON u.id = c.user_id
+                      FROM assimilation_cases c
+                      JOIN users u ON u.id = c.user_id
+                      LEFT JOIN assimilation_watchlists w ON w.id = c.watchlist_id
                      WHERE c.closed_at IS NULL AND c.assigned_to IS NULL
-                     ORDER BY c.last_attended_on IS NULL, c.last_attended_on ASC, c.id ASC
+                     ORDER BY " . ($has_open ? "(w.is_open = 1) DESC, " : "") . "c.last_attended_on IS NULL, c.last_attended_on ASC, c.id ASC
                      LIMIT 30
                 ");
                 $poolStmt->execute();

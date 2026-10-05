@@ -81,19 +81,44 @@ message tells you how many.
 ## 4. Watchlists
 
 A watchlist is a saved rule with a name, for example *Workers — fewer than 3
-in 2 months*. Build the rule, click **Save as watchlist**, name it, and
-decide whether it sends a daily digest.
+in 2 months*. The easiest way to build one is the **Build a List** button on
+Find people: a friendly step-by-step wizard that asks how long people have
+been away, who to watch, any fine-tuning (department, region, gender, age),
+and who should go after them — then shows a live count of who matches and
+lets you name and launch it. Power users can still open **Advanced filters**,
+build the rule by hand, and click **Save as watchlist**.
 
-Each morning a job re-runs every active watchlist and sends managers **one
-in-app digest per watchlist**, naming only the people who are **newly**
-drifted into it — "4 people newly drifted: …". Nobody is announced twice,
-however many times the job runs. Someone who starts attending again drops off
-the list, and if they drift a second time they are announced again.
+### Open watchlists (pushed to every volunteer)
 
-Open **Watchlists** to see each one's live count, how many of those people
-have nobody calling them, and to open a watchlist back in Find people, pause
-its digest, or delete it. Deleting a watchlist keeps every follow-up that
-came from it.
+On the wizard's *Who goes after them?* step you choose between two kinds:
+
+- **Open to every volunteer** — everyone the list covers is pushed straight
+  to the unclaimed pool on the public volunteer page, immediately at launch
+  and again each morning for people who drift in later. New people also land
+  there automatically between morning runs whenever a manager opens
+  Assimilation. **Whoever picks someone first takes them**: the person moves
+  to that volunteer's own list and leaves the shared one, and any volunteer
+  can leave notes on them. Launching an open list switches on team self-pick
+  in settings if it was off, so volunteers can actually claim people.
+- **Managers assign** — the classic private list. Nobody is pushed anywhere;
+  you hand people to volunteers yourself from Find people.
+
+Each morning a job re-runs every active watchlist and sends **one in-app
+digest per watchlist**, naming only the people who are **newly** drifted into
+it — "4 people newly drifted: …". Managed lists tell the managers; open lists
+tell the managers *and* every volunteer. Nobody is announced twice, however
+many times the job runs. Someone who starts attending again drops off the
+list, and if they drift a second time they are announced again. Two gentle
+guards apply to open lists: anyone already being followed up is never
+double-pushed, and anyone a past follow-up closed as *not interested*,
+*relocated*, *attends elsewhere* or *unreachable* is never pushed again
+automatically (a manager can still assign them by hand). Someone who came
+home and later drifts again **is** pushed again — that is the point.
+
+Open **Watchlists** to see each list's live count — matched people, how many
+are waiting in the pool, how many are being called — to open a list back in
+Find people, pause its digest, or delete it. Deleting a watchlist keeps every
+follow-up that came from it.
 
 ## 5. Follow-ups
 
