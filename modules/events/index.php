@@ -942,6 +942,21 @@ require_once '../../includes/header.php';
     .att-pop-row:last-child{ border-bottom:0; }
     .att-pop-row:hover, .att-pop-row:focus-within{ background:#F8FAFC; }
     .att-pop-status{ display:inline-block; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#475569; background:#F1F5F9; border-radius:999px; padding:2px 8px; }
+    /* Full name, never truncated — wraps instead. */
+    .att-pop-name{ font-weight:900; color:#111827; font-size:.875rem; line-height:1.35; overflow-wrap:break-word; word-break:break-word; }
+    /* Icon actions: 44px tap targets, meaning carried by title + aria-label. */
+    .att-pop-icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:14px; cursor:pointer; transition:background-color .15s, color .15s, border-color .15s, transform .1s; }
+    .att-pop-icon-btn:focus-visible{ outline:3px solid rgba(29,53,106,.25); outline-offset:2px; }
+    .att-pop-icon-btn:active{ transform:scale(.93); }
+    .att-pop-icon-clock{ background:#FEF2F2; color:#DC2626; }
+    .att-pop-icon-clock:hover{ background:#D11920; color:#FFFFFF; }
+    .att-pop-icon-view{ background:#F9FAFB; color:#6B7280; border:1px solid #E5E7EB; }
+    .att-pop-icon-view:hover{ background:#EEF2FF; color:#1D356A; border-color:#C7D2FE; }
+    /* Phones: stack each result — full name on its own line, icons below it. */
+    @media (max-width:639px){
+        .att-pop-row{ flex-direction:column; align-items:stretch; gap:8px; }
+        .att-pop-row .att-pop-actions{ justify-content:flex-end; }
+    }
 
     .att-spin{ display:inline-block; width:13px; height:13px; border-radius:50%; border:2px solid #D1D5DB; border-top-color:#6B7280; animation:attSpin .7s linear infinite; flex-shrink:0; }
     .att-spin-light{ border-color:rgba(255,255,255,.4); border-top-color:#fff; }
@@ -967,7 +982,8 @@ require_once '../../includes/header.php';
     .att-field-msg{ margin-top:.35rem; font-size:.72rem; font-weight:700; color:#D11920; line-height:1.35; }
     @media (prefers-reduced-motion:reduce){
         #attSearchPopover.att-pop-open, .att-kpi-pill .att-kpi-chevron, .att-group-reveal{ animation:none; }
-        .att-kpi-chevron, .att-kpi-pill{ transition:none; }
+        .att-kpi-chevron, .att-kpi-pill, .att-pop-icon-btn{ transition:none; }
+        .att-pop-icon-btn:active{ transform:none; }
     }
 
     /* Analytics tab */
@@ -2016,7 +2032,7 @@ require_once '../../includes/header.php';
         // aria-expanded/aria-controls so keyboard + screen reader users can
         // operate it naturally. Collapsed by default.
         return `<div class="bg-white/70 border border-gray-100 rounded-3xl overflow-hidden" id="${gid}">
-            <button type="button" id="${gid}-btn" class="att-kpi-group-btn w-full px-5 py-4 bg-white flex items-center justify-between gap-3 text-left hover:bg-blue-50/40 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 transition-colors" aria-expanded="${expanded ? 'true' : 'false'}" aria-controls="${gid}-body">
+            <button type="button" id="${gid}-btn" onclick="toggleAttKpiDetailGroup('${gid}')" class="att-kpi-group-btn w-full px-5 py-4 bg-white flex items-center justify-between gap-3 text-left hover:bg-blue-50/40 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 transition-colors" aria-expanded="${expanded ? 'true' : 'false'}" aria-controls="${gid}-body">
                 <span class="font-black text-gray-900 text-sm sm:text-base min-w-0 truncate">${esc(label)}</span>
                 <span class="flex items-center gap-2.5 shrink-0">
                     <span class="text-xs font-black text-hodBlue bg-blue-50 px-3 py-1 rounded-full">${attNum(count)}</span>
@@ -2346,7 +2362,7 @@ require_once '../../includes/header.php';
         const name = attPersonName(u);
         return `<div class="att-pop-row" id="attPopRow-${u.id}">
             <div class="min-w-0 flex-1">
-                <p class="font-black text-gray-900 truncate text-sm">${esc(name)}</p>
+                <p class="att-pop-name">${esc(name)}</p>
                 <p class="text-[11px] text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
                     <span class="att-pop-status">${esc(attStatusLabel(u.spiritual_status))}</span>
                     ${u.phone
@@ -2354,9 +2370,15 @@ require_once '../../includes/header.php';
                         : '<span class="text-gray-300 font-semibold">No phone on file</span>'}
                 </p>
             </div>
-            <div class="att-pop-actions flex flex-wrap items-center justify-end gap-2 shrink-0">
-                <button type="button" onclick="attSearchClockIn(${u.id})" class="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2.5 rounded-xl text-xs font-black transition-colors">Clock In</button>
-                <button type="button" onclick="openVerifyDetails(${u.id})" class="bg-gray-50 text-gray-500 hover:text-hodBlue border border-gray-100 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors">Verify Details</button>
+            <div class="att-pop-actions flex items-center justify-end gap-2 shrink-0">
+                <button type="button" onclick="attSearchClockIn(${u.id})" title="Clock In" aria-label="Clock in ${esc(name)}"
+                    class="att-pop-icon-btn att-pop-icon-clock">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </button>
+                <button type="button" onclick="openVerifyDetails(${u.id})" title="Verify Details" aria-label="Verify details for ${esc(name)}"
+                    class="att-pop-icon-btn att-pop-icon-view">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                </button>
             </div>
         </div>`;
     }
