@@ -60,6 +60,38 @@ const CHARIS_AWOL_CANONICAL_STATUSES = [
 
 const CHARIS_AWOL_DEFAULT_STATUSES = ['Member', 'Worker', 'Pastor'];
 
+/**
+ * Events are stored with either underscore ('Sunday_Service') or spaced
+ * ('Sunday Service') categories depending on where they were created. AWOL
+ * detection must recognise both spellings so recent Sunday and Thursday
+ * midweek services are never missed in the rolling focus period.
+ *
+ * @param string[] $serviceTypes canonical service type keys
+ * @return string[] every accepted event_category spelling, de-duplicated
+ */
+function charis_awol_event_category_aliases(array $serviceTypes): array
+{
+    $aliases = [];
+    foreach ($serviceTypes as $type) {
+        $type = trim((string) $type);
+        if ($type === '') continue;
+        $underscored = str_replace(' ', '_', $type);
+        $spaced      = str_replace('_', ' ', $type);
+        foreach ([$type, $underscored, $spaced] as $variant) {
+            $aliases[$variant] = true;
+        }
+    }
+    return array_values(array_keys($aliases));
+}
+
+/**
+ * Normalise an event_category back to its canonical underscore key.
+ */
+function charis_awol_canonical_service_key(string $eventCategory): string
+{
+    return str_replace(' ', '_', trim($eventCategory));
+}
+
 const CHARIS_AWOL_EXCLUDED_ATTENDANCE_STATUSES = [
     'Unknown',
     'Relocated',
@@ -488,16 +520,18 @@ function charis_compute_awol_list(
     $todayDate = $now->format('Y-m-d');
 
     // 1. Find completed qualifying service occurrences for selected types in rolling window
-    $typePlaceholders = implode(',', array_fill(0, count($serviceTypes), '?'));
-    $eventParams = array_merge($serviceTypes, [$windowStartStr, $nowStr]);
+    $categoryAliases = charis_awol_event_category_aliases($serviceTypes);
+    $typePlaceholders = implode(',', array_fill(0, count($categoryAliases), '?'));
+    $eventParams = array_merge($categoryAliases, [$windowStartStr, $nowStr]);
 
     $eventStmt = $pdo->prepare("
-        SELECT event_category, DATE(event_date) AS service_date, MIN(event_date) AS event_date
+        SELECT REPLACE(event_category, ' ', '_') AS event_category,
+               DATE(event_date) AS service_date, MIN(event_date) AS event_date
           FROM events
          WHERE event_category IN ({$typePlaceholders})
            AND event_date >= ?
            AND event_date <= ?
-         GROUP BY event_category, DATE(event_date)
+         GROUP BY REPLACE(event_category, ' ', '_'), DATE(event_date)
          ORDER BY service_date ASC
     ");
     $eventStmt->execute($eventParams);
