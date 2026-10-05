@@ -8,7 +8,7 @@
  * (includes/special_events/theme.php), so one stylesheet serves every event.
  */
 
-@import "tailwindcss";
+@import "tailwindcss" source(none);
 
 @source "../js";
 @source "../../../e";

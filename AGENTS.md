@@ -290,10 +290,29 @@ the CSP in §19.7 allows only `'self'` (Google Fonts is the one exception).
 per-team values in the nonced `<style>` block via `se_theme_css_vars()`. The
 `style` prop inside a Preact component is fine (it goes through the CSSOM).
 
-**Rebuild the CSS when classes change.** `bin/build_se_css.sh` compiles
-`assets/se/css/se.css`, which is committed because the host has no Node. CI
-runs it with `--check` and fails on a stale file. If two branches both changed
-`se.css`, rebuild it rather than merging it by hand.
+**The SE CSS freshness check — a committed artifact, scoped to SE changes.**
+`assets/se/css/se.css` is a COMPILED, COMMITTED file (the cPanel host has no Node —
+production serves the committed bytes). CI rebuilds it
+(`bin/build_se_css.sh --check`) and fails on any diff, but ONLY when your changes touch
+SE paths (`assets/se/`, `e/`, `includes/special_events/`, `modules/special_events/`,
+`api/special_events_*`, `bin/build_se_css.sh`, `tests/special_events/`), and the build
+scans ONLY the `@source` dirs in `assets/se/css/se.input.css` (auto-detection is disabled
+via `source(none)`). Consequences:
+- Work outside those paths can NEVER fail this check. Nothing to do.
+- If you touch SE sources: after your markup/JS changes run
+  `bash bin/build_se_css.sh --check`. "stale" means run `bash bin/build_se_css.sh`
+  (no flag) and commit the regenerated `assets/se/css/se.css` AND `assets/se/BUILD` in the
+  SAME commit as your change. Never hand-edit `se.css`; never open the PR with a stale
+  artifact to fix later — every CI run fails until it is rebuilt.
+- Sandbox cannot download the standalone binary (GitHub release assets blocked — EOF/SSL)?
+  Use the npm CLI at the SAME pinned version, from the repo root:
+    cd "$(git rev-parse --show-toplevel)"
+    npx -y @tailwindcss/cli@$(tr -d '[:space:]' < assets/se/css/TAILWIND_VERSION) \
+        -i assets/se/css/se.input.css -o assets/se/css/se.css --minify
+    printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git rev-parse --short HEAD)" \
+        > assets/se/BUILD
+- Never commit the `tailwindcss-linux-x64` binary (~121MB, git-ignored).
+- Merge conflict on `se.css`: rebuild on the merged tree — never resolve it by hand.
 
 **Rules that are not negotiable**
 
