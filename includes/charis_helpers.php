@@ -427,7 +427,8 @@ function charis_save_awol_config(
     int $periodWeeks,
     array $serviceTypes,
     array $spiritualStatuses,
-    int $updatedBy
+    int $updatedBy,
+    ?string $changeReason = null
 ): array {
     if ($servicesMissed <= 0 || $servicesMissed > 52) {
         throw new InvalidArgumentException('Services missed must be a positive integer between 1 and 52.');
@@ -451,6 +452,14 @@ function charis_save_awol_config(
     $servicesJson = json_encode($filteredServices);
     $statusesJson = json_encode($filteredStatuses);
 
+    $changeReason = $changeReason !== null ? trim($changeReason) : null;
+    if ($changeReason === '') $changeReason = null;
+    if ($changeReason !== null) {
+        $changeReason = function_exists('mb_substr')
+            ? mb_substr($changeReason, 0, 255)
+            : substr($changeReason, 0, 255);
+    }
+
     $stmt = $pdo->prepare("
         INSERT INTO charis_awol_config (id, services_missed, missed_threshold, period_weeks, service_types, spiritual_statuses, updated_by, updated_at)
         VALUES (1, ?, ?, ?, ?, ?, ?, NOW())
@@ -467,10 +476,10 @@ function charis_save_awol_config(
 
     try {
         $histStmt = $pdo->prepare("
-            INSERT INTO charis_awol_config_history (config_id, services_missed, missed_threshold, period_weeks, service_types, spiritual_statuses, updated_by, created_at)
-            VALUES (1, ?, ?, ?, ?, ?, ?, NOW())
+            INSERT INTO charis_awol_config_history (config_id, services_missed, missed_threshold, period_weeks, service_types, spiritual_statuses, updated_by, change_reason, created_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, NOW())
         ");
-        $histStmt->execute([$servicesMissed, $servicesMissed, $periodWeeks, $servicesJson, $statusesJson, $updatedBy]);
+        $histStmt->execute([$servicesMissed, $servicesMissed, $periodWeeks, $servicesJson, $statusesJson, $updatedBy, $changeReason]);
     } catch (Throwable $e) {
         error_log('Charis AWOL config history write failed: ' . $e->getMessage());
     }
@@ -483,8 +492,54 @@ function charis_save_awol_config(
         'service_types'      => $filteredServices,
         'spiritual_statuses' => $filteredStatuses,
         'updated_by'         => $updatedBy,
+        'change_reason'      => $changeReason,
         'updated_at'         => date('Y-m-d H:i:s'),
     ];
+}
+
+/**
+ * Recent AWOL rule changes for the editor modal's audit trail.
+ *
+ * @return array<int,array<string,mixed>>
+ */
+function charis_get_awol_config_history(PDO $pdo, int $limit = 5): array
+{
+    $limit = max(1, min(50, $limit));
+    try {
+        $stmt = $pdo->prepare("
+            SELECT h.id, h.services_missed, h.missed_threshold, h.period_weeks,
+                   h.service_types, h.spiritual_statuses, h.change_reason, h.created_at,
+                   h.updated_by, u.first_name, u.last_name
+              FROM charis_awol_config_history h
+              LEFT JOIN users u ON u.id = h.updated_by
+             ORDER BY h.created_at DESC, h.id DESC
+             LIMIT {$limit}
+        ");
+        $stmt->execute();
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log('Charis AWOL config history unavailable: ' . $e->getMessage());
+        return [];
+    }
+
+    $history = [];
+    foreach ($rows as $row) {
+        $serviceTypes = json_decode((string) $row['service_types'], true);
+        $spiritualStatuses = json_decode((string) $row['spiritual_statuses'], true);
+        $name = trim((string) ($row['first_name'] ?? '') . ' ' . (string) ($row['last_name'] ?? ''));
+        $history[] = [
+            'id'                 => (int) $row['id'],
+            'services_missed'    => (int) $row['services_missed'],
+            'missed_threshold'   => (int) $row['missed_threshold'],
+            'period_weeks'       => (int) $row['period_weeks'],
+            'service_types'      => is_array($serviceTypes) ? array_values($serviceTypes) : [],
+            'spiritual_statuses' => is_array($spiritualStatuses) ? array_values($spiritualStatuses) : [],
+            'change_reason'      => $row['change_reason'],
+            'created_at'         => $row['created_at'],
+            'created_by_name'    => $name !== '' ? $name : 'Admin',
+        ];
+    }
+    return $history;
 }
 
 /**

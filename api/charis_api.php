@@ -289,9 +289,11 @@ try {
             $is_awol_configured = ($awol_config !== null);
             $awol_checks = [];
             $awol_summary = null;
+            $qualifying_services_count = 0;
 
             if ($is_awol_configured) {
                 $computedAwol = charis_compute_awol_list($pdo, $awol_config);
+                $qualifying_services_count = (int) $computedAwol['total_qualifying_services'];
                 foreach ($computedAwol['awol_checks'] as $ac) {
                     $ac['secure_notes'] = charis_secure_welfare_notes(
                         $pdo,
@@ -323,7 +325,9 @@ try {
                 'can_configure_awol' => $charis_access['can_configure_awol'],
                 'is_awol_configured' => $is_awol_configured,
                 'awol_config'        => $awol_config,
+                'awol_config_history'=> charis_get_awol_config_history($pdo, 5),
                 'awol_summary'       => $awol_summary,
+                'qualifying_services_count' => $qualifying_services_count,
                 'awol_checks'        => $awol_checks,
                 'manual_checks'      => $manual_checks,
                 'current_user_id'    => $user_id,
@@ -1920,6 +1924,7 @@ try {
                 'status'             => 'success',
                 'is_configured'      => ($config !== null),
                 'config'             => $config,
+                'history'            => charis_get_awol_config_history($pdo, 5),
                 'can_configure_awol' => $charis_access['can_configure_awol'],
             ]);
             break;
@@ -1978,13 +1983,15 @@ try {
                 $periodWeeks,
                 $rawServiceTypes,
                 $rawSpiritualStatuses,
-                $user_id
+                $user_id,
+                isset($_POST['change_reason']) ? (string) $_POST['change_reason'] : null
             );
 
             echo json_encode([
                 'status'  => 'success',
                 'message' => 'AWOL Monitoring configuration saved successfully.',
                 'config'  => $savedConfig,
+                'history' => charis_get_awol_config_history($pdo, 5),
             ]);
             break;
 

@@ -702,7 +702,9 @@ function loadDashboardData() {
             window.canConfigureAwol = res.can_configure_awol || false;
             window.awolConfig = res.awol_config || null;
             window.awolConfigHistory = res.awol_config_history || [];
-            window.qualifyingServicesCount = res.qualifying_services_count || 0;
+            window.qualifyingServicesCount = res.qualifying_services_count
+                ?? (res.awol_summary ? res.awol_summary.total_qualifying_services : 0)
+                ?? 0;
             globalWorkers = res.charis_workers || [];
             globalMembers = res.members || [];
 
@@ -1731,6 +1733,7 @@ $(document).ready(function() {
     handleAjaxForm('awolConfigForm', (res)=>{
         closeModal('awolConfigModal');
         if (res && res.config) window.awolConfig = res.config;
+        if (res && Array.isArray(res.history)) window.awolConfigHistory = res.history;
         loadDashboardData();
     });
 
