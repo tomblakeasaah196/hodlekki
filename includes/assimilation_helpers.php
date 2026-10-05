@@ -513,6 +513,159 @@ function assim_rule_user_ids(PDO $pdo, array $rule): array {
 }
 
 // ==========================================================================
+// WATCHLIST CASES — opening them, keeping hits in step, and pushing open
+// lists to the volunteer pool. Shared by the module API, the public API and
+// the nightly cron, so there is exactly one definition of each step.
+// ==========================================================================
+
+// Opens a case for one person, or explains why it could not. The unique key
+// on assimilation_cases.open_user_id is the real guard against two open
+// cases for the same person, so a race loses here rather than in the data.
+// $to_user_id NULL means the unclaimed pool.
+function assim_open_case(PDO $pdo, int $person_id, ?int $to_user_id, int $by_user_id, ?int $watchlist_id): array {
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE id = ?");
+    $stmt->execute([$person_id]);
+    if (!$stmt->fetchColumn()) {
+        return ['ok' => false, 'reason' => 'not_found'];
+    }
+    $last = $pdo->prepare("SELECT MAX(x.attended_on) FROM " . assim_attendance_union_sql() . " x WHERE x.user_id = ?");
+    $last->execute([$person_id]);
+    $last_attended = $last->fetchColumn() ?: null;
+
+    try {
+        $ins = $pdo->prepare("
+            INSERT INTO assimilation_cases
+                (user_id, watchlist_id, assigned_to, assigned_by, assigned_at, status, last_attended_on)
+            VALUES (?, ?, ?, ?, ?, 'To_Call', ?)
+        ");
+        $ins->execute([
+            $person_id, $watchlist_id ?: null, $to_user_id ?: null,
+            $to_user_id ? $by_user_id : null, $to_user_id ? date('Y-m-d H:i:s') : null,
+            $last_attended,
+        ]);
+    } catch (PDOException $e) {
+        // 23000 = the one-open-case-per-person unique key.
+        if ($e->getCode() === '23000') {
+            return ['ok' => false, 'reason' => 'already_open'];
+        }
+        throw $e;
+    }
+    $case_id = (int) $pdo->lastInsertId();
+    if ($to_user_id) {
+        $pdo->prepare("
+            INSERT INTO assimilation_case_assignments (case_id, from_user_id, to_user_id, assigned_by, action)
+            VALUES (?, NULL, ?, ?, 'assign')
+        ")->execute([$case_id, $to_user_id, $by_user_id]);
+    }
+    return ['ok' => true, 'case_id' => $case_id];
+}
+
+// Keeps assimilation_watchlist_hits in step with a rule, so the cron and
+// the sidebar badge both read from one place. announced_at stays untouched,
+// which is what stops a person being announced twice.
+function assim_sync_watchlist_hits(PDO $pdo, int $watchlist_id, array $user_ids): array {
+    $existing = $pdo->prepare("SELECT user_id FROM assimilation_watchlist_hits WHERE watchlist_id = ?");
+    $existing->execute([$watchlist_id]);
+    $before = array_map('intval', $existing->fetchAll(PDO::FETCH_COLUMN));
+
+    $fresh = array_values(array_diff($user_ids, $before));
+    $gone  = array_values(array_diff($before, $user_ids));
+
+    if ($fresh) {
+        $ins = $pdo->prepare("
+            INSERT INTO assimilation_watchlist_hits (watchlist_id, user_id) VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)
+        ");
+        foreach ($fresh as $uid) {
+            $ins->execute([$watchlist_id, $uid]);
+        }
+    }
+    if ($gone) {
+        // They are back in the house often enough — stop watching them, and
+        // let them be announced again if they drift a second time.
+        $del = $pdo->prepare("DELETE FROM assimilation_watchlist_hits WHERE watchlist_id = ? AND user_id = ?");
+        foreach ($gone as $uid) {
+            $del->execute([$watchlist_id, $uid]);
+        }
+    }
+    return ['new' => $fresh, 'left' => $gone];
+}
+
+// --------------------------------------------------------------------------
+// Open watchlists: push people straight into the unclaimed pool so every
+// volunteer sees them on the public page and can claim them. Two guards keep
+// this gentle:
+//   1. assim_open_case's unique key skips anyone who is already being
+//      followed up (claimed or pooled elsewhere).
+//   2. Anyone a previous follow-up closed for a reason OTHER than returning
+//      home (not interested, relocated, attends elsewhere, unreachable) is
+//      never pushed automatically again — a human can still assign them.
+//      Someone whose earlier case closed as Returned_Home CAN be pushed a
+//      second time: drifting again after coming home is exactly what these
+//      lists exist to catch.
+// Returns the number of people actually pushed.
+// --------------------------------------------------------------------------
+function assim_auto_pool_open(PDO $pdo, int $watchlist_id, array $user_ids, int $by_user_id): int {
+    $user_ids = array_values(array_unique(array_filter(array_map('intval', $user_ids))));
+    if (!$user_ids) {
+        return 0;
+    }
+    $blocked = [];
+    $in     = implode(',', array_fill(0, count($user_ids), '?'));
+    $stmt   = $pdo->prepare("
+        SELECT DISTINCT user_id FROM assimilation_cases
+         WHERE user_id IN ({$in})
+           AND closed_at IS NOT NULL AND status <> 'Returned_Home'
+    ");
+    $stmt->execute($user_ids);
+    $blocked = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+
+    $pushed = 0;
+    foreach (array_diff($user_ids, $blocked) as $uid) {
+        $res = assim_open_case($pdo, $uid, null, $by_user_id, $watchlist_id);
+        if (!empty($res['ok'])) {
+            $pushed++;
+        }
+    }
+    return $pushed;
+}
+
+// True once 20261005120000_assimilation_open_watchlists.sql has run. The
+// tree ships to production BEFORE migrations do (see AGENTS.md), so every
+// is_open read or write asks this first and quietly behaves like the feature
+// does not exist yet, instead of dying on an unknown column.
+function assim_has_open_watchlists(PDO $pdo): bool {
+    static $has = null;
+    if ($has !== null) {
+        return $has;
+    }
+    try {
+        $has = (int) $pdo->query("
+            SELECT COUNT(*) FROM information_schema.columns
+             WHERE table_schema = DATABASE()
+               AND table_name = 'assimilation_watchlists' AND column_name = 'is_open'
+        ")->fetchColumn() === 1;
+    } catch (PDOException $e) {
+        $has = false;
+    }
+    return $has;
+}
+
+// Who should hear that an OPEN list pushed new people: the managers, told in
+// the module; plus every active team volunteer, told on the public volunteer
+// page — because they are the ones who can pick people up. Managed lists
+// keep the classic audience: managers alone. A manager who also volunteers
+// is told once, as a manager.
+function assim_watchlist_audience(PDO $pdo, bool $is_open): array {
+    $managers = array_values(array_unique(array_map('intval', assim_manager_ids($pdo))));
+    if (!$is_open) {
+        return ['managers' => $managers, 'volunteers' => []];
+    }
+    $volunteers = array_map(fn($t) => (int) $t['user_id'], assim_team($pdo));
+    return ['managers' => $managers, 'volunteers' => array_values(array_diff($volunteers, $managers))];
+}
+
+// ==========================================================================
 // CASES
 // ==========================================================================
 

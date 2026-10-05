@@ -109,77 +109,9 @@ function assim_case_for(PDO $pdo, int $case_id, int $user_id, bool $is_manager, 
     return $case;
 }
 
-// Opens a case for one person, or explains why it could not. The unique key
-// on assimilation_cases.open_user_id is the real guard against two open
-// cases for the same person, so a race loses here rather than in the data.
-function assim_open_case(PDO $pdo, int $person_id, ?int $to_user_id, int $by_user_id, ?int $watchlist_id): array {
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE id = ?");
-    $stmt->execute([$person_id]);
-    if (!$stmt->fetchColumn()) {
-        return ['ok' => false, 'reason' => 'not_found'];
-    }
-    $last = $pdo->prepare("SELECT MAX(x.attended_on) FROM " . assim_attendance_union_sql() . " x WHERE x.user_id = ?");
-    $last->execute([$person_id]);
-    $last_attended = $last->fetchColumn() ?: null;
-
-    try {
-        $ins = $pdo->prepare("
-            INSERT INTO assimilation_cases
-                (user_id, watchlist_id, assigned_to, assigned_by, assigned_at, status, last_attended_on)
-            VALUES (?, ?, ?, ?, ?, 'To_Call', ?)
-        ");
-        $ins->execute([
-            $person_id, $watchlist_id ?: null, $to_user_id ?: null,
-            $to_user_id ? $by_user_id : null, $to_user_id ? date('Y-m-d H:i:s') : null,
-            $last_attended,
-        ]);
-    } catch (PDOException $e) {
-        // 23000 = the one-open-case-per-person unique key.
-        if ($e->getCode() === '23000') {
-            return ['ok' => false, 'reason' => 'already_open'];
-        }
-        throw $e;
-    }
-    $case_id = (int) $pdo->lastInsertId();
-    if ($to_user_id) {
-        $pdo->prepare("
-            INSERT INTO assimilation_case_assignments (case_id, from_user_id, to_user_id, assigned_by, action)
-            VALUES (?, NULL, ?, ?, 'assign')
-        ")->execute([$case_id, $to_user_id, $by_user_id]);
-    }
-    return ['ok' => true, 'case_id' => $case_id];
-}
-
-// Keeps assimilation_watchlist_hits in step with a rule, so the cron and
-// the sidebar badge both read from one place. announced_at stays untouched,
-// which is what stops a person being announced twice.
-function assim_sync_watchlist_hits(PDO $pdo, int $watchlist_id, array $user_ids): array {
-    $existing = $pdo->prepare("SELECT user_id FROM assimilation_watchlist_hits WHERE watchlist_id = ?");
-    $existing->execute([$watchlist_id]);
-    $before = array_map('intval', $existing->fetchAll(PDO::FETCH_COLUMN));
-
-    $fresh = array_values(array_diff($user_ids, $before));
-    $gone  = array_values(array_diff($before, $user_ids));
-
-    if ($fresh) {
-        $ins = $pdo->prepare("
-            INSERT INTO assimilation_watchlist_hits (watchlist_id, user_id) VALUES (?, ?)
-            ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)
-        ");
-        foreach ($fresh as $uid) {
-            $ins->execute([$watchlist_id, $uid]);
-        }
-    }
-    if ($gone) {
-        // They are back in the house often enough — stop watching them, and
-        // let them be announced again if they drift a second time.
-        $del = $pdo->prepare("DELETE FROM assimilation_watchlist_hits WHERE watchlist_id = ? AND user_id = ?");
-        foreach ($gone as $uid) {
-            $del->execute([$watchlist_id, $uid]);
-        }
-    }
-    return ['new' => $fresh, 'left' => $gone];
-}
+// assim_open_case(), assim_sync_watchlist_hits() and the open-watchlist
+// helpers live in includes/assimilation_helpers.php so the module, the
+// public API and the nightly cron all share one implementation.
 
 try {
     switch ($action) {
@@ -301,13 +233,31 @@ try {
             if (!$is_manager) {
                 assim_deny();
             }
+            $has_open = assim_has_open_watchlists($pdo);
             $rows = $pdo->query("
-                SELECT w.id, w.name, w.rule_json, w.is_active, w.notify, w.created_at,
+                SELECT w.id, w.name, w.rule_json, w.is_active, w.notify,
+                       " . ($has_open ? "w.is_open" : "0") . " AS is_open, w.created_at,
                        TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) AS created_by_name
                   FROM assimilation_watchlists w
                   LEFT JOIN users u ON u.id = w.created_by
                  ORDER BY w.is_active DESC, w.name
             ")->fetchAll(PDO::FETCH_ASSOC);
+
+            // Open cases per watchlist, split into unclaimed pool vs claimed.
+            $case_counts = [];
+            foreach ($pdo->query("
+                SELECT watchlist_id,
+                       SUM(assigned_to IS NULL) AS pool,
+                       SUM(assigned_to IS NOT NULL) AS claimed
+                  FROM assimilation_cases
+                 WHERE closed_at IS NULL AND watchlist_id IS NOT NULL
+                 GROUP BY watchlist_id
+            ")->fetchAll(PDO::FETCH_ASSOC) as $cc) {
+                $case_counts[(int) $cc['watchlist_id']] = [
+                    'pool'    => (int) $cc['pool'],
+                    'claimed' => (int) $cc['claimed'],
+                ];
+            }
 
             $lists = [];
             foreach ($rows as $w) {
@@ -315,7 +265,12 @@ try {
                 $ids  = assim_rule_user_ids($pdo, $rule);
                 if ((int) $w['is_active'] === 1) {
                     // Keeps the badge and the cron honest between nightly runs.
-                    assim_sync_watchlist_hits($pdo, (int) $w['id'], $ids);
+                    $delta = assim_sync_watchlist_hits($pdo, (int) $w['id'], $ids);
+                    // An open list keeps pushing even when nobody opens the
+                    // module between cron runs — the page counts as a run.
+                    if ((int) $w['is_open'] === 1 && $delta['new']) {
+                        assim_auto_pool_open($pdo, (int) $w['id'], $delta['new'], $user_id);
+                    }
                 }
                 $untouched = 0;
                 if ($ids) {
@@ -328,6 +283,7 @@ try {
                     $stmt->execute($ids);
                     $untouched = (int) $stmt->fetchColumn();
                 }
+                $cc = $case_counts[(int) $w['id']] ?? ['pool' => 0, 'claimed' => 0];
                 $lists[] = [
                     'id'              => (int) $w['id'],
                     'name'            => $w['name'],
@@ -335,12 +291,27 @@ try {
                     'summary'         => assim_rule_summary($rule),
                     'is_active'       => (int) $w['is_active'],
                     'notify'          => (int) $w['notify'],
+                    'is_open'         => (int) $w['is_open'],
                     'created_by_name' => $w['created_by_name'],
                     'people'          => count($ids),
                     'untouched'       => $untouched,
+                    'pool'            => $cc['pool'],
+                    'claimed'         => $cc['claimed'],
                 ];
             }
             echo json_encode(['status' => 'success', 'data' => $lists]);
+            break;
+
+        // Light live count for the watchlist builder's preview step.
+        case 'count_rule':
+            if (!$is_manager) {
+                assim_deny();
+            }
+            $rule = assim_rule_from_request();
+            echo json_encode(['status' => 'success', 'data' => [
+                'count'   => assim_count_rule($pdo, $rule),
+                'summary' => assim_rule_summary($rule),
+            ]]);
             break;
 
         case 'save_watchlist':
@@ -351,21 +322,77 @@ try {
             if ($name === '' || mb_strlen($name) > 120) {
                 assim_fail('Give the watchlist a name (up to 120 characters).');
             }
-            $rule   = assim_rule_from_request();
-            $notify = empty($_POST['notify']) ? 0 : 1;
-            $id     = (int) ($_POST['id'] ?? 0);
+            $rule     = assim_rule_from_request();
+            $notify   = empty($_POST['notify']) ? 0 : 1;
+            $is_open  = empty($_POST['is_open']) ? 0 : 1;
+            $id       = (int) ($_POST['id'] ?? 0);
+            $has_open = assim_has_open_watchlists($pdo);
+            if ($is_open && !$has_open) {
+                assim_fail('Open watchlists need a database update that has not run yet. Save it as a managers-assign list for now.');
+            }
 
             if ($id > 0) {
-                $pdo->prepare("UPDATE assimilation_watchlists SET name = ?, rule_json = ?, notify = ? WHERE id = ?")
-                    ->execute([$name, json_encode($rule), $notify, $id]);
+                $sql = "UPDATE assimilation_watchlists SET name = ?, rule_json = ?, notify = ?"
+                    . ($has_open ? ", is_open = ?" : '') . " WHERE id = ?";
+                $params = [$name, json_encode($rule), $notify];
+                if ($has_open) $params[] = $is_open;
+                $params[] = $id;
+                $pdo->prepare($sql)->execute($params);
                 // The rule moved, so who it covers moved with it.
                 $pdo->prepare("DELETE FROM assimilation_watchlist_hits WHERE watchlist_id = ?")->execute([$id]);
+            } elseif ($has_open) {
+                $pdo->prepare("INSERT INTO assimilation_watchlists (name, rule_json, created_by, notify, is_open) VALUES (?, ?, ?, ?, ?)")
+                    ->execute([$name, json_encode($rule), $user_id, $notify, $is_open]);
+                $id = (int) $pdo->lastInsertId();
             } else {
+                // Pre-migration deploy: the column is not there yet.
                 $pdo->prepare("INSERT INTO assimilation_watchlists (name, rule_json, created_by, notify) VALUES (?, ?, ?, ?)")
                     ->execute([$name, json_encode($rule), $user_id, $notify]);
                 $id = (int) $pdo->lastInsertId();
             }
-            assim_sync_watchlist_hits($pdo, $id, assim_rule_user_ids($pdo, $rule));
+
+            $matching = assim_rule_user_ids($pdo, $rule);
+            assim_sync_watchlist_hits($pdo, $id, $matching);
+
+            $extra = [];
+            if ($is_open) {
+                // An open list pushes everyone it covers into the unclaimed
+                // pool right now, so volunteering never waits for the cron.
+                $pushed = assim_auto_pool_open($pdo, $id, $matching, $user_id);
+                // The people already in the list are the launch, not a
+                // drift — announce them once here, then stamp every hit so
+                // the nightly digest only ever names genuinely NEW arrivals.
+                $pdo->prepare("UPDATE assimilation_watchlist_hits SET announced_at = NOW() WHERE watchlist_id = ? AND announced_at IS NULL")->execute([$id]);
+                if ($notify) {
+                    $count = count($matching);
+                    $aud   = assim_watchlist_audience($pdo, true);
+                    assim_notify($pdo, $aud['managers'], 'New open watchlist',
+                        "\"{$name}\" is live — {$count} " . ($count === 1 ? 'person' : 'people')
+                        . ' on it, all pushed to the volunteers. Watch them get carried home from here.');
+                    if ($aud['volunteers']) {
+                        assim_notify($pdo, $aud['volunteers'], 'New open watchlist',
+                            "\"{$name}\" — {$count} " . ($count === 1 ? 'person is' : 'people are')
+                            . ' waiting on your volunteer page. Pick someone and call them with love.',
+                            '/assimilation.php');
+                    }
+                }
+                // Volunteers can only claim if self-pick is on; an open list
+                // promises them that, so saving one turns it on.
+                $self_claim_turned_on = !assim_allow_self_claim($pdo);
+                if ($self_claim_turned_on) {
+                    assim_save_setting($pdo, 'allow_self_claim', '1');
+                    $extra['self_claim_turned_on'] = true;
+                }
+                $extra['pushed'] = $pushed;
+                $extra['open']   = true;
+                $msg = $pushed > 0
+                    ? "\"{$name}\" is live — {$pushed} " . ($pushed === 1 ? 'person is' : 'people are') . " now on every volunteer's page."
+                    : "\"{$name}\" is live. Everyone matching is already being followed up.";
+                echo json_encode(['status' => 'success',
+                    'message' => $msg,
+                    'data'    => ['id' => $id] + $extra]);
+                break;
+            }
             echo json_encode(['status' => 'success', 'message' => 'Watchlist saved.', 'data' => ['id' => $id]]);
             break;
 

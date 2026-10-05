@@ -377,6 +377,10 @@ function personCard(c, inPool) {
             ${due ? `<span class="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${due[1]}">${due[0]}</span>` : ''}
         </div>
         <div class="flex flex-wrap gap-1.5">
+            ${inPool && c.watchlist ? `<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-700 text-white px-2.5 py-1 text-[11px] font-bold">
+                ${icon('M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9', 'w-3.5 h-3.5')}
+                ${c.watchlist_open ? 'Open list:' : 'From'} &ldquo;${escapeHtml(c.watchlist)}&rdquo;
+            </span>` : ''}
             <span class="inline-flex items-center gap-1.5 rounded-full bg-hodBlue/5 border border-hodBlue/15 text-hodBlue px-2.5 py-1 text-[11px] font-semibold">
                 ${icon('M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', 'w-3.5 h-3.5')}
                 ${c.last_attended ? 'Last in church ' + escapeHtml(niceDate(c.last_attended)) + ' &middot; ' + escapeHtml(c.since_words) : 'No attendance on record'}

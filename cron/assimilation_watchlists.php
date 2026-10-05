@@ -1,9 +1,12 @@
 <?php
 // /cron/assimilation_watchlists.php
 // Daily: re-runs every active Assimilation watchlist, records who now falls
-// into it, and sends the managers ONE in-app digest per watchlist naming only
-// the people who are newly drifted. Also runs the returned-home sweep so a
-// Sunday check-in is noticed even if nobody opens the module.
+// into it, and sends ONE in-app digest per watchlist naming only the people
+// who are newly drifted. Managed lists notify the managers; open lists
+// notify the managers AND every team volunteer, because open lists also push
+// each new drift-in straight into the unclaimed pool on the volunteer page.
+// Also runs the returned-home sweep so a Sunday check-in is noticed even if
+// nobody opens the module.
 //
 // Nobody is announced twice: assimilation_watchlist_hits.first_seen_at is set
 // the first time a person appears in a watchlist and announced_at the first
@@ -38,8 +41,14 @@ try {
 // ---------------------------------------------------------------------------
 // 2. Each active watchlist
 // ---------------------------------------------------------------------------
-$watchlists = $pdo->query("SELECT id, name, rule_json, notify FROM assimilation_watchlists WHERE is_active = 1 ORDER BY id")
-    ->fetchAll(PDO::FETCH_ASSOC);
+// is_open arrives with 20261005120000; the tree ships before migrations run,
+// so fall back to a 0 column rather than die on an unknown column.
+$has_open = assim_has_open_watchlists($pdo);
+
+$watchlists = $pdo->query(
+    "SELECT id, name, rule_json, notify, " . ($has_open ? "is_open" : "0") . " AS is_open
+       FROM assimilation_watchlists WHERE is_active = 1 ORDER BY id"
+)->fetchAll(PDO::FETCH_ASSOC);
 
 if (!$watchlists) {
     echo "[assimilation] no active watchlists\n";
@@ -83,6 +92,8 @@ foreach ($watchlists as $w) {
         $deleteHit->execute([$id, $uid]);
     }
 
+    $is_open = (int) ($w['is_open'] ?? 0) === 1;
+
     // Only the ones nobody has been told about yet.
     $selectHit->execute([$id]);
     $fresh = $selectHit->fetchAll(PDO::FETCH_ASSOC);
@@ -91,22 +102,44 @@ foreach ($watchlists as $w) {
         continue;
     }
 
+    // Open lists push every new drift-in straight to the volunteer pool so
+    // someone can pick them up before the day is out.
+    $pushed = 0;
+    if ($is_open) {
+        $pushed = assim_auto_pool_open($pdo, $id, array_column($fresh, 'user_id'), 0);
+    }
+
     if ((int) $w['notify'] === 1) {
         $names = array_column($fresh, 'name');
         $list  = implode(', ', array_slice($names, 0, 5))
             . (count($names) > 5 ? ' and ' . (count($names) - 5) . ' more' : '');
         $count = count($names);
-        assim_notify($pdo, $managers,
-            $count === 1 ? '1 person newly drifted' : "{$count} people newly drifted",
-            "\"{$w['name']}\" — " . assim_rule_summary($rule) . ": {$list}. "
-            . 'Open Assimilation to assign someone to reach out to them.');
+        $title = $count === 1 ? '1 person newly drifted' : "{$count} people newly drifted";
+        if ($is_open) {
+            $aud = assim_watchlist_audience($pdo, true);
+            assim_notify($pdo, $aud['managers'] ?: $managers, $title,
+                "\"{$w['name']}\" — " . assim_rule_summary($rule) . ": {$list}. "
+                . ($pushed > 0 ? "{$pushed} pushed to the volunteers' pool. " : '')
+                . 'Follow the pickups from the module.');
+            if ($aud['volunteers']) {
+                assim_notify($pdo, $aud['volunteers'], $title,
+                    "\"{$w['name']}\": {$list} just landed on your volunteer page — pick someone and call with love.",
+                    '/assimilation.php');
+            }
+        } else {
+            assim_notify($pdo, $managers, $title,
+                "\"{$w['name']}\" — " . assim_rule_summary($rule) . ": {$list}. "
+                . 'Open Assimilation to assign someone to reach out to them.');
+        }
     }
 
     foreach ($fresh as $hit) {
         $markHit->execute([$id, (int) $hit['user_id']]);
     }
     echo "[assimilation] {$w['name']}: " . count($matching) . ' in list, ' . count($fresh)
-        . ' newly announced' . ((int) $w['notify'] === 1 ? ' to ' . count($managers) . ' manager(s)' : ' (digest off)') . "\n";
+        . ' newly announced'
+        . ($is_open ? ", {$pushed} pushed to the pool" : '')
+        . ((int) $w['notify'] === 1 ? ' and told to the team' : ' (digest off)') . "\n";
 }
 
 echo "[assimilation] done\n";

@@ -94,6 +94,63 @@ try {
     <!-- ================= TAB 1 — FIND PEOPLE ================= -->
     <div id="view-find" role="tabpanel" aria-labelledby="tabBtn-find" tabindex="0" class="focus:outline-none animate-fade-in-up space-y-5" style="animation-delay: 0.2s;">
 
+        <!-- ============ BUILD-A-LIST HERO ============ -->
+        <section class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 via-emerald-700 to-emerald-900 text-white shadow-lg shadow-emerald-900/25">
+            <div class="absolute -top-16 -right-16 w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none" aria-hidden="true"></div>
+            <div class="absolute -bottom-20 -left-10 w-56 h-56 bg-amber-300/10 rounded-full blur-3xl pointer-events-none" aria-hidden="true"></div>
+
+            <div class="relative z-10 p-6 md:p-8 flex flex-col sm:flex-row items-start sm:items-center gap-6">
+                <div class="shrink-0 mx-auto sm:mx-0" aria-hidden="true">
+                    <svg class="w-24 h-24 md:w-28 md:h-28" viewBox="0 0 120 120" fill="none">
+                        <circle cx="60" cy="60" r="54" fill="rgba(255,255,255,0.08)"/>
+                        <circle cx="60" cy="60" r="42" fill="rgba(255,255,255,0.07)"/>
+                        <circle cx="60" cy="60" r="30" fill="rgba(255,255,255,0.06)"/>
+                        <path d="M48 66 60 55l12 11v12a2 2 0 0 1-2 2H50a2 2 0 0 1-2-2V66Z" fill="#FCD34D"/>
+                        <path d="M44 67.5 60 53l16 14.5" stroke="#FDE68A" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <rect x="56" y="70" width="8" height="10" rx="1.5" fill="#B45309"/>
+                        <circle cx="60" cy="62.5" r="2.2" fill="#B45309"/>
+                        <circle cx="26" cy="88" r="5" fill="#FCA5A5"/>
+                        <circle cx="94" cy="86" r="5" fill="#93C5FD"/>
+                        <circle cx="100" cy="34" r="5" fill="#6EE7B7"/>
+                        <path d="M31 86c8-2 14-6 17-12M89 83c-6-4-12-6-18-6M96 40c-5 6-12 10-20 12" stroke="rgba(255,255,255,0.55)" stroke-width="2" stroke-dasharray="3 4" stroke-linecap="round"/>
+                        <circle cx="60" cy="60" r="52" stroke="rgba(255,255,255,0.25)" stroke-width="1.5" stroke-dasharray="4 6"/>
+                    </svg>
+                </div>
+                <div class="flex-1 min-w-0 text-center sm:text-left">
+                    <h3 class="font-display font-bold text-2xl md:text-3xl tracking-tight">Build an AWOL watchlist</h3>
+                    <p class="text-emerald-100/90 text-sm md:text-base mt-1.5 font-medium max-w-md">A friendly 3-choice wizard. You say who shows up and who goes after them &mdash; we keep watch from there.</p>
+                    <div class="flex flex-wrap justify-center sm:justify-start gap-x-4 gap-y-1.5 mt-3 text-[11px] font-bold uppercase tracking-wider text-emerald-200/80">
+                        <span class="inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg> We keep watch</span>
+                        <span class="inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg> Volunteers act</span>
+                        <span class="inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg> You hear first</span>
+                    </div>
+                </div>
+                <button type="button" onclick="openBuilder()" class="w-full sm:w-auto shrink-0 min-h-[56px] bg-white text-emerald-800 hover:bg-emerald-50 active:scale-[0.98] px-7 py-4 rounded-2xl font-display font-bold text-lg shadow-xl shadow-emerald-950/30 transition-all flex items-center justify-center gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-emerald-800">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"/></svg>
+                    Build a List
+                </button>
+            </div>
+        </section>
+
+        <!-- ============ TOOLBAR ============ -->
+        <div class="flex flex-wrap items-center gap-2">
+            <button type="button" onclick="openWatchlists()" class="min-h-[48px] px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 flex items-center gap-2">
+                <svg class="w-5 h-5 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                Watchlists <span id="wlCount" class="text-gray-400"></span>
+            </button>
+            <button type="button" id="advToggle" onclick="toggleAdvanced()" aria-expanded="false" aria-controls="advPanel" class="min-h-[48px] px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 flex items-center gap-2">
+                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                Advanced filters
+                <svg id="advChevron" class="w-4 h-4 text-gray-400 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <button type="button" onclick="exportCsv()" class="ml-auto min-h-[48px] px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 flex items-center gap-2">
+                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                Export CSV
+            </button>
+        </div>
+
+        <!-- ============ ADVANCED FILTERS (collapsed by default) ============ -->
+        <div id="advPanel" class="hidden">
         <section class="bg-white rounded-3xl border border-gray-100 shadow-sm p-5 md:p-6 space-y-5">
             <div class="flex flex-wrap items-end gap-x-3 gap-y-4">
                 <h3 class="w-full text-sm font-bold text-gray-900">Who counts as drifted?</h3>
@@ -152,13 +209,12 @@ try {
             <div class="border-t border-gray-100 pt-4 flex flex-wrap items-center gap-3">
                 <p id="ruleSummary" class="text-sm text-gray-500 font-medium min-w-0 flex-1">&mdash;</p>
                 <div class="flex flex-wrap gap-2">
-                    <button type="button" onclick="openWatchlists()" class="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">Watchlists <span id="wlCount" class="ml-1 text-gray-400"></span></button>
                     <button type="button" onclick="openSaveWatchlist()" class="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">Save as watchlist</button>
-                    <button type="button" onclick="exportCsv()" class="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">Export CSV</button>
                     <button type="button" onclick="runFind()" class="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-900 text-white text-sm font-bold shadow-lg shadow-emerald-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2">Find people</button>
                 </div>
             </div>
         </section>
+        </div>
 
         <div id="bulkBar" class="hidden sticky top-4 z-30 bg-gray-900 text-white rounded-2xl shadow-2xl px-5 py-3 flex flex-wrap items-center gap-3">
             <p class="font-bold text-sm"><span id="selCount">0</span> selected</p>
@@ -357,6 +413,12 @@ try {
                 Send the team a daily digest
                 <input type="checkbox" id="wlNotify" checked class="w-5 h-5 accent-emerald-700">
             </label>
+            <label class="flex items-center justify-between gap-3 text-sm font-semibold text-gray-700 cursor-pointer">
+                <span>Open to every volunteer
+                    <span class="block text-[11px] font-medium text-gray-400 mt-0.5">New matches land on their phones automatically. Whoever picks someone first takes them.</span>
+                </span>
+                <input type="checkbox" id="wlOpen" class="w-5 h-5 accent-emerald-700 shrink-0">
+            </label>
             <button type="submit" class="w-full bg-emerald-700 hover:bg-emerald-900 text-white py-3 rounded-xl font-bold">Save watchlist</button>
         </form>
     </div>
@@ -410,6 +472,247 @@ try {
             </section>
             <button type="submit" class="w-full bg-emerald-700 hover:bg-emerald-900 text-white py-3 rounded-xl font-bold">Save settings</button>
         </form>
+    </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- BUILD-A-LIST WIZARD — full-screen sheet on mobile, card on desktop -->
+<!-- ================================================================ -->
+<style>
+@keyframes bwIn { from { opacity: 0; transform: translateY(16px) scale(.99); } to { opacity: 1; transform: none; } }
+.bw-step-on { animation: bwIn .32s ease both; }
+@keyframes bwFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.bw-float { animation: bwFloat 3.4s ease-in-out infinite; }
+@keyframes bwPulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+.bw-count-dot { animation: bwPulse .9s ease-in-out infinite; }
+.bw-choice { transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease, transform .12s ease; }
+.bw-choice:active { transform: scale(.985); }
+</style>
+<div id="bwModal" class="fixed inset-0 w-screen h-screen bg-gray-900/85 backdrop-blur-md hidden z-[9999] flex items-stretch justify-center md:items-center md:p-6 opacity-0 transition-opacity duration-300" role="dialog" aria-modal="true" aria-labelledby="bwHeading">
+    <div class="bg-white w-full h-full min-h-[480px] flex flex-col overflow-hidden transform scale-95 transition-transform duration-300 md:h-auto md:max-h-[92vh] md:max-w-2xl md:rounded-[2rem] md:shadow-2xl">
+
+        <!-- header -->
+        <div class="shrink-0 px-4 md:px-6 pt-4 pb-3 border-b border-gray-100 flex items-center gap-3">
+            <button type="button" onclick="closeModal('bwModal')" aria-label="Close the builder" class="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <div id="bwDots" class="flex-1 flex justify-center items-center gap-1.5" role="tablist" aria-label="Builder progress"></div>
+            <span id="bwStepNum" class="shrink-0 text-[11px] font-bold text-gray-400 uppercase tracking-wider w-10 text-right">1/6</span>
+        </div>
+
+        <!-- body -->
+        <div id="bwBody" class="flex-1 overflow-y-auto overscroll-contain px-5 md:px-8 py-6">
+
+            <!-- STEP 0 — intro -->
+            <section data-wstep="0" class="bw-step space-y-6 text-center">
+                <div class="bw-float mx-auto w-56 md:w-64" aria-hidden="true">
+                    <svg viewBox="0 0 260 190" fill="none" class="w-full h-auto">
+                        <ellipse cx="130" cy="96" rx="108" ry="80" fill="#ECFDF5"/>
+                        <circle cx="130" cy="96" r="66" fill="#D1FAE5"/>
+                        <path d="M104 104l26-22 26 22v30a4 4 0 01-4 4h-44a4 4 0 01-4-4v-30Z" fill="#047857"/>
+                        <path d="M98 106l32-27 32 27" stroke="#065F46" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+                        <rect x="123" y="114" width="14" height="24" rx="3" fill="#FCD34D"/>
+                        <path d="M130 99c2-4 8-3.4 8 .6 0 3-4 5.4-8 8.4-4-3-8-5.4-8-8.4 0-4 6-4.6 8-.6Z" fill="#F87171"/>
+                        <circle cx="34" cy="146" r="9" fill="#FCA5A5"/>
+                        <circle cx="226" cy="140" r="9" fill="#93C5FD"/>
+                        <circle cx="224" cy="50" r="9" fill="#C4B5FD"/>
+                        <path d="M43 141c22-4 44-14 60-29" stroke="#10B981" stroke-width="2.5" stroke-dasharray="1 7" stroke-linecap="round"/>
+                        <path d="M217 135c-20-2-40-9-57-20" stroke="#10B981" stroke-width="2.5" stroke-dasharray="1 7" stroke-linecap="round"/>
+                        <path d="M215 46c-16 14-40 24-62 28" stroke="#10B981" stroke-width="2.5" stroke-dasharray="1 7" stroke-linecap="round"/>
+                        <g transform="rotate(-6 58 58)">
+                            <rect x="26" y="38" width="54" height="42" rx="9" fill="#ffffff" stroke="#A7F3D0" stroke-width="2"/>
+                            <rect x="34" y="48" width="26" height="5" rx="2.5" fill="#A7F3D0"/>
+                            <rect x="34" y="58" width="34" height="5" rx="2.5" fill="#D1FAE5"/>
+                            <rect x="34" y="68" width="18" height="5" rx="2.5" fill="#D1FAE5"/>
+                            <circle cx="68" cy="45" r="8" fill="#10B981"/>
+                            <path d="m64.8 45 2.2 2.2 3.8-4.2" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </g>
+                    </svg>
+                </div>
+                <div class="space-y-2">
+                    <p class="text-[11px] font-bold text-emerald-700 uppercase tracking-[0.2em]">The watchlist builder</p>
+                    <h3 id="bwHeading" class="font-display font-bold text-2xl md:text-3xl text-gray-900 tracking-tight">Let&rsquo;s build an AWOL watchlist</h3>
+                    <p class="text-gray-500 text-sm md:text-base max-w-sm mx-auto">You choose <strong class="text-gray-700">who shows up</strong> on the list and <strong class="text-gray-700">who goes after them</strong>. Three quick choices.</p>
+                </div>
+                <div class="grid grid-cols-3 gap-2 max-w-md mx-auto text-[11px] font-bold text-gray-500">
+                    <span class="bg-gray-50 border border-gray-100 rounded-2xl px-2 py-3"><span class="text-lg block mb-1" aria-hidden="true">👀</span>We keep watch</span>
+                    <span class="bg-gray-50 border border-gray-100 rounded-2xl px-2 py-3"><span class="text-lg block mb-1" aria-hidden="true">📲</span>Volunteers act</span>
+                    <span class="bg-gray-50 border border-gray-100 rounded-2xl px-2 py-3"><span class="text-lg block mb-1" aria-hidden="true">🏠</span>People come home</span>
+                </div>
+            </section>
+
+            <!-- STEP 1 — how long away -->
+            <section data-wstep="1" class="bw-step hidden space-y-5">
+                <div class="text-center space-y-1.5">
+                    <h3 tabindex="-1" class="font-display font-bold text-xl md:text-2xl text-gray-900">How long have they been away?</h3>
+                    <p class="text-sm text-gray-500">Pick the heart of the list.</p>
+                </div>
+                <div class="space-y-3 max-w-md mx-auto" role="radiogroup" aria-label="How long away">
+                    <button type="button" data-away="nos" onclick="bwPickAway('nos')" role="radio" aria-checked="false" class="bw-away bw-choice w-full min-h-[64px] flex items-center gap-4 rounded-2xl border-2 border-gray-100 bg-white p-4 text-left hover:border-emerald-200">
+                        <span class="w-12 h-12 shrink-0 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center" aria-hidden="true"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span>
+                        <span class="flex-1 min-w-0"><span class="block font-bold text-gray-900">Just missed a few Sundays</span><span class="block text-xs text-gray-500 mt-0.5">Not seen in about a month</span></span>
+                        <span class="bw-check w-6 h-6 shrink-0 rounded-full border-2 border-gray-200 flex items-center justify-center transition-colors" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" data-away="slip" onclick="bwPickAway('slip')" role="radio" aria-checked="false" class="bw-away bw-choice w-full min-h-[64px] flex items-center gap-4 rounded-2xl border-2 border-gray-100 bg-white p-4 text-left hover:border-emerald-200">
+                        <span class="w-12 h-12 shrink-0 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center" aria-hidden="true"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.5 19a4.5 4.5 0 000-9 6 6 0 00-11.6 1.6A4 4 0 006 19h11.5z"/></svg></span>
+                        <span class="flex-1 min-w-0"><span class="block font-bold text-gray-900">Slipping away</span><span class="block text-xs text-gray-500 mt-0.5">Barely seen in 2 months</span></span>
+                        <span class="bw-check w-6 h-6 shrink-0 rounded-full border-2 border-gray-200 flex items-center justify-center transition-colors" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" data-away="gone" onclick="bwPickAway('gone')" role="radio" aria-checked="false" class="bw-away bw-choice w-full min-h-[64px] flex items-center gap-4 rounded-2xl border-2 border-gray-100 bg-white p-4 text-left hover:border-emerald-200">
+                        <span class="w-12 h-12 shrink-0 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center" aria-hidden="true"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.5 16a4.5 4.5 0 000-9 6 6 0 00-11.6 1.6A4 4 0 006 16h11.5zM8 21l.9-2m2.2 2 .9-2m2.2 2 .9-2"/></svg></span>
+                        <span class="flex-1 min-w-0"><span class="block font-bold text-gray-900">Gone a while</span><span class="block text-xs text-gray-500 mt-0.5">Almost no check-ins in 3 months</span></span>
+                        <span class="bw-check w-6 h-6 shrink-0 rounded-full border-2 border-gray-200 flex items-center justify-center transition-colors" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" data-away="custom" onclick="bwPickAway('custom')" role="radio" aria-checked="false" class="bw-away bw-choice w-full min-h-[64px] flex items-center gap-4 rounded-2xl border-2 border-gray-100 bg-white p-4 text-left hover:border-emerald-200">
+                        <span class="w-12 h-12 shrink-0 rounded-2xl bg-gray-100 text-gray-600 flex items-center justify-center" aria-hidden="true"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6M9 8h6m2 8h6"/></svg></span>
+                        <span class="flex-1 min-w-0"><span class="block font-bold text-gray-900">Set my own</span><span class="block text-xs text-gray-500 mt-0.5">Choose the exact numbers</span></span>
+                        <span class="bw-check w-6 h-6 shrink-0 rounded-full border-2 border-gray-200 flex items-center justify-center transition-colors" aria-hidden="true"></span>
+                    </button>
+                </div>
+                <div id="bwCustomRow" class="hidden max-w-md mx-auto bg-gray-50 border border-gray-100 rounded-2xl p-4">
+                    <div class="flex flex-wrap items-center justify-center gap-x-2 gap-y-3 text-sm font-semibold text-gray-700">
+                        <span>Fewer than</span>
+                        <span class="inline-flex items-center gap-1">
+                            <button type="button" onclick="bwStepCustom('max', -1)" aria-label="Fewer services" class="w-10 h-10 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:border-emerald-300">&minus;</button>
+                            <span id="bwCustomMax" class="w-10 text-center font-display font-bold text-lg text-emerald-800">3</span>
+                            <button type="button" onclick="bwStepCustom('max', 1)" aria-label="More services" class="w-10 h-10 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:border-emerald-300">+</button>
+                        </span>
+                        <span>services in</span>
+                        <span class="inline-flex items-center gap-1">
+                            <button type="button" onclick="bwStepCustom('win', -1)" aria-label="Shorter window" class="w-10 h-10 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:border-emerald-300">&minus;</button>
+                            <span id="bwCustomWin" class="w-10 text-center font-display font-bold text-lg text-emerald-800">2</span>
+                            <button type="button" onclick="bwStepCustom('win', 1)" aria-label="Longer window" class="w-10 h-10 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:border-emerald-300">+</button>
+                        </span>
+                        <select id="bwCustomUnit" onchange="bwCustomUnitChanged()" aria-label="Window unit" class="px-3 py-2.5 border border-gray-200 rounded-xl font-bold bg-white focus:border-emerald-500 outline-none">
+                            <option value="days">days</option><option value="weeks">weeks</option><option value="months" selected>months</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <!-- STEP 2 — who -->
+            <section data-wstep="2" class="bw-step hidden space-y-5">
+                <div class="text-center space-y-1.5">
+                    <h3 tabindex="-1" class="font-display font-bold text-xl md:text-2xl text-gray-900">Who should we keep watch on?</h3>
+                    <p class="text-sm text-gray-500">Everyone below is in &mdash; or tap to narrow it.</p>
+                </div>
+                <div class="max-w-lg mx-auto space-y-3">
+                    <button type="button" id="bwEveryone" onclick="bwPickEveryone()" aria-pressed="true" class="bw-choice w-full min-h-[56px] flex items-center gap-3 rounded-2xl border-2 border-gray-100 bg-white p-3.5 text-left hover:border-emerald-200">
+                        <span class="w-11 h-11 shrink-0 rounded-2xl bg-emerald-100 flex items-center justify-center text-2xl" aria-hidden="true">⛪</span>
+                        <span class="flex-1 min-w-0"><span class="block font-bold text-gray-900">Everyone in the house</span><span class="block text-xs text-gray-500 mt-0.5">First-timers to pastors &mdash; nobody filtered out</span></span>
+                        <span class="bw-check w-6 h-6 shrink-0 rounded-full border-2 border-gray-200 flex items-center justify-center transition-colors" aria-hidden="true"></span>
+                    </button>
+                    <div id="bwStatusWrap" class="grid grid-cols-2 min-[420px]:grid-cols-3 sm:grid-cols-4 gap-2"></div>
+                </div>
+            </section>
+
+            <!-- STEP 3 — fine tune -->
+            <section data-wstep="3" class="bw-step hidden space-y-5">
+                <div class="text-center space-y-1.5">
+                    <h3 tabindex="-1" class="font-display font-bold text-xl md:text-2xl text-gray-900">Fine-tune, if you like</h3>
+                    <p class="text-sm text-gray-500">All optional &mdash; skip straight ahead if it already feels right.</p>
+                </div>
+                <div class="max-w-md mx-auto space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Department
+                            <select id="bwDept" onchange="bwFtChanged()" class="mt-1.5 w-full min-h-[48px] px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium bg-white focus:border-emerald-500 outline-none normal-case tracking-normal"></select>
+                        </label>
+                        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Region
+                            <select id="bwRegion" onchange="bwFtChanged()" class="mt-1.5 w-full min-h-[48px] px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium bg-white focus:border-emerald-500 outline-none normal-case tracking-normal"></select>
+                        </label>
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Gender</p>
+                        <div id="bwGenderWrap" class="flex gap-2" role="group" aria-label="Gender"></div>
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Age</p>
+                        <div id="bwAgeWrap" class="flex flex-wrap gap-2" role="group" aria-label="Age band"></div>
+                    </div>
+                    <label class="flex items-center justify-between gap-3 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3.5 cursor-pointer">
+                        <span class="text-sm font-semibold text-gray-700">Only people who have attended before</span>
+                        <span class="relative inline-flex shrink-0">
+                            <input type="checkbox" id="bwEver" checked onchange="bwFtChanged()" class="peer sr-only">
+                            <span class="block w-11 h-6 rounded-full bg-gray-200 peer-checked:bg-emerald-600 transition-colors"></span>
+                            <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5"></span>
+                        </span>
+                    </label>
+                </div>
+            </section>
+
+            <!-- STEP 4 — who works it -->
+            <section data-wstep="4" class="bw-step hidden space-y-5">
+                <div class="text-center space-y-1.5">
+                    <h3 tabindex="-1" class="font-display font-bold text-xl md:text-2xl text-gray-900">Who goes after them?</h3>
+                    <p class="text-sm text-gray-500">The big one &mdash; how the calling gets done.</p>
+                </div>
+                <div class="space-y-3 max-w-md mx-auto" role="radiogroup" aria-label="Who works this list">
+                    <button type="button" id="bwModeOpen" onclick="bwPickMode('open')" role="radio" aria-checked="true" class="bw-choice w-full flex items-start gap-4 rounded-2xl border-2 border-gray-100 bg-white p-4 text-left hover:border-emerald-200">
+                        <span class="w-12 h-12 shrink-0 rounded-2xl bg-emerald-100 flex items-center justify-center text-2xl" aria-hidden="true">🙌</span>
+                        <span class="flex-1 min-w-0">
+                            <span class="flex flex-wrap items-center gap-2">
+                                <span class="font-bold text-gray-900">Open to every volunteer</span>
+                                <span class="text-[10px] font-bold uppercase tracking-wider bg-emerald-700 text-white rounded-full px-2 py-0.5">Recommended</span>
+                            </span>
+                            <span class="block text-xs text-gray-500 mt-1 leading-relaxed">Everyone on this list lands on every volunteer&rsquo;s phone. Whoever picks them first takes them &mdash; they leave the shared list &mdash; and any volunteer can leave notes.</span>
+                        </span>
+                        <span class="bw-check w-6 h-6 mt-1 shrink-0 rounded-full border-2 border-gray-200 flex items-center justify-center transition-colors" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" id="bwModeManaged" onclick="bwPickMode('managed')" role="radio" aria-checked="false" class="bw-choice w-full flex items-start gap-4 rounded-2xl border-2 border-gray-100 bg-white p-4 text-left hover:border-emerald-200">
+                        <span class="w-12 h-12 shrink-0 rounded-2xl bg-hodBlue/10 flex items-center justify-center text-2xl" aria-hidden="true">🧭</span>
+                        <span class="flex-1 min-w-0">
+                            <span class="font-bold text-gray-900">Managers assign</span>
+                            <span class="block text-xs text-gray-500 mt-1 leading-relaxed">Stay a private manager list. You hand each person to a specific volunteer, one by one.</span>
+                        </span>
+                        <span class="bw-check w-6 h-6 mt-1 shrink-0 rounded-full border-2 border-gray-200 flex items-center justify-center transition-colors" aria-hidden="true"></span>
+                    </button>
+                </div>
+                <div class="max-w-md mx-auto space-y-2">
+                    <label class="flex items-center justify-between gap-3 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3.5 cursor-pointer">
+                        <span class="text-sm font-semibold text-gray-700"><span aria-hidden="true">🔔</span> <span id="bwDigestLbl">Nudge the whole team when someone new drifts in</span></span>
+                        <span class="relative inline-flex shrink-0">
+                            <input type="checkbox" id="bwDigest" checked onchange="bwDigestChanged()" class="peer sr-only">
+                            <span class="block w-11 h-6 rounded-full bg-gray-200 peer-checked:bg-emerald-600 transition-colors"></span>
+                            <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5"></span>
+                        </span>
+                    </label>
+                    <p id="bwSelfClaimNote" class="hidden text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3">💡 Team self-pick is off in settings right now. Launching an open list switches it on, so volunteers can pick people themselves.</p>
+                </div>
+            </section>
+
+            <!-- STEP 5 — name & launch -->
+            <section data-wstep="5" class="bw-step hidden space-y-5">
+                <div class="text-center space-y-1.5">
+                    <h3 tabindex="-1" class="font-display font-bold text-xl md:text-2xl text-gray-900">Name it. Launch it.</h3>
+                    <p class="text-sm text-gray-500">One last look before we start watching.</p>
+                </div>
+                <div class="max-w-md mx-auto space-y-4">
+                    <div class="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 rounded-3xl p-6 text-center" aria-live="polite">
+                        <p id="bwCount" class="font-display font-bold text-4xl text-emerald-800 leading-none">
+                            <span class="bw-count-dot">•</span><span class="bw-count-dot" style="animation-delay:.15s">•</span><span class="bw-count-dot" style="animation-delay:.3s">•</span>
+                        </p>
+                        <p id="bwCountSub" class="text-xs font-bold text-emerald-700/80 uppercase tracking-wider mt-2">Counting quietly…</p>
+                    </div>
+                    <div>
+                        <label for="bwName" class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">List name</label>
+                        <input type="text" id="bwName" maxlength="120" oninput="bw.nameTouched = true" placeholder="e.g. Slipping away · Workers" class="mt-1.5 w-full min-h-[52px] px-4 py-3 border border-gray-200 rounded-2xl font-semibold focus:border-emerald-500 outline-none">
+                    </div>
+                    <div id="bwRecap" class="flex flex-wrap gap-2"></div>
+                    <p class="text-xs text-gray-400 text-center">People who start attending again drop off the list by themselves.</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- footer -->
+        <div class="shrink-0 border-t border-gray-100 bg-white px-5 md:px-8 pt-3.5 flex gap-3" style="padding-bottom: max(0.875rem, env(safe-area-inset-bottom));">
+            <button type="button" id="bwBack" onclick="bwShow(bw.step - 1)" class="invisible shrink-0 min-h-[52px] px-5 rounded-2xl border border-gray-200 bg-white font-bold text-gray-600 hover:border-emerald-300 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+                Back
+            </button>
+            <button type="button" id="bwNext" onclick="bwForward()" class="flex-1 min-h-[52px] rounded-2xl bg-emerald-700 hover:bg-emerald-800 active:scale-[0.99] text-white font-bold text-base shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:pointer-events-none">
+                Let&rsquo;s go
+            </button>
+        </div>
     </div>
 </div>
 <?php endif; ?>
@@ -781,14 +1084,30 @@ try {
     }
     function renderWatchlists(list) {
         if (!list.length) {
-            $('#wlList').html(`<p class="text-sm text-gray-500 text-center py-6">No watchlists yet. Build a rule above, then tap <strong>Save as watchlist</strong>.</p>`);
+            $('#wlList').html(`<div class="text-center py-8 space-y-3">
+                <div class="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-700 mx-auto flex items-center justify-center">${icon('M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', 'w-7 h-7')}</div>
+                <p class="text-sm text-gray-500">No watchlists yet.<br>Tap <strong class="text-gray-700">Build a List</strong> on the Find people tab — it takes under a minute.</p>
+            </div>`);
             return;
         }
-        $('#wlList').html(list.map(w => `
+        $('#wlList').html(list.map(w => {
+            const chips = [];
+            if (w.is_open) {
+                if (w.pool) chips.push(`<span class="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 text-[10px] font-bold">📲 ${w.pool} waiting for a volunteer</span>`);
+                if (w.claimed) chips.push(`<span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-1 text-[10px] font-bold">🙋 ${w.claimed} being called</span>`);
+                if (w.untouched) chips.push(`<span class="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2.5 py-1 text-[10px] font-bold">${w.untouched} held back by past outcomes</span>`);
+                if (!chips.length) chips.push(`<span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-1 text-[10px] font-bold">Everyone on it is being carried 🎉</span>`);
+            } else if (w.untouched) {
+                chips.push(`<span class="text-xs font-bold text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2 block">${w.untouched} of them have nobody calling yet</span>`);
+            }
+            return `
             <div class="border ${w.is_active ? 'border-gray-100' : 'border-dashed border-gray-200 opacity-70'} rounded-2xl p-4 space-y-3">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
-                        <p class="font-bold text-gray-900">${escapeHtml(w.name)} ${w.is_active ? '' : pill('Paused', 'bg-gray-100 text-gray-600')}</p>
+                        <p class="font-bold text-gray-900">${escapeHtml(w.name)}
+                            ${w.is_open ? pill('🙌 Open', 'bg-emerald-100 text-emerald-800 ml-1') : ''}
+                            ${w.is_active ? '' : pill('Paused', 'bg-gray-100 text-gray-600 ml-1')}
+                        </p>
                         <p class="text-xs text-gray-500 mt-0.5">${escapeHtml(w.summary)}</p>
                     </div>
                     <div class="shrink-0 text-right">
@@ -796,13 +1115,14 @@ try {
                         <p class="text-[10px] uppercase tracking-wider text-gray-400">people</p>
                     </div>
                 </div>
-                ${w.untouched ? `<p class="text-xs font-bold text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2">${w.untouched} of them have nobody calling yet</p>` : ''}
+                ${chips.length ? `<div class="flex flex-wrap gap-1.5">${chips.join('')}</div>` : ''}
                 <div class="flex flex-wrap gap-2">
                     <button type="button" onclick='loadWatchlist(${JSON.stringify(w.rule)})' class="min-h-[44px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-900 text-white text-xs font-bold">Open in Find people</button>
                     <button type="button" onclick="toggleWatchlist(${w.id}, ${w.is_active ? 0 : 1})" class="min-h-[44px] px-4 rounded-xl border border-gray-200 text-gray-700 text-xs font-bold hover:border-emerald-300">${w.is_active ? 'Pause digest' : 'Turn on'}</button>
                     <button type="button" onclick="deleteWatchlist(${w.id}, '${escapeHtml(w.name).replace(/'/g, "&#39;")}')" class="min-h-[44px] px-4 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold ml-auto">Delete</button>
                 </div>
-            </div>`).join(''));
+            </div>`;
+        }).join(''));
     }
     function loadWatchlist(rule) {
         applyRule(rule);
@@ -835,6 +1155,7 @@ try {
         describeRule();
         $('#wlRuleEcho').text($('#ruleSummary').text());
         $('#wlName').val('');
+        $('#wlOpen').prop('checked', false);
         openModal('saveWlModal');
         setTimeout(() => $('#wlName').trigger('focus'), 320);
     }
@@ -842,11 +1163,321 @@ try {
         ev.preventDefault();
         $.post(API_URL, {
             action: 'save_watchlist', name: $('#wlName').val().trim(),
-            notify: $('#wlNotify').is(':checked') ? 1 : 0, rule: JSON.stringify(currentRule())
+            notify: $('#wlNotify').is(':checked') ? 1 : 0,
+            is_open: $('#wlOpen').is(':checked') ? 1 : 0,
+            rule: JSON.stringify(currentRule())
         }, function(res) {
             showToast(res.message, res.status === 'success' ? 'success' : 'error');
-            if (res.status === 'success') { closeModal('saveWlModal'); refreshWatchlistCount(); }
+            if (res.status === 'success') {
+                if (res.data && res.data.self_claim_turned_on && BOOT) BOOT.allow_self_claim = true;
+                closeModal('saveWlModal');
+                refreshWatchlistCount();
+            }
         }, 'json').fail(() => showToast('Server error', 'error'));
+    });
+
+    /* ==================== ADVANCED PANEL TOGGLE ==================== */
+    function toggleAdvanced() {
+        const opening = $('#advPanel').hasClass('hidden');
+        $('#advPanel').toggleClass('hidden');
+        $('#advChevron').css('transform', opening ? 'rotate(180deg)' : '');
+        $('#advToggle').attr('aria-expanded', opening ? 'true' : 'false');
+        if (opening) runFind();
+    }
+
+    /* ==================== BUILD-A-LIST WIZARD ==================== */
+    const BW_TOTAL = 6;
+    const BW_AWAY = {
+        nos:  { max: 1, win: 1, unit: 'months', label: 'Just missed a few Sundays' },
+        slip: { max: 3, win: 2, unit: 'months', label: 'Slipping away' },
+        gone: { max: 5, win: 3, unit: 'months', label: 'Gone a while' }
+    };
+    const BW_STATUSES = [
+        ['1st_Timer', '1st timer', '👋', 'bg-amber-100'], ['2nd_Timer', '2nd timer', '🌱', 'bg-lime-100'],
+        ['3rd_Timer', '3rd timer', '🌿', 'bg-green-100'], ['Visitor', 'Visitor', '🧳', 'bg-sky-100'],
+        ['Non_Member', 'Not a member yet', '🙂', 'bg-gray-100'], ['Member', 'Member', '🏠', 'bg-emerald-100'],
+        ['Worker', 'Worker', '🛠️', 'bg-orange-100'], ['Pastor', 'Pastor', '📖', 'bg-violet-100']
+    ];
+    let bw = null;
+
+    function bwFresh() {
+        return { step: 0, away: 'slip', custom: { max: 3, win: 2, unit: 'months' },
+            who: new Set(), mode: 'open', digest: 1,
+            nameTouched: false, busy: false, countSig: null };
+    }
+
+    function openBuilder() {
+        if (!BOOT) { showToast('Still loading — one moment', 'error'); return; }
+        bw = bwFresh();
+        $('#bwDept').html('<option value="0">Every department</option>' + BOOT.departments.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join(''));
+        $('#bwRegion').html('<option value="0">Every region</option>' + BOOT.regions.map(r => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join(''));
+        $('#bwStatusWrap').html(BW_STATUSES.map(([k, lbl, emoji, bg]) => `
+            <button type="button" data-who="${k}" onclick="bwPickWho('${k}')" aria-pressed="false" class="bw-who bw-choice min-h-[64px] flex flex-col items-center justify-center gap-1 rounded-2xl border-2 border-gray-100 bg-white p-2.5 text-center hover:border-emerald-200">
+                <span class="w-9 h-9 rounded-xl ${bg} flex items-center justify-center text-xl leading-none" aria-hidden="true">${emoji}</span>
+                <span class="text-[11px] font-bold text-gray-700 leading-tight">${lbl}</span>
+            </button>`).join(''));
+        $('#bwGenderWrap').html([['', 'Everyone'], ['Male', 'Male'], ['Female', 'Female']].map(([v, lbl]) => `
+            <button type="button" data-g="${v}" onclick="bwPickGender('${v}')" aria-pressed="${v === '' ? 'true' : 'false'}" class="bw-gender bw-choice flex-1 min-h-[48px] rounded-xl border-2 border-gray-100 bg-white text-sm font-bold text-gray-600 hover:border-emerald-200">${lbl}</button>`).join(''));
+        $('#bwAgeWrap').html([['', 'Any age']].concat(BOOT.age_bands.map(a => [a, a])).map(([v, lbl]) => `
+            <button type="button" data-age="${escapeHtml(v)}" onclick="bwPickAge('${escapeHtml(v)}')" aria-pressed="${v === '' ? 'true' : 'false'}" class="bw-age bw-choice min-h-[44px] px-3.5 rounded-full border-2 border-gray-100 bg-white text-xs font-bold text-gray-600 hover:border-emerald-200">${escapeHtml(lbl)}</button>`).join(''));
+        $('#bwCustomMax').text(bw.custom.max);
+        $('#bwCustomWin').text(bw.custom.win);
+        $('#bwCustomUnit').val(bw.custom.unit);
+        $('#bwEver').prop('checked', true);
+        $('#bwDigest').prop('checked', true);
+        $('#bwName').val('');
+        bwSyncAll();
+        openModal('bwModal');
+        bwShow(0, true);
+    }
+
+    function bwRule() {
+        const a = bw.away === 'custom' ? bw.custom : BW_AWAY[bw.away];
+        return {
+            max_services: a.max, window_value: a.win, window_unit: a.unit,
+            spiritual_status: [...bw.who],
+            department_id: +$('#bwDept').val() || 0,
+            region_id: +$('#bwRegion').val() || 0,
+            gender: bw.gender || '', age_band: bw.age || '',
+            ever_attended: $('#bwEver').is(':checked') ? 1 : 0,
+            last_attended_before: null, last_attended_after: null,
+            case_state: '', search: ''
+        };
+    }
+
+    function bwSuggest() {
+        const a = bw.away === 'custom' ? 'Custom watch' : BW_AWAY[bw.away].label;
+        const who = bw.who.size ? [...bw.who].map(label).join(' & ') : 'Everyone';
+        return `${a} · ${who}`.slice(0, 120);
+    }
+
+    function bwShow(step, instant = false) {
+        if (!bw) return;
+        bw.step = Math.max(0, Math.min(BW_TOTAL - 1, step));
+        $('.bw-step').each(function() {
+            const on = +this.dataset.wstep === bw.step;
+            $(this).toggleClass('hidden', !on).toggleClass('bw-step-on', on && !instant);
+        });
+        $('#bwBody').scrollTop(0);
+        $('#bwStepNum').text(`${bw.step + 1}/${BW_TOTAL}`);
+        bwDots();
+        bwFooter();
+        if (bw.step === BW_TOTAL - 1) {
+            if (!bw.nameTouched) $('#bwName').val(bwSuggest());
+            bwRecap();
+            bwRefreshCount();
+            setTimeout(() => $('#bwName').trigger('focus'), 350);
+        }
+    }
+
+    function bwForward() {
+        if (!bw || bw.busy) return;
+        if (bw.step === BW_TOTAL - 1) { bwLaunch(); return; }
+        bwShow(bw.step + 1);
+    }
+
+    function bwDots() {
+        $('#bwDots').html(Array.from({ length: BW_TOTAL }, (_, i) => {
+            const cls = i === bw.step ? 'w-6 bg-emerald-600' : (i < bw.step ? 'w-2 bg-emerald-300' : 'w-2 bg-gray-200');
+            return `<button type="button" role="tab" data-i="${i}" aria-label="Step ${i + 1}" aria-selected="${i === bw.step}" ${i < bw.step ? '' : 'disabled'} class="bw-dot h-2 rounded-full transition-all duration-300 ${cls}"></button>`;
+        }).join(''));
+    }
+    $(document).on('click', '.bw-dot', function() { if (bw && !bw.busy) bwShow(+this.dataset.i); });
+
+    function bwFooter() {
+        $('#bwBack').toggleClass('invisible', bw.step === 0).prop('disabled', bw.busy);
+        const next = $('#bwNext').prop('disabled', bw.busy);
+        const arrow = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>`;
+        if (bw.step === BW_TOTAL - 1) {
+            next.html(bw.busy
+                ? `<svg class="animate-spin w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Launching…`
+                : `🚀 Launch watchlist`);
+        } else {
+            next.html((bw.step === 0 ? 'Let&rsquo;s go ' : 'Continue ') + arrow);
+        }
+    }
+
+    /* ---- step 1: how long away ---- */
+    function bwPickAway(k) {
+        bw.away = k; bw.countSig = null;
+        $('.bw-away').each(function() { bwPaintChoice($(this), this.dataset.away === k); });
+        $('#bwCustomRow').toggleClass('hidden', k !== 'custom');
+    }
+    function bwStepCustom(field, delta) {
+        if (field === 'max') bw.custom.max = Math.max(1, Math.min(50, bw.custom.max + delta));
+        if (field === 'win') bw.custom.win = Math.max(1, Math.min(104, bw.custom.win + delta));
+        $('#bwCustomMax').text(bw.custom.max);
+        $('#bwCustomWin').text(bw.custom.win);
+        bw.countSig = null;
+    }
+    function bwCustomUnitChanged() { bw.custom.unit = $('#bwCustomUnit').val(); bw.countSig = null; }
+
+    /* ---- step 2: who ---- */
+    function bwPickEveryone() {
+        bw.who.clear(); bw.countSig = null;
+        bwSyncWho();
+    }
+    function bwPickWho(k) {
+        bw.who.has(k) ? bw.who.delete(k) : bw.who.add(k);
+        bw.countSig = null;
+        bwSyncWho();
+    }
+    function bwSyncWho() {
+        const everyone = bw.who.size === 0;
+        bwPaintChoice($('#bwEveryone'), everyone);
+        $('#bwEveryone').attr('aria-pressed', everyone ? 'true' : 'false');
+        $('.bw-who').each(function() {
+            const on = bw.who.has(this.dataset.who);
+            bwPaintChoice($(this), on);
+            $(this).attr('aria-pressed', on ? 'true' : 'false');
+        });
+    }
+
+    /* ---- step 3: fine tune ---- */
+    function bwPickGender(v) {
+        bw.gender = v; bw.countSig = null;
+        $('.bw-gender').each(function() { bwPaintChoice($(this), this.dataset.g === v); });
+    }
+    function bwPickAge(v) {
+        bw.age = v; bw.countSig = null;
+        $('.bw-age').each(function() { bwPaintChoice($(this), this.dataset.age === v); });
+    }
+    function bwFtChanged() { bw.countSig = null; }
+
+    /* ---- step 4: who works it ---- */
+    function bwPickMode(mode) {
+        bw.mode = mode; bw.countSig = null;
+        bwPaintChoice($('#bwModeOpen'), mode === 'open');
+        bwPaintChoice($('#bwModeManaged'), mode === 'managed');
+        $('#bwDigestLbl').text(mode === 'open'
+            ? 'Nudge the whole team when someone new drifts in'
+            : 'Nudge the managers when someone new drifts in');
+        $('#bwSelfClaimNote').toggleClass('hidden', !(mode === 'open' && BOOT && !BOOT.allow_self_claim));
+    }
+    function bwDigestChanged() { bw.digest = $('#bwDigest').is(':checked') ? 1 : 0; bw.countSig = null; }
+
+    /* ---- shared choice painting ---- */
+    function bwPaintChoice($el, on) {
+        $el.toggleClass('border-emerald-600 bg-emerald-50 shadow-sm', on)
+           .toggleClass('border-gray-100 bg-white', !on);
+        if ($el.attr('role') === 'radio') $el.attr('aria-checked', on ? 'true' : 'false');
+        if ($el.attr('aria-pressed') !== undefined) $el.attr('aria-pressed', on ? 'true' : 'false');
+        $el.find('.bw-check')
+           .toggleClass('bg-emerald-600 border-emerald-600 text-white', on)
+           .toggleClass('border-gray-200 text-transparent', !on)
+           .html(on ? '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5" d="M5 13l4 4L19 7"/></svg>' : '');
+    }
+    function bwSyncAll() {
+        bwPickAway(bw.away);
+        bwSyncWho();
+        bwPickGender('');
+        bwPickAge('');
+        bwPickMode(bw.mode);
+        bw.digest = 1;
+        $('#bwDigestLbl').text('Nudge the whole team when someone new drifts in');
+    }
+
+    /* ---- step 5: recap & count ---- */
+    function bwRecap() {
+        const a = bw.away === 'custom'
+            ? `Under ${bw.custom.max} in ${bw.custom.win} ${bw.custom.unit}`
+            : BW_AWAY[bw.away].label;
+        const chips = [
+            ['🕰️', a],
+            ['👥', bw.who.size ? [...bw.who].map(label).join(', ') : 'Everyone'],
+        ];
+        const dept = BOOT.departments.find(d => +d.id === +$('#bwDept').val());
+        if (dept) chips.push(['⛪', dept.name]);
+        const region = BOOT.regions.find(r => +r.id === +$('#bwRegion').val());
+        if (region) chips.push(['📍', region.name]);
+        if (bw.gender) chips.push(['🧑', bw.gender]);
+        if (bw.age) chips.push(['🎂', 'Aged ' + bw.age]);
+        chips.push([bw.mode === 'open' ? '🙌' : '🧭', bw.mode === 'open' ? 'Open to every volunteer' : 'Managers assign']);
+        chips.push(['🔔', bw.digest ? 'Daily nudge on' : 'Silent — no nudges']);
+        $('#bwRecap').html(chips.map(([emoji, txt]) =>
+            `<span class="inline-flex items-center gap-1.5 bg-white border border-gray-200 rounded-full px-3 py-1.5 text-[11px] font-bold text-gray-600"><span aria-hidden="true">${emoji}</span>${escapeHtml(txt)}</span>`).join(''));
+    }
+
+    function bwRefreshCount() {
+        const sig = JSON.stringify(bwRule());
+        if (bw.countSig === sig) return;
+        bw.countSig = sig;
+        $('#bwCount').html('<span class="bw-count-dot">•</span><span class="bw-count-dot" style="animation-delay:.15s">•</span><span class="bw-count-dot" style="animation-delay:.3s">•</span>');
+        $('#bwCountSub').text('Counting quietly…');
+        $.post(API_URL, { action: 'count_rule', rule: sig }, function(res) {
+            if (!bw || bw.countSig !== sig) return;
+            if (res.status !== 'success') { $('#bwCount').text('—'); $('#bwCountSub').text('Could not count right now'); return; }
+            bwTweenCount(res.data.count);
+        }, 'json').fail(function() {
+            if (!bw || bw.countSig !== sig) return;
+            $('#bwCount').text('—');
+            $('#bwCountSub').text('Could not count right now');
+        });
+    }
+
+    function bwTweenCount(target) {
+        target = +target || 0;
+        const el = document.getElementById('bwCount');
+        const t0 = performance.now(), dur = Math.min(900, 300 + target * 2);
+        (function tick(t) {
+            const p = Math.min(1, (t - t0) / dur);
+            const eased = 1 - Math.pow(1 - p, 3);
+            el.textContent = Math.round(target * eased).toLocaleString();
+            if (p < 1 && bw) requestAnimationFrame(tick);
+        })(performance.now());
+        $('#bwCountSub').text(target === 1 ? 'person matches right now' : 'people match right now');
+    }
+
+    /* ---- launch ---- */
+    function bwLaunch() {
+        if (bw.busy) return;
+        const name = $('#bwName').val().trim();
+        if (!name) {
+            showToast('Give the list a short name first', 'error');
+            $('#bwName').trigger('focus');
+            return;
+        }
+        bw.busy = true; bwFooter();
+        $.post(API_URL, {
+            action: 'save_watchlist', name: name, rule: JSON.stringify(bwRule()),
+            notify: bw.digest ? 1 : 0, is_open: bw.mode === 'open' ? 1 : 0
+        }, function(res) {
+            bw.busy = false; bwFooter();
+            if (res.status !== 'success') { showToast(res.message, 'error'); return; }
+            if (res.data && res.data.self_claim_turned_on && BOOT) BOOT.allow_self_claim = true;
+            closeModal('bwModal');
+            confettiBurst();
+            showToast(res.message, 'success');
+            refreshWatchlistCount();
+        }, 'json').fail(function() {
+            bw.busy = false; bwFooter();
+            showToast('Server error', 'error');
+        });
+    }
+
+    /* ---- celebration ---- */
+    function confettiBurst() {
+        const colors = ['#059669', '#10B981', '#34D399', '#FBBF24', '#F59E0B', '#A7F3D0'];
+        const host = document.createElement('div');
+        host.className = 'fixed inset-0 z-[10001] pointer-events-none overflow-hidden';
+        host.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(host);
+        for (let i = 0; i < 42; i++) {
+            const s = document.createElement('span');
+            const size = 6 + Math.random() * 8;
+            s.style.cssText = `position:absolute;top:-12px;left:${Math.random() * 100}%;width:${size}px;height:${size * (0.6 + Math.random())}px;background:${colors[i % colors.length]};border-radius:${Math.random() > 0.5 ? '50%' : '2px'};`;
+            host.appendChild(s);
+            const fall = window.innerHeight * 0.65 + Math.random() * window.innerHeight * 0.4;
+            s.animate([
+                { transform: 'translate3d(0,-12px,0) rotate(0deg)', opacity: 1 },
+                { transform: `translate3d(${(Math.random() - 0.5) * 240}px,${fall}px,0) rotate(${360 + Math.random() * 540}deg)`, opacity: 0.85 }
+            ], { duration: 1700 + Math.random() * 1300, easing: 'cubic-bezier(.16,.7,.4,1)', fill: 'forwards' });
+        }
+        setTimeout(() => host.remove(), 3300);
+    }
+    $(document).on('keydown', function(ev) {
+        const m = document.getElementById('bwModal');
+        if (ev.key === 'Escape' && m && !m.classList.contains('hidden')) closeModal('bwModal');
     });
 
     /* ============================ TAB 2 — FOLLOW-UP ============================ */
