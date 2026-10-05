@@ -961,46 +961,209 @@ try {
             $event_id = (int)($_POST['event_id'] ?? 0);
             if (!$event_id) { echo json_encode(['status'=>'error','message'=>'Event ID is required.']); exit; }
 
-            // Total check-ins (all days)
-            $t = $pdo->prepare("SELECT COUNT(*) FROM checkins WHERE event_id = ?");
-            $t->execute([$event_id]); $total = (int)$t->fetchColumn();
+            $eventStmt = $pdo->prepare("SELECT id, title, event_category, requires_registration FROM events WHERE id = ?");
+            $eventStmt->execute([$event_id]);
+            $event = $eventStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$event) { echo json_encode(['status'=>'error','message'=>'Event not found.']); exit; }
 
-            // Checked in today
-            $td = $pdo->prepare("SELECT COUNT(*) FROM checkins WHERE event_id = ? AND checkin_date = ?");
-            $td->execute([$event_id, date('Y-m-d')]); $today = (int)$td->fetchColumn();
-
-            // Checked in yesterday
-            $ye = $pdo->prepare("SELECT COUNT(*) FROM checkins WHERE event_id = ? AND checkin_date = ?");
-            $ye->execute([$event_id, date('Y-m-d', strtotime('-1 day'))]); $yesterday = (int)$ye->fetchColumn();
-
-            // Members vs walk-ins
-            $mix = $pdo->prepare("SELECT SUM(is_member=1) AS members, SUM(is_walkin=1) AS walkins FROM checkins WHERE event_id = ?");
-            $mix->execute([$event_id]); $m = $mix->fetch(PDO::FETCH_ASSOC);
-
-            // Per-day breakdown
-            $days = $pdo->prepare("SELECT checkin_date, COUNT(*) AS n FROM checkins WHERE event_id = ? GROUP BY checkin_date ORDER BY checkin_date");
-            $days->execute([$event_id]); $byDay = $days->fetchAll(PDO::FETCH_ASSOC);
-
-            // Registered total (from event_registrations) for context
+            // Registered total (from event_registrations) determines whether this
+            // event is using the registration/check-in workflow or the normal
+            // Sunday/Midweek roster attendance workflow.
             $reg = $pdo->prepare("SELECT COUNT(*) FROM event_registrations WHERE event_id = ?");
-            $reg->execute([$event_id]); $registered = (int)$reg->fetchColumn();
+            $reg->execute([$event_id]);
+            $registered = (int)$reg->fetchColumn();
+            $workflowMode = ((int)($event['requires_registration'] ?? 0) === 1) || $registered > 0;
 
-            // growth trend (today vs yesterday)
-            $growth = 0;
-            if ($yesterday > 0) $growth = round((($today - $yesterday) / $yesterday) * 100);
-            elseif ($today > 0) $growth = 100;
+            $normaliseRow = function(array $row): array {
+                $name = trim((string)($row['name'] ?? ''));
+                if ($name === '') {
+                    $name = trim((string)($row['full_name'] ?? ''));
+                }
+                if ($name === '') {
+                    $name = trim((string)($row['first_name'] ?? '') . ' ' . (string)($row['last_name'] ?? ''));
+                }
+                if ($name === '') $name = 'Unnamed attendee';
+                return [
+                    'id' => isset($row['id']) ? (int)$row['id'] : null,
+                    'name' => $name,
+                    'first_name' => $row['first_name'] ?? '',
+                    'last_name' => $row['last_name'] ?? '',
+                    'phone' => $row['phone'] ?? '',
+                    'gender' => $row['gender'] ?? '',
+                    'spiritual_status' => $row['spiritual_status'] ?? ($row['status'] ?? ''),
+                    'marked_at' => $row['marked_at'] ?? ($row['checked_in_at'] ?? ($row['check_in_time'] ?? null)),
+                ];
+            };
+            $normaliseRows = function(array $rows) use ($normaliseRow): array {
+                $out = [];
+                foreach ($rows as $row) $out[] = $normaliseRow($row);
+                return $out;
+            };
+
+            if ($workflowMode) {
+                $checkStmt = $pdo->prepare("
+                    SELECT c.id, c.full_name, c.phone, c.is_member, c.is_walkin, c.source,
+                           c.checkin_date, c.checked_in_at AS marked_at,
+                           u.first_name, u.last_name, u.gender, u.spiritual_status
+                    FROM checkins c
+                    LEFT JOIN users u ON u.id = c.user_id
+                    WHERE c.event_id = ?
+                    ORDER BY c.checked_in_at DESC, c.id DESC
+                ");
+                $checkStmt->execute([$event_id]);
+                $checkRowsRaw = $checkStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $today = date('Y-m-d');
+                $yesterday = date('Y-m-d', strtotime('-1 day'));
+                $todayRowsRaw = [];
+                $memberRowsRaw = [];
+                $walkinRowsRaw = [];
+                $yesterdayCount = 0;
+                foreach ($checkRowsRaw as $row) {
+                    if (($row['checkin_date'] ?? '') === $today) $todayRowsRaw[] = $row;
+                    if (($row['checkin_date'] ?? '') === $yesterday) $yesterdayCount++;
+                    if ((int)($row['is_member'] ?? 0) === 1) $memberRowsRaw[] = $row;
+                    if ((int)($row['is_walkin'] ?? 0) === 1) $walkinRowsRaw[] = $row;
+                }
+
+                $total = count($checkRowsRaw);
+                $todayCount = count($todayRowsRaw);
+                $growth = 0;
+                if ($yesterdayCount > 0) $growth = round((($todayCount - $yesterdayCount) / $yesterdayCount) * 100);
+                elseif ($todayCount > 0) $growth = 100;
+
+                echo json_encode([
+                    'status'=>'success',
+                    'kpis'=>[
+                        'mode'=>'workflow',
+                        'total'=>$total,
+                        'today'=>$todayCount,
+                        'yesterday'=>$yesterdayCount,
+                        'growth'=>$growth,
+                        'members'=>count($memberRowsRaw),
+                        'walkins'=>count($walkinRowsRaw),
+                        'registered'=>$registered,
+                        'details'=>[
+                            'card1'=>[
+                                'title'=>'Total Checked In',
+                                'subtitle'=>'Everyone checked in through the registration/check-in workflow.',
+                                'groups'=>[
+                                    ['label'=>'All checked in', 'rows'=>$normaliseRows($checkRowsRaw)]
+                                ]
+                            ],
+                            'card2'=>[
+                                'title'=>'Checked In Today',
+                                'subtitle'=>'People checked in today for this event.',
+                                'groups'=>[
+                                    ['label'=>'Today', 'rows'=>$normaliseRows($todayRowsRaw)]
+                                ]
+                            ],
+                            'card3'=>[
+                                'title'=>'Members / Walk-ins',
+                                'subtitle'=>'Registration workflow split between known members and walk-ins.',
+                                'groups'=>[
+                                    ['label'=>'Members', 'rows'=>$normaliseRows($memberRowsRaw)],
+                                    ['label'=>'Walk-ins', 'rows'=>$normaliseRows($walkinRowsRaw)]
+                                ]
+                            ],
+                        ],
+                    ]
+                ]);
+                break;
+            }
+
+            // Normal attendance mode: Sunday/Midweek services use the roster-based
+            // attendance table as the source of truth. We union QR checkins so any
+            // defensive/self-check-in records still count, but dedupe by user.
+            $attendanceStmt = $pdo->prepare("
+                SELECT u.id, u.first_name, u.last_name, u.phone, u.gender, u.spiritual_status,
+                       MIN(src.marked_at) AS marked_at
+                FROM (
+                    SELECT user_id, check_in_time AS marked_at
+                    FROM attendance
+                    WHERE event_id = ? AND status = 'Present' AND user_id IS NOT NULL
+                    UNION ALL
+                    SELECT user_id, checked_in_at AS marked_at
+                    FROM checkins
+                    WHERE event_id = ? AND user_id IS NOT NULL
+                ) src
+                JOIN users u ON u.id = src.user_id
+                GROUP BY u.id, u.first_name, u.last_name, u.phone, u.gender, u.spiritual_status
+                ORDER BY marked_at DESC, u.first_name ASC, u.last_name ASC
+            ");
+            $attendanceStmt->execute([$event_id, $event_id]);
+            $attendanceRowsRaw = $attendanceStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $guestStmt = $pdo->prepare("
+                SELECT NULL AS id, c.full_name, c.phone, NULL AS gender, 'Not_On_File' AS spiritual_status,
+                       c.checked_in_at AS marked_at
+                FROM checkins c
+                WHERE c.event_id = ? AND c.user_id IS NULL
+                ORDER BY c.checked_in_at DESC, c.id DESC
+            ");
+            $guestStmt->execute([$event_id]);
+            $attendanceRowsRaw = array_merge($attendanceRowsRaw, $guestStmt->fetchAll(PDO::FETCH_ASSOC));
+
+            $maleRows = [];
+            $femaleRows = [];
+            $unknownGenderRows = [];
+            $memberRows = [];
+            $timerRows = [];
+            $memberStatuses = ['Member', 'Worker', 'Pastor'];
+            $timerStatuses = ['1st_Timer', '2nd_Timer', '3rd_Timer'];
+
+            foreach ($attendanceRowsRaw as $row) {
+                $gender = $row['gender'] ?? '';
+                if ($gender === 'Male') $maleRows[] = $row;
+                elseif ($gender === 'Female') $femaleRows[] = $row;
+                else $unknownGenderRows[] = $row;
+
+                $status = $row['spiritual_status'] ?? '';
+                if (in_array($status, $memberStatuses, true)) $memberRows[] = $row;
+                if (in_array($status, $timerStatuses, true)) $timerRows[] = $row;
+            }
 
             echo json_encode([
                 'status'=>'success',
                 'kpis'=>[
-                    'total'=>$total,
-                    'today'=>$today,
-                    'yesterday'=>$yesterday,
-                    'growth'=>$growth,
-                    'members'=>(int)($m['members']??0),
-                    'walkins'=>(int)($m['walkins']??0),
+                    'mode'=>'attendance',
+                    'total'=>count($attendanceRowsRaw),
                     'registered'=>$registered,
-                    'by_day'=>$byDay,
+                    'gender'=>[
+                        'male'=>count($maleRows),
+                        'female'=>count($femaleRows),
+                        'unknown'=>count($unknownGenderRows),
+                    ],
+                    'member_mix'=>[
+                        'members'=>count($memberRows),
+                        'timers'=>count($timerRows),
+                    ],
+                    'details'=>[
+                        'card1'=>[
+                            'title'=>'Attendance',
+                            'subtitle'=>'Everyone marked present for this service.',
+                            'groups'=>[
+                                ['label'=>'Marked present', 'rows'=>$normaliseRows($attendanceRowsRaw)]
+                            ]
+                        ],
+                        'card2'=>[
+                            'title'=>'Gender Split',
+                            'subtitle'=>'Attendance grouped by gender from each person\'s profile.',
+                            'groups'=>[
+                                ['label'=>'Male', 'rows'=>$normaliseRows($maleRows)],
+                                ['label'=>'Female', 'rows'=>$normaliseRows($femaleRows)],
+                                ['label'=>'Unknown gender', 'rows'=>$normaliseRows($unknownGenderRows)]
+                            ]
+                        ],
+                        'card3'=>[
+                            'title'=>'Members / 1st–3rd Timers',
+                            'subtitle'=>'Church members compared with first, second and third timers.',
+                            'groups'=>[
+                                ['label'=>'Church members', 'rows'=>$normaliseRows($memberRows)],
+                                ['label'=>'1st, 2nd & 3rd timers', 'rows'=>$normaliseRows($timerRows)]
+                            ]
+                        ],
+                    ],
                 ]
             ]);
             break;
