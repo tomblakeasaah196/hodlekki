@@ -7,13 +7,17 @@
   "properties": {
     "items": {
       "type": "array",
-      "maxItems": 60,
       "items": {
         "type": "object",
         "required": [
           "title",
           "kind",
           "day_index",
+          "start_time",
+          "end_time",
+          "duration_min",
+          "host",
+          "notes",
           "confidence"
         ],
         "properties": {
@@ -27,19 +31,24 @@
             "type": "integer"
           },
           "start_time": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "end_time": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "duration_min": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "host": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "notes": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "confidence": {
             "type": "number"

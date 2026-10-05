@@ -7,13 +7,13 @@
     "palettes": {
       "type": "array",
       "minItems": 4,
-      "maxItems": 4,
       "items": {
         "type": "object",
         "required": [
           "name",
           "rationale",
           "accent",
+          "team_suggestions",
           "mood_words"
         ],
         "properties": {
@@ -26,24 +26,19 @@
           "accent": {
             "type": "string"
           },
-          "background_hint": {
-            "type": "string"
-          },
           "team_suggestions": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "minItems": 4,
-            "maxItems": 4
+            "minItems": 4
           },
           "mood_words": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "minItems": 3,
-            "maxItems": 3
+            "minItems": 3
           }
         }
       }

@@ -500,7 +500,10 @@ function se_songs_import_ai(PDO $pdo, array $event, ?int $assetId, string $text,
     ]);
 
     $rows = [];
-    foreach (is_array($result['songs'] ?? null) ? $result['songs'] : [] as $song) {
+    $songs = is_array($result['songs'] ?? null) ? $result['songs'] : [];
+    // Keep the 400-row cap in PHP instead of exposing a large nested-array
+    // bound to Gemini's constrained-decoding compiler.
+    foreach (array_slice($songs, 0, 400) as $song) {
         if (!is_array($song)) {
             continue;
         }

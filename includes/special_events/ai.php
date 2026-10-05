@@ -13,8 +13,11 @@
 /** Raised for every AI failure. The code maps straight onto §12.1. */
 class SeAiException extends RuntimeException
 {
-    public function __construct(public readonly string $errorCode, string $message)
-    {
+    public function __construct(
+        public readonly string $errorCode,
+        string $message,
+        public readonly ?int $httpStatus = null
+    ) {
         parent::__construct($message);
     }
 }
@@ -45,7 +48,8 @@ class SeAiGemini implements SeAiProvider
             // instead of letting Google answer 404 "model not found".
             throw new SeAiException(
                 'AI_UNAVAILABLE',
-                'No Gemini model is configured. An administrator should set SE_AI_MODEL_TEXT and SE_AI_MODEL_VISION, or leave them out of .env entirely.'
+                'No Gemini model is configured. An administrator should set SE_AI_MODEL_TEXT and SE_AI_MODEL_VISION, or leave them out of .env entirely.',
+                0
             );
         }
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/'
@@ -91,20 +95,30 @@ class SeAiGemini implements SeAiProvider
         curl_close($ch);
 
         if ($body === false) {
-            // The message may name the host but never the key.
-            throw new SeAiException('AI_UNAVAILABLE', 'The AI service could not be reached: ' . $curlError);
+            // The message may name the host but never the key. A zero status
+            // means no HTTP response arrived; a real response code is kept.
+            throw new SeAiException(
+                'AI_UNAVAILABLE',
+                'The AI service could not be reached: ' . $curlError,
+                $status > 0 ? $status : 0
+            );
         }
 
         $decoded = json_decode((string) $body, true);
         if (!is_array($decoded)) {
-            throw new SeAiException('AI_UNAVAILABLE', 'The AI service returned something unreadable.');
+            throw new SeAiException(
+                'AI_UNAVAILABLE',
+                'The AI service returned something unreadable.',
+                $status > 0 ? $status : 0
+            );
         }
 
         if ($status !== 200) {
             $reason = (string) ($decoded['error']['message'] ?? 'HTTP ' . $status);
             throw new SeAiException(
                 in_array($status, [429, 500, 503], true) ? 'AI_RETRYABLE' : 'AI_UNAVAILABLE',
-                'The AI service refused the request: ' . mb_substr($reason, 0, 200, 'UTF-8')
+                'The AI service refused the request: ' . mb_substr($reason, 0, 500, 'UTF-8'),
+                $status
             );
         }
 
@@ -316,6 +330,13 @@ function se_schema_validate(mixed $value, array $schema, string $path = '$'): ar
     $problems = [];
     $type     = $schema['type'] ?? null;
 
+    // Gemini's response-schema subset uses nullable alongside a concrete
+    // type. Required-but-null properties keep object shapes deterministic
+    // without forcing the model to invent a value.
+    if ($value === null && !empty($schema['nullable'])) {
+        return [];
+    }
+
     $typeOk = match ($type) {
         null      => true,
         'object'  => is_array($value) && !array_is_list($value) || $value === [],
@@ -474,6 +495,95 @@ function se_ai_retry_hint(array $problems): string
         . 'Do not include Markdown, commentary or trailing text; close every string, array and object.';
 }
 
+/** Gemini can reject a valid response schema when its decoder has too many states. */
+function se_ai_is_schema_rejection(SeAiException $e): bool
+{
+    return $e->httpStatus === 400
+        && preg_match('/too many states|constraint|invalid.*schema/is', $e->getMessage()) === 1;
+}
+
+/**
+ * A one-line sketch of the shape a task expects, e.g.
+ * `{"items": [{"title": string, "day_index": integer, "host": string|null}], "warnings": [string]}`.
+ *
+ * It exists for the schema-rejection fallback: without `responseSchema` the
+ * model only knows what the prompt tells it, and the prompts describe the
+ * fields in prose. Deriving the sketch from the schema file keeps the two
+ * from drifting apart. No event or attendee data can appear in it.
+ */
+function se_schema_outline(array $schema, int $depth = 0): string
+{
+    $suffix = !empty($schema['nullable']) ? '|null' : '';
+    $type   = strtolower((string) ($schema['type'] ?? ''));
+
+    if ($depth > 5) {
+        return 'value' . $suffix;
+    }
+    if (isset($schema['enum']) && is_array($schema['enum'])) {
+        return implode('|', array_map(static fn($v): string => '"' . (string) $v . '"', $schema['enum'])) . $suffix;
+    }
+    if ($type === 'object') {
+        $properties = is_array($schema['properties'] ?? null) ? $schema['properties'] : [];
+        if (!$properties) {
+            return 'object' . $suffix;
+        }
+        $parts = [];
+        foreach ($properties as $key => $child) {
+            $parts[] = '"' . (string) $key . '": '
+                . (is_array($child) ? se_schema_outline($child, $depth + 1) : 'string');
+        }
+
+        return '{' . implode(', ', $parts) . '}' . $suffix;
+    }
+    if ($type === 'array') {
+        $items = is_array($schema['items'] ?? null) ? se_schema_outline($schema['items'], $depth + 1) : 'string';
+
+        return '[' . $items . ', …]' . $suffix;
+    }
+
+    return ($type !== '' ? $type : 'string') . $suffix;
+}
+
+/**
+ * The instruction that replaces a rejected `responseSchema`. It names the
+ * shape and nothing else — the module still validates the answer locally.
+ */
+function se_ai_schema_fallback_hint(array $schema): string
+{
+    return 'Return one complete JSON object with exactly this shape, and nothing else: '
+        . se_schema_outline($schema)
+        . ' Every property shown must be present. Use null (not an omitted property, '
+        . 'and never an invented value) where the source does not say. No Markdown, no commentary.';
+}
+
+/**
+ * One safe diagnostic line for every failed provider attempt. Prompt text,
+ * response text, attendee data and credentials are deliberately absent.
+ */
+function se_ai_log_failure(
+    string $task,
+    string $model,
+    ?int $httpStatus,
+    int $attempt,
+    string $message,
+    bool $schemaFallback = false
+): void {
+    $clean = static function (string $value, int $limit): string {
+        $value = preg_replace('/\s+/u', ' ', trim($value)) ?? '';
+        return mb_substr($value, 0, $limit, 'UTF-8');
+    };
+
+    error_log(sprintf(
+        'SE ai/failure task=%s model=%s http_status=%s attempt=%d schema_fallback=%s message=%s',
+        $clean($task, 64),
+        $clean($model, 100),
+        $httpStatus === null ? 'unknown' : (string) $httpStatus,
+        $attempt,
+        $schemaFallback ? 'without_response_schema' : 'no',
+        $clean($message, 500)
+    ));
+}
+
 // --------------------------------------------------------------------------
 // se_ai()
 // --------------------------------------------------------------------------
@@ -531,15 +641,18 @@ function se_ai(PDO $pdo, string $task, array $input, array $ctx = []): array
     $provider = ($ctx['provider'] ?? null) instanceof SeAiProvider
         ? $ctx['provider']
         : new SeAiGemini($apiKey);
-    $attempt  = 0;
+    $attempt = 0;
+    $normalRetryUsed = false;
+    $schemaFallbackUsed = false;
     $lastProblems = [];
 
-    while ($attempt < 2) {
+    // At most three provider calls: the original, one schema-less fallback,
+    // and the module's existing retry for a transient or malformed response.
+    while ($attempt < 3) {
         $attempt++;
         $startedAt = microtime(true);
         $usage     = ['input' => 0, 'output' => 0, 'thinking' => 0, 'total' => 0];
         $httpStatus = null;
-        $errorCode = null;
         $retryShouldExpandTokens = false;
 
         try {
@@ -553,13 +666,23 @@ function se_ai(PDO $pdo, string $task, array $input, array $ctx = []): array
             if (!is_array($decoded)) {
                 $lastProblems = [se_ai_json_problem($text, $finishReason, $usage, (int) $request['max_tokens'])];
                 $retryShouldExpandTokens = se_ai_response_looks_truncated($finishReason, $usage, (int) $request['max_tokens']);
-                throw new SeAiException('AI_INVALID_OUTPUT', 'The AI did not return usable JSON.');
+                throw new SeAiException(
+                    'AI_INVALID_OUTPUT',
+                    'The AI did not return usable JSON.',
+                    $httpStatus
+                );
             }
 
+            // Always validate against the original local schema, including
+            // when Gemini could only serve the call without responseSchema.
             $problems = $prompt['schema'] ? se_schema_validate($decoded, $prompt['schema']) : [];
             if ($problems) {
                 $lastProblems = $problems;
-                throw new SeAiException('AI_INVALID_OUTPUT', 'The AI output did not match the expected shape.');
+                throw new SeAiException(
+                    'AI_INVALID_OUTPUT',
+                    'The AI output did not match the expected shape.',
+                    $httpStatus
+                );
             }
 
             se_ai_log($pdo, $task, $model, $prompt['version'], $usage, $startedAt, $httpStatus, true, null, $userId, $eventId, $ctx['job_id'] ?? null);
@@ -567,20 +690,33 @@ function se_ai(PDO $pdo, string $task, array $input, array $ctx = []): array
             return $decoded;
         } catch (SeAiException $e) {
             $errorCode = $e->errorCode;
-            se_ai_log($pdo, $task, $model, $prompt['version'], $usage, $startedAt, $httpStatus, false, $errorCode, $userId, $eventId, $ctx['job_id'] ?? null);
+            $httpStatus = $e->httpStatus ?? $httpStatus;
+            $useSchemaFallback = !$schemaFallbackUsed && se_ai_is_schema_rejection($e);
 
-            if ($attempt >= 2) {
-                throw new SeAiException(
-                    $errorCode === 'AI_RETRYABLE' ? 'AI_UNAVAILABLE' : $errorCode,
-                    $e->getMessage()
-                );
+            se_ai_log($pdo, $task, $model, $prompt['version'], $usage, $startedAt, $httpStatus, false, $errorCode, $userId, $eventId, $ctx['job_id'] ?? null);
+            se_ai_log_failure($task, $model, $httpStatus, $attempt, $e->getMessage(), $useSchemaFallback);
+
+            if ($useSchemaFallback) {
+                // Keep JSON mode, but omit responseSchema on the next call and
+                // describe the shape in words instead. Local validation stays
+                // mandatory, so no model output reaches a review screen merely
+                // because this fallback fired.
+                $schemaFallbackUsed = true;
+                $request['schema'] = [];
+                $parts = array_merge($parts, [[
+                    'text' => se_ai_schema_fallback_hint($prompt['schema']),
+                ]]);
+                $request['parts'] = $parts;
+                continue;
             }
 
-            if ($errorCode === 'AI_RETRYABLE') {
+            if (!$normalRetryUsed && $errorCode === 'AI_RETRYABLE') {
+                $normalRetryUsed = true;
                 usleep(1500000);   // One retry after 1.5 s on 429/500/503.
                 continue;
             }
-            if ($errorCode === 'AI_INVALID_OUTPUT') {
+            if (!$normalRetryUsed && $errorCode === 'AI_INVALID_OUTPUT') {
+                $normalRetryUsed = true;
                 // Retry once with a non-sensitive hint naming what was wrong.
                 // If Gemini stopped because of MAX_TOKENS, the retry also gets
                 // a larger output budget; otherwise the same ceiling is kept.
@@ -593,11 +729,15 @@ function se_ai(PDO $pdo, string $task, array $input, array $ctx = []): array
                 continue;
             }
 
+            if ($errorCode === 'AI_RETRYABLE') {
+                throw new SeAiException('AI_UNAVAILABLE', $e->getMessage(), $httpStatus);
+            }
+
             throw $e;
         }
     }
 
-    throw new SeAiException('AI_UNAVAILABLE', 'The AI service did not answer.');
+    throw new SeAiException('AI_UNAVAILABLE', 'The AI service did not answer.', 0);
 }
 
 /** One row per call in se_ai_requests. Never logs prompt text or output. */
@@ -961,7 +1101,9 @@ function se_ai_palette_suggest(PDO $pdo, array $event, string $primary, string $
     ]);
 
     $palettes = [];
-    foreach ($result['palettes'] ?? [] as $palette) {
+    // The prompt asks for four; cap here instead of putting another nested
+    // array maximum into Gemini's serving schema.
+    foreach (array_slice((array) ($result['palettes'] ?? []), 0, 4) as $palette) {
         $accent = se_normalize_hex($palette['accent'] ?? '');
         if ($accent === null) {
             continue;   // Drop a suggestion we cannot trust rather than guess.

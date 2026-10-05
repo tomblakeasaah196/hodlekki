@@ -7,17 +7,22 @@ class SeAiSequenceProvider implements SeAiProvider
     /** @var array<int,array> */
     public array $requests = [];
 
-    /** @param array<int,array> $responses */
+    /** @param array<int,array> $responses Arrays are returned; SeAiException instances are thrown. */
     public function __construct(private array $responses) {}
 
     public function generate(array $request): array
     {
         $this->requests[] = $request;
         if (!$this->responses) {
-            throw new SeAiException('AI_UNAVAILABLE', 'No test response queued.');
+            throw new SeAiException('AI_UNAVAILABLE', 'No test response queued.', 0);
         }
 
-        return array_shift($this->responses);
+        $next = array_shift($this->responses);
+        if ($next instanceof SeAiException) {
+            throw $next;
+        }
+
+        return $next;
     }
 }
 
@@ -33,7 +38,45 @@ function se_ai_test_sqlite_pdo(): ?PDO
     $pdo->exec("ATTACH DATABASE ':memory:' AS information_schema");
     $pdo->exec('CREATE TABLE information_schema.tables (table_schema TEXT, table_name TEXT)');
 
+    // se_ai_requests is the diagnostic record: one row per attempt, with the
+    // provider's HTTP status. Giving every test PDO the table keeps
+    // se_table_exists()'s per-process cache consistent across this file.
+    $pdo->exec("INSERT INTO information_schema.tables (table_schema, table_name) VALUES ('se_test', 'se_ai_requests')");
+    $pdo->exec(
+        'CREATE TABLE se_ai_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER NULL, event_id INTEGER NULL, user_id INTEGER NULL,
+            task TEXT NOT NULL, model TEXT NOT NULL, prompt_version TEXT NOT NULL,
+            input_tokens INTEGER NULL, output_tokens INTEGER NULL, latency_ms INTEGER NULL,
+            http_status INTEGER NULL, ok INTEGER NOT NULL DEFAULT 0, error_code TEXT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )'
+    );
+
     return $pdo;
+}
+
+/**
+ * Run $fn with error_log() redirected to a temporary file and return what it
+ * wrote. The module's diagnostics are error_log lines, so this is the only
+ * way to assert both what they say and what they must never contain.
+ */
+function se_ai_test_capture_log(callable $fn): string
+{
+    $file  = tempnam(sys_get_temp_dir(), 'se-ai-log-');
+    $saved = ini_get('error_log');
+    ini_set('error_log', $file);
+
+    try {
+        $fn();
+    } finally {
+        ini_set('error_log', $saved === false ? '' : $saved);
+    }
+
+    $written = (string) @file_get_contents($file);
+    @unlink($file);
+
+    return $written;
 }
 
 /**
@@ -245,15 +288,18 @@ if ($pdo === null) {
         ],
     ]);
 
-    $result = se_ai($pdo, 'copywrite', [
-        'count'     => 3,
-        'purpose'   => SE_COPYWRITE_LABELS['description'],
-        'limit'     => SE_COPYWRITE_LIMITS['description'],
-        'title'     => 'Chara',
-        'edition'   => '2026',
-        'organizer' => 'Envision',
-        'facts'     => 'date Saturday; venue HOD Lekki; karaoke; Bible games and teams',
-    ], ['provider' => $provider, 'event_id' => 123, 'user_id' => 456]);
+    $result = [];
+    $logged = se_ai_test_capture_log(function () use (&$result, $pdo, $provider): void {
+        $result = se_ai($pdo, 'copywrite', [
+            'count'     => 3,
+            'purpose'   => SE_COPYWRITE_LABELS['description'],
+            'limit'     => SE_COPYWRITE_LIMITS['description'],
+            'title'     => 'Chara',
+            'edition'   => '2026',
+            'organizer' => 'Envision',
+            'facts'     => 'date Saturday; venue HOD Lekki; karaoke; Bible games and teams',
+        ], ['provider' => $provider, 'event_id' => 123, 'user_id' => 456]);
+    });
 
     is_same('the retry returns the valid JSON result', $longVariants, $result['variants']);
     is_same('the provider was called twice', 2, count($provider->requests));
@@ -268,7 +314,168 @@ if ($pdo === null) {
     ok('the retry hint names truncation', str_contains($retryHint, 'truncated'), $retryHint);
     ok('the retry hint asks for complete JSON', str_contains($retryHint, 'complete JSON'), $retryHint);
     ok('the retry hint does not echo raw AI output', !str_contains($retryHint, 'unfinished unfinished'));
+
+    ok('a failed attempt leaves one diagnostic line', str_contains($logged, 'SE ai/failure task=copywrite'), $logged);
+    ok('the diagnostic names the attempt number', str_contains($logged, 'attempt=1'), $logged);
+    ok('the diagnostic never carries the model output', !str_contains($logged, 'unfinished'), $logged);
+    ok('the diagnostic never carries the API key', !str_contains($logged, 'test-gemini-key'), $logged);
+
+    $rows = $pdo->query('SELECT task, model, http_status, ok, error_code FROM se_ai_requests ORDER BY id')->fetchAll();
+    is_same('both attempts are logged to se_ai_requests', 2, count($rows));
+    is_same('the failed attempt records the provider status, not NULL', 200, (int) $rows[0]['http_status']);
+    is_same('…with its error code', 'AI_INVALID_OUTPUT', (string) $rows[0]['error_code']);
+    is_same('the successful attempt is logged as ok', 1, (int) $rows[1]['ok']);
 }
+
+echo "    a rejected responseSchema falls back instead of failing\n";
+$fallbackPdo = se_ai_test_sqlite_pdo();
+if ($fallbackPdo === null) {
+    ok('schema fallback skipped without pdo_sqlite', true);
+} else {
+    $_ENV['GEMINI_API_KEY'] = 'test-gemini-key';
+    $_ENV['SE_AI_MODEL_VISION'] = 'gemini-2.5-flash';
+
+    // Exactly what Gemini answers when its constrained-decoding compiler
+    // refuses a bounded array of nested objects: 400, before it ever looks
+    // at the screenshot. Both program_extract paths share this schema, so
+    // "Read pasted text" and "Upload and read" fail and recover together.
+    $refusal = new SeAiException(
+        'AI_UNAVAILABLE',
+        'The AI service refused the request: The specified schema produces a constraint that has too many states for serving.',
+        400
+    );
+    $extracted = [
+        'items' => [[
+            'title' => 'Photo Booth and games', 'kind' => 'other', 'day_index' => 0,
+            'start_time' => '15:30', 'end_time' => '16:30', 'duration_min' => 60,
+            'host' => null, 'notes' => null, 'confidence' => 0.9,
+        ]],
+        'warnings' => [],
+    ];
+
+    $provider = new SeAiSequenceProvider([
+        $refusal,
+        [
+            'text'          => se_json_encode($extracted),
+            'http_status'   => 200,
+            'usage'         => ['input' => 900, 'output' => 120, 'thinking' => 0, 'total' => 1020],
+            'model'         => 'gemini-2.5-flash',
+            'finish_reason' => 'STOP',
+        ],
+    ]);
+
+    $imported = [];
+    $logged = se_ai_test_capture_log(function () use (&$imported, $fallbackPdo, $provider): void {
+        $imported = se_ai($fallbackPdo, 'program_extract', [
+            'kinds' => implode(', ', SE_PROGRAM_KINDS),
+            'days'  => '[{"index":0,"date":"2026-10-24"}]',
+            'text'  => '',
+        ], ['provider' => $provider, 'vision' => true]);
+    });
+
+    is_same('the import survives a refused schema', $extracted, $imported);
+    is_same('the provider was called twice', 2, count($provider->requests));
+    ok('the first call carried the response schema', $provider->requests[0]['schema'] !== []);
+    is_same('the retry drops responseSchema', [], $provider->requests[1]['schema']);
+    is_same('the retry keeps the same system instruction',
+        $provider->requests[0]['system'], $provider->requests[1]['system']);
+
+    $fallbackParts = $provider->requests[1]['parts'];
+    $shapeHint = $fallbackParts[array_key_last($fallbackParts)]['text'] ?? '';
+    ok('the retry describes the shape in words instead',
+        str_contains($shapeHint, '"items"') && str_contains($shapeHint, '"day_index": integer')
+        && str_contains($shapeHint, '"host": string|null'), $shapeHint);
+    ok('the shape hint asks for null rather than an invented value',
+        str_contains($shapeHint, 'null'), $shapeHint);
+    is_same('the original parts are still sent',
+        $provider->requests[0]['parts'],
+        array_slice($fallbackParts, 0, count($provider->requests[0]['parts'])));
+
+    ok('the fallback is recorded in the log', str_contains($logged, 'schema_fallback=without_response_schema'), $logged);
+    ok('the log carries the real HTTP status', str_contains($logged, 'http_status=400'), $logged);
+    ok('the log names the task and model',
+        str_contains($logged, 'task=program_extract') && str_contains($logged, 'model=gemini-2.5-flash'), $logged);
+
+    $rows = $fallbackPdo->query('SELECT http_status, ok, error_code FROM se_ai_requests ORDER BY id')->fetchAll();
+    is_same('the refusal is stored with its status', 400, (int) $rows[0]['http_status']);
+    is_same('…and its error code', 'AI_UNAVAILABLE', (string) $rows[0]['error_code']);
+    is_same('the fallback call is stored as a success', 1, (int) $rows[1]['ok']);
+
+    // The guard is narrow: an ordinary 400 must still surface as an error,
+    // and the fallback fires at most once.
+    $hardFailure = new SeAiSequenceProvider([
+        new SeAiException('AI_UNAVAILABLE', 'The AI service refused the request: API key not valid.', 400),
+    ]);
+    try {
+        se_ai_test_capture_log(static function () use ($fallbackPdo, $hardFailure): void {
+            se_ai($fallbackPdo, 'program_extract', ['kinds' => '', 'days' => '[]', 'text' => ''],
+                ['provider' => $hardFailure]);
+        });
+        ok('an unrelated 400 still fails', false, 'no exception thrown');
+    } catch (SeAiException $e) {
+        is_same('an unrelated 400 still fails', 'AI_UNAVAILABLE', $e->errorCode);
+        is_same('and it is not retried without the schema', 1, count($hardFailure->requests));
+        is_same('the exception carries the HTTP status', 400, $e->httpStatus);
+    }
+
+    unset($_ENV['SE_AI_MODEL_VISION']);
+}
+
+echo "    transport failures are distinguishable from refusals\n";
+(function (): void {
+    $neverReached = new SeAiException('AI_UNAVAILABLE', 'The AI service could not be reached: timeout', 0);
+    is_same('a request that never arrived carries status 0', 0, $neverReached->httpStatus);
+    ok('a refusal is not mistaken for a transport failure',
+        se_ai_is_schema_rejection(new SeAiException('AI_UNAVAILABLE', 'too many states for serving', 400)));
+    ok('the schema guard ignores a 429', !se_ai_is_schema_rejection(
+        new SeAiException('AI_RETRYABLE', 'Resource has been exhausted (too many states).', 429)));
+    ok('the schema guard ignores an unrelated 400', !se_ai_is_schema_rejection(
+        new SeAiException('AI_UNAVAILABLE', 'The AI service refused the request: API key not valid.', 400)));
+    ok('an invalid schema message also triggers the fallback', se_ai_is_schema_rejection(
+        new SeAiException('AI_UNAVAILABLE', 'Invalid JSON payload: invalid response schema.', 400)));
+})();
+
+echo "    the import schemas stay inside Gemini's serving limits\n";
+(function (): void {
+    foreach (['program_extract' => 'items', 'songs_extract' => 'songs'] as $task => $key) {
+        $schema = se_ai_prompt($task)['schema'];
+        $list   = $schema['properties'][$key];
+        ok($task . ' no longer bounds an array of objects', !isset($list['maxItems']));
+        is_same($task . ' has no optional properties left',
+            count($list['items']['properties']), count($list['items']['required']));
+
+        $openapi = se_schema_to_openapi($schema);
+        ok($task . ' keeps nullable through the OpenAPI conversion',
+            in_array(true, array_map(
+                static fn(array $p): bool => !empty($p['nullable']),
+                $openapi['properties'][$key]['items']['properties']
+            ), true));
+    }
+
+    // Required-but-null is what replaces the optional properties, so the
+    // post-processors must keep accepting it.
+    $schema = se_ai_prompt('program_extract')['schema'];
+    is_same('a null optional value still validates', [], se_schema_validate([
+        'items' => [[
+            'title' => 'Welcome', 'kind' => 'welcome', 'day_index' => 0,
+            'start_time' => null, 'end_time' => null, 'duration_min' => null,
+            'host' => null, 'notes' => null, 'confidence' => 0.8,
+        ]],
+        'warnings' => [],
+    ], $schema));
+
+    $normalised = se_program_import_normalize([[
+        'title' => 'Welcome', 'kind' => 'welcome', 'day_index' => 0,
+        'start_time' => null, 'end_time' => null, 'duration_min' => null,
+        'host' => null, 'notes' => null, 'confidence' => 0.8,
+    ]], [[
+        'id' => 7, 'day_date' => '2026-10-24',
+        'starts_at' => '2026-10-24 15:00:00', 'ends_at' => '2026-10-24 22:00:00',
+    ]]);
+    is_same('normalisation accepts required-but-null fields', 'Welcome', $normalised[0]['title']);
+    is_same('…leaving no host', null, $normalised[0]['host_name']);
+    is_same('…and no invented start time', null, $normalised[0]['start_time']);
+})();
 
 echo "    model resolution from .env\n";
 (function (): void {

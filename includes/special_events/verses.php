@@ -354,7 +354,9 @@ function se_verses_suggest(PDO $pdo, array $event, string $theme, int $count, st
     $dropped = [];
     $seen    = [];
 
-    foreach ((array) ($result['verses'] ?? []) as $item) {
+    // The requested count is enforced here rather than as a maxItems bound on
+    // an array of objects in Gemini's constrained response schema.
+    foreach (array_slice((array) ($result['verses'] ?? []), 0, $count) as $item) {
         $ref = se_line($item['ref'] ?? '', 60);
         if ($ref === '') {
             continue;

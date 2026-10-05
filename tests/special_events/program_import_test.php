@@ -57,3 +57,10 @@ $amPm = se_program_import_normalize([
 ], $importDays);
 is_same('a legible 12-hour fallback retains the right clock', '2026-10-24T15:30:00+01:00', $amPm[0]['start_time']);
 is_same('a legible 12-hour fallback retains the range duration', 60, $amPm[0]['duration_min']);
+
+$overLimit = [];
+for ($i = 1; $i <= 65; $i++) {
+    $overLimit[] = ['title' => 'Programme item ' . $i];
+}
+is_same('programme normalisation enforces the 60-row AI import cap', 60,
+    count(se_program_import_normalize($overLimit, $importDays)));

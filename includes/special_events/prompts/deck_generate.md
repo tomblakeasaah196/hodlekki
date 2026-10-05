@@ -1,5 +1,5 @@
 ---
-version: 2
+version: 3
 temperature: 0.7
 max_tokens: 8192
 thinking_budget: 0
