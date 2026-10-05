@@ -522,12 +522,11 @@ function se_asset_store(PDO $pdo, array $event, string $role, array $file, array
     $metaJson = [];
 
     if ($detectedKind === 'image') {
-        if ($role === 'hero') {
-            $size = @getimagesize($tmp);
-            if (is_array($size) && (int) $size[0] < 1600) {
-                throw new SeRuleException('VALIDATION', 'A hero image should be at least 1600 pixels wide for a sharp full-screen background.');
-            }
-        }
+        // Smaller images are valid too. They may look softer when stretched to
+        // a full-screen background, but rejecting them makes otherwise useful
+        // phone and WhatsApp images impossible to upload. The image processor
+        // still creates the normal responsive variants; the Studio can show
+        // the dimensions so producers can choose a higher-resolution source.
         $processed = se_image_process($tmp, $detected, $dir, $role);
         $fileName  = $processed['file'];
         $mime      = $processed['mime'];

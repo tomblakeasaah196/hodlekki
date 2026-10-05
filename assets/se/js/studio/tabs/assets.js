@@ -183,8 +183,14 @@ export function AssetsTab() {
                                 options=${roles.map((r) => ({ value: r, label: ROLE_LABELS[r] || r }))} />
                         <//>
 
-                        <${Field} label="File" name="file">
+                        <${Field} label="File" name="file"
+                                  hint=${role === 'hero_video'
+                                      ? 'MP4 video, up to 25 MB (videos under 10 MB are accepted).'
+                                      : role === 'hero'
+                                          ? 'PNG, JPEG, WebP or GIF. Smaller images are accepted; 1600 px wide or more is recommended for a sharper full-screen background.'
+                                          : 'The server checks the file contents and safely re-encodes supported images.'}>
                             <input type="file" required
+                                accept=${role === 'hero_video' ? 'video/mp4,.mp4' : undefined}
                                 onChange=${(e) => setFile(e.currentTarget.files?.[0] || null)}
                                 class="w-full text-sm text-gray-600 file:mr-3 file:px-4 file:py-2 file:rounded-xl file:border-0 file:bg-blue-50 file:text-hodBlue file:font-semibold file:cursor-pointer" />
                         <//>
