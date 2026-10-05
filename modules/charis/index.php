@@ -1,7 +1,30 @@
 <?php
 // /modules/charis/index.php
+// Authorize before including the shared header, which starts rendering HTML.
+// This preserves real redirect/403 response codes and avoids rendering any
+// module chrome for an unauthorized request.
+require_once '../../includes/db.php';
+require_once '../../includes/charis_helpers.php';
+if (!isset($_SESSION['user_id'])) {
+    header('Location: /auth/login.php');
+    exit;
+}
+
+$charisPageAccess = charis_access_context($pdo, (int) $_SESSION['user_id']);
+if (!$charisPageAccess['can_access']) {
+    http_response_code(403);
+    echo '<!doctype html><meta charset="utf-8"><title>Charis access required</title>'
+       . '<main style="max-width:36rem;margin:5rem auto;padding:2rem;text-align:center;font-family:sans-serif">'
+       . '<h1>Charis access required</h1>'
+       . '<p>This module is available only to authorized pastors, IDI, and Charis team members.</p>'
+       . '</main>';
+    exit;
+}
+if (empty($_SESSION['charis_csrf']) || !is_string($_SESSION['charis_csrf'])) {
+    $_SESSION['charis_csrf'] = bin2hex(random_bytes(32));
+}
+$charisCsrf = $_SESSION['charis_csrf'];
 require_once '../../includes/header.php';
-if (!isset($_SESSION['user_id'])) { echo "<script>window.location.href='/auth/login.php';</script>"; exit; }
 ?>
 <script src="/assets/js/celebrants_export.js"></script>
 <link  href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
@@ -31,36 +54,62 @@ if (!isset($_SESSION['user_id'])) { echo "<script>window.location.href='/auth/lo
 <!-- ════════════════════════════════════════════════════════
      VIEW 1 — WELFARE
 ════════════════════════════════════════════════════════ -->
-<div id="view-welfare" class="space-y-8">
+<div id="view-welfare" class="space-y-4 xl:space-y-8">
 
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100/60 relative overflow-hidden">
-        <div class="absolute top-0 right-0 w-64 h-64 bg-red-50/60 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none z-0"></div>
-        <div class="relative z-10 flex items-center gap-4">
-            <div class="w-14 h-14 bg-hodRed rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0">
-                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
-            </div>
-            <div>
-                <h2 class="text-2xl md:text-3xl font-display font-bold text-gray-900 tracking-tight">Charis — Welfare</h2>
-                <p class="text-gray-500 text-sm mt-1">Birthdays, life events, and AWOL welfare tracking.</p>
-            </div>
-        </div>
-        <div class="relative z-10 flex flex-wrap gap-3">
-            <button onclick="openModal('awolReportModal')" class="bg-orange-600 hover:bg-orange-700 text-white px-5 py-3 rounded-xl font-bold transition-all shadow-lg flex items-center gap-2 shrink-0">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                AWOL Report
+    <!-- Compact section launchers keep every welfare area visible at first glance on phones and tablets. -->
+    <section class="xl:hidden" aria-label="Welfare sections">
+        <div class="grid grid-cols-3 gap-2 sm:gap-3">
+            <button type="button" onclick="openModal('birthdaysOverviewModal')" aria-haspopup="dialog" class="group min-w-0 min-h-[116px] sm:min-h-[128px] rounded-2xl sm:rounded-3xl border border-blue-100 bg-gradient-to-br from-white to-blue-50 p-2.5 sm:p-4 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                <span class="mx-auto flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl border border-blue-100 bg-white text-hodBlue shadow-sm transition-transform group-hover:scale-105">
+                    <svg class="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18zm-3-9v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2h12z"></path></svg>
+                </span>
+                <span class="mt-2 block text-[10px] sm:text-xs font-black leading-tight text-gray-900">Upcoming Birthdays</span>
+                <span id="birthdayCardCount" class="mt-1 block text-[9px] sm:text-[10px] font-bold text-blue-600">Loading…</span>
             </button>
-            <button onclick="openModal('envisionRecapModal'); loadEnvisionRecap();" class="bg-gray-900 hover:bg-black text-white px-5 py-3 rounded-xl font-bold transition-all shadow-lg flex items-center gap-2 shrink-0">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                Monthly Recap
-            </button>
-            <button onclick="openModal('addLifeEventModal')" class="bg-hodRed hover:bg-red-700 text-white px-5 py-3 rounded-xl font-bold transition-all shadow-lg hover:-translate-y-0.5 flex items-center gap-2 shrink-0">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                Log Life Event
-            </button>
-        </div>
-    </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <button type="button" onclick="openModal('lifeEventsOverviewModal')" aria-haspopup="dialog" class="group min-w-0 min-h-[116px] sm:min-h-[128px] rounded-2xl sm:rounded-3xl border border-red-100 bg-gradient-to-br from-white to-red-50 p-2.5 sm:p-4 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">
+                <span class="mx-auto flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl border border-red-100 bg-white text-hodRed shadow-sm transition-transform group-hover:scale-105">
+                    <svg class="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                </span>
+                <span class="mt-2 block text-[10px] sm:text-xs font-black leading-tight text-gray-900">Life Events</span>
+                <span id="lifeEventsCardCount" class="mt-1 block text-[9px] sm:text-[10px] font-bold text-red-600">Loading…</span>
+            </button>
+
+            <button type="button" onclick="openModal('welfareOverviewModal')" aria-haspopup="dialog" class="group min-w-0 min-h-[116px] sm:min-h-[128px] rounded-2xl sm:rounded-3xl border border-orange-100 bg-gradient-to-br from-white to-orange-50 p-2.5 sm:p-4 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2">
+                <span class="mx-auto flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl border border-orange-100 bg-white text-orange-500 shadow-sm transition-transform group-hover:scale-105">
+                    <svg class="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </span>
+                <span class="mt-2 block text-[10px] sm:text-xs font-black leading-tight text-gray-900">Welfare</span>
+                <span id="welfareCardCount" class="mt-1 block text-[9px] sm:text-[10px] font-bold text-orange-600">Loading…</span>
+            </button>
+        </div>
+    </section>
+
+    <!-- Small, equal action tiles replace the former oversized title and button banner. -->
+    <section class="rounded-2xl sm:rounded-3xl border border-gray-100 bg-white p-2 sm:p-3 shadow-sm" aria-label="Welfare actions">
+        <div class="mx-auto grid max-w-2xl grid-cols-3 gap-1.5 sm:gap-3">
+            <button type="button" <?= $charisPageAccess['is_manager'] ? 'onclick="openModal(\'awolReportModal\')"' : 'disabled aria-disabled="true" title="Charis leadership access required"' ?> class="group flex min-w-0 flex-col items-center justify-center rounded-xl sm:rounded-2xl px-1.5 py-2.5 sm:py-3 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 <?= $charisPageAccess['is_manager'] ? 'hover:bg-orange-50' : 'cursor-not-allowed opacity-50' ?>">
+                <span class="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-600 transition-colors group-hover:bg-orange-100">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6m4 6V7m4 10v-3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                </span>
+                <span class="mt-1.5 text-[9px] sm:text-[10px] font-bold leading-tight text-gray-700">AWOL Report</span>
+            </button>
+            <button type="button" <?= $charisPageAccess['is_manager'] ? 'onclick="openModal(\'envisionRecapModal\'); loadEnvisionRecap();"' : 'disabled aria-disabled="true" title="Charis leadership access required"' ?> class="group flex min-w-0 flex-col items-center justify-center rounded-xl sm:rounded-2xl px-1.5 py-2.5 sm:py-3 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 <?= $charisPageAccess['is_manager'] ? 'hover:bg-indigo-50' : 'cursor-not-allowed opacity-50' ?>">
+                <span class="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 transition-colors group-hover:bg-indigo-100">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4m10-2v4m-2-2h4M6 17v4m-2-2h4m4-12l1.1 3.4a2 2 0 001.3 1.3L18 13l-3.6 1.2a2 2 0 00-1.3 1.3L12 19l-1.1-3.5a2 2 0 00-1.3-1.3L6 13l3.6-1.3a2 2 0 001.3-1.3L12 7z"></path></svg>
+                </span>
+                <span class="mt-1.5 text-[9px] sm:text-[10px] font-bold leading-tight text-gray-700">Monthly Recap</span>
+            </button>
+            <button type="button" onclick="openModal('addLifeEventModal')" class="group flex min-w-0 flex-col items-center justify-center rounded-xl sm:rounded-2xl px-1.5 py-2.5 sm:py-3 text-center transition-colors hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+                <span class="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-red-50 text-hodRed transition-colors group-hover:bg-red-100">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10m-5 4v6m-3-3h6M5 13V7a2 2 0 012-2h10a2 2 0 012 2v6"></path></svg>
+                </span>
+                <span class="mt-1.5 text-[9px] sm:text-[10px] font-bold leading-tight text-gray-700">Log Life Event</span>
+            </button>
+        </div>
+    </section>
+
+    <div class="hidden xl:grid xl:grid-cols-3 gap-8">
         <!-- Birthdays -->
         <div class="relative bg-white rounded-3xl shadow-sm border border-gray-100/60 overflow-hidden flex flex-col h-[550px] group">
             <div class="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50/40 to-sky-100/60 transition-transform duration-700 group-hover:scale-105"></div>
@@ -109,14 +158,14 @@ if (!isset($_SESSION['user_id'])) { echo "<script>window.location.href='/auth/lo
                         <p class="text-[10px] font-bold uppercase tracking-wider text-orange-500 mt-0.5">AWOL Alerts</p>
                     </div>
                 </div>
-                <div class="flex bg-orange-50/50 p-1 rounded-xl border border-orange-100/50 overflow-x-auto no-scrollbar snap-x">
-                    <button onclick="toggleWelfareTab('my_cases')" id="tabWelMyCases" class="px-4 py-2 rounded-lg text-xs font-bold bg-white text-orange-600 shadow-sm transition-all whitespace-nowrap flex-1">My Cases</button>
-                    <button onclick="toggleWelfareTab('master')"   id="tabWelMaster"  class="px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Master List</button>
-                    <button onclick="toggleWelfareTab('archive')"  id="tabWelArchive" class="px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Archive</button>
+                <div role="tablist" aria-label="Welfare views" class="flex bg-orange-50/50 p-1 rounded-xl border border-orange-100/50 overflow-x-auto no-scrollbar snap-x">
+                    <button type="button" role="tab" aria-selected="true" data-welfare-tab="my_cases" onclick="toggleWelfareTab('my_cases')" id="tabWelMyCases" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold bg-white text-orange-600 shadow-sm transition-all whitespace-nowrap flex-1">My Cases</button>
+                    <button type="button" role="tab" aria-selected="false" data-welfare-tab="master" onclick="toggleWelfareTab('master')" id="tabWelMaster" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Master List</button>
+                    <button type="button" role="tab" aria-selected="false" data-welfare-tab="archive" onclick="toggleWelfareTab('archive')" id="tabWelArchive" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Archive</button>
                 </div>
             </div>
             <div class="p-4 flex-1 overflow-y-auto custom-scrollbar bg-gray-50/30">
-                <ul id="welfareList" class="space-y-3"></ul>
+                <ul id="welfareList" class="welfare-list space-y-3"></ul>
             </div>
         </div>
     </div>
@@ -402,16 +451,16 @@ if (!isset($_SESSION['user_id'])) { echo "<script>window.location.href='/auth/lo
 
                     <div class="space-y-3">
                         <p class="font-bold text-gray-900">Step-by-step: How to handle an AWOL case</p>
-                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">1</span><p><strong>Check "My Cases" tab</strong> in the Urgent Welfare card. These are cases assigned directly to you by the HOD.</p></div>
+                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">1</span><p><strong>Open the Welfare card, then check "My Cases".</strong> These are cases assigned directly to you by Charis leadership.</p></div>
                         <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">2</span><p><strong>Click "Manage Case"</strong>. Use the Call or WhatsApp buttons to contact the member directly from the modal.</p></div>
                         <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">3</span><p><strong>Fill in your findings</strong> — what did the member say? Are they coming back? Did they relocate?</p></div>
-                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">4</span><p><strong>Select the correct Attendance Status</strong>: Active (re-engaged), Inconsistent, Unknown, Relocated, or Attends Another Church.</p></div>
+                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">4</span><p><strong>Select the final Attendance Status</strong>: Active (re-engaged), Unknown, Relocated, or Attends Another Church.</p></div>
                         <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">5</span><p><strong>Click "Resolve &amp; Close Case"</strong>. The member's name will disappear from the AWOL list for this cycle.</p></div>
                     </div>
 
                     <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
                         <p class="font-bold text-blue-800 mb-1">Generating the AWOL Report</p>
-                        <p>Click the orange <strong>"AWOL Report"</strong> button in the Welfare header. Choose a period — either a specific Month &amp; Year, or a custom date range. The report is sent directly to the pastor and includes all cases (resolved and pending), with member contact details clearly listed.</p>
+                        <p>Tap <strong>"AWOL Report"</strong> in the compact action row. Choose a Month &amp; Year or a custom range of up to one year. A confidential PDF downloads with tracked AWOL cases created or resolved in that period, including pending and completed work.</p>
                     </div>
                 </div>
             </details>
@@ -501,6 +550,14 @@ if (!isset($_SESSION['user_id'])) { echo "<script>window.location.href='/auth/lo
 // CHARIS MODULE — MASTER JS
 // ═══════════════════════════════════════════════════════════
 const API_URL = '/api/charis_api.php';
+const CHARIS_CSRF = <?= json_encode($charisCsrf, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+$.ajaxSetup({
+    beforeSend: function(xhr, settings) {
+        if ((settings.type || 'GET').toUpperCase() !== 'GET') {
+            xhr.setRequestHeader('X-Charis-CSRF', CHARIS_CSRF);
+        }
+    }
+});
 let globalWorkers = [], globalMembers = [], globalEvents = {};
 let barChartInstance = null, pieChartInstance = null;
 let currentWelfareTab = 'my_cases';
@@ -508,15 +565,18 @@ let currentLogisticsType = 'upcoming';
 let currentTaskEventId = null;
 
 // ── Helpers ───────────────────────────────────────────────
-function jsEscape(s) {
-    if (s === null || s === undefined) return '';
-    return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');
-}
 function htmlEscape(s) {
     if (s === null || s === undefined) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
 }
+// Safely quote a JavaScript string inside a double-quoted HTML event attribute.
+function inlineArg(s) { return htmlEscape(JSON.stringify(String(s ?? ''))); }
 function fmtMoney(v) { return '₦' + parseFloat(v||0).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function parseServerDate(v) {
+    if (!v) return null;
+    const parsed = new Date(String(v).replace(' ', 'T'));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
 // ── Celebrant card helpers ────────────────────────────────
 // Three kinds of celebrant share one grid: adult birthdays, wedding
@@ -570,7 +630,10 @@ function closeModal(id) {
     if(!m) return;
     m.classList.add('opacity-0');
     m.querySelector('.transform')?.classList.add('scale-95');
-    setTimeout(() => { m.classList.add('hidden'); if(!document.querySelectorAll('.backdrop-blur-md:not(.hidden), .backdrop-blur-md.opacity-0').length) document.body.style.overflow=''; }, 300);
+    setTimeout(() => {
+        m.classList.add('hidden');
+        if (!document.querySelector('.backdrop-blur-md:not(.hidden)')) document.body.style.overflow = '';
+    }, 300);
 }
 
 // ── Toast ─────────────────────────────────────────────────
@@ -612,7 +675,10 @@ function switchTab(name) {
 function loadDashboardData() {
     $.ajax({ url: API_URL, type:'GET', data:{action:'fetch_dashboard'}, dataType:'json',
         success: function(res) {
-            if (res.status !== 'success') return;
+            if (res.status !== 'success') {
+                showToast(res.message || 'Unable to load the Charis dashboard.', 'error');
+                return;
+            }
             window.isCharisAdmin  = res.is_charis_admin;
             window.isPastor = res.is_pastor;
             window.loggedInUserId = res.current_user_id;
@@ -633,11 +699,17 @@ function loadDashboardData() {
 
             globalEvents = { upcoming: res.upcoming_events||[], past: res.past_events||[] };
 
-            renderBirthdays(res.birthdays||[]);
-            renderAnniversaries(res.anniversaries||[]);
-            window.welfareData = res.welfare_checks||[];
+            renderBirthdays(res.birthdays || []);
+            renderAnniversaries(res.anniversaries || []);
+            window.welfareData = res.welfare_checks || [];
+            const welfareCount = window.welfareData.length;
+            $('#welfareCardCount').text(welfareCount + (welfareCount === 1 ? ' alert' : ' alerts'));
+            $('#welfareModalCount').text(welfareCount);
             renderWelfareList();
             renderLogisticsTable(currentLogisticsType);
+        },
+        error: function() {
+            showToast('Unable to load the Charis dashboard. Please try again.', 'error');
         }
     });
 }
@@ -661,7 +733,9 @@ function renderBirthdays(birthdays) {
             </li>`;
         });
     }
-    $('#birthdaysList').html(html);
+    $('#birthdaysList, #birthdaysModalList').html(html);
+    $('#birthdayCardCount').text(birthdays.length + ' upcoming');
+    $('#birthdaysModalCount').text(birthdays.length);
 }
 
 function renderAnniversaries(items) {
@@ -673,25 +747,33 @@ function renderAnniversaries(items) {
             html += `<li class="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl shadow-sm gap-3">
                 <div class="flex items-center gap-3 overflow-hidden">
                     <div class="h-10 w-10 rounded-full bg-red-50 border border-red-100 text-hodRed flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">${avatar}</div>
-                    <div class="truncate"><p class="text-sm font-bold text-gray-900 truncate">${htmlEscape(a.first_name)} ${htmlEscape(a.last_name)}</p><p class="text-[10px] font-bold text-red-500 mt-0.5">${htmlEscape(a.formatted_date)} — ${htmlEscape((a.event_type||'').replace('_',' '))}</p></div>
+                    <div class="truncate"><p class="text-sm font-bold text-gray-900 truncate">${htmlEscape(a.first_name)} ${htmlEscape(a.last_name)}</p><p class="text-[10px] font-bold text-red-500 mt-0.5">${htmlEscape(a.formatted_date)} — ${htmlEscape((a.event_type || '').replace(/_/g, ' '))}</p></div>
                 </div>
                 <div class="shrink-0">${generateActionBlock(a, a.event_type)}</div>
             </li>`;
         });
     }
-    $('#anniversariesList').html(html);
+    $('#anniversariesList, #anniversariesModalList').html(html);
+    $('#lifeEventsCardCount').text(items.length + (items.length === 1 ? ' event' : ' events'));
+    $('#lifeEventsModalCount').text(items.length);
 }
 
 function generateActionBlock(item, type) {
-    if (!window.isCharisAdmin) return '';
+    const canManage = window.isCharisAdmin
+        || item.assigned_worker_id == window.loggedInUserId;
     if (item.assignment_id) {
         const statusMap = { Assigned:'bg-yellow-50 text-yellow-700 border-yellow-200', Flyer_Posted:'bg-blue-50 text-blue-700 border-blue-200', Completed:'bg-green-50 text-green-700 border-green-200' };
         const sc = statusMap[item.assignment_status] || 'bg-gray-50 text-gray-500 border-gray-200';
         if (item.assignment_status === 'Completed') return `<span class="text-[10px] border px-2 py-1 rounded-lg font-bold ${sc}">✓ Done</span>`;
+        if (!canManage) {
+            const label = item.assignment_status === 'Flyer_Posted' ? 'Flyer Posted' : 'Assigned';
+            return `<span class="text-[10px] border px-2 py-1 rounded-lg font-bold ${sc}">${label}</span>`;
+        }
         if (item.assignment_status === 'Flyer_Posted') return `<button onclick="updateAssignmentStatus(${item.assignment_id},'Completed',this)" class="text-[10px] border px-2 py-1 rounded-lg font-bold ${sc}">Mark Done</button>`;
         return `<button onclick="updateAssignmentStatus(${item.assignment_id},'Flyer_Posted',this)" class="text-[10px] border px-2 py-1 rounded-lg font-bold ${sc}">Flyer Posted</button>`;
     }
-    return `<button onclick="triggerAssignModal('${jsEscape(item.target_user_id)}','${jsEscape(type)}','${jsEscape(item.event_date)}','${jsEscape(item.first_name)} ${jsEscape(item.last_name)}')" class="text-[10px] bg-gray-50 border border-gray-200 hover:border-hodBlue hover:text-hodBlue px-3 py-1.5 rounded-lg font-bold transition-all">Assign</button>`;
+    if (!window.isCharisAdmin) return '';
+    return `<button onclick="triggerAssignModal(${inlineArg(item.target_user_id)},${inlineArg(type)},${inlineArg(item.event_date)},${inlineArg(`${item.first_name || ''} ${item.last_name || ''}`.trim())})" class="text-[10px] bg-gray-50 border border-gray-200 hover:border-hodBlue hover:text-hodBlue px-3 py-1.5 rounded-lg font-bold transition-all">Assign</button>`;
 }
 
 function triggerAssignModal(tid, type, date, name) {
@@ -712,10 +794,13 @@ function updateAssignmentStatus(id, status, btn) {
 // ═══════════════════════════════════════════════════════════
 function toggleWelfareTab(tab) {
     currentWelfareTab = tab;
-    document.getElementById('tabWelMyCases').className = 'px-4 py-2 rounded-lg text-xs font-bold ' + (tab==='my_cases'?'bg-white text-orange-600 shadow-sm':'text-gray-500 hover:text-gray-900') + ' transition-all whitespace-nowrap flex-1';
-    document.getElementById('tabWelMaster').className  = 'px-4 py-2 rounded-lg text-xs font-bold ' + (tab==='master'?'bg-white text-orange-600 shadow-sm':'text-gray-500 hover:text-gray-900') + ' transition-all whitespace-nowrap flex-1';
-    document.getElementById('tabWelArchive').className = 'px-4 py-2 rounded-lg text-xs font-bold ' + (tab==='archive'?'bg-white text-orange-600 shadow-sm':'text-gray-500 hover:text-gray-900') + ' transition-all whitespace-nowrap flex-1';
-    
+    document.querySelectorAll('[data-welfare-tab]').forEach(button => {
+        const isActive = button.dataset.welfareTab === tab;
+        button.className = 'welfare-tab-button px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold transition-all whitespace-nowrap flex-1 '
+            + (isActive ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-900');
+        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+
     if (tab === 'archive') {
         loadWelfareArchive();
     } else {
@@ -730,10 +815,10 @@ function renderWelfareList() {
     if (!data.length) { html = '<li class="text-center py-12 text-gray-400 text-sm">No alerts in this view.</li>'; }
     else {
         data.forEach(w => {
-            const badge = w.alert_type==='AWOL' ? '<span class="text-[9px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold border border-red-200 uppercase">3 Wks AWOL</span>' : '<span class="text-[9px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded font-bold border border-orange-200 uppercase">Manual</span>';
+            const badge = w.alert_type==='AWOL' ? '<span class="text-[9px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold border border-red-200 uppercase">3 Services AWOL</span>' : '<span class="text-[9px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded font-bold border border-orange-200 uppercase">Manual</span>';
             let action = '';
             if (currentWelfareTab === 'my_cases') {
-                action = `<button onclick="openManageWelfareModal(${w.target_user_id},${w.followup_id||0},'${jsEscape(w.first_name)} ${jsEscape(w.last_name)}','${jsEscape(w.phone)}')" class="w-full text-xs font-bold text-white bg-hodBlue hover:bg-blue-900 px-4 py-2.5 rounded-xl transition-all mb-2">Manage Case</button>`;
+                action = `<button onclick="openManageWelfareModal(${w.target_user_id},${w.followup_id || 0},${inlineArg(`${w.first_name || ''} ${w.last_name || ''}`.trim())},${inlineArg(w.phone || '')})" class="w-full text-xs font-bold text-white bg-hodBlue hover:bg-blue-900 px-4 py-2.5 rounded-xl transition-all mb-2">Manage Case</button>`;
             } else if (w.assignment_status==='Assigned') {
                 action = `<div class="flex items-center justify-between bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl mb-2"><span class="text-[10px] font-bold text-gray-500">Assigned: <span class="text-hodBlue">${htmlEscape(w.worker_fname)}</span></span>${window.isCharisAdmin?`<button onclick="openAssignWelfareModal(${w.target_user_id},${w.followup_id||0})" class="text-[10px] font-bold text-gray-400 hover:text-hodBlue underline">Reassign</button>`:''}</div>`;
             } else if (w.assignment_status==='Requested') {
@@ -742,9 +827,14 @@ function renderWelfareList() {
                 action = window.isCharisAdmin ? `<button onclick="openAssignWelfareModal(${w.target_user_id},${w.followup_id||0})" class="w-full text-[11px] font-bold text-gray-700 bg-gray-50 border border-gray-200 hover:border-hodBlue hover:text-hodBlue px-4 py-2.5 rounded-xl transition-all mb-2">Assign Case</button>` : `<button onclick="requestWelfareCase(${w.target_user_id},${w.followup_id||0})" class="w-full text-[11px] font-bold text-hodBlue bg-blue-50 border border-blue-200 hover:bg-blue-100 px-4 py-2.5 rounded-xl transition-all mb-2">Request to Handle</button>`;
             }
 
-            // Zero-Trust Notes Button
-            let safeNotesJson = encodeURIComponent(JSON.stringify(w.secure_notes||[]));
-            let notesHtml = `<button onclick='prepManageCharisNotes(JSON.parse(decodeURIComponent("${safeNotesJson}")), ${w.target_user_id}, "${jsEscape(w.first_name)} ${jsEscape(w.last_name)}")' class="text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-xl border border-blue-100 flex items-center justify-center gap-1 w-full transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg> Manage Notes (${(w.secure_notes||[]).length})</button>`;
+            // Secure notes are readable according to their audience. Only
+            // Charis leadership or the assigned worker gets the note composer.
+            const canManageNotes = w.assignment_status === 'Assigned'
+                && (window.isCharisAdmin || w.worker_id == window.loggedInUserId);
+            const notesPayload = JSON.stringify(w.secure_notes || []);
+            const notesLabel = canManageNotes ? 'Manage Notes' : 'View Notes';
+            const memberName = `${w.first_name || ''} ${w.last_name || ''}`.trim();
+            let notesHtml = `<button onclick="prepManageCharisNotes(JSON.parse(${inlineArg(notesPayload)}),${w.target_user_id},${inlineArg(memberName)},${canManageNotes})" class="text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-xl border border-blue-100 flex items-center justify-center gap-1 w-full transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg> ${notesLabel} (${(w.secure_notes || []).length})</button>`;
 
             html += `<li class="flex flex-col p-4 bg-white border border-orange-100/60 rounded-2xl shadow-sm gap-3 hover:shadow-md transition-shadow">
                 <div class="flex justify-between items-start gap-2">
@@ -755,19 +845,20 @@ function renderWelfareList() {
             </li>`;
         });
     }
-    $('#welfareList').html(html);
+    $('.welfare-list').html(html);
 }
 
 // ═══════════════════════════════════════════════════════════
 // ZERO-TRUST CHARIS NOTES UI LOGIC
 // ═══════════════════════════════════════════════════════════
-function prepManageCharisNotes(secureNotes, targetUserId, memberName) {
+function prepManageCharisNotes(secureNotes, targetUserId, memberName, canEdit = false) {
     $('#note_target_user_id').val(targetUserId);
     $('#charis_notes_target_name').text(memberName);
     resetCharisNoteForm();
 
-    // Show the Pastors-only toggle only for pastors.
-    document.getElementById('charisPastorOnlyWrap').classList.toggle('hidden', !window.isPastor);
+    document.getElementById('charisNoteComposer').classList.toggle('hidden', !canEdit);
+    // Show the Pastors-only toggle only to users with pastoral clearance.
+    document.getElementById('charisPastorOnlyWrap').classList.toggle('hidden', !canEdit || !window.isPastor);
 
     let container = $('#existingCharisNotesContainer');
     container.empty();
@@ -784,7 +875,7 @@ function prepManageCharisNotes(secureNotes, targetUserId, memberName) {
                 : '';
 
             let editBtn = '';
-            if (n.author_id == window.loggedInUserId) {
+            if (canEdit && n.author_id == window.loggedInUserId) {
                 editBtn = `<button class="charis-edit-note text-[10px] font-bold text-hodBlue hover:underline mt-2"
                     data-note-id="${n.id}"
                     data-note-text="${encodeURIComponent(n.note_text)}"
@@ -796,7 +887,7 @@ function prepManageCharisNotes(secureNotes, targetUserId, memberName) {
                     <div class="flex justify-between items-start mb-2 border-b border-gray-50 pb-2">
                         <div>
                             <span class="font-bold text-gray-900 text-sm">${htmlEscape(n.first_name)} ${htmlEscape(n.last_name)}</span>
-                            <span class="text-[10px] text-gray-400 ml-2">${new Date(n.created_at).toLocaleString()}</span>
+                            <span class="text-[10px] text-gray-400 ml-2">${parseServerDate(n.created_at)?.toLocaleString() || htmlEscape(n.created_at || '')}</span>
                         </div>
                         <div class="flex gap-1">${visBadge}</div>
                     </div>
@@ -832,7 +923,7 @@ function resetCharisNoteForm() {
 // handleAjaxForm('saveCharisNoteForm', ()=>{ closeModal('manageCharisNotesModal'); loadDashboardData(); toggleWelfareTab(currentWelfareTab); });
 
 function loadWelfareArchive() {
-    $('#welfareList').html('<li class="text-center py-10 text-gray-400"><svg class="animate-spin h-8 w-8 mx-auto mb-3 text-orange-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Fetching archives...</li>');
+    $('.welfare-list').html('<li class="text-center py-10 text-gray-400"><svg class="animate-spin h-8 w-8 mx-auto mb-3 text-orange-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Fetching archives...</li>');
     
     $.getJSON(API_URL, { action: 'fetch_welfare_archive' }, res => {
         if(res.status === 'success') {
@@ -844,7 +935,8 @@ function loadWelfareArchive() {
                     let formattedNotes = (a.secure_notes || []).map(n => `<div class="mb-2 bg-white p-2.5 rounded-lg border border-gray-100 shadow-sm"><span class="font-bold text-gray-800 text-[10px] uppercase tracking-wider">${htmlEscape(n.first_name)} ${htmlEscape(n.last_name)}:</span> <span class="text-gray-600 text-[11px] whitespace-pre-wrap ml-1">${htmlEscape(n.note_text)}</span></div>`).join('');
                     if(!formattedNotes) formattedNotes = '<span class="text-[10px] text-gray-400 italic">No accessible notes found.</span>';
 
-                    let archiveDateDisplay = a.archive_date ? new Date(a.archive_date).toLocaleDateString() : 'Unknown Date';
+                    const archiveDate = parseServerDate(a.archive_date);
+                    const archiveDateDisplay = archiveDate ? archiveDate.toLocaleDateString() : 'Unknown Date';
 
                     html += `<li class="flex flex-col p-4 bg-gray-50/50 border border-gray-200 rounded-2xl shadow-sm gap-2">
                         <div class="flex justify-between items-start gap-2 border-b border-gray-200 pb-3">
@@ -856,24 +948,34 @@ function loadWelfareArchive() {
                     </li>`;
                 });
             }
-            $('#welfareList').html(html);
+            $('.welfare-list').html(html);
         } else {
             // Failsafe: Shows the backend error message instead of hanging
-            $('#welfareList').html(`<li class="text-center py-10 text-red-500 font-bold text-sm">Error: ${res.message}</li>`);
+            $('.welfare-list').html(`<li class="text-center py-10 text-red-500 font-bold text-sm">Error: ${res.message}</li>`);
         }
     }).fail(() => {
         // Failsafe: Catches 500 fatal server crashes
-        $('#welfareList').html('<li class="text-center py-10 text-red-500 font-bold text-sm">Server Error. Check logs.</li>');
+        $('.welfare-list').html('<li class="text-center py-10 text-red-500 font-bold text-sm">Server Error. Check logs.</li>');
     });
 }
 
 function openManageWelfareModal(uid, fid, name, phone) {
+    document.getElementById('manageWelfareForm').reset();
+    document.getElementById('resolveWelfareForm').reset();
     $('#welfareMemberName').text(name);
     $('#welfareUserId').val(uid); $('#welfareFollowupId').val(fid);
-    $('#resolveWelfareUserId').val(uid);
-    $('#btnWelfareCall').attr('href','tel:'+phone);
-    const clean = phone.replace(/\D/g,'');
-    $('#btnWelfareWhatsApp').attr('href','https://wa.me/234'+clean.replace(/^0/,''));
+    $('#resolveWelfareUserId').val(uid); $('#resolveWelfareFollowupId').val(fid);
+
+    const clean = String(phone || '').replace(/\D/g, '');
+    const internationalPhone = clean.startsWith('234')
+        ? '234' + clean.slice(3).replace(/^0/, '')
+        : (clean.startsWith('0') ? '234' + clean.slice(1) : (clean ? '234' + clean : ''));
+    $('#btnWelfareCall')
+        .attr('href', clean ? 'tel:+' + internationalPhone : '#')
+        .toggleClass('pointer-events-none opacity-50', !clean);
+    $('#btnWelfareWhatsApp')
+        .attr('href', clean ? 'https://wa.me/' + internationalPhone : '#')
+        .toggleClass('pointer-events-none opacity-50', !clean);
     openModal('manageWelfareModal');
 }
 function openAssignWelfareModal(tid, fid) {
@@ -943,7 +1045,7 @@ function renderLogisticsTable(type) {
                 <td class="px-6 py-4 pl-8 font-bold text-gray-900">${htmlEscape(e.nice_date)}</td>
                 <td class="px-6 py-4 font-medium text-gray-700">${htmlEscape(e.title)}</td>
                 <td class="px-6 py-4"><span class="px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${sc}">${htmlEscape(lbl)}</span></td>
-                <td class="px-6 py-4 pr-8 text-right"><button onclick="openEventTasksModal(${e.id},'${jsEscape(e.title)}','${jsEscape(e.nice_date)}')" class="text-xs font-bold text-hodBlue hover:text-blue-900 border border-blue-200 px-4 py-2 rounded-xl hover:bg-blue-50 transition-all">Manage Tasks</button></td>
+                <td class="px-6 py-4 pr-8 text-right"><button onclick="openEventTasksModal(${e.id},${inlineArg(e.title)},${inlineArg(e.nice_date)})" class="text-xs font-bold text-hodBlue hover:text-blue-900 border border-blue-200 px-4 py-2 rounded-xl hover:bg-blue-50 transition-all">Manage Tasks</button></td>
             </tr>`;
         });
     }
@@ -988,7 +1090,7 @@ function renderTasksList(tasks, isAdmin) {
             if (!t.funds_disbursed) {
                 actions += `<button onclick="markFundsReceived(${t.id})" class="text-xs font-bold text-blue-700 border border-blue-200 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl transition-all">Mark Funds Received</button>`;
             }
-            actions += `<button onclick="openTaskReportModal(${t.id},'${jsEscape(t.task_title)}')" class="text-xs font-bold text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-xl transition-all">Submit Report</button>`;
+            actions += `<button onclick="openTaskReportModal(${t.id},${inlineArg(t.task_title)})" class="text-xs font-bold text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-xl transition-all">Submit Report</button>`;
         }
         if (isAdmin) {
             actions += `<button onclick="deleteTask(${t.id})" class="text-xs font-bold text-red-400 hover:text-red-600 border border-red-100 hover:border-red-300 px-3 py-1.5 rounded-xl transition-all">Remove</button>`;
@@ -1178,7 +1280,7 @@ function renderEnvisionRecap(data) {
         const badgeColor = celebBadgeClass(v.event_type);
         html+=`<div class="relative group rounded-3xl overflow-hidden shadow-lg bg-gray-900 border border-gray-100/10 aspect-[9/16] transition-transform duration-300 hover:-translate-y-2">
             <img src="${htmlEscape(img)}" alt="${htmlEscape(v.first_name)}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105">
-            <button onclick="prepImageEditor('${jsEscape(v.ref)}')" class="absolute top-4 right-4 z-20 bg-black/50 hover:bg-hodRed text-white p-2.5 rounded-full shadow-lg border border-white/20 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
+            <button onclick="prepImageEditor(${inlineArg(v.ref)})" class="absolute top-4 right-4 z-20 bg-black/50 hover:bg-hodRed text-white p-2.5 rounded-full shadow-lg border border-white/20 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 13.5v3.75zM20.71 7.04a1.003 1.003 0 000-1.42l-2.34-2.34a1.003 1.003 0 00-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"></path></svg>
             </button>
             <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none"></div>
@@ -1312,7 +1414,7 @@ function renderAdminBorrows(borrows) {
             </div>
             <div class="flex flex-col gap-1.5 shrink-0">
                 ${b.status==='Reserved'?`<button onclick="confirmBookPickup(${b.id})" class="text-[10px] font-bold bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-all">Confirm Pickup</button>`:''}
-                ${b.status==='Picked_Up'||b.status==='Overdue'?`<button onclick="openReturnBookModal(${b.id},'${jsEscape(b.title)}','${jsEscape(b.member_name)}')" class="text-[10px] font-bold bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-all">Process Return</button>`:''}
+                ${b.status==='Picked_Up'||b.status==='Overdue'?`<button onclick="openReturnBookModal(${b.id},${inlineArg(b.title)},${inlineArg(b.member_name)})" class="text-[10px] font-bold bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-all">Process Return</button>`:''}
                 ${b.extension_status==='Pending'?`<button onclick="approveExtension(${b.id})" class="text-[10px] font-bold bg-yellow-500 text-white px-3 py-1.5 rounded-lg hover:bg-yellow-600 transition-all">Approve Ext.</button>`:''}
                 <button onclick="cancelReservation(${b.id})" class="text-[10px] font-bold text-red-400 border border-red-100 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-all">Cancel</button>
             </div>
@@ -1406,9 +1508,8 @@ $(document).ready(function() {
     handleAjaxForm('manageWelfareForm', ()=>{ closeModal('manageWelfareModal'); loadDashboardData(); });
 
     // Manage Welfare — Resolve & Close
-    handleAjaxForm('resolveWelfareForm', ()=>{ closeModal('manageWelfareModal'); loadDashboardData(); showToast('Case resolved. Member removed from AWOL list.','success'); });
+    handleAjaxForm('resolveWelfareForm', ()=>{ closeModal('manageWelfareModal'); loadDashboardData(); });
 
     handleAjaxForm('bulkServiceForm', ()=>{ loadDashboardData(); });
 });
 </script>
-
