@@ -269,3 +269,54 @@ if ($pdo === null) {
     ok('the retry hint asks for complete JSON', str_contains($retryHint, 'complete JSON'), $retryHint);
     ok('the retry hint does not echo raw AI output', !str_contains($retryHint, 'unfinished unfinished'));
 }
+
+echo "    model resolution from .env\n";
+(function (): void {
+    $saved = [
+        'text'   => $_ENV['SE_AI_MODEL_TEXT'] ?? null,
+        'vision' => $_ENV['SE_AI_MODEL_VISION'] ?? null,
+    ];
+
+    // Unset: the documented default.
+    unset($_ENV['SE_AI_MODEL_TEXT'], $_ENV['SE_AI_MODEL_VISION']);
+    is_same('text model defaults when unset', SE_AI_MODEL_FALLBACK, se_ai_model(false));
+    is_same('vision model defaults when unset', SE_AI_MODEL_FALLBACK, se_ai_model(true));
+
+    // Present but blank — what `SE_AI_MODEL_VISION=""` from .env.example
+    // leaves behind, because includes/db.php's loader stores every line it
+    // reads. This used to build `…/v1beta/models/:generateContent` and 404,
+    // so a programme screenshot reported "AI unavailable" while Health said
+    // the key was ready.
+    $_ENV['SE_AI_MODEL_TEXT']   = '';
+    $_ENV['SE_AI_MODEL_VISION'] = '   ';
+    is_same('blank text model falls back', SE_AI_MODEL_FALLBACK, se_ai_model(false));
+    is_same('blank vision model falls back', SE_AI_MODEL_FALLBACK, se_ai_model(true));
+
+    // A real override still wins, whitespace and all.
+    $_ENV['SE_AI_MODEL_VISION'] = ' gemini-2.5-pro ';
+    is_same('an override is used and trimmed', 'gemini-2.5-pro', se_ai_model(true));
+
+    is_same('se_env falls back for a missing key', 'poll', se_env('SE_TEST_MISSING_KEY', 'poll'));
+    $_ENV['SE_TEST_BLANK_KEY'] = '""';
+    is_same('se_env keeps a literal value', '""', se_env('SE_TEST_BLANK_KEY', 'poll'));
+    unset($_ENV['SE_TEST_BLANK_KEY']);
+
+    foreach (['text' => 'SE_AI_MODEL_TEXT', 'vision' => 'SE_AI_MODEL_VISION'] as $k => $env) {
+        if ($saved[$k] === null) { unset($_ENV[$env]); } else { $_ENV[$env] = $saved[$k]; }
+    }
+})();
+
+echo "    an empty model never reaches the provider\n";
+(function (): void {
+    $gemini = new SeAiGemini('test-key');
+    try {
+        $gemini->generate([
+            'model' => '', 'system' => 's', 'parts' => [['text' => 'x']],
+            'temperature' => 0.1, 'schema' => [], 'max_tokens' => 256, 'timeout' => 5,
+        ]);
+        ok('an empty model name is refused before the HTTP call', false, 'no exception thrown');
+    } catch (SeAiException $e) {
+        is_same('an empty model name reports AI_UNAVAILABLE', 'AI_UNAVAILABLE', $e->errorCode);
+        ok('the message names the setting to fix', str_contains($e->getMessage(), 'SE_AI_MODEL_VISION'), $e->getMessage());
+    }
+})();

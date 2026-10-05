@@ -66,7 +66,7 @@ final class SeAblyDriver implements SeRealtimeDriver
     {
         $this->fallback->publish($eventPublicId, $channel, $envelope);
 
-        $key = (string) ($_ENV['ABLY_API_KEY'] ?? '');
+        $key = se_env('ABLY_API_KEY');
         if ($key === '' || !function_exists('curl_init')) {
             return;
         }
@@ -112,7 +112,7 @@ function se_realtime_driver(array $event): SeRealtimeDriver
     $settings = se_event_settings($event);
     $name     = (string) se_settings_path($settings, 'realtime.driver', '');
     if ($name === '') {
-        $name = (string) ($_ENV['SE_REALTIME_DRIVER'] ?? 'poll');
+        $name = se_env('SE_REALTIME_DRIVER', 'poll');
     }
 
     if (!isset($cache[$name])) {

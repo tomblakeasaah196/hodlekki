@@ -1780,11 +1780,11 @@ try {
             'ai'             => [
                 'available' => se_ai_available(),
                 'reason'    => se_ai_unavailable_reason(),
-                'model_text' => (string) ($_ENV['SE_AI_MODEL_TEXT'] ?? 'gemini-2.5-flash'),
-                'model_vision' => (string) ($_ENV['SE_AI_MODEL_VISION'] ?? 'gemini-2.5-flash'),
+                'model_text' => se_ai_model(false),
+                'model_vision' => se_ai_model(true),
             ],
             'hash_pepper'    => ['configured' => se_has_hash_pepper()],
-            'realtime'       => ['driver' => (string) ($_ENV['SE_REALTIME_DRIVER'] ?? 'poll')],
+            'realtime'       => ['driver' => se_env('SE_REALTIME_DRIVER', 'poll')],
             'uploads'        => [
                 'writable' => is_writable(se_docroot() . '/uploads') || is_writable(se_docroot()),
                 'gd_webp'  => function_exists('imagewebp'),

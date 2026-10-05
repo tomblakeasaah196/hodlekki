@@ -144,6 +144,8 @@ export function SettingsTab() {
                             ['Module version', health.module_version],
                             ['Server time', formatDateTime(health.server_time)],
                             ['AI', health.ai?.available ? 'ready' : 'off'],
+                            ['AI model (text)', health.ai?.model_text || 'MISSING'],
+                            ['AI model (image/PDF)', health.ai?.model_vision || 'MISSING'],
                             ['Token pepper', health.hash_pepper?.configured ? 'configured' : 'MISSING'],
                             ['Realtime driver', health.realtime?.driver],
                             ['WebP support', health.uploads?.gd_webp ? 'yes' : 'no (falls back to PNG/JPEG)'],

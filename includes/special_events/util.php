@@ -9,6 +9,27 @@
 // file is unit-testable from the CLI (tests/special_events/).
 
 // --------------------------------------------------------------------------
+// Configuration
+// --------------------------------------------------------------------------
+
+/**
+ * A trimmed .env value, falling back to $default when the variable is either
+ * missing OR present but blank.
+ *
+ * This exists because includes/db.php's loadEnv() writes EVERY line it reads
+ * into $_ENV, so a `KEY=""` copied out of .env.example lands as an empty
+ * string and a plain `?? 'default'` never fires — the caller then builds a
+ * request with an empty model name, host or driver. Always read optional
+ * configuration through this helper (§28.4).
+ */
+function se_env(string $key, string $default = ''): string
+{
+    $raw = trim((string) ($_ENV[$key] ?? ''));
+
+    return $raw !== '' ? $raw : $default;
+}
+
+// --------------------------------------------------------------------------
 // Identifiers
 // --------------------------------------------------------------------------
 

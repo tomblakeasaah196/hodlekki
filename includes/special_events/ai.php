@@ -39,8 +39,16 @@ class SeAiGemini implements SeAiProvider
 
     public function generate(array $request): array
     {
-        $model = (string) $request['model'];
-        $url   = 'https://generativelanguage.googleapis.com/v1beta/models/'
+        $model = trim((string) $request['model']);
+        if ($model === '') {
+            // Never post to `…/models/:generateContent`; say what is wrong
+            // instead of letting Google answer 404 "model not found".
+            throw new SeAiException(
+                'AI_UNAVAILABLE',
+                'No Gemini model is configured. An administrator should set SE_AI_MODEL_TEXT and SE_AI_MODEL_VISION, or leave them out of .env entirely.'
+            );
+        }
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/'
             . rawurlencode($model) . ':generateContent';
 
         $generationConfig = [
@@ -127,10 +135,30 @@ class SeAiGemini implements SeAiProvider
 // Availability and limits
 // --------------------------------------------------------------------------
 
+/** The model used when .env names none. Both tasks share it. */
+const SE_AI_MODEL_FALLBACK = 'gemini-2.5-flash';
+
+/**
+ * The Gemini model for a text or a vision task.
+ *
+ * Read through se_env() on purpose: `SE_AI_MODEL_VISION=""` in .env (exactly
+ * what .env.example ships) used to survive `?? 'gemini-2.5-flash'` as an
+ * empty string, which built the URL `…/v1beta/models/:generateContent`. That
+ * 404s, se_ai() reports AI_UNAVAILABLE, and the Studio told a Producer
+ * "Image and PDF reading is unavailable right now" while Health still said
+ * the key was ready (§28.4).
+ */
+function se_ai_model(bool $vision): string
+{
+    return $vision
+        ? se_env('SE_AI_MODEL_VISION', SE_AI_MODEL_FALLBACK)
+        : se_env('SE_AI_MODEL_TEXT', SE_AI_MODEL_FALLBACK);
+}
+
 /** True when an API key is configured, so the UI can hide the AI buttons. */
 function se_ai_available(): bool
 {
-    return trim((string) ($_ENV['GEMINI_API_KEY'] ?? '')) !== '';
+    return se_env('GEMINI_API_KEY') !== '';
 }
 
 /** Why AI is off, for the tooltip next to a disabled button. */
@@ -459,7 +487,7 @@ function se_ai_retry_hint(array $problems): string
  */
 function se_ai(PDO $pdo, string $task, array $input, array $ctx = []): array
 {
-    $apiKey = trim((string) ($_ENV['GEMINI_API_KEY'] ?? ''));
+    $apiKey = se_env('GEMINI_API_KEY');
     if ($apiKey === '') {
         throw new SeAiException('AI_UNAVAILABLE', (string) se_ai_unavailable_reason());
     }
@@ -471,9 +499,7 @@ function se_ai(PDO $pdo, string $task, array $input, array $ctx = []): array
 
     $prompt  = se_ai_prompt($task);
     $isVision = !empty($ctx['vision']);
-    $model   = $isVision
-        ? (string) ($_ENV['SE_AI_MODEL_VISION'] ?? 'gemini-2.5-flash')
-        : (string) ($_ENV['SE_AI_MODEL_TEXT'] ?? 'gemini-2.5-flash');
+    $model    = se_ai_model($isVision);
 
     // The rendered template IS the system instruction (it already carries the
     // task's variables). The user turn holds only the extra inlineData parts
