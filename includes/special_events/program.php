@@ -819,7 +819,10 @@ function se_program_import_normalize(array $items, array $days): array
 {
     $out = [];
 
-    foreach ($items as $raw) {
+    // The serving schema deliberately has no maxItems: large bounds on nested
+    // objects can make Gemini reject the request before reading the source.
+    // Keep the operational limit here, where it has no decoder-state cost.
+    foreach (array_slice($items, 0, 60) as $raw) {
         if (!is_array($raw)) {
             continue;
         }

@@ -742,13 +742,24 @@ that writes the rows; discarding the review leaves the programme unchanged.
 If image/PDF reading is temporarily unavailable, the tab says so plainly, and
 now also shows the reason it was given. Keep or paste the text and try again
 later, or use **Add a row manually** — the night can always be built without
-AI. Two reasons are worth knowing apart:
+AI. Three reasons are worth knowing apart:
 
 - *"The AI allowance for this hour is used up"* — nothing is broken. Wait, or
   an administrator raises the limits in Settings.
 - Anything naming a **model** — a configuration fault, not a bad photo. Send
   an administrator to **Settings → Health** and read them the two AI model
   lines (§20).
+- Anything about a **schema**, a **constraint** or **too many states** — the
+  AI service refused the *shape* we asked for, before it ever looked at your
+  screenshot. The system now notices that, asks again without the strict
+  shape and checks the answer itself, so the review table still appears. If
+  you ever see the message anyway, it means the second attempt failed too:
+  tell an administrator, who has a one-line check to run (§20).
+
+Reading a picture and reading pasted text use the same instructions, so when
+one of them is genuinely broken the other is too. If **Read pasted text**
+works and the upload does not, the problem really is the file: try a PNG or
+JPEG screenshot rather than a photo of a screen, or a PDF under 15 MB.
 
 On the night, the host presses Start and Finish on the console and the times
 everywhere follow. If the night is running late, the portal says so.
@@ -769,7 +780,9 @@ CSV with `title,artist,duration` columns works too; press **It is a CSV**. You
 see what we read, with each row marked *new*, *already in the library*,
 *already on tonight's list* or *might be a duplicate*. Untick anything you do
 not want, then add them. For a photographed song book, upload the picture on
-the Assets tab and choose it here.
+the Assets tab and choose it here. Long lists are fine: we read up to 400
+songs from one list, and anything past that is left out of the preview rather
+than guessed at.
 
 **Publishing.** Nobody can pick until you press **Publish the list**. Do it
 when the list is final; unpublishing hides it again.
@@ -878,6 +891,36 @@ actually calls — the second is the one that reads a programme screenshot or a
 PDF. Both show `gemini-2.5-flash` unless an administrator has deliberately
 named another in `.env`; `MISSING` there explains an "unavailable" message on
 the Programme tab even while *AI* says *ready*.
+
+### When AI fails, for an administrator
+
+Every AI call is recorded, successes and failures alike, with the status the
+service gave us:
+
+```sql
+SELECT created_at, task, model, http_status, ok, error_code
+FROM se_ai_requests ORDER BY id DESC LIMIT 10;
+```
+
+`http_status` `200` is a working call. A real number such as `400`, `403` or
+`429` means the service answered and refused; `0` means the request never got
+there at all (no network, DNS, a firewall). The server's error log holds one
+line per failed attempt — task, model, status, attempt number and the
+service's own words. It never contains the prompt, anybody's details or the
+key.
+
+To test the connection by hand, from the repository (never from a browser —
+the folder is closed to the web):
+
+```bash
+php bin/se_ai_probe.php              # the text call and the image call
+php bin/se_ai_probe.php --text-only
+php bin/se_ai_probe.php --file=/path/to/the-screenshot.png
+```
+
+It prints the raw HTTP status, the curl error number and Google's own
+message, plus the length of the API key — never the key itself. It sends a
+fixed sample programme, never real event data.
 
 ---
 

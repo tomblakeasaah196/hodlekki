@@ -1,0 +1,8 @@
+# /bin/.htaccess — nothing in this directory is ever served.
+#
+# bin/ is not excluded by .deployignore (bin/deploy.sh is invoked on the host
+# by cPanel and by the webhook), so these files DO reach the docroot. None of
+# them is a web entry point: se_ai_probe.php is a CLI diagnostic that talks to
+# the AI provider, and the shell scripts build and deploy the site.
+Options -Indexes
+Require all denied

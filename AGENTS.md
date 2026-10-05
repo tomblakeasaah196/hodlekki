@@ -332,6 +332,22 @@ via `source(none)`). Consequences:
   The module adds one merge field, `{{link}}` (guide §21.2).
 - AI only through `se_ai()`. **No attendee personal data in a prompt, ever**,
   and nothing an AI returns is applied without human review.
+- **Response schemas stay small.** Gemini compiles `responseSchema` into a
+  constrained decoder and refuses anything with too many states ("The
+  specified schema produces a constraint that has too many states for
+  serving", HTTP 400) — a bounded array of nested objects with several
+  optional properties is the usual trigger. So in
+  `includes/special_events/prompts/*.schema.json`: no `maxItems` on arrays of
+  objects (cap the list in PHP and say the limit in the prompt), and prefer
+  `required` + `"nullable": true` over optional properties. `se_ai()` already
+  retries once without `responseSchema` when a 400 names the schema, and
+  always validates the answer with `se_schema_validate()` — but that fallback
+  is a safety net, not a licence to grow a schema.
+- Diagnosing an AI failure: `se_ai_requests.http_status` now records a real
+  status for every attempt (`0` = the request never reached Google), one
+  `error_log` line per failed attempt says task/model/status/attempt, and
+  `php bin/se_ai_probe.php` makes the same text and image calls from the CLI
+  and prints the raw status, curl errno and Google's message.
 - Code shipped before a later migration MUST degrade safely: ask
   `se_table_exists()` first and return `FEATURE_NOT_READY`, never a fatal.
   The tree is copied to production *before* migrations run.

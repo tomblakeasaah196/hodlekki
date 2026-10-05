@@ -7,21 +7,24 @@
   "properties": {
     "songs": {
       "type": "array",
-      "maxItems": 400,
       "items": {
         "type": "object",
         "required": [
-          "title"
+          "title",
+          "artist",
+          "duration"
         ],
         "properties": {
           "title": {
             "type": "string"
           },
           "artist": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "duration": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           }
         }
       }
