@@ -2398,10 +2398,11 @@ function se_ai(PDO $pdo, string $task, array $input, array $ctx): array;
 - Output: `{clusters: [{label (≤ 24 chars, title case), response_ids: [...]}], junk_ids: [...]}`.
 - Post: counts = number of responses per cluster; sort desc; top `board_size_max` → draft board; crew edits/approves.
 
-### 15.7 Verse suggestions (`verses_suggest`)
+### 15.7 Verse suggestions (`verses_suggest` + `verses_accept`)
 
 - Input: `{theme: "joy", count: 12, translation: "KJV", tone: "warm, celebratory"}`. Output: `{verses: [{ref, why (≤ 80 chars), prayer_template (≤ 160 chars, must contain "{name}")}]}`.
-- Post: fetch KJV text per ref; drop unknown refs; crew approves.
+- Post: fetch KJV text per ref; drop unknown refs (with reasons); nothing is saved. The Studio opens a **picker modal** where crew tick verses, may edit a reference (the KJV text re-fetches live via `bible_lookup`) or the prayer line, and add.
+- Accepting IS the §15.9 human review: `verses_accept` re-looks-up every (possibly edited) reference server-side — client-sent text is never trusted — inserts approved with `suggested_by_ai = 1` (migration `20261103090000`), returns each failed pick with a reason, and writes one audit row (`verse_save:accept_ai`) naming the suggestion job. Text always comes from the lookup service (`text_source = 'lookup'`), so the single-approval rule stays sound. Hand-added references keep the separate Approve step.
 
 ### 15.8 Copywriting (`copywrite`)
 

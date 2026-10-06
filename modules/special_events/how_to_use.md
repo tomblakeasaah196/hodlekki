@@ -614,10 +614,17 @@ The optional prayer line must contain `{name}`, which becomes their first name:
 "May this be your season, Ada."
 
 **Suggest verses** asks the AI for references on a theme you type. It never
-sees a guest. It proposes references; the text still comes from the KJV lookup,
-and every suggestion lands as **needs review**. Nothing is shown to anybody
-until you press **Approve**. If no verse is approved, guests simply do not get
-one — nothing breaks.
+sees a guest. A picker opens with each suggestion's KJV text (fetched by the
+server, never written by the AI), the reason it was picked, and its prayer
+line. Tick the ones you want, fix a reference if the AI got one wrong — the
+text re-fetches as you edit — adjust any prayer line, and press **Add**.
+Verses you add are approved in the same moment and are marked
+**suggested by AI** in the list; ones you leave ticked-off are dropped.
+Nothing the AI offered is saved until you add it there.
+
+Hand-added references still land as **needs review** and wait for the
+**Approve** button. If no verse is approved, guests simply do not get one —
+nothing breaks.
 
 ---
 

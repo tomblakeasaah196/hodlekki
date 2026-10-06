@@ -6,7 +6,8 @@
 //
 // The AI never picks a verse on its own. It suggests references, the KJV
 // text is fetched by the server, and nothing becomes usable until a human
-// presses Approve — §15.9's human-review rule, made visible as a button.
+// says so — the Approve button for hand-added verses, or the suggestion
+// picker, whose "Add" saves and approves the verses the producer ticked.
 
 import { html } from '@se/core/html.js';
 import { useState, useEffect } from 'preact/hooks';
@@ -26,7 +27,12 @@ function Verses() {
     const [prayer, setPrayer] = useState('');
     const [theme, setTheme] = useState('');
     const [busy, setBusy] = useState(false);
-    const [suggestions, setSuggestions] = useState(null);
+    const [suggesting, setSuggesting] = useState(false);
+    const [adding, setAdding] = useState(false);
+    // The suggestion round in review: {jobId, theme, dropped, rows}. `rows`
+    // holds what the producer can still change; the picker edits it live.
+    const [picker, setPicker] = useState(null);
+    const [pickerOpen, setPickerOpen] = useState(false);
 
     const editable = can('event.edit');
 
@@ -47,6 +53,89 @@ function Verses() {
     if (!verses) return html`<${Spinner} label="Loading verses…" />`;
 
     const approved = verses.filter((v) => v.approved).length;
+
+    /** Turn a suggestions response into the editable picker state and open it. */
+    const openPicker = (result, themeWords) => {
+        setPicker({
+            jobId: result.job_id || null,
+            theme: themeWords.trim(),
+            dropped: result.dropped || [],
+            rows: (result.verses || []).map((v, i) => ({
+                key: i + ':' + v.ref_display,
+                ref: v.ref_display,
+                lookedUpRef: v.ref_display,
+                text: v.text,
+                why: v.why || '',
+                prayer: v.prayer_template || '',
+                alreadyAdded: !!v.already_added,
+                picked: !v.already_added,
+                checking: false,
+                problem: '',
+            })),
+        });
+        setPickerOpen(true);
+    };
+
+    const patchRow = (key, patch) =>
+        setPicker((p) => p && ({
+            ...p,
+            rows: p.rows.map((r) => (r.key === key ? { ...r, ...patch } : r)),
+        }));
+
+    const dismissPicker = () => {
+        setPicker(null);
+        setPickerOpen(false);
+    };
+
+    /** Save the ticked verses. Accepting approves them (§15.7). */
+    const addPicked = async () => {
+        if (!picker || adding) return;
+
+        const picks = picker.rows
+            .filter((r) => r.picked && !r.alreadyAdded && r.ref.trim() !== '')
+            .map((r) => ({ ref: r.ref.replace(/\s+/g, ' ').trim(), prayer_template: r.prayer }));
+        if (!picks.length) return;
+
+        setAdding(true);
+        try {
+            const data = await studio('verses_accept', { id: event.id, job_id: picker.jobId, picks });
+            setVerses(data.verses);
+
+            // A rejected pick keeps its row with the server's reason pinned
+            // under it; everything else graduated into the list below.
+            const reasonByRef = {};
+            (data.rejected || []).forEach((rej) => {
+                if (rej.ref) reasonByRef[rej.ref] = rej.why;
+            });
+
+            const remaining = [];
+            for (const row of picker.rows) {
+                const submitted = row.picked && !row.alreadyAdded && row.ref.trim() !== '';
+                if (!submitted) { remaining.push(row); continue; }
+                const key = row.ref.replace(/\s+/g, ' ').trim();
+                if (reasonByRef[key]) {
+                    remaining.push({ ...row, checking: false, problem: reasonByRef[key] });
+                }
+            }
+
+            if (remaining.some((r) => !r.alreadyAdded)) {
+                setPicker({ ...picker, rows: remaining });
+            } else {
+                dismissPicker();
+            }
+
+            const acceptedCount = (data.accepted || []).length;
+            if (acceptedCount) {
+                toast(acceptedCount + ' ' + (acceptedCount === 1 ? 'verse' : 'verses') + ' added and approved.', 'success');
+            }
+            if (reasonByRef && (data.rejected || []).length) {
+                toast(data.rejected.length + ' could not be added — see the note in the picker.', 'error');
+            }
+        } catch (e) {
+            toast(e.message, 'error');
+        }
+        setAdding(false);
+    };
 
     return html`
         <${Card} title="Welcome verses"
@@ -87,7 +176,7 @@ function Verses() {
                                     ${verse.approved
                                         ? html`<span class="ml-2 text-xs font-bold text-emerald-600">approved</span>`
                                         : html`<span class="ml-2 text-xs font-bold text-amber-600">needs review</span>`}
-                                    ${verse.source === 'ai' ? html`<span class="ml-2 text-xs text-gray-400">suggested</span>` : null}
+                                    ${verse.ai_suggested ? html`<span class="ml-2 text-xs text-gray-400">suggested by AI</span>` : null}
                                 </p>
                                 <p class="text-sm text-gray-600 mt-1">${verse.text}</p>
                                 ${verse.prayer_template
@@ -120,8 +209,8 @@ function Verses() {
                     <p class="text-sm font-semibold text-gray-700">Ask for suggestions</p>
                     <p class="text-sm text-gray-500">
                         The AI only sees the words you type here — never a guest's name, number or answers.
-                        It proposes references; the KJV text comes from the server, and nothing is used
-                        until you approve it.
+                        It proposes references; the KJV text comes from the server and opens in a picker,
+                        and nothing is used until you add it there.
                     </p>
                     <div class="flex flex-wrap gap-3 items-end">
                         <div class="flex-1 min-w-[16rem]">
@@ -129,30 +218,164 @@ function Verses() {
                                 <${TextInput} name="theme" value=${theme} onInput=${setTheme} maxLength=${160} />
                             <//>
                         </div>
-                        <${Button} variant="secondary" loading=${busy} disabled=${busy || !theme.trim()}
+                        <${Button} variant="secondary" loading=${suggesting} disabled=${suggesting || !theme.trim()}
                             onClick=${async () => {
-                                setBusy(true);
+                                setSuggesting(true);
                                 try {
-                                    setSuggestions(await studio('verses_suggest', { id: event.id, theme, count: 8 }));
+                                    openPicker(await studio('verses_suggest', { id: event.id, theme, count: 8 }), theme);
                                 } catch (e) { toast(e.message, 'error'); }
-                                setBusy(false);
+                                setSuggesting(false);
                             }}>Suggest verses<//>
                     </div>
 
-                    ${suggestions ? html`
-                        <div class="rounded-2xl bg-blue-50 border border-blue-100 p-4 space-y-2">
+                    ${picker && !pickerOpen ? html`
+                        <div class="rounded-2xl bg-blue-50 border border-blue-100 p-4 flex flex-wrap items-center justify-between gap-3">
                             <p class="text-sm font-semibold text-hodBlue">
-                                ${(suggestions.verses || []).length} saved as “needs review”. Approve the ones you want.
+                                Verse suggestions for “${picker.theme}” are waiting. Nothing is saved yet.
                             </p>
-                            ${(suggestions.dropped || []).length ? html`
-                                <ul class="text-xs text-gray-500 list-disc pl-5">
-                                    ${suggestions.dropped.map((d, i) => html`
-                                        <li key=${i}>${d.ref} — ${d.why}</li>`)}
-                                </ul>` : null}
-                            <${Button} variant="ghost" onClick=${() => { setSuggestions(null); load(); }}>Refresh the list<//>
+                            <div class="flex gap-2">
+                                <${Button} variant="secondary" onClick=${() => setPickerOpen(true)}>Review them<//>
+                                <${Button} variant="ghost" onClick=${dismissPicker}>Dismiss<//>
+                            </div>
                         </div>` : null}
                 </div>` : null}
+
+            ${picker && pickerOpen ? html`
+                <${SuggestionPicker} picker=${picker} eventId=${event.id} adding=${adding}
+                    onPatch=${patchRow} onClose=${() => setPickerOpen(false)}
+                    onDismiss=${dismissPicker} onAdd=${addPicked} />` : null}
         <//>`;
+}
+
+// --------------------------------------------------------------------------
+// The suggestion picker (§15.7): a modal that opens the moment the AI
+// answers, so the producer ticks, fixes and adds — never blind-accepts.
+// --------------------------------------------------------------------------
+
+function SuggestionPicker({ picker, eventId, adding, onPatch, onClose, onDismiss, onAdd }) {
+    // Esc closes the picker; the suggestions wait behind the review chip, so
+    // a stray keypress loses nothing.
+    useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, []);
+
+    const pickedCount = picker.rows.filter(
+        (r) => r.picked && !r.alreadyAdded && r.ref.trim() !== ''
+    ).length;
+
+    return html`
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4" data-app-modal data-modal-ignore>
+            <button type="button" aria-label="Close" class="absolute inset-0 bg-gray-900/40"
+                    onClick=${onClose}></button>
+            <div role="dialog" aria-modal="true" aria-label="Verse suggestions"
+                 class="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+
+                <header class="flex items-start justify-between gap-3 px-6 pt-6 pb-4 border-b border-gray-100">
+                    <div>
+                        <h3 class="font-display font-bold text-gray-900">Verses for “${picker.theme}”</h3>
+                        <p class="text-sm text-gray-500 mt-1">
+                            Tick the ones you want, and fix anything the AI got wrong — the KJV text
+                            re-fetches as you edit a reference. Whatever you add is approved and can
+                            greet a guest straight away.
+                        </p>
+                    </div>
+                    <button type="button" onClick=${onClose} aria-label="Close"
+                            class="text-gray-400 hover:text-gray-900 p-2 shrink-0">✕</button>
+                </header>
+
+                <div class="flex-1 overflow-y-auto px-6 py-4">
+                    <ul class="space-y-3">
+                        ${picker.rows.map((row) => html`
+                            <${SuggestionRow} key=${row.key} row=${row} eventId=${eventId}
+                                onPatch=${onPatch} />`)}
+                    </ul>
+
+                    ${picker.dropped.length ? html`
+                        <div class="mt-4 rounded-2xl bg-gray-50 p-4">
+                            <p class="text-xs font-semibold text-gray-500">
+                                ${picker.dropped.length} more from the AI never made it this far:
+                            </p>
+                            <ul class="text-xs text-gray-400 list-disc pl-5 mt-1 space-y-0.5">
+                                ${picker.dropped.map((d, i) => html`<li key=${i}>${d.ref} — ${d.why}</li>`)}
+                            </ul>
+                        </div>` : null}
+                </div>
+
+                <footer class="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t border-gray-100">
+                    <${Button} variant="ghost" onClick=${onDismiss}>Discard suggestions<//>
+                    <div class="flex gap-2">
+                        <${Button} variant="secondary" onClick=${onClose}>Not now<//>
+                        <${Button} loading=${adding} disabled=${adding || !pickedCount}
+                            onClick=${onAdd}>Add ${pickedCount} ${pickedCount === 1 ? 'verse' : 'verses'}<//>
+                    </div>
+                </footer>
+            </div>
+        </div>`;
+}
+
+function SuggestionRow({ row, eventId, onPatch }) {
+    // Editing the reference re-fetches the KJV text after a short pause, so
+    // what the producer sees is always the server's text, never the AI's.
+    useEffect(() => {
+        if (row.alreadyAdded) return undefined;
+        const refNow = row.ref.replace(/\s+/g, ' ').trim();
+        if (refNow === '' || refNow === row.lookedUpRef) {
+            // Back at the fetched reference (or blank): cancel any pending
+            // lookup state so the row is not left "Fetching…" forever.
+            if (row.checking || row.problem) onPatch(row.key, { checking: false, problem: '' });
+            return undefined;
+        }
+
+        onPatch(row.key, { checking: true, problem: '' });
+        const timer = setTimeout(async () => {
+            try {
+                const found = await studio('bible_lookup', { id: eventId, ref: refNow });
+                onPatch(row.key, { checking: false, lookedUpRef: refNow, text: found.text, problem: '' });
+            } catch (e) {
+                onPatch(row.key, { checking: false, lookedUpRef: refNow, text: '', problem: e.message });
+            }
+        }, 600);
+        return () => clearTimeout(timer);
+    }, [row.ref]);
+
+    return html`
+        <li class=${'rounded-2xl border p-4 transition-colors ' + (
+            row.alreadyAdded ? 'border-gray-100 bg-gray-50'
+            : row.picked ? 'border-hodBlue/40 bg-blue-50/50'
+            : 'border-gray-100 bg-white')}>
+            <div class="flex items-start gap-3">
+                <input type="checkbox" checked=${row.picked} disabled=${row.alreadyAdded}
+                    aria-label=${'Use ' + row.ref}
+                    onChange=${(e) => onPatch(row.key, { picked: e.currentTarget.checked })}
+                    class="mt-2.5 w-4 h-4 shrink-0 accent-hodBlue disabled:opacity-40" />
+                <div class="flex-1 min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <input type="text" value=${row.ref} maxLength="60" spellcheck="false"
+                            disabled=${row.alreadyAdded} aria-label="Reference"
+                            onInput=${(e) => onPatch(row.key, { ref: e.currentTarget.value })}
+                            class=${'w-44 px-3 py-2 rounded-xl border outline-none text-sm font-semibold disabled:bg-gray-100 disabled:text-gray-400 '
+                                + (row.problem ? 'border-hodRed' : 'border-gray-200 focus:border-hodBlue')} />
+                        ${row.alreadyAdded
+                            ? html`<span class="text-xs font-bold text-gray-400">already in your list</span>`
+                            : row.why ? html`<span class="text-xs text-gray-400 italic">${row.why}</span>` : null}
+                    </div>
+                    ${row.checking
+                        ? html`<p class="text-sm text-gray-400 mt-2">Fetching the KJV text…</p>`
+                        : row.problem
+                            ? html`<p class="text-sm text-hodRed mt-2">${row.problem}</p>`
+                            : row.text
+                                ? html`<p class="text-sm text-gray-600 mt-2">${row.text}</p>`
+                                : html`<p class="text-sm text-gray-400 mt-2">No KJV text for that reference — fix it above.</p>`}
+                    ${row.alreadyAdded ? null : html`
+                        <input type="text" value=${row.prayer} maxLength="300"
+                            placeholder="Prayer line with {name} — optional" aria-label="Prayer line"
+                            onInput=${(e) => onPatch(row.key, { prayer: e.currentTarget.value })}
+                            class="mt-2 w-full px-3 py-2 rounded-xl border border-gray-200 focus:border-hodBlue outline-none text-sm" />`}
+                </div>
+            </div>
+        </li>`;
 }
 
 // --------------------------------------------------------------------------

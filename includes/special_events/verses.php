@@ -5,7 +5,9 @@
 //
 // A verse set is built in the Studio: a theme produces suggested REFERENCES
 // from the model, each reference is fetched from the KJV (§15.9) and stored
-// as text, and crew approves it before it can ever reach a guest's card.
+// as text, and a human signs it off before it can ever reach a guest's card —
+// the Approve button for hand-added verses, or the suggestion picker, whose
+// "Add" both saves and approves the verses the producer ticked (§15.7).
 // AI never supplies the words of Scripture — only the pointer to them.
 //
 // At check-in the least-used approved verse is handed out (ties broken at
@@ -16,6 +18,31 @@
 function se_verses_ready(PDO $pdo): bool
 {
     return se_table_exists($pdo, 'se_event_verses');
+}
+
+/**
+ * Is the §15.7 provenance flag migrated yet? The tree ships to production
+ * before migrations run (AGENTS.md), so reads and writes both degrade until
+ * 20261103090000_se_verses_ai_flag.sql lands: the badge simply hides.
+ */
+function se_verses_ai_flag_ready(PDO $pdo): bool
+{
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+
+    try {
+        $stmt = $pdo->query(
+            "SELECT 1 FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = 'se_event_verses'
+               AND column_name = 'suggested_by_ai'"
+        );
+        return $ready = (bool) $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        error_log('SE verses/ai_flag_ready: ' . $e->getMessage());
+        return $ready = false;
+    }
 }
 
 /** Every verse of an event, newest sort order first. */
@@ -80,9 +107,11 @@ function se_verse_payload(array $verse): array
         'ref_display'   => (string) $verse['ref_display'],
         'text'          => (string) $verse['text'],
         'text_source'   => (string) $verse['text_source'],
+        'ai_suggested'  => se_bool($verse['suggested_by_ai'] ?? 0),
         'prayer_template' => $verse['prayer_template'],
         'sort_order'    => (int) $verse['sort_order'],
         'is_active'     => se_bool($verse['is_active']),
+        'approved'      => !empty($verse['approved_at']),
         'approved_at'   => se_iso($verse['approved_at']),
         'approved_by'   => $verse['approved_by'] !== null ? (int) $verse['approved_by'] : null,
         'second_approved_by' => $verse['second_approved_by'] !== null ? (int) $verse['second_approved_by'] : null,
@@ -397,4 +426,147 @@ function se_verses_suggest(PDO $pdo, array $event, string $theme, int $count, st
     ], ['verses' => $out, 'dropped' => $dropped], $actorId);
 
     return ['job_id' => $jobId, 'verses' => $out, 'dropped' => $dropped];
+}
+
+/**
+ * The pure half of accepting suggestions (§15.7): trim each pick the picker
+ * sent, enforce the rules that need no database, and split them into rows
+ * ready to save and rows handed back with a reason. Kept DB-free so the
+ * test harness can pin the shaping down.
+ *
+ * @return array{0: array<int, array{ref: string, prayer_template: ?string}>,
+ *               1: array<int, array{ref: string, why: string}>} [clean, rejected]
+ */
+function se_verses_clean_picks(array $picks, int $max = 24): array
+{
+    $clean    = [];
+    $rejected = [];
+
+    foreach (array_slice(array_values($picks), 0, max(1, $max)) as $item) {
+        if (!is_array($item)) {
+            $rejected[] = ['ref' => '', 'why' => 'not a pick we recognise'];
+            continue;
+        }
+
+        $ref = se_line($item['ref'] ?? '', 60);
+        if ($ref === '') {
+            $rejected[] = ['ref' => '', 'why' => 'no reference given'];
+            continue;
+        }
+
+        $prayer = se_line($item['prayer_template'] ?? '', 300);
+        if ($prayer !== '' && !str_contains($prayer, '{name}')) {
+            $rejected[] = ['ref' => $ref, 'why' => 'the prayer line needs {name}'];
+            continue;
+        }
+
+        $clean[] = ['ref' => $ref, 'prayer_template' => $prayer !== '' ? $prayer : null];
+    }
+
+    return [$clean, $rejected];
+}
+
+/**
+ * Accept picks from the suggestion picker (§15.7).
+ *
+ * Accepting IS the human review §15.9 asks for: the picker shows the KJV
+ * text the server fetched, the producer may fix the reference or the prayer
+ * line, and whatever they confirm is looked up AGAIN here — client-sent
+ * verse text is never trusted — then inserted already approved and marked
+ * `suggested_by_ai`. Because the text always comes from the lookup service
+ * (`text_source = 'lookup'`), the single-approval rule stays sound and no
+ * second approval is needed.
+ *
+ * The batch never fails as a whole for one bad pick: each pick that
+ * misbehaves comes back in `rejected` with a reason the picker can pin to
+ * its row.
+ *
+ * @return array{verses: array, accepted: string[], rejected: array<int, array{ref: string, why: string}>}
+ */
+function se_verses_accept(PDO $pdo, array $event, array $picks, ?int $jobId, int $actorId): array
+{
+    $eventId = (int) $event['id'];
+
+    if (!se_verses_ready($pdo)) {
+        throw new SeRuleException('FEATURE_NOT_READY', 'Welcome verses are not available yet.');
+    }
+    if ($picks === []) {
+        throw new SeValidationException(['picks' => 'Pick at least one verse.']);
+    }
+
+    [$clean, $rejected] = se_verses_clean_picks($picks);
+
+    $existing = [];
+    foreach (se_verses_list($pdo, $eventId) as $verse) {
+        $parsed = se_bible_ref_normalize((string) $verse['ref_display']);
+        if ($parsed !== null) {
+            $existing[$parsed['ref_norm']] = true;
+        }
+    }
+
+    $next = 0;
+    try {
+        $stmt = $pdo->prepare("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM se_event_verses WHERE event_id = ?");
+        $stmt->execute([$eventId]);
+        $next = (int) $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        error_log('SE verses/accept_next: ' . $e->getMessage());
+    }
+
+    $withFlag = se_verses_ai_flag_ready($pdo);
+    $accepted = [];
+
+    foreach ($clean as $pick) {
+        $parsed = se_bible_ref_normalize($pick['ref']);
+        if ($parsed === null) {
+            $rejected[] = ['ref' => $pick['ref'], 'why' => 'not a reference we recognise'];
+            continue;
+        }
+        if (isset($existing[$parsed['ref_norm']])) {
+            $rejected[] = ['ref' => $pick['ref'], 'why' => 'already in your list'];
+            continue;
+        }
+
+        $looked = se_bible_lookup($pdo, $pick['ref'], 'KJV');
+        if ($looked === null || $looked['text'] === '') {
+            $rejected[] = ['ref' => $pick['ref'], 'why' => 'the KJV lookup did not return it'];
+            continue;
+        }
+
+        if ($withFlag) {
+            $stmt = $pdo->prepare(
+                "INSERT INTO se_event_verses
+                    (event_id, translation, ref_display, text, text_source, prayer_template,
+                     sort_order, is_active, approved_by, approved_at, suggested_by_ai)
+                 VALUES (?, 'KJV', ?, ?, 'lookup', ?, ?, 1, ?, NOW(), 1)"
+            );
+        } else {
+            $stmt = $pdo->prepare(
+                "INSERT INTO se_event_verses
+                    (event_id, translation, ref_display, text, text_source, prayer_template,
+                     sort_order, is_active, approved_by, approved_at)
+                 VALUES (?, 'KJV', ?, ?, 'lookup', ?, ?, 1, ?, NOW())"
+            );
+        }
+        $stmt->execute([$eventId, $looked['ref_display'], $looked['text'], $pick['prayer_template'], $next, $actorId]);
+
+        // Blocks batch duplicates without a second query, and any later pick
+        // naming this same reference now reads as already-in-the-list.
+        $existing[$parsed['ref_norm']] = true;
+        $accepted[] = (string) $looked['ref_display'];
+        $next++;
+    }
+
+    se_audit($pdo, $eventId, 'verse_save:accept_ai', [
+        'count'    => count($accepted),
+        'refs'     => $accepted,
+        'rejected' => count($rejected),
+        'job_id'   => $jobId,
+    ], 'event', $eventId, $actorId);
+
+    return [
+        'verses'   => array_map('se_verse_payload', se_verses_list($pdo, $eventId)),
+        'accepted' => $accepted,
+        'rejected' => $rejected,
+    ];
 }

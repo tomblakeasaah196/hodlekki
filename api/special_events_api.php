@@ -1170,7 +1170,29 @@ try {
             $userId
         );
 
-        se_api_success('Here are some suggestions. Nothing is saved until you approve it.', $result);
+        se_api_success('Here are some suggestions. Nothing is saved until you pick the ones you want.', $result);
+    }
+
+    case 'verses_accept': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        // Tick-and-add from the suggestion picker (§15.7): accepting approves,
+        // and the server re-fetches every reference — client text is ignored.
+        $jobId  = se_int($body['job_id'] ?? 0, 0);
+        $result = se_verses_accept(
+            $pdo,
+            $event,
+            is_array($body['picks'] ?? null) ? $body['picks'] : [],
+            $jobId > 0 ? $jobId : null,
+            $userId
+        );
+
+        $added   = count($result['accepted']);
+        $dropped = count($result['rejected']);
+        se_api_success(
+            $added . ' added and approved.' . ($dropped ? ' ' . $dropped . ' could not be added.' : ''),
+            $result
+        );
     }
 
     case 'bible_lookup': {
