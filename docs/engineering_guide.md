@@ -345,7 +345,7 @@ Each journey lists the steps and the system behaviour behind them. Section refer
 ### 7.1 Producer creates Chara (or clones last year's)
 
 1. **Studio → Special Events → "New event"** (or **"Clone…"** on a past event, §10.10).
-2. **Details.** Title `Chara`, edition `2026`, tagline, rich description, organiser label `Envision`, venue (name, address, map link, notes such as "Check-in is downstairs"). Then the **days**: for a single day, one row (doors open 4:00 PM, starts 5:00 PM, ends 10:00 PM). For multi-day events, one row per day.
+2. **Details.** Title `Chara`, edition `2026`, tagline, rich description, organiser label `Envision`, venue (name, address, map link, notes such as "Check-in is downstairs"). Then the **days**: for a single day, one row (doors open 4:00 PM, starts 5:00 PM, ends 10:00 PM). For multi-day events, one row per day. Last on the tab, the **public page** panel: the portal's opening line, the countdown and hero-video switches, and the **Good to know** questions (S6) — the `settings.portal` branch, saved on its own through `portal_settings_save` so it never collides with the form above it.
 3. **Slug.** Type `chara`. The field validates live: format, reserved words, availability (§10.2). The preview shows `hodlc.lpc.cm/e/chara`.
 4. **Brand.** Paste the **primary** and **secondary** hex codes (optional accent). The derived palette appears immediately, with contrast badges on the live preview. **"Suggest palettes ✨"** returns four AI palettes built around the two colours, each with a mini portal/stage/team preview (§13.2, §15). Then pick the display and body fonts and upload the logo/wordmark, hero image and hero video (§14.1).
 5. **Registration & capacity.** Field toggles (email optional/required/hidden, how-heard, karaoke interest), consent mode and text, custom questions; online capacity `120`, auto-close ✓, waitlist ☐/✓, self-cancel ☐/✓, walk-ins `30` (hard cap ☐/✓), seats-left mode; registration window (opens now, closes at event start).
@@ -1410,6 +1410,7 @@ $drift_min = round((last eta_end − last planned_end) / 60);   // positive = ru
 
 - Host console shows drift ("Running 8 min late") and suggests skipping a `buffer` item.
 - Public display honours `settings.program.public_time_mode`: `exact` (`7:15 PM`), `approximate` (default: `~7:15 PM`, rounded to 15 min) or `order_only` (no times), the right fit for a flexibly-timed programme (M7, M12).
+- **Publish gate.** `settings.program.published` decides whether the event page shows the programme at all. The spec default is **`true`** and new events are created with **`false`** (`se_settings_for_new_event()`, called by `se_event_create()`) — the two are deliberately different. An event written before the key existed has no `published` in its `settings_json`, so the spec default is what its page reads: shipping `false` there would have pulled a live programme off a church's page at file-copy time, before a migration could run or a producer could press anything. A clone keeps whatever the source event chose. `se_portal_program_public()` checks it *before* reading anything, so an unpublished programme costs the page no queries, returns `null`, and S4b plus its menu entry are simply not rendered. Studio → Programme has the toggle (`program_publish {id, on}` → `se_event_settings_patch()`, `event.edit`, no `row_version`). The gate is **public-page-only**: `se_snapshot_public()` keeps feeding `program` to the stage, the host console and the lobby, because the crew needs the run of show whether or not guests may read it.
 - Actions: **Start** (sets `live`, ends any other live item as `done`), **Finish**, **Skip**, **Undo last** (restores the previous status/timestamps from the audit entry), **Reorder** (planned items only).
 - Starting an item linked to a game sets the stage scene to that game's intro.
 
@@ -1878,7 +1879,7 @@ Auth: ERP session + `X-SE-CSRF` + module access (§6.2) + capability on the even
 | Events | `list_events {filter}`, `get_event {id}`, `create_event {title, slug, days[], …}`, `update_event {id, section, fields, expected_row_version}`, `check_slug {slug, event_id?}`, `reclaim_slug {event_id, slug}`, `publish {id}`, `unpublish {id}`, `cancel {id, reason}`, `archive {id}`, `delete_draft {id}`, `clone_event {source_id, options, title, slug, first_start}` |
 | Brand | `palette_derive {primary, secondary, accent?, preset}` (pure maths, instant), `palette_suggest {primary, secondary, mood[]}` (AI job), `apply_palette {id, palette}` |
 | Registration | `form_fields_save {id, fields[]}`, `capacity_save {id, …}`, `override_set {id, mode, note}` |
-| Days & programme | `days_save {id, days[]}`, `program_list {id}`, `program_save {id, items[]}`, `program_import {id, text?\|asset_id?}` (AI job), `program_apply {id, job_id, items[], mode: replace\|append, day_id}` |
+| Days & programme | `days_save {id, days[]}`, `program_list {id}` (→ `{program, kinds, time_mode, published}`), `program_save {id, items[]}`, `program_publish {id, on}` (the §10.7.2 gate), `program_poster_data {id}` (§14.2b), `program_import {id, text?\|asset_id?}` (AI job), `program_apply {id, job_id, items[], mode: replace\|append, day_id}` |
 | Teams | `teams_save {id, teams[{color_hex, color_label, name?}]}` (count locked after first assignment), `teams_roster {id}` |
 | Karaoke | `songs_event_list`, `songs_import_preview {text\|file\|asset_id}` (AI for images), `songs_import_commit {preview_id}`, `songs_toggle {song_id, active}`, `karaoke_settings_save`, `karaoke_publish_list {on}` |
 | Verses | `verses_suggest {theme, count}` (AI), `verses_add {refs[]}` (fetch KJV), `verses_save {verses[]}` |
@@ -1889,6 +1890,7 @@ Auth: ERP session + `X-SE-CSRF` + module access (§6.2) + capability on the even
 | Attendees | `attendees_list {filters, q, page}`, `attendee_get {id}`, `attendee_update {id, fields}` (crew corrections), `attendee_cancel`, `attendee_restore`, `attendee_promote`, `attendee_remove {reason}`, `attendee_add` (studio channel), `attendee_reset_links`, `attendee_erase {reason}`, `attendees_export` (xlsx), `possible_duplicates`, `possible_members` |
 | Insights | `insights {id, range?}`, `report_pdf {id}`, `report_summary_ai {id}` |
 | Hand-off | `handoff_preview {id}`, `handoff_commit {id, overrides[]}`, `handoff_history {id}` |
+| Portal page | `portal_settings_save {id, settings: {intro_line?, show_countdown?, hero_video_enabled?, chapters_from_featured?, faq?[{q, a}]}}` (patches `settings.portal`, no row_version), `portal_faq_reset {id}` (the Appendix E questions again) |
 | Ops | `audit_list {id, filters}`, `health {id}`, `settings_get`, `settings_save` (manager) |
 
 Response shapes mirror the tables in §9. Every list action paginates (`page`, `per_page ≤ 100`), returning `{items, page, pages, total}`.
@@ -2097,9 +2099,11 @@ Playlist: `se_music` rows (max `SE_MUSIC_MAX` = 5), each joined to an `se_assets
 
 **S4 · Watch / listen.** "Lite" YouTube embed (thumbnail + play; the `youtube-nocookie.com` iframe loads on tap) and an optional voice-over audio card ("Hear from the team"). **Not built in PR2** — no per-event setting holds the URL yet, so the portal simply skips this screen (§28.4).
 
+**S4b · Programme.** The public run of show (§10.7.2): public items only, never a crew note, times in the event's chosen mode. Shown only when `settings.program.published` is true — see the publish gate in §10.7.2. While it is hidden the top-bar menu drops its "Programme" entry too (the menu's first item, which has always pointed at the chapters, now reads "The night").
+
 **S5 · Venue.** Glass card: venue name, address, notes ("Check-in is downstairs"), **Open in Maps**, **Add to calendar** (`/e/<slug>/calendar.ics`).
 
-**S6 · FAQ.** Accordion from `settings.portal.faq` (defaults in Appendix E): cost, dress code, singing optional, friends, arrival time, food.
+**S6 · FAQ.** Accordion from `settings.portal.faq`. The Appendix E list (cost, dress code, singing optional, friends, arrival time, food) is **starter content**, not fixed copy: Studio → Details → **Good to know** rewrites, reorders, extends (to `SE_PORTAL_FAQ_MAX` = 20) or empties it, and an empty list drops the whole section. Server-side, `se_portal_faq_clean()` trims, drops fully blank rows and refuses a half-filled one (`faq_<i>_q` / `faq_<i>_a` field errors); the normaliser only re-seeds the six when the key is absent entirely.
 
 **S7 · Footer.** Organiser, HOD Lekki logo, Privacy, "Designed by Envision".
 
@@ -2213,6 +2217,7 @@ Now-on-stage card, Up-next card, queue (drag handles), statuses (Up next / On st
 - **Overview**: readiness ring + checklist (Appendix H.1), key dates, quick links (portal, check-in poster PNG/PDF, stage & lobby links with copy buttons, consoles), KPIs, recent audit activity.
 - **Brand**: hex inputs (swatch + text, paste-friendly), contrast report, AI suggestions grid, font pickers with live specimen, asset pickers (logo, hero image/video, OG).
 - **Check-in**: the welcome-verse list (§10.9) with AI suggestions, KJV lookup and approve, plus the A4/A3 QR posters (§14.2) and the live door counters. Everything about the moment somebody walks in lives here, so the desk crew has one tab to open.
+- **Programme**: the publish bar first (green/amber — it is the one thing about a run of show a producer gets wrong), then the run of show, the **programme poster** (§14.2b) and the AI import panel.
 - **Teams**: count, "paste hex codes" box, per-team rows (swatch, hex, label, name, captain), similarity/contrast warnings, roster view.
 - **Live**: screen links with one-click rotation, the test-mode toggle and Reset rehearsal (§11.13), and the live monitor (§18.3) polling every 5 s while the tab is visible.
 - **Modals** follow the shared contract: overlay element with `data-app-modal` (or an id containing "modal") and `position: fixed`, a single `data-modal-panel` child, `.hidden` toggled for visibility. `assets/js/modal-manager.js` then provides centring, scroll lock, inert background and focus handling. Drawers (side panels) use `justify-end` so the manager ignores them.
@@ -2295,6 +2300,22 @@ Storage: `/uploads/se/<public_id>/<role>/<yyyymmdd>-<8 hex>.<ext>`. File names a
 6. Upload with `render_save` → stored as an asset with the template's role. Posters also get a PDF via dompdf (PNG embedded full-bleed at the right paper size) for printing.
 
 The Studio shows all formats as a grid with **Render all**, **Download zip** (client-side zip of the PNGs; JSZip is vendored for the Studio only), **Set as link preview** (OG) and **Use on stage** (adds to the standby loop).
+
+### 14.2b Programme poster (A4 / 16:9)
+
+**Goal**: the run of show as one picture — printed for the door, or on the lobby TV — without a designer and without anything being cut off.
+
+Studio → Programme → **Programme poster**. Two shapes only: `a4` 2480 × 3508 (210 × 297 mm at 300 dpi) and `screen` 1920 × 1080. **Download JPEG** is the primary action (PNG is next to it); the file is `<slug>-<edition>-programme-<a4|screen>.jpg` and nothing is uploaded — a poster is reprinted every time the programme changes, so it is not worth an asset row.
+
+Server: `program_poster_data {id}` (`insights.view`) → `se_program_poster_payload()` in `cards.php`. It returns the **public** programme from `se_program_public()` (so the poster can never show a crew-only item), the day's date/doors line, `se_card_colors()`, the event fonts, the hero asset's path and the portal URL for the QR. The publish gate is deliberately **not** applied: crews print the running order long before the page may show it.
+
+Client: `assets/se/js/studio/program_poster.js`. Unlike every other render in §14.2 there is **no `se__*` SVG template** — a programme is a list of unknown length, and fixed tokens cannot answer "does all of it fit?". The module builds the SVG source itself, then reuses the §14.2 pipeline from step 3 (`embedFontCss` → `rasterise` → `shareOrDownload`).
+
+- **Fitting.** `planPosterRows(count, avail, metrics)` picks the row height that makes every item fit the page, capped so six items do not become six slabs; past a per-format threshold (18 on A4, 8 on screen) it opens a second column. Then two passes settle the time column (as wide as the widest time), the title size (shrunk until the *longest* title fits its column) and the time size. Blurbs are drawn only while rows are tall enough; the host name moves to the right of the title when they are not. Nothing is ever dropped — it gets smaller.
+- **Measuring.** `makeMeasurer()` uses a canvas 2D context, so `primeFonts()` first injects the already-fetched `@font-face` CSS into the Studio document and awaits `document.fonts.load()`. Without it the browser measures Arial and lays out for a face a third narrower. With no metrics at all (node tests, a blocked font) it falls back to a deliberately generous average-advance estimate.
+- **Background.** The portal hero asset, fetched same-origin and inlined as a data URI (an SVG drawn to a canvas cannot fetch), `xMidYMid slice`, under a palette scrim plus a primary/secondary glow. No hero: the gradients alone.
+- **JPEG.** `rasterise(svg, w, h, {type, quality, background})` — the options argument is new and optional, so the §14.2 and §14.3 callers still get a PNG. JPEG has no alpha, hence the opaque `background` fill before `drawImage`.
+- Tests: `tests/special_events/js/program_poster.test.mjs` draws both formats for 1 … 40 items and asserts every box and baseline lands inside the canvas.
 
 ### 14.3 Personal share cards
 
@@ -4648,7 +4669,7 @@ Statistics: {{stats_json}}
     }
   },
   "feud": { "survey_closes_at": null },
-  "program": { "public_time_mode": "approximate" },
+  "program": { "public_time_mode": "approximate", "published": true },
   "portal": {
     "intro_line": null,
     "show_countdown": true,
@@ -4686,7 +4707,7 @@ Statistics: {{stats_json}}
 
 ## Appendix F — Copy deck (microcopy)
 
-Tone: joyful, warm, short, inclusive of guests; Nigerian-English friendly; no church jargon without a hint. These strings are the defaults; the Studio can override portal headline/tagline/FAQ per event.
+Tone: joyful, warm, short, inclusive of guests; Nigerian-English friendly; no church jargon without a hint. These strings are the defaults; the Studio overrides portal headline/tagline (Details) and the FAQ (Details → Good to know, `portal_settings_save`) per event. The `portal.faq` default is only applied when the stored document has no `faq` key at all — an event that saves `[]` keeps an empty list and shows no FAQ section.
 
 | Key | Text |
 |---|---|

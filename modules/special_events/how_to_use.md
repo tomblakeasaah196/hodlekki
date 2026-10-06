@@ -109,6 +109,44 @@ into it.
 
 A multi-day event just gets more rows.
 
+### The public page
+
+Three small decisions about `/e/your-link` that belong nowhere else:
+
+- **Opening line** — one sentence under the countdown. Leave it empty and the
+  page uses your tagline on its own.
+- **Count down to the first day** — off hides the clock, which is what you
+  want for an event with no fixed start time.
+- **Play the hero video when there is one** — off always shows the hero image,
+  even if a video is sitting in Assets.
+
+### Good to know — the questions guests ask
+
+The list at the bottom of the public page, the one that opens when a guest taps
+a question. A new event starts with six **starter questions** (is it free, what
+to wear, do I have to sing, can I bring a friend, what time to arrive, will
+there be food) and you change all of them here.
+
+- **Add a question** — a new empty row at the bottom. Up to 20.
+- **↑ / ↓** — the order here is the order on the page, so put the one everybody
+  asks first.
+- **Remove** — takes it off the page.
+- **Restore the starter questions** — puts the original six back, replacing
+  whatever is there now. You are asked to confirm first.
+- **✨ Help me write this answer** — three suggestions from the AI helper for
+  that one answer. Nothing is used until you pick it, and you can edit it
+  afterwards. (Hidden when no AI key is configured.)
+
+Answers are plain words — no Markdown, no links. A question needs an answer and
+an answer needs a question: save a half-filled row and that row is highlighted
+rather than quietly showing a blank panel to a guest.
+
+**Remove every question and the whole section disappears from the page.** That
+is a real choice, not a mistake, so nothing is put back for you.
+
+Press **Save the public page** when you are done — this box saves separately
+from the name, venue and dates above it, and neither one disturbs the other.
+
 ---
 
 ## 5. Brand
@@ -321,7 +359,8 @@ title card: the name snaps in letter by letter, a hairline draws, and
 *presents* fades up beneath it. All of it plays once and then holds still, and
 a guest who has asked their phone for reduced motion simply gets the finished
 frame. It counts down to the night, then walks down the page: **what it is**, **the night
-chapter by chapter**, **where**, and **good to know**. The Household of David
+chapter by chapter**, **where**, and **good to know** (the questions you wrote
+in Details — see §4). The Household of David
 logo has its own clear lockup in the top bar and appears again in the footer. A
 button follows the guest down the screen and always says the right thing for
 the moment (the table in §6 lists them all).
@@ -764,6 +803,50 @@ whether it is **featured** (bigger on the programme and on the stage screen).
 **What guests see** decides how times are printed: *approximate* ("~7:15 PM",
 the kind default), *exact*, or *order only* — no times, just the order.
 
+**Publishing it (the bar at the top).** A run of show is a working document:
+items get cut, times move, somebody is still deciding who closes. So a
+programme is **hidden from the event page until you publish it**. The bar at
+the top of the tab always says which it is:
+
+- **Amber, "Not published"** — guests see no programme at all on the page, and
+  the page menu does not offer one. Press **Publish the programme**.
+- **Green, "Published"** — the public items are on the page, in this order,
+  with the times you chose. Press **Hide it again** at any point; it comes off
+  the page immediately and nothing you typed is lost.
+
+One exception, once only: an event whose programme was already on its page
+before this update keeps it there, published, exactly as guests last saw it.
+Nothing disappeared the day the switch arrived. Events created from now on
+start hidden.
+
+Publishing is only about the public page. **The stage screen, the host console
+and the lobby always show the real run of show**, published or not, so the
+crew is never left guessing. Items marked "not on the public page" under
+**More** stay private either way.
+
+**The programme poster.** Under the run of show, **Programme poster** turns
+the list into one picture you can print or put on a screen. Pick the shape:
+
+- **A4 poster** — 210 × 297 mm at 300 dpi, for the door, the noticeboard and
+  the hand-outs.
+- **16:9 screen** — 1920 × 1080, for the projector, the lobby TV or a slide.
+
+Press **Download JPEG** (there is a **PNG** button beside it if you want the
+sharper file for a printer). The poster is drawn in your browser, so nothing
+is sent anywhere and it always matches what the page is showing.
+
+What it puts on the poster, without being asked: the event's **hero image** as
+the background (set it in **Brand**; without one you get the event's colours),
+the title, date, doors and venue, every public item with its time, the
+featured ones highlighted, the "times are approximate" note when that is what
+guests are being told, the page address and a **QR code** to it — switch the
+code off with the tick box if you would rather not have one.
+
+It also fits itself. A short programme gets big, roomy rows with the one-line
+descriptions; a long one shrinks the rows, then splits into two columns. It
+will never cut an item off the bottom — if it has to choose, the type gets
+smaller. Multi-day events get one poster per day; choose the day on the right.
+
 **Importing one.** Most programmes arrive as a screenshot in a group chat.
 Open **Programme → Import a programme**, then either:
 
@@ -1161,6 +1244,11 @@ Overview lists exactly what is missing, in red, each with where to fix it.
 **Why is "Suggest palettes" missing?**
 No AI key is configured. Everything else works; you just choose the accent
 yourself.
+
+**Can I change the questions at the bottom of the public page?**
+Yes — Details → **Good to know**. The six an event starts with are only a
+starting point: rewrite them, reorder them, add your own, or delete the lot and
+the section disappears.
 
 **Can I delete an event?**
 Only a draft, and only an administrator. Once anyone has registered it is

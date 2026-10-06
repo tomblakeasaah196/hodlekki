@@ -9,6 +9,7 @@ import { useState, useEffect, useMemo } from 'preact/hooks';
 import { studio, studioUpload } from '@se/core/api.js';
 import { current, toast, can, applyEvent } from '../state.js';
 import { Card, Button, Spinner, EmptyState, Field, TextInput, TextArea, Select, Switch } from '../ui.js';
+import { ProgramPosterCard } from '../program_poster.js';
 
 const KINDS = [
     'welcome', 'worship', 'prayer', 'word', 'game', 'karaoke', 'debate',
@@ -540,6 +541,51 @@ function ImportPanel({ event, days, defaultDayId, onApplied, onAddManual }) {
 }
 
 // --------------------------------------------------------------------------
+// The publish gate (§10.7.2)
+// --------------------------------------------------------------------------
+
+/** What the bar at the top of the tab says, in both states. */
+export function publishBarCopy(published, itemCount) {
+    if (published) {
+        return {
+            state: 'Published',
+            title: 'The programme is on the event page.',
+            hint: itemCount
+                ? 'Guests see the public items, in this order, with the times you chose below.'
+                : 'There is nothing public to show yet, so the section stays off the page until there is.',
+            action: 'Hide it again',
+        };
+    }
+
+    return {
+        state: 'Not published',
+        title: 'The programme is hidden from the event page.',
+        hint: 'Nobody outside the team can see it. The stage screen, the host console and the lobby '
+            + 'always show the real run of show, published or not.',
+        action: 'Publish the programme',
+    };
+}
+
+function PublishBar({ published, busy, readOnly, itemCount, onToggle }) {
+    const copy = publishBarCopy(published, itemCount);
+    const tone = published
+        ? 'bg-emerald-50 border-emerald-200'
+        : 'bg-amber-50 border-amber-200';
+
+    return html`
+        <div class=${'rounded-3xl border p-5 sm:p-6 flex flex-wrap items-center gap-4 ' + tone}>
+            <span class=${'px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ' +
+                (published ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white')}>${copy.state}</span>
+            <div class="min-w-[14rem] flex-1">
+                <p class="font-display font-bold text-gray-900">${copy.title}</p>
+                <p class="text-sm text-gray-600 mt-1">${copy.hint}</p>
+            </div>
+            <${Button} variant=${published ? 'secondary' : 'primary'} loading=${busy}
+                disabled=${readOnly} onClick=${() => onToggle(!published)}>${copy.action}<//>
+        </div>`;
+}
+
+// --------------------------------------------------------------------------
 
 export function ProgramTab() {
     const event = programEventFromCurrent(current.value);
@@ -551,6 +597,8 @@ export function ProgramTab() {
     const [dirty, setDirty] = useState(false);
     const [loadError, setLoadError] = useState('');
     const [loading, setLoading] = useState(true);
+    const [published, setPublished] = useState(false);
+    const [publishing, setPublishing] = useState(false);
     const readOnly = !can('event.edit');
 
     function absorb(program, mode) {
@@ -572,6 +620,7 @@ export function ProgramTab() {
         try {
             const result = await loadProgram(studio, event.id);
             absorb(result.program, result.time_mode);
+            setPublished(!!result.published);
         } catch (caught) {
             setLoadError(caught.message || 'We could not load this programme.');
         } finally {
@@ -614,6 +663,19 @@ export function ProgramTab() {
         reordered.splice(to, 0, moved);
         setItems((previous) => [...previous.filter((item) => !dayItems.includes(item)), ...reordered]);
         setDirty(true);
+    }
+
+    async function togglePublish(on) {
+        setPublishing(true);
+        try {
+            const result = await studio('program_publish', { id: event.id, on });
+            setPublished(!!result.published);
+            toast(on ? 'The programme is live on the event page.' : 'The programme is hidden again.', 'success');
+        } catch (caught) {
+            toast(caught.message, 'error');
+        } finally {
+            setPublishing(false);
+        }
     }
 
     async function save() {
@@ -659,8 +721,13 @@ export function ProgramTab() {
 
     const days = data.days || [];
 
+    const publicCount = items.filter((item) => item.is_public).length;
+
     return html`
         <div class="space-y-6">
+            <${PublishBar} published=${published} busy=${publishing} readOnly=${readOnly}
+                itemCount=${publicCount} onToggle=${togglePublish} />
+
             <${Card} title="Run of show"
                 subtitle="Use the arrows to order items. Times you do not pin are calculated from the durations."
                 actions=${html`
@@ -703,6 +770,8 @@ export function ProgramTab() {
                     <//>
                 </div>
             <//>
+
+            <${ProgramPosterCard} event=${event} />
 
             ${readOnly ? null : html`
                 <${ImportPanel} event=${event} days=${days} defaultDayId=${dayId ?? days[0]?.day_id ?? 0}

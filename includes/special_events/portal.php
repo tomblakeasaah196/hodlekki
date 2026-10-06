@@ -35,11 +35,15 @@ function se_portal_render(
     $state     = se_registration_state($event, $phase, $counts);
     $seatsLeft = se_seats_left($event, $counts);
 
-    se_portal_topbar($event, $organizer);
+    // Read once, used twice: the menu only offers "Programme" when there is
+    // a programme section to jump to (§10.7.2 publish gate).
+    $program = se_portal_program_public($pdo, $event, $days, $settings);
+
+    se_portal_topbar($event, $organizer, $program !== null);
     se_portal_hero($event, $days, $settings, $phase, $state, $seatsLeft, $heroAsset, $heroVideoAsset, $registration);
     se_portal_intro($event, $settings);
     se_portal_chapters($pdo, $event, $settings, se_portal_team_slots($pdo, $event));
-    se_portal_program($pdo, $event, $days, $settings);
+    se_portal_program($program);
     se_portal_venue($event, $days);
     se_portal_faq($event, $settings);
     se_portal_footer($event, $organizer);
@@ -116,7 +120,7 @@ function se_portal_music_dock(PDO $pdo, array $event, array $settings): void
 // S0 · Top bar
 // --------------------------------------------------------------------------
 
-function se_portal_topbar(array $event, string $organizer): void
+function se_portal_topbar(array $event, string $organizer, bool $hasProgram = false): void
 {
     $slug = (string) $event['slug'];
     ?>
@@ -150,7 +154,10 @@ function se_portal_topbar(array $event, string $organizer): void
           </svg>
         </summary>
         <ul class="se-glass">
-          <li><a href="#se-chapters">Programme</a></li>
+          <li><a href="#se-chapters">The night</a></li>
+          <?php if ($hasProgram): ?>
+          <li><a href="#se-programme">Programme</a></li>
+          <?php endif; ?>
           <li><a href="#se-venue">Venue</a></li>
           <li><a href="#se-faq">FAQ</a></li>
           <li><a href="<?= se_h(se_event_url($slug, 'privacy', false)) ?>">Privacy</a></li>
@@ -571,25 +578,44 @@ function se_portal_team_orbit(array $teams): string
 // --------------------------------------------------------------------------
 
 /**
- * The public run of show, when the event has one (§10.7.2).
+ * The programme this page should show, or null for "no section at all".
  *
- * Only public items, never a crew note, and times in the event's chosen mode
- * (se_program_public() does all three). Before PR4's table exists, or while
- * the programme is empty, the section is simply left out.
+ * Four ways to get null, and the page is identical in each: the table is not
+ * migrated yet, the programme is empty, something threw, or the run of show
+ * has not been published (settings.program.published, §10.7.2). The gate is
+ * public-page-only — the stage, the host console and the lobby read the live
+ * snapshots and always see the real programme, drift and all.
  */
-function se_portal_program(PDO $pdo, array $event, array $days, array $settings): void
+function se_portal_program_public(PDO $pdo, array $event, array $days, array $settings): ?array
 {
+    // The gate is checked before anything is read, so an unpublished
+    // programme costs the page nothing at all.
+    if (!se_bool($settings['program']['published'] ?? true)) {
+        return null;
+    }
     if (!function_exists('se_program_ready') || !se_program_ready($pdo)) {
-        return;
+        return null;
     }
 
     try {
         $program = se_program_public($pdo, $event, $days, $settings);
     } catch (Throwable $e) {
         error_log('SE portal/program: ' . $e->getMessage());
-        return;
+        return null;
     }
-    if (!$program['days']) {
+
+    return $program['days'] ? $program : null;
+}
+
+/**
+ * The public run of show, when the event has one (§10.7.2).
+ *
+ * Only public items, never a crew note, and times in the event's chosen mode
+ * — se_portal_program_public() above does all three, plus the publish gate.
+ */
+function se_portal_program(?array $program): void
+{
+    if ($program === null) {
         return;
     }
 

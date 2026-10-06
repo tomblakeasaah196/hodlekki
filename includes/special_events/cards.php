@@ -344,3 +344,145 @@ function se_card_night_payload(
         'privacy'  => 'Nothing here leaves your phone until you share it.',
     ];
 }
+
+// --------------------------------------------------------------------------
+// Programme poster (§14.2b)
+// --------------------------------------------------------------------------
+
+/**
+ * The two shapes a programme poster is ever wanted in: one to print and one
+ * to put on a screen. Both are drawn in the browser at these pixel sizes.
+ */
+const SE_PROGRAM_POSTER_SIZES = [
+    'a4' => [
+        'w' => 2480, 'h' => 3508,
+        'label' => 'A4 poster', 'hint' => '210 × 297 mm at 300 dpi',
+    ],
+    'screen' => [
+        'w' => 1920, 'h' => 1080,
+        'label' => '16:9 screen', 'hint' => 'Projector, lobby TV or a slide',
+    ],
+];
+
+/** A human date for one programme day: "Saturday 8 November". */
+function se_program_poster_day_label(array $day): string
+{
+    $when = se_parse_datetime((string) ($day['day_date'] ?? ''));
+    if ($when === null) {
+        return (string) ($day['label'] ?? '');
+    }
+
+    $date = $when->format('l j F');
+    $name = trim((string) ($day['label'] ?? ''));
+
+    return $name !== '' ? $name . ' · ' . $date : $date;
+}
+
+/**
+ * The line under the times, which has to match what the page promises.
+ * Exact times get no note at all — the times are the note.
+ */
+function se_program_poster_note(string $timeMode): string
+{
+    return match ($timeMode) {
+        'order_only' => 'In this order on the night.',
+        'exact'      => '',
+        default      => 'Times are approximate — the night runs on joy, not a stopwatch.',
+    };
+}
+
+/**
+ * Everything the programme poster needs, as data (§14.2b).
+ *
+ * Like every other render in this module the pixels are drawn in the browser
+ * — @se/studio/program_poster.js lays the list out and rasterises it — so
+ * this returns the public programme, the palette, the fonts and the hero
+ * image's URL, and never an image.
+ *
+ * The publish gate is deliberately NOT applied: a producer prints the run of
+ * show for the crew long before the page is allowed to show it. `published`
+ * travels with the payload so the Studio can say which is which.
+ */
+function se_program_poster_payload(PDO $pdo, array $event, ?array $settings = null): array
+{
+    $settings ??= se_event_settings($event);
+    $days      = se_event_days($pdo, (int) $event['id']);
+    $theme     = se_event_theme($event);
+
+    $program = ['days' => [], 'time_mode' => 'approximate'];
+    if (function_exists('se_program_ready') && se_program_ready($pdo)) {
+        try {
+            $program = se_program_public($pdo, $event, $days, $settings);
+        } catch (Throwable $e) {
+            error_log('SE poster/program: ' . $e->getMessage());
+        }
+    }
+
+    // The day rows carry the times; the public programme carries the items.
+    $byId = [];
+    foreach ($days as $day) {
+        $byId[(int) $day['id']] = $day;
+    }
+
+    $outDays = [];
+    foreach ($program['days'] as $block) {
+        $day   = $byId[(int) $block['day_id']] ?? ['day_date' => $block['day_date'], 'label' => $block['label']];
+        $doors = se_parse_datetime($day['doors_open_at'] ?? null);
+        $start = se_parse_datetime($day['starts_at'] ?? null);
+
+        $outDays[] = [
+            'day_id' => (int) $block['day_id'],
+            'date'   => se_program_poster_day_label($day + ['label' => $block['label'] ?? null]),
+            'doors'  => $doors !== null ? 'Doors ' . ltrim($doors->format('g:i A'), '0') : '',
+            'start'  => $start !== null ? ltrim($start->format('g:i A'), '0') : '',
+            'items'  => array_map(static fn(array $item): array => [
+                'time'     => (string) ($item['time'] ?? ''),
+                'title'    => (string) $item['title'],
+                'blurb'    => (string) ($item['blurb'] ?? ''),
+                'host'     => (string) ($item['host'] ?? ''),
+                'featured' => (bool) $item['featured'],
+            ], $block['items']),
+        ];
+    }
+
+    $heroId = isset($event['hero_asset_id']) ? (int) $event['hero_asset_id'] : 0;
+    $hero   = $heroId > 0 ? se_asset_find($pdo, $heroId) : null;
+
+    $sizes = [];
+    foreach (SE_PROGRAM_POSTER_SIZES as $key => $spec) {
+        $sizes[$key] = [
+            'width'  => $spec['w'],
+            'height' => $spec['h'],
+            'label'  => $spec['label'],
+            'hint'   => $spec['hint'],
+        ];
+    }
+
+    $timeMode = (string) ($program['time_mode'] ?? 'approximate');
+
+    return [
+        'published'  => se_bool($settings['program']['published'] ?? false),
+        'sizes'      => $sizes,
+        'days'       => $outDays,
+        'time_mode'  => $timeMode,
+        'note'       => se_program_poster_note($timeMode),
+        'text'       => [
+            'organizer' => (string) ($event['organizer_label'] ?? 'Envision'),
+            'title'     => (string) $event['title'],
+            'edition'   => (string) ($event['edition_label'] ?? ''),
+            'tagline'   => (string) ($event['tagline'] ?? ''),
+            'venue'     => (string) ($event['venue_name'] ?? ''),
+            'url'       => se_card_short_url($event),
+            'heading'   => 'The programme',
+        ],
+        'qr'         => se_event_url((string) $event['slug']),
+        'hero'       => $hero !== null ? (string) $hero['path'] : null,
+        'church_logo' => '/assets/images/hod_logo.svg',
+        'colors'     => se_card_colors($theme),
+        'fonts'      => [
+            'display' => (string) $event['font_display'],
+            'body'    => (string) $event['font_body'],
+        ],
+        'filename'   => str_replace('.png', '', se_card_filename($event, 'programme', '')),
+    ];
+}
