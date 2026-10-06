@@ -523,6 +523,9 @@ const SE_SCHEMA_EXPECTED = [
         'se_handoffs' => ['id', 'event_id', 'reach_campaign_id', 'summary_json', 'created_by', 'created_at'],
         'se_handoff_items' => ['id', 'handoff_id', 'event_id', 'registration_id', 'contact_id', 'destination', 'outcome', 'target_table', 'target_id', 'done_contact_key'],
     ],
+    '20261103090000_se_verses_ai_flag.sql' => [
+        'se_event_verses' => ['suggested_by_ai'],
+    ],
 ];
 
 /**

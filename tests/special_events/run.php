@@ -60,6 +60,11 @@ require_once __DIR__ . '/../../includes/special_events/teams.php';
 require_once __DIR__ . '/../../includes/special_events/checkin.php';
 require_once __DIR__ . '/../../includes/special_events/live.php';
 
+// verses.php carries se_verses_clean_picks(), the pure shaping half of the
+// suggestion picker (§15.7). Its PDO functions are only called inside other
+// functions, so the include stays database-free like the rest of this list.
+require_once __DIR__ . '/../../includes/special_events/verses.php';
+
 // PR4's pure layers: the programme clock (planning, ETA, drift, the public
 // rounding) and the song library's normaliser and import parsers. Both files
 // talk to a PDO elsewhere, but nothing runs at include time.
