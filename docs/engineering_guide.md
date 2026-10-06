@@ -2081,7 +2081,7 @@ Playlist: `se_music` rows (max `SE_MUSIC_MAX` = 5), each joined to an `se_assets
 - *Background*: hero video (muted, `playsinline`, loop ≤ 15 s, poster) **or** an animated gradient mesh: 3 layered radial gradients in primary/secondary/accent whose positions drift via `@property` custom properties, a 3 % SVG noise grain and a vignette. The video is skipped if `navigator.connection.saveData` or `effectiveType` is `2g`/`slow-2g`.
 - *Spotlights*: two conic-gradient beams from the top corners, `mix-blend-mode: screen`, opacity .35, sweeping ±18° (GSAP yoyo, 6–8 s, offset).
 - *Kicker*: `CHARA 2026 · BY ENVISION` (edition + organiser).
-- *Wordmark*: event title in `display-xl`, display font, neon glow (layered `text-shadow` from `--se-glow`). Intro: SplitText chars flicker-in (opacity 0→1→.3→1, glow ramp, 40 ms stagger, ≈1.2 s), then a slow glow "breathing" (4 s sine).
+- *Wordmark*: event title in `display-xl`, display font, neon glow (layered `text-shadow` from `--se-glow`). Intro: SplitText chars flicker-in (opacity 0→1→.3→1, glow ramp, 40 ms stagger, ≈1.2 s), then a slow glow "breathing" (4 s sine). The flicker-in **replays on a loop**, 5 s after each pass settles, and like every infinite hero timeline it is paused off-screen and in a background tab (`pauseWhenHidden()`); under reduced motion it never runs.
 - *Tagline* (≤ 12 words) and *info chips*: 📅 date · 🕔 time · 📍 venue (tap → map).
 - *Countdown* (flip digits DD : HH : MM : SS) while `upcoming`.
 - *CTA cluster*: primary neon button (phase-aware label, §10.1) with a pulsing ring; the **seats-left ring** wraps the button when visible ("42 left"); secondary ghost link "See the night ↓".
