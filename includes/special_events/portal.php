@@ -166,11 +166,16 @@ function se_portal_hero(
     $organizer = (string) ($event['organizer_label'] ?? 'Envision');
     $slug      = (string) $event['slug'];
 
-    // Short event names deserve to read as one deliberate wordmark, even on
-    // a narrow phone. Longer names retain their natural wrapping instead of
-    // being forced into an unreadably small line.
-    $titleCharacters = mb_strlen((string) preg_replace('/\s+/u', '', $title), 'UTF-8');
-    $wordmarkFit = $titleCharacters > 0 && $titleCharacters <= 12 ? 'compact' : 'natural';
+    // A short two-word name ("Chara Night") reads best as a deliberate stacked
+    // wordmark: one word per line at the full display scale, rather than being
+    // shrunk to survive on a single line. Every other name keeps its natural
+    // wrapping. The words are emitted as spans inside the one <h1>, separated
+    // by real whitespace, so assistive technology still reads one heading.
+    $titleWords = preg_split('/\s+/u', trim($title), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $titleCharacters = mb_strlen(implode('', $titleWords), 'UTF-8');
+    $stackWordmark = count($titleWords) === 2 && $titleCharacters > 0 && $titleCharacters <= 14;
+    $wordmarkLayout = $stackWordmark ? 'stacked' : 'natural';
+    $wordmarkWords = $stackWordmark ? $titleWords : [$title];
 
     $firstDay = $days[0] ?? null;
     $startsAt = se_parse_datetime($firstDay['starts_at'] ?? ($event['starts_at'] ?? null));
@@ -214,8 +219,8 @@ function se_portal_hero(
 
     <p class="se-label"><?= se_h(mb_strtoupper(trim($title . ' ' . $edition), 'UTF-8')) ?> · BY <?= se_h(mb_strtoupper($organizer, 'UTF-8')) ?></p>
 
-    <h1 id="se-hero-title" class="se-display-xl se-wordmark" data-se-wordmark data-se-wordmark-fit="<?= se_h($wordmarkFit) ?>">
-      <span class="se-wordmark-title"><?= se_h($title) ?></span><?php if ($edition !== ''): ?> <span class="se-wordmark-edition"><?= se_h($edition) ?></span><?php endif; ?>
+    <h1 id="se-hero-title" class="se-display-xl se-wordmark" data-se-wordmark data-se-wordmark-layout="<?= se_h($wordmarkLayout) ?>">
+      <span class="se-wordmark-title"><?php foreach ($wordmarkWords as $i => $word): ?><?= $i > 0 ? ' ' : '' ?><span class="se-wordmark-word"><?= se_h($word) ?></span><?php endforeach; ?></span><?php if ($edition !== ''): ?> <span class="se-wordmark-edition"><?= se_h($edition) ?></span><?php endif; ?>
     </h1>
 
     <?php if ($tagline !== ''): ?>

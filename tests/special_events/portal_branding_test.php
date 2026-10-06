@@ -47,9 +47,17 @@ ok('the selected hero is prioritised for first paint',
     str_contains($heroHtml, 'fetchpriority="high"'));
 ok('the image activates the media blending treatment',
     str_contains($heroHtml, 'data-has-media="1"') && str_contains($heroHtml, 'se-hero-shade'));
-ok('short event names use the compact wordmark treatment',
-    str_contains($heroHtml, 'data-se-wordmark-fit="compact"')
-    && str_contains($heroHtml, '<span class="se-wordmark-title">Chara Night</span>'));
+ok('a two-word event name stacks onto two deliberate wordmark lines',
+    str_contains($heroHtml, 'data-se-wordmark-layout="stacked"')
+    && str_contains($heroHtml, '<span class="se-wordmark-word">Chara</span> <span class="se-wordmark-word">Night</span>'));
+ok('the stacked wordmark stays one accessible heading',
+    substr_count($heroHtml, '<h1 ') === 1
+    && str_contains($heroHtml, 'id="se-hero-title"')
+    && !str_contains($heroHtml, '<br'));
+preg_match('~<h1\b[^>]*>(.*?)</h1>~s', $heroHtml, $headingMatch);
+is_same('the stacked heading still reads as the full title', 'Chara Night 2026',
+    trim((string) preg_replace('/\s+/', ' ', strip_tags($headingMatch[1] ?? ''))));
+
 ok('the calendar pill contains the date without duplicating the time',
     str_contains($heroHtml, '>Sat 31 Oct</time>')
     && !str_contains($heroHtml, 'Sat 31 Oct, 3:30 PM'));
@@ -68,8 +76,9 @@ $longTitleEvent['title'] = 'The Big Envision Celebration';
 ob_start();
 se_portal_hero($longTitleEvent, $days, $settings, $phase, 'open', null, null, null, null);
 $longTitleHeroHtml = (string) ob_get_clean();
-ok('long event names retain natural wrapping instead of the compact treatment',
-    str_contains($longTitleHeroHtml, 'data-se-wordmark-fit="natural"'));
+ok('long event names retain natural wrapping instead of stacking',
+    str_contains($longTitleHeroHtml, 'data-se-wordmark-layout="natural"')
+    && str_contains($longTitleHeroHtml, '<span class="se-wordmark-word">The Big Envision Celebration</span>'));
 
 ob_start();
 se_portal_topbar($event, 'Envision');
@@ -102,7 +111,12 @@ ok('the selected image keeps the animated mesh blend at a controlled strength',
     str_contains($css, '.se-hero-bg[data-has-media="1"] .se-hero-mesh')
     && str_contains($css, 'mix-blend-mode: screen')
     && str_contains($css, 'opacity: 0.4'));
-ok('compact wordmarks remain one line with responsive size and spacing',
-    str_contains($css, '.se-wordmark[data-se-wordmark-fit="compact"] .se-wordmark-title')
-    && str_contains($css, 'white-space: nowrap')
+ok('the hero wordmark is restored to the large display scale',
+    str_contains($css, '.se-display-xl { font-size: clamp(3.5rem, 12vw, 9rem);')
+    && str_contains($css, "font-size: clamp(3.5rem, 12vw, 9rem);\n    line-height: 0.92;"));
+ok('the shrinking compact-title behaviour is gone',
+    !str_contains($css, 'data-se-wordmark-fit="compact"')
+    && !str_contains($css, 'clamp(2.15rem, 10.6vw, 3.75rem)'));
+ok('stacked wordmarks break each word onto its own line',
+    str_contains($css, '.se-wordmark[data-se-wordmark-layout="stacked"] .se-wordmark-word')
     && str_contains($css, '@media (max-width: 520px)'));

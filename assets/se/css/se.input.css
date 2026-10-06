@@ -612,7 +612,7 @@
   .se-wordmark {
     max-inline-size: 100%;
     margin-block: 0.75rem 1rem;
-    font-size: clamp(2.5rem, 11vw, 8.5rem);
+    font-size: clamp(3.5rem, 12vw, 9rem);
     line-height: 0.92;
     letter-spacing: -0.045em;
     text-wrap: balance;
@@ -621,15 +621,17 @@
       0 0 54px color-mix(in oklab, var(--se-glow) 45%, transparent);
   }
   .se-wordmark-title { display: inline; }
-  .se-wordmark[data-se-wordmark-fit="compact"] .se-wordmark-title {
-    display: inline-block;
-    white-space: nowrap;
+  .se-wordmark-word { display: inline; }
+  /* A deliberate two-word wordmark ("Chara Night") stacks one word per line at
+   * the full display scale instead of shrinking to fit a single line. */
+  .se-wordmark[data-se-wordmark-layout="stacked"] .se-wordmark-title { display: block; }
+  .se-wordmark[data-se-wordmark-layout="stacked"] .se-wordmark-word {
+    display: block;
   }
   .se-wordmark-edition { color: var(--se-secondary); display: inline-block; }
   @media (max-width: 520px) {
     .se-wordmark {
-      font-size: clamp(2.15rem, 10.6vw, 3.75rem);
-      letter-spacing: -0.06em;
+      letter-spacing: -0.055em;
       text-wrap: pretty;
     }
     .se-wordmark-edition { margin-inline-start: 0.12em; }

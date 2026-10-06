@@ -300,9 +300,11 @@ Press **Publish** and `/e/your-link` is live.
 
 `hodlc.lpc.cm/e/your-link` is the page you send people to. It opens on your
 hero image across the full first screen, with the animated event colours and
-spotlights layered over it in a calm, readable order. The event name scales and
-tightens slightly on smaller phones so short names such as **Chara Night** stay
-on one line; long names wrap naturally rather than becoming too small. It
+spotlights layered over it in a calm, readable order. The event name is printed
+large and expressively: a short two-word name such as **Chara Night** is set
+deliberately on two lines — *Chara* above, *Night* below — at full size instead
+of being shrunk to squeeze onto one line. Longer names keep their natural
+wrapping. Either way it is still one heading for screen readers. It
 counts down to the night, then walks down the page: **what it is**, **the night
 chapter by chapter**, **where**, and **good to know**. The Household of David
 logo has its own clear lockup in the top bar and appears again in the footer. A
