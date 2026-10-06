@@ -22,6 +22,16 @@ const ROLE_LABELS = {
     poster_screen: 'Poster (screen 16:9)',
 };
 
+/**
+ * Roles this tab must not offer.
+ *
+ * `music` is uploaded from Studio → Music, because a track cannot be stored
+ * without a rights attestation (SE_ASSET_ROLES_NEED_RIGHTS) and the tick
+ * lives on that form. Offering it here would hand the producer a dropdown
+ * entry whose only possible outcome is "Confirm the music rights first."
+ */
+const ROLES_ELSEWHERE = ['music'];
+
 function bytes(n) {
     if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
     if (n >= 1024) return Math.round(n / 1024) + ' KB';
@@ -134,8 +144,13 @@ export function AssetsTab() {
     if (!event) return html`<${Spinner} />`;
 
     const readOnly = !can('assets.manage');
-    const assets = event.assets || [];
-    const roles = boot.value?.asset_roles || Object.keys(ROLE_LABELS);
+    // Music is listed on its own tab, in playing order and with its rights
+    // status, which is more use than a tile in a grid of pictures.
+    const allAssets = event.assets || [];
+    const assets = allAssets.filter((a) => !ROLES_ELSEWHERE.includes(a.role));
+    const hiddenCount = allAssets.length - assets.length;
+    const roles = (boot.value?.asset_roles || Object.keys(ROLE_LABELS))
+        .filter((r) => !ROLES_ELSEWHERE.includes(r));
 
     const needsAlt = ['logo', 'wordmark', 'hero', 'hero_poster', 'illustration', 'background', 'gallery', 'sponsor', 'flyer'];
 
@@ -213,7 +228,9 @@ export function AssetsTab() {
                 </form>
             <//>` : null}
 
-            <${Card} title="Brand kit" subtitle=${`${assets.length} file${assets.length === 1 ? '' : 's'}.`}>
+            <${Card} title="Brand kit"
+                     subtitle=${`${assets.length} file${assets.length === 1 ? '' : 's'}.`
+                         + (hiddenCount ? ` ${hiddenCount} music track${hiddenCount === 1 ? '' : 's'} are managed on the Music tab.` : '')}>
                 ${assets.length === 0
                     ? html`<${EmptyState} title="Nothing uploaded yet"
                               message="Add the hero image, the logo and the flyer, and they become available on the Brand tab." />`

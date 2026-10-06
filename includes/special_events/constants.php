@@ -250,6 +250,27 @@ const SE_CHAPTERS_MAX = 12;
 /** Asset roles a chapter background may be picked from (§14.1). */
 const SE_CHAPTER_BG_ROLES = ['background', 'illustration', 'gallery', 'hero'];
 
+/**
+ * Portal music (§13.3 S0b).
+ *
+ * Five tracks is the agreed ceiling: enough that a guest reading the page for
+ * ten minutes does not hear the same loop twice, few enough that the
+ * producer's rights check stays a real check rather than a ritual.
+ */
+const SE_MUSIC_MAX = 5;
+
+/**
+ * Default playback volume, as a percentage.
+ *
+ * Thirty is deliberate and low. This is a bed under someone filling in a
+ * registration form on a phone, possibly in a room with other people —
+ * it should read as atmosphere, not as a broadcast.
+ */
+const SE_MUSIC_DEFAULT_VOLUME = 30;
+
+/** Roles whose uploads require a rights attestation before they are stored. */
+const SE_ASSET_ROLES_NEED_RIGHTS = ['music'];
+
 /** Asset roles with their kind and byte cap (§14.1). */
 const SE_ASSET_ROLES = [
     'logo'           => ['kind' => 'image', 'max_bytes' => 5242880],
@@ -635,6 +656,7 @@ const SE_STUDIO_TABS = [
     'checkin'      => ['label' => 'Check-in',     'requires' => 'se_checkins'],
     'program'      => ['label' => 'Programme',    'requires' => 'se_program_items'],
     'chapters'     => ['label' => 'Chapters',     'requires' => 'se_chapters'],
+    'music'        => ['label' => 'Music',        'requires' => 'se_music'],
     'teams'        => ['label' => 'Teams',        'requires' => 'se_teams'],
     'karaoke'      => ['label' => 'Karaoke',      'requires' => 'se_songs'],
     'games'        => ['label' => 'Games',        'requires' => 'se_games'],
@@ -654,7 +676,7 @@ const SE_STUDIO_TABS = [
  * (build_prompts.md PR1: "Tabs belonging to later PRs stay hidden").
  */
 const SE_STUDIO_TABS_READY = [
-    'overview', 'details', 'brand', 'registration', 'checkin', 'program', 'chapters', 'teams',
+    'overview', 'details', 'brand', 'registration', 'checkin', 'program', 'chapters', 'music', 'teams',
     'karaoke', 'games', 'messages', 'live', 'attendees', 'insights', 'handoff', 'assets', 'crew', 'settings',
 ];
 

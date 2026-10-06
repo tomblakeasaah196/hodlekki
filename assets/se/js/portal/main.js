@@ -454,6 +454,21 @@ function animateChapters() {
     for (const line of qsa('[data-se-draw]')) drawStroke(line, g);
 }
 
+/**
+ * Portal music (§13.3 S0b), loaded on demand.
+ *
+ * The engine is ~9 KB of audio graph and gesture plumbing that most visits
+ * never need — there is no dock unless the producer uploaded a track — so it
+ * stays off the critical path and is fetched only when one is in the DOM.
+ */
+function startPortalMusic() {
+    if (!config.music?.enabled || !document.getElementById('se-music')) return;
+
+    import('./music.js')
+        .then((module) => module.startMusic(config))
+        .catch(() => { /* no music is not an error worth showing anybody */ });
+}
+
 /** The hero video, skipped on a metered or slow connection (§13.3 S1). */
 function startHeroVideo() {
     const video = qs('[data-se-hero-video]');
@@ -661,6 +676,7 @@ function start() {
         animateChapters();
         startCountdown();
         startSticky();
+        startPortalMusic();
         beacon('view', config.attribution?.src || '');
     }
 
