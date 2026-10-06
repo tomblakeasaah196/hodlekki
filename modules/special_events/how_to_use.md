@@ -794,6 +794,45 @@ whether it is **featured** (bigger on the programme and on the stage screen).
 **What guests see** decides how times are printed: *approximate* ("~7:15 PM",
 the kind default), *exact*, or *order only* — no times, just the order.
 
+**Publishing it (the bar at the top).** A run of show is a working document:
+items get cut, times move, somebody is still deciding who closes. So a
+programme is **hidden from the event page until you publish it**. The bar at
+the top of the tab always says which it is:
+
+- **Amber, "Not published"** — guests see no programme at all on the page, and
+  the page menu does not offer one. Press **Publish the programme**.
+- **Green, "Published"** — the public items are on the page, in this order,
+  with the times you chose. Press **Hide it again** at any point; it comes off
+  the page immediately and nothing you typed is lost.
+
+Publishing is only about the public page. **The stage screen, the host console
+and the lobby always show the real run of show**, published or not, so the
+crew is never left guessing. Items marked "not on the public page" under
+**More** stay private either way.
+
+**The programme poster.** Under the run of show, **Programme poster** turns
+the list into one picture you can print or put on a screen. Pick the shape:
+
+- **A4 poster** — 210 × 297 mm at 300 dpi, for the door, the noticeboard and
+  the hand-outs.
+- **16:9 screen** — 1920 × 1080, for the projector, the lobby TV or a slide.
+
+Press **Download JPEG** (there is a **PNG** button beside it if you want the
+sharper file for a printer). The poster is drawn in your browser, so nothing
+is sent anywhere and it always matches what the page is showing.
+
+What it puts on the poster, without being asked: the event's **hero image** as
+the background (set it in **Brand**; without one you get the event's colours),
+the title, date, doors and venue, every public item with its time, the
+featured ones highlighted, the "times are approximate" note when that is what
+guests are being told, the page address and a **QR code** to it — switch the
+code off with the tick box if you would rather not have one.
+
+It also fits itself. A short programme gets big, roomy rows with the one-line
+descriptions; a long one shrinks the rows, then splits into two columns. It
+will never cut an item off the bottom — if it has to choose, the type gets
+smaller. Multi-day events get one poster per day; choose the day on the right.
+
 **Importing one.** Most programmes arrive as a screenshot in a group chat.
 Open **Programme → Import a programme**, then either:
 

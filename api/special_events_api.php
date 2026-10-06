@@ -1304,11 +1304,39 @@ try {
     case 'program_list': {
         $event = se_studio_event($pdo, $body, 'insights.view');
 
+        $settings = se_event_settings($event);
+
         se_api_success('OK', [
-            'program' => se_program_payload($pdo, $event),
-            'kinds'   => SE_PROGRAM_KINDS,
-            'time_mode' => se_event_settings($event)['program']['public_time_mode'] ?? 'approximate',
+            'program'   => se_program_payload($pdo, $event),
+            'kinds'     => SE_PROGRAM_KINDS,
+            'time_mode' => $settings['program']['public_time_mode'] ?? 'approximate',
+            'published' => se_bool($settings['program']['published'] ?? false),
         ]);
+    }
+
+    case 'program_publish': {
+        // The publish gate (§10.7.2). Settings only — the run of show itself
+        // is untouched, so publishing is instant and reversible, and the
+        // crew screens never change either way.
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $on    = se_bool($body['on'] ?? true);
+
+        $updated = se_event_settings_patch($pdo, $event, ['program' => ['published' => $on]], $userId);
+
+        se_live_publish($pdo, (int) $event['id'], true);
+
+        se_api_success(
+            $on ? 'The programme is live on the page.' : 'The programme is hidden from the page.',
+            ['published' => se_bool(se_event_settings($updated)['program']['published'] ?? false)]
+        );
+    }
+
+    case 'program_poster_data': {
+        // Everything @se/studio/program_poster.js needs to draw the poster
+        // in the browser (§14.2b). No pixels are made on the server.
+        $event = se_studio_event($pdo, $body, 'insights.view');
+
+        se_api_success('OK', se_program_poster_payload($pdo, $event));
     }
 
     case 'program_save': {

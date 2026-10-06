@@ -396,8 +396,21 @@ export function templateSize(svgText) {
     return { width: vb[2] || 1080, height: vb[3] || 1920 };
 }
 
-/** Rasterise resolved SVG source to a PNG blob at 1:1 (§14.2 step 5). */
-export function rasterise(svgSource, width, height) {
+/**
+ * Rasterise resolved SVG source to an image blob at 1:1 (§14.2 step 5).
+ *
+ * `options` — `{ type, quality, background }` — defaults to the PNG every
+ * caller before the programme poster wanted. Pass `{ type: 'image/jpeg' }`
+ * for a flat, mail-and-print-friendly file.
+ */
+export function rasterise(svgSource, width, height, options = {}) {
+    // `options` is new and optional: three-argument calls still get a PNG.
+    const type = options.type || 'image/png';
+    const quality = typeof options.quality === 'number' ? options.quality : 0.92;
+    // JPEG has no alpha, so anything transparent comes out black unless the
+    // canvas is painted first (§14.3).
+    const background = options.background || (type === 'image/jpeg' ? '#000000' : null);
+
     return new Promise((resolve, reject) => {
         const blob = new Blob([svgSource], { type: 'image/svg+xml;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -409,9 +422,17 @@ export function rasterise(svgSource, width, height) {
                 canvas.width = width;
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
+                if (background) {
+                    ctx.fillStyle = background;
+                    ctx.fillRect(0, 0, width, height);
+                }
                 ctx.drawImage(image, 0, 0, width, height);
                 URL.revokeObjectURL(url);
-                canvas.toBlob((png) => (png ? resolve(png) : reject(new Error('The card could not be saved.'))), 'image/png');
+                canvas.toBlob(
+                    (out) => (out ? resolve(out) : reject(new Error('The image could not be saved.'))),
+                    type,
+                    quality
+                );
             } catch (e) {
                 URL.revokeObjectURL(url);
                 reject(e);
@@ -427,11 +448,11 @@ export function rasterise(svgSource, width, height) {
 }
 
 /**
- * Share the PNG, falling back to a download — the same approach checkin.php
+ * Share the image, falling back to a download — the same approach checkin.php
  * already uses, because Web Share with files is Android-and-modern-iOS only.
  */
 export async function shareOrDownload(blob, filename, title) {
-    const file = new File([blob], filename, { type: 'image/png' });
+    const file = new File([blob], filename, { type: blob.type || 'image/png' });
 
     try {
         if (navigator.canShare && navigator.canShare({ files: [file] })) {

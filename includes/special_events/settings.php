@@ -317,6 +317,11 @@ function se_settings_spec(): array
             // "Order only" in the Studio was silently reset to 'approximate'.
             'public_time_mode' => ['type' => 'enum', 'default' => 'approximate',
                                    'values' => SE_PROGRAM_TIME_MODES],
+            // The publish gate (§10.7.2). A run of show is a working document
+            // — times move, items are cut — so it stays off the public page
+            // until Studio → Programme says otherwise. Crew screens (stage,
+            // host console, lobby) are never gated by this.
+            'published'        => ['type' => 'bool', 'default' => false],
         ]],
 
         'portal' => ['type' => 'obj', 'children' => [
