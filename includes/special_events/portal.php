@@ -166,6 +166,12 @@ function se_portal_hero(
     $organizer = (string) ($event['organizer_label'] ?? 'Envision');
     $slug      = (string) $event['slug'];
 
+    // Short event names deserve to read as one deliberate wordmark, even on
+    // a narrow phone. Longer names retain their natural wrapping instead of
+    // being forced into an unreadably small line.
+    $titleCharacters = mb_strlen((string) preg_replace('/\s+/u', '', $title), 'UTF-8');
+    $wordmarkFit = $titleCharacters > 0 && $titleCharacters <= 12 ? 'compact' : 'natural';
+
     $firstDay = $days[0] ?? null;
     $startsAt = se_parse_datetime($firstDay['starts_at'] ?? ($event['starts_at'] ?? null));
 
@@ -208,8 +214,8 @@ function se_portal_hero(
 
     <p class="se-label"><?= se_h(mb_strtoupper(trim($title . ' ' . $edition), 'UTF-8')) ?> · BY <?= se_h(mb_strtoupper($organizer, 'UTF-8')) ?></p>
 
-    <h1 id="se-hero-title" class="se-display-xl se-wordmark" data-se-wordmark>
-      <?= se_h($title) ?><?php if ($edition !== ''): ?> <span class="se-wordmark-edition"><?= se_h($edition) ?></span><?php endif; ?>
+    <h1 id="se-hero-title" class="se-display-xl se-wordmark" data-se-wordmark data-se-wordmark-fit="<?= se_h($wordmarkFit) ?>">
+      <span class="se-wordmark-title"><?= se_h($title) ?></span><?php if ($edition !== ''): ?> <span class="se-wordmark-edition"><?= se_h($edition) ?></span><?php endif; ?>
     </h1>
 
     <?php if ($tagline !== ''): ?>
