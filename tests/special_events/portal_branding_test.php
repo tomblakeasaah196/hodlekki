@@ -47,6 +47,9 @@ ok('the selected hero is prioritised for first paint',
     str_contains($heroHtml, 'fetchpriority="high"'));
 ok('the image activates the media blending treatment',
     str_contains($heroHtml, 'data-has-media="1"') && str_contains($heroHtml, 'se-hero-shade'));
+ok('short event names use the compact wordmark treatment',
+    str_contains($heroHtml, 'data-se-wordmark-fit="compact"')
+    && str_contains($heroHtml, '<span class="se-wordmark-title">Chara Night</span>'));
 ok('the calendar pill contains the date without duplicating the time',
     str_contains($heroHtml, '>Sat 31 Oct</time>')
     && !str_contains($heroHtml, 'Sat 31 Oct, 3:30 PM'));
@@ -59,6 +62,14 @@ se_portal_hero($event, $days, $settings, $phase, 'open', null, null, null, null)
 $plainHeroHtml = (string) ob_get_clean();
 ok('the gradient-only fallback remains available without an image',
     str_contains($plainHeroHtml, 'data-has-media="0"') && !str_contains($plainHeroHtml, 'se-hero-image'));
+
+$longTitleEvent = $event;
+$longTitleEvent['title'] = 'The Big Envision Celebration';
+ob_start();
+se_portal_hero($longTitleEvent, $days, $settings, $phase, 'open', null, null, null, null);
+$longTitleHeroHtml = (string) ob_get_clean();
+ok('long event names retain natural wrapping instead of the compact treatment',
+    str_contains($longTitleHeroHtml, 'data-se-wordmark-fit="natural"'));
 
 ob_start();
 se_portal_topbar($event, 'Envision');
@@ -79,8 +90,19 @@ ok('the topbar uses accessible share and menu icons instead of visible labels',
     && !str_contains($brandHtml, '>Menu</summary>'));
 
 $css = (string) file_get_contents(__DIR__ . '/../../assets/se/css/se.input.css');
-ok('the hero image has a full-bleed CSS treatment',
-    str_contains($css, '.se-hero-image') && str_contains($css, 'object-fit: cover'));
-ok('the selected image keeps the animated mesh blend',
+ok('the hero image has a full-viewport, full-bleed CSS treatment',
+    str_contains($css, '.se-hero-image')
+    && str_contains($css, 'object-fit: cover')
+    && str_contains($css, 'min-height: 100dvh'));
+ok('the image, overlays and copy have intentional hero layers',
+    str_contains($css, '.se-hero-bg { position: absolute; inset: 0; z-index: 0;')
+    && str_contains($css, '.se-hero-inner {')
+    && str_contains($css, 'z-index: 1;'));
+ok('the selected image keeps the animated mesh blend at a controlled strength',
     str_contains($css, '.se-hero-bg[data-has-media="1"] .se-hero-mesh')
-    && str_contains($css, 'mix-blend-mode: screen'));
+    && str_contains($css, 'mix-blend-mode: screen')
+    && str_contains($css, 'opacity: 0.4'));
+ok('compact wordmarks remain one line with responsive size and spacing',
+    str_contains($css, '.se-wordmark[data-se-wordmark-fit="compact"] .se-wordmark-title')
+    && str_contains($css, 'white-space: nowrap')
+    && str_contains($css, '@media (max-width: 520px)'));
