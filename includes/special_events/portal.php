@@ -48,6 +48,72 @@ function se_portal_render(
     se_portal_faq($event, $settings);
     se_portal_footer($event, $organizer);
     se_portal_sticky($event, $state, $seatsLeft, $registration);
+    se_portal_music_dock($pdo, $event, $settings);
+}
+
+// --------------------------------------------------------------------------
+// S0b · Music dock (§13.3 S0b)
+// --------------------------------------------------------------------------
+
+/**
+ * Two small buttons, bottom-left: sound on/off, and volume.
+ *
+ * Rendered by the server so it is in the DOM at first paint and the browser
+ * has already laid it out before the first gesture arrives — the control
+ * fades in, it never pops into existence mid-scroll.
+ *
+ * It starts `hidden` and @se/portal/music.js removes that only once it has a
+ * playable track and a working audio element. A visitor whose browser or
+ * connection cannot do this is never shown a button that does nothing.
+ *
+ * No text. Everything a sighted person needs is in the two glyphs; everything
+ * a screen-reader user needs is in aria-label, which JS keeps in step with
+ * the state.
+ */
+function se_portal_music_dock(PDO $pdo, array $event, array $settings): void
+{
+    $music = se_music_boot($pdo, $event, $settings);
+    if (!$music['enabled'] || $music['tracks'] === []) {
+        return;
+    }
+    ?>
+<div class="se-music" id="se-music" data-state="off" hidden>
+  <!-- Sound on/off. The ring behind it breathes with the track. -->
+  <button type="button" class="se-music-key" data-se-music="toggle"
+          aria-pressed="false" aria-label="Play the background music">
+    <span class="se-music-ring" aria-hidden="true"></span>
+    <svg class="se-music-glyph se-music-glyph-on" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M11 5 6.5 8.5H4a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h2.5L11 19z"
+            fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+      <path class="se-music-wave se-music-wave-1" d="M14.8 9.4a3.6 3.6 0 0 1 0 5.2"
+            stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path class="se-music-wave se-music-wave-2" d="M17.4 7a7.1 7.1 0 0 1 0 10"
+            stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    <svg class="se-music-glyph se-music-glyph-off" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M11 5 6.5 8.5H4a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h2.5L11 19z"
+            fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+      <path d="m15.5 10 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+    </svg>
+  </button>
+
+  <!-- Volume. Tapping it slides the rail out; it never covers the page. -->
+  <div class="se-music-vol" data-open="0">
+    <button type="button" class="se-music-key" data-se-music="volume"
+            aria-expanded="false" aria-controls="se-music-rail" aria-label="Volume">
+      <svg class="se-music-glyph" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M5 14.5a7.5 7.5 0 0 1 14 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="m12 14.5 3.6-3.9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <circle cx="12" cy="14.6" r="1.25" fill="currentColor"/>
+      </svg>
+    </button>
+    <input type="range" class="se-music-rail" id="se-music-rail"
+           min="0" max="100" step="5"
+           value="<?= (int) $music['volume'] ?>"
+           aria-label="Music volume" tabindex="-1">
+  </div>
+</div>
+    <?php
 }
 
 // --------------------------------------------------------------------------

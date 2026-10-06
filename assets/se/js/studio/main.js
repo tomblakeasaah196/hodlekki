@@ -24,6 +24,7 @@ import { CheckinTab } from './tabs/checkin.js';
 import { TeamsTab } from './tabs/teams.js';
 import { ProgramTab } from './tabs/program.js';
 import { ChaptersTab } from './tabs/chapters.js';
+import { MusicTab } from './tabs/music.js';
 import { KaraokeTab } from './tabs/karaoke.js';
 import { MessagesTab } from './tabs/messages.js';
 import { LiveTab } from './tabs/live.js';
@@ -44,6 +45,7 @@ const TABS = {
     teams: TeamsTab,
     program: ProgramTab,
     chapters: ChaptersTab,
+    music: MusicTab,
     karaoke: KaraokeTab,
     games: GamesTab,
     messages: MessagesTab,
@@ -63,7 +65,7 @@ const TABS = {
  * unless you knew to scroll the tab bar sideways.
  */
 const GROUPS = [
-    ['Set up', ['overview', 'details', 'brand', 'registration', 'program', 'chapters', 'teams']],
+    ['Set up', ['overview', 'details', 'brand', 'registration', 'program', 'chapters', 'music', 'teams']],
     ['The night', ['checkin', 'karaoke', 'games', 'live', 'crew', 'assets']],
     ['People', ['attendees', 'messages']],
     ['Afterwards', ['insights', 'handoff']],

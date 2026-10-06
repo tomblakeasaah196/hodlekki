@@ -339,6 +339,12 @@ function se_settings_spec(): array
             'show_countdown'        => ['type' => 'bool', 'default' => true],
             'hero_video_enabled'    => ['type' => 'bool', 'default' => true],
             'chapters_from_featured' => ['type' => 'bool', 'default' => true],
+            // Portal music (§13.3 S0b). The volume is a percentage and the
+            // default is low on purpose: see SE_MUSIC_DEFAULT_VOLUME.
+            'music_enabled'         => ['type' => 'bool', 'default' => true],
+            'music_volume'          => ['type' => 'int',  'default' => SE_MUSIC_DEFAULT_VOLUME,
+                                        'min' => 5, 'max' => 100],
+            'music_shuffle'         => ['type' => 'bool', 'default' => false],
             // Starter questions, not fixed copy: Studio → Details → "Good to
             // know" writes this list, and se_portal_faq_reset_value() puts
             // these six back. An event that saves an empty list simply has no

@@ -2064,6 +2064,19 @@ Mobile-first; desktop enhances. Sections in order:
 
 **S0 · Top bar.** Transparent over the hero, glass after 80 px of scroll. Left: `ENVISION PRESENTS` (label style, organiser label). Right: Share (Web Share API → fallback copy link) and a menu (Programme, Venue, FAQ, Privacy).
 
+**S0b · Music dock.** Fixed bottom-left, above the sticky CTA. Two 44 px glass keys and no text: mute/unmute, and a volume key whose rail slides out of it. Rendered by the server (`se_portal_music_dock()`) and armed by `@se/portal/music.js`, which is imported lazily and only when the boot payload carries a playlist.
+
+Two browser facts set the whole design, and neither is negotiable:
+
+- **Audible autoplay is blocked** until the visitor interacts with the page. The portal therefore loads silent and the first `pointerdown`/`touchstart`/`keydown`/`scroll` fades the first track in over 1.6 s. A refused `play()` leaves the listeners attached so the next real tap still works.
+- **Silent mode is undetectable.** There is no API for the ringer switch, the system volume or audibility. `audio.volume` is the element's own gain (read-only and always `1` on iOS); an `AnalyserNode` measures our own buffer before the speaker. No detection is attempted, and `tests/special_events/js/music.test.mjs` fails if any is reintroduced.
+
+Volume defaults to `portal.music_volume` (30%), applied through a `GainNode` rather than `audio.volume`. The guest's mute state and level are kept in `localStorage` per `public_id` and survive reloads. The ring around the mute key is driven by the RMS of `getByteTimeDomainData()`, smoothed asymmetrically (0.45 attack / 0.12 release) onto the `--se-music-level` custom property; CSS owns the look. `prefers-reduced-motion` stops the ring without stopping the sound; a browser with no `AudioContext` falls back to a pulse timed from the track's stored BPM.
+
+Also: skipped entirely on `saveData`/`2g`/`slow-2g` (the S1 hero-video rule), `preload="none"` so nothing is fetched before consent, paused on `visibilitychange`, and ducked to 15% while any other unmuted `HTMLMediaElement` plays. The dock is rendered on `view === 'home'` only — `/in`, `/play` and `/me` get `music.enabled = false` from `se_music_boot()`.
+
+Playlist: `se_music` rows (max `SE_MUSIC_MAX` = 5), each joined to an `se_assets` row with role `music`. `rights_confirmed` is required by `se_asset_store()` on the way in *and* by `se_music_playable()` on the way out, so an unattested track cannot reach a public page by any route. Studio → Music owns the upload; the Assets tab hides the role.
+
 **S1 · Hero (100svh).**
 - *Background*: hero video (muted, `playsinline`, loop ≤ 15 s, poster) **or** an animated gradient mesh: 3 layered radial gradients in primary/secondary/accent whose positions drift via `@property` custom properties, a 3 % SVG noise grain and a vignette. The video is skipped if `navigator.connection.saveData` or `effectiveType` is `2g`/`slow-2g`.
 - *Spotlights*: two conic-gradient beams from the top corners, `mix-blend-mode: screen`, opacity .35, sweeping ±18° (GSAP yoyo, 6–8 s, offset).

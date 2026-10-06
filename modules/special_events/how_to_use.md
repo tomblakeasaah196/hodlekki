@@ -31,10 +31,10 @@ the server. Hiding a button is never the lock.
 
 **Finding your way around an event.** The sections sit down the left, grouped
 in the order you meet them: **Set up** (Overview, Details, Brand,
-Registration, Programme, Teams), **The night** (Check-in, Karaoke, Games, Live,
-Crew, Assets), **People** (Attendees, Messages), **Afterwards** (Insights,
-Hand-off) and **Settings**. On a phone they are in the **Section** list at the
-top.
+Registration, Programme, Chapters, Music, Teams), **The night** (Check-in,
+Karaoke, Games, Live, Crew, Assets), **People** (Attendees, Messages),
+**Afterwards** (Insights, Hand-off) and **Settings**. On a phone they are in
+the **Section** list at the top.
 
 ---
 
@@ -280,6 +280,10 @@ What happens to an upload:
   a 3000-pixel image.
 - SVG files are cleaned of anything that could run code.
 
+**Background music is not uploaded here.** It has its own tab (§18b-iii),
+because a track cannot be saved without someone confirming its rights, and
+that tick belongs on the form where the file is chosen.
+
 ---
 
 ## 8. Crew
@@ -370,6 +374,11 @@ public page is a fixed colour, so changing the brand changes the whole night.
 
 Everything on it comes from what you filled in. There is no separate "website"
 to maintain: change the tagline in Details and the page changes.
+
+If you have uploaded anything on the **Music** tab (§18b-iii), the page also
+has a song behind it — starting quietly the moment the guest taps or scrolls,
+with a small speaker and volume control in the bottom-left corner that they
+can mute at any time.
 
 It also has:
 
@@ -961,6 +970,106 @@ uploaded to; choose them again on the new event.
 as a still, finished frame — the words, the icon and the picture, with nothing
 moving. Nothing in this tab can produce a page that only works with the
 animation.
+
+## 18b-iii. Music — the song behind the page
+
+**Music** tab in the Studio.
+
+Up to **five tracks** that play softly while people read the event page and
+fill in the registration form. They play in the order you set, and when the
+last one finishes the first starts again, so the page is never silent while
+someone is on it.
+
+### Three things to know before you start
+
+These are the questions everybody asks, so they are answered first.
+
+**1. The music does not start by itself, and it cannot.** Every browser —
+Chrome, Safari, Firefox, the one inside WhatsApp — refuses to let a website
+make a sound until the visitor has touched the page. There is no setting,
+no trick and no paid service that changes this. What actually happens is
+that the page loads silent, and the moment the guest taps or starts
+scrolling, the music fades in over about a second and a half. In practice
+almost everyone scrolls immediately, so almost everyone hears it — but the
+very first instant of the page is always quiet.
+
+**2. We cannot tell whether someone's phone is on silent.** No website can.
+Browsers deliberately do not expose the ringer switch, the system volume, or
+whether anything is actually audible — it would be a way to fingerprint and
+track people. So a guest whose phone is on silent, or whose laptop is muted,
+simply hears nothing, and we have no way to know or to warn them. That is
+why the little speaker button is always on screen: it is how they find out
+there was music at all.
+
+**3. There is always a way to turn it off.** Two small buttons sit in the
+bottom-left corner of the page — a speaker and a dial. No words, nothing
+covering the content. The speaker mutes and unmutes; the dial slides out a
+volume rail. **Whatever a guest chooses is remembered on their device**, so
+someone who mutes it stays muted on their next visit and on every other page
+of the event. This is not optional politeness: an accessibility rule
+(WCAG 2.1) requires that any sound lasting more than a few seconds can be
+stopped.
+
+### Adding a track
+
+Choose the audio file — **MP3 or M4A, up to 10 MB** — give it a title and an
+artist, and tick the rights box. The upload button stays greyed out until
+you tick it.
+
+> **I have checked this track and it is clear for us to use publicly.**
+
+That tick is recorded: **your name and the date are saved against the
+track**, shown on the tab afterwards, and written to the event's audit log.
+It is not a formality — it is the record that says a named person at the
+church checked, which is exactly what we would need if anyone ever asked. A
+track that has not been confirmed **will not play on the public page**, even
+if it is sitting in the list.
+
+Keep the file small. Around **96 kbps** is plenty for background music and
+makes a three-minute track about 2 MB instead of 7 — which matters, because
+your guests are paying for that data.
+
+**BPM** is optional. Leave it blank unless you know it. It is only a
+fallback for the little animation on the speaker button; on nearly every
+phone the button pulses to the actual sound instead.
+
+### Making it sound right
+
+Press **Preview** on any track and it plays here at the exact volume the
+portal will use. Do that before you publish. A track that sounds lovely in
+headphones at full volume is often far too busy at 30% behind a form.
+
+Under **Playback** you can:
+
+- turn the music off for this event entirely — nothing is downloaded and no
+  buttons appear;
+- set the **starting volume**, which defaults to **30%**. That is the house
+  setting and it is low on purpose: this is a bed for someone filling in a
+  form, often in a room with other people. A guest who moves the slider
+  keeps their own level on their own phone;
+- **shuffle** the order instead of playing top to bottom.
+
+### What else the page does on its own
+
+- **Nothing is downloaded on a slow or metered connection.** On 2G, or when
+  a phone has Data Saver switched on, the music is skipped completely — the
+  same rule the hero video already follows.
+- **A hidden tab goes quiet.** If a guest switches to another tab the music
+  stops, and picks up again when they come back.
+- **It gets out of the way of other sound.** If anything else on the page
+  starts playing, the music drops right down and comes back afterwards.
+- **It is only on the main event page** — never on check-in, the games page,
+  or the private "my night" link, where a phone making noise would be a
+  nuisance in a room that already has a PA.
+
+### Removing a track
+
+**Remove** takes it out of the playlist **and deletes the audio file**. Use
+**Take out of rotation** instead if you only want to rest a track and keep
+it for later.
+
+Music does not appear on the **Assets** tab, and you cannot upload it from
+there — it lives here, where the rights box is.
 
 ## 18c. Karaoke
 

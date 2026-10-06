@@ -1074,6 +1074,9 @@
     transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
   }
   .se-sticky[data-shown="1"] { transform: translateY(0); }
+  /* The music dock sits above the bar when the bar is up, so neither
+   * control ever has to be hunted for behind the other. */
+  .se-sticky[data-shown="1"] ~ .se-music { transform: translateY(-3.75rem); }
   .se-sticky-inner {
     display: flex;
     align-items: center;
@@ -1083,6 +1086,135 @@
     margin-inline: auto;
   }
   @media (min-width: 768px) { .se-sticky { display: none; } }
+
+  /* ------------------------------------------------------------------ *
+   * S0b — music dock (§13.3 S0b)
+   *
+   * Two 44px glass keys, bottom-left, out of the way of the sticky CTA on
+   * the right. Everything here is sized in rem and uses the theme tokens,
+   * so a producer's brand colours reach the control without a second
+   * palette.
+   *
+   * The breathing ring is driven by --se-music-level, which the analyser in
+   * @se/portal/music.js writes 20 times a second. CSS owns the LOOK of the
+   * pulse; JavaScript only reports how loud the track is right now. Nothing
+   * animates unless the music is actually playing.
+   * ------------------------------------------------------------------ */
+
+  .se-music {
+    position: fixed;
+    inset-block-end: calc(1rem + env(safe-area-inset-bottom, 0px));
+    inset-inline-start: 1rem;
+    z-index: 31;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    /* Armed by JS: it fades up rather than appearing mid-scroll. */
+    opacity: 0;
+    transform: translateY(0.75rem);
+    transition: opacity 420ms ease, transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .se-music[data-ready="1"] { opacity: 1; transform: translateY(0); }
+  .se-music[hidden] { display: none; }
+
+  .se-music-key {
+    --se-music-level: 0;
+    position: relative;
+    width: 2.75rem;
+    height: 2.75rem;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    border: 1px solid var(--se-border);
+    background: color-mix(in oklab, var(--se-surface) 62%, transparent);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    color: var(--se-text);
+    cursor: pointer;
+    transition: transform 160ms ease, border-color 200ms ease, color 200ms ease;
+  }
+  .se-music-key:hover { border-color: color-mix(in oklab, var(--se-accent) 55%, var(--se-border)); }
+  .se-music-key:active { transform: scale(0.94); }
+
+  /* The ring. Scale and opacity both track the level, so a quiet passage
+   * is a faint breath and a chorus is a visible one — but the ceiling is
+   * low (1.38) because this is meant to be noticed, not watched. */
+  .se-music-ring {
+    position: absolute;
+    inset: -1px;
+    border-radius: 999px;
+    pointer-events: none;
+    border: 1.5px solid color-mix(in oklab, var(--se-accent) 70%, transparent);
+    opacity: calc(0.12 + (var(--se-music-level) * 0.5));
+    transform: scale(calc(1 + (var(--se-music-level) * 0.38)));
+    transition: transform 90ms ease-out, opacity 140ms ease-out;
+  }
+  .se-music[data-state="off"] .se-music-ring { opacity: 0; transform: scale(1); }
+
+  .se-music-glyph { width: 1.25rem; height: 1.25rem; display: block; }
+  .se-music[data-state="on"] .se-music-key[data-se-music="toggle"] { color: var(--se-accent); }
+
+  /* One glyph at a time: the speaker with waves, or the speaker with a
+   * cross. Swapping them rather than crossing one out keeps the meaning
+   * readable at 20px on a phone in daylight. */
+  .se-music-glyph-off { display: none; }
+  .se-music[data-state="off"] .se-music-glyph-on  { display: none; }
+  .se-music[data-state="off"] .se-music-glyph-off { display: block; }
+
+  /* The two arcs fade in with the level so the glyph itself has a little
+   * life in it, independent of the ring. */
+  .se-music-wave { opacity: 0.35; transition: opacity 160ms ease; }
+  .se-music[data-state="on"] .se-music-wave-1 { opacity: calc(0.45 + (var(--se-music-level) * 0.55)); }
+  .se-music[data-state="on"] .se-music-wave-2 { opacity: calc(0.18 + (var(--se-music-level) * 0.82)); }
+
+  /* Volume: the rail grows out of the key instead of opening a panel. */
+  .se-music-vol { display: flex; align-items: center; }
+  .se-music-rail {
+    width: 0;
+    opacity: 0;
+    margin-inline-start: 0;
+    height: 2.75rem;
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    cursor: pointer;
+    pointer-events: none;
+    transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease, margin 260ms ease;
+  }
+  .se-music-vol[data-open="1"] .se-music-rail {
+    width: 6.5rem;
+    opacity: 1;
+    margin-inline-start: 0.5rem;
+    pointer-events: auto;
+  }
+  .se-music-rail::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--se-text) 28%, transparent);
+  }
+  .se-music-rail::-moz-range-track {
+    height: 3px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--se-text) 28%, transparent);
+  }
+  .se-music-rail::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 0.85rem;
+    height: 0.85rem;
+    margin-top: -0.35rem;
+    border-radius: 999px;
+    background: var(--se-accent);
+    border: none;
+    box-shadow: 0 1px 6px color-mix(in oklab, var(--se-bg-2) 70%, transparent);
+  }
+  .se-music-rail::-moz-range-thumb {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 999px;
+    background: var(--se-accent);
+    border: none;
+  }
 
   /* ------------------------------------------------------------------ *
    * Registration sheet (§13.4) and manage page (§13.5)
@@ -1717,4 +1849,15 @@
   /* The team wipe is pure celebration; reduced motion gets the words only. */
   .se-team-wipe { display: none !important; }
   .se-arrival { animation: none !important; }
+
+  /* The music still plays if it is asked for — a motion preference is not
+   * a sound preference — but the ring stops breathing and holds a steady
+   * state instead. The control itself keeps working. */
+  .se-music-ring {
+    transform: none !important;
+    opacity: 0.22 !important;
+    transition: none !important;
+  }
+  .se-music[data-state="on"] .se-music-wave-1,
+  .se-music[data-state="on"] .se-music-wave-2 { opacity: 0.7 !important; }
 }
