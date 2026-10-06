@@ -117,7 +117,8 @@
 
         while (parent) {
             Array.from(parent.children).forEach(sibling => {
-                if (sibling !== child && sibling.tagName !== 'SCRIPT' && sibling.tagName !== 'STYLE') makeInert(sibling);
+                if (sibling !== child && sibling.tagName !== 'SCRIPT' && sibling.tagName !== 'STYLE'
+                    && !isPreservedPortaledWidget(sibling)) makeInert(sibling);
             });
             child = parent;
             parent = parent.parentElement;
@@ -213,15 +214,36 @@
         queueMicrotask(sync);
     }
 
-    function eventIsOutsideTopPanel(event) {
+    // Widget libraries such as Select2 teleport their dropdown surface away
+    // from the original control — either to the dialog root (dropdownParent)
+    // or straight to <body>. Those surfaces carry real interactive elements
+    // (search fields, option lists) and must be treated as part of the dialog
+    // even though they sit next to the panel rather than inside it.
+    function isPortaledWidgetSurface(target) {
+        return target instanceof HTMLElement && !!target.closest('.select2-container');
+    }
+
+    function isPreservedPortaledWidget(element) {
+        // An open widget dropdown portaled to <body> belongs to a control that
+        // lives inside the active dialog; keep it interactive and readable.
+        return element instanceof HTMLElement && element.matches('.select2-container--open');
+    }
+
+    function isInsideTopDialog(target) {
         const top = topDialog();
         if (!top) return false;
-        const state = dialogState.get(top);
-        return !state.panel.contains(event.target);
+        // Taps directly on the dialog backdrop still count as "outside".
+        if (target === top) return false;
+        // Anything inside the overlay (panel + in-overlay portals) is inside.
+        if (top.contains(target)) return true;
+        // Widget dropdowns portaled elsewhere (e.g. <body>) by Select2 et al.
+        return isPortaledWidgetSurface(target);
     }
 
     function blockOutsideDismissal(event) {
-        if (!eventIsOutsideTopPanel(event)) return;
+        // Nothing to guard when no dialog is open — the page works normally.
+        if (!topDialog()) return;
+        if (isInsideTopDialog(event.target)) return;
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
@@ -262,8 +284,7 @@
     function handleFocus(event) {
         const top = topDialog();
         if (!top) return;
-        const panel = dialogState.get(top).panel;
-        if (!panel.contains(event.target)) focusDialog(top);
+        if (!isInsideTopDialog(event.target)) focusDialog(top);
     }
 
     function init() {
