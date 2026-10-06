@@ -63,6 +63,32 @@ function se_studio_event(PDO $pdo, array $body, string $capability): array
 }
 
 /**
+ * Resolve the named event for an action every Studio user may take.
+ *
+ * `se_studio_event()` also demands a capability on that event. Erase is the
+ * one action that must not: it answers a legal request from a guest, and it
+ * cannot depend on the caller happening to hold a role on the event that
+ * person registered for. Module access — checked at the top of this file, and
+ * again by the caller — is the whole gate (§19.8).
+ */
+function se_studio_event_any(PDO $pdo, array $body): array
+{
+    $event = null;
+
+    if (!empty($body['id'])) {
+        $event = se_event_find($pdo, (int) $body['id']);
+    } elseif (!empty($body['event'])) {
+        $event = se_event_find_by_public_id($pdo, se_str($body['event'], 12));
+    }
+
+    if (!$event) {
+        se_api_error('That event no longer exists.', 'EVENT_NOT_FOUND');
+    }
+
+    return $event;
+}
+
+/**
  * Resolve an asset by its own id (§12.5 `asset_update {id, …}`) and check a
  * capability on the event that owns it.
  *
@@ -966,10 +992,65 @@ try {
         se_api_success('Old links are dead. Here is the new one.', ['manage_url' => $url]);
     }
 
-    case 'attendee_erase': {
-        // Irreversible, so it is a manager action, not a desk one (§19.9).
+    case 'attendee_delete': {
+        // The soft grade. Not manager-only: this is a cancellation with a
+        // memory, and the crew who can release a seat can take someone off
+        // the list. What it does NOT do is keep them out — that is the
+        // `block` flag, which stores 'removed' instead of 'cancelled' and so
+        // reuses the portal's existing refusal (§12.2).
+        $event  = se_studio_event($pdo, $body, 'attendee.pii');
+        $days   = se_event_days($pdo, (int) $event['id']);
+        $reason = se_line($body['reason'] ?? '', 160);
+        if ($reason === '') {
+            throw new SeValidationException(['reason' => 'Say why, so the next person reading the log understands.']);
+        }
+
+        $result = se_attendee_delete(
+            $pdo,
+            $event,
+            $days,
+            se_int($body['attendee_id'] ?? 0, 1),
+            $reason,
+            se_bool($body['block'] ?? false),
+            $userId
+        );
+
+        se_api_success(
+            $result['blocked'] ? 'Deleted, and the door will turn them away.' : 'Deleted. They can register again.',
+            $result + ['counts' => se_event_counts($pdo, (int) $event['id'])]
+        );
+    }
+
+    case 'attendee_delete_permanent': {
+        // Irreversible and it moves the night's numbers, so it is a manager
+        // action (§19.9), exactly like Erase and for the same reason.
         se_require_manager($pdo);
         $event  = se_studio_event($pdo, $body, 'attendee.pii');
+        $reason = se_line($body['reason'] ?? '', 160);
+        if ($reason === '') {
+            throw new SeValidationException(['reason' => 'Record why this deletion was asked for.']);
+        }
+
+        $result = se_attendee_delete_permanent($pdo, $event, se_int($body['attendee_id'] ?? 0, 1), $reason, $userId);
+
+        se_api_success('Deleted permanently. The audit log is all that is left.', [
+            'erased'  => true,
+            'deleted' => true,
+        ] + $result + ['counts' => se_event_counts($pdo, (int) $event['id'])]);
+    }
+
+    case 'attendee_erase': {
+        // Erasure is a privacy obligation, not a privilege (§19.8). A guest
+        // who asks for their data to be deleted should not have to wait for
+        // an administrator to be found, so this is open to anyone who can
+        // open the Studio at all — and the reason is still required, and the
+        // audit line still records who did it.
+        //
+        // Note the deliberate difference from `attendee_delete_permanent`
+        // below, which stays manager-only: that one moves the night's
+        // numbers, this one does not.
+        se_require_module_access($pdo);
+        $event  = se_studio_event_any($pdo, $body);
         $reason = se_line($body['reason'] ?? '', 160);
         if ($reason === '') {
             throw new SeValidationException(['reason' => 'Record why this erasure was requested.']);

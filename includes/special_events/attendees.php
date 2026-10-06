@@ -5,7 +5,7 @@
 //
 // This is the crew's view of the registration list: search, correct, cancel,
 // restore, promote, remove, add at the desk, reset links, and erase on a
-// subject request (§19.9). The capacity rules all live in capacity.php, so
+// subject request (§19.8). The capacity rules all live in capacity.php, so
 // anything that frees or takes a seat goes through se_lock_event() there.
 //
 // Personal data: a phone number is only ever returned to a caller holding
@@ -36,7 +36,12 @@ function se_attendees_list(PDO $pdo, int $eventId, array $filters, string $q, in
     $params = [$eventId];
 
     $status = se_str($filters['status'] ?? '', 20);
-    if (in_array($status, ['confirmed', 'waitlisted', 'cancelled', 'removed'], true)) {
+    if ($status === 'deleted') {
+        // A deleted registration keeps the status it was given on the way out
+        // ('cancelled', or 'removed' when the crew also blocked the number),
+        // so it cannot be found by status alone.
+        $where[] = 'r.deleted_at IS NOT NULL';
+    } elseif (in_array($status, ['confirmed', 'waitlisted', 'cancelled', 'removed'], true)) {
         $where[] = 'r.status = ?';
         $params[] = $status;
     } elseif ($status !== 'all') {
@@ -157,6 +162,8 @@ function se_attendee_payload(PDO $pdo, array $row, bool $withPii): array
         'waitlisted_at'    => se_iso($row['waitlisted_at'] ?? null),
         'cancelled_at'     => se_iso($row['cancelled_at'] ?? null),
         'cancel_reason'    => $row['cancel_reason'] !== null ? (string) $row['cancel_reason'] : null,
+        'deleted_at'       => se_iso($row['deleted_at'] ?? null),
+        'deleted'          => ($row['deleted_at'] ?? null) !== null,
         'first_checkin_at' => se_iso($row['first_checkin_at'] ?? null),
     ];
 }
@@ -330,10 +337,13 @@ function se_attendee_restore(PDO $pdo, array $event, array $days, int $id, int $
         $free   = se_online_free($ev, $counts);
         $status = ($free === null || $free > 0) ? 'confirmed' : 'waitlisted';
 
+        // Restoring is also the undo for a soft Delete, so the marker goes
+        // with the rest of the exit state — otherwise the person would hold a
+        // seat while still wearing a "deleted" badge.
         $pdo->prepare(
             "UPDATE se_registrations
                 SET status = ?, seat_pool = ?, cancelled_at = NULL, cancelled_by = NULL,
-                    cancel_reason = NULL,
+                    cancel_reason = NULL, deleted_at = NULL, deleted_by = NULL,
                     confirmed_at = IF(? = 'confirmed', NOW(), confirmed_at),
                     waitlisted_at = IF(? = 'waitlisted', NOW(), waitlisted_at)
               WHERE id = ?"
@@ -426,6 +436,234 @@ function se_attendee_remove(PDO $pdo, array $event, array $days, int $id, string
 }
 
 /**
+ * Delete someone off the event (§12.5 `attendee_delete`).
+ *
+ * The difference from Remove is exactly one thing, and it is the reason this
+ * exists: **a deleted person may register again**. Remove leaves the portal
+ * refusing them (`outcome: 'blocked'`, §12.2) because the crew wants them kept
+ * out. Delete is the crew saying "take this off my list" — which is what a
+ * test account, a duplicate, or a mistyped number actually needs.
+ *
+ * The row keeps its history and its codes; `deleted_at` is the marker, so
+ * `status` goes on meaning what §9.3 says it means. The seat mechanics are the
+ * cancellation's, not a second implementation: the seat returns to the room
+ * and the waitlist is promoted inside the same event lock.
+ *
+ * @param bool $block also keep them out of the portal (stores 'removed')
+ * @return array{status:string, promoted:list<int>, blocked:bool}
+ */
+function se_attendee_delete(PDO $pdo, array $event, array $days, int $id, string $reason, bool $block, int $actorId): array
+{
+    $eventId = (int) $event['id'];
+    $reason  = se_line($reason, 160);
+
+    $result = se_lock_event($pdo, $eventId, function (array $ev) use ($pdo, $id, $reason, $block, $actorId): array {
+        $stmt = $pdo->prepare("SELECT * FROM se_registrations WHERE id = ? AND event_id = ? FOR UPDATE");
+        $stmt->execute([$id, (int) $ev['id']]);
+        $reg = $stmt->fetch();
+        if (!$reg) {
+            throw new SeNotFoundException('That person is not on this list.');
+        }
+
+        // Only a seat that is actually held comes back to the room. Deleting
+        // someone who already self-cancelled must not promote a second person.
+        $wasOnline = (string) $reg['status'] === 'confirmed' && (string) $reg['seat_pool'] === 'online';
+        $status    = $block ? 'removed' : 'cancelled';
+
+        // `cancelled_at` keeps its first value: someone who released their own
+        // seat last week and is only being tidied up today was cancelled last
+        // week, and rewriting that would misreport the night.
+        $pdo->prepare(
+            "UPDATE se_registrations
+                SET status = ?, seat_pool = NULL, cancelled_at = COALESCE(cancelled_at, NOW()),
+                    cancelled_by = 'crew', cancel_reason = ?,
+                    deleted_at = NOW(), deleted_by = ?
+              WHERE id = ?"
+        )->execute([$status, $reason ?: null, $actorId ?: null, $id]);
+
+        // Their song is not theirs any more — the same courtesy a
+        // cancellation pays the karaoke queue (§9.5).
+        if (se_table_exists($pdo, 'se_karaoke_entries')) {
+            $pdo->prepare(
+                "UPDATE se_karaoke_entries SET status = 'cancelled'
+                  WHERE registration_id = ? AND status IN ('held','queued','up_next')"
+            )->execute([$id]);
+        }
+
+        se_tokens_revoke($pdo, $id);
+
+        if (se_table_exists($pdo, 'se_devices')) {
+            $pdo->prepare("UPDATE se_devices SET revoked_at = NOW(), registration_id = NULL WHERE registration_id = ?")
+                ->execute([$id]);
+        }
+
+        $promoted = $wasOnline ? se_promote_waitlist($pdo, $ev, 1) : [];
+
+        se_audit($pdo, (int) $ev['id'], 'attendee_delete',
+            ['registration_id' => $id, 'reason' => $reason, 'blocked' => $block, 'promoted' => $promoted],
+            'registration', $id, $actorId);
+
+        return ['promoted' => $promoted, 'event' => $ev, 'status' => $status];
+    });
+
+    se_after_capacity_change($pdo, $result['event']);
+    if ($result['promoted']) {
+        se_messages_enqueue_waitlist_promotion($pdo, $result['event'], $days, $result['promoted']);
+    }
+
+    return ['status' => $result['status'], 'promoted' => $result['promoted'], 'blocked' => $block];
+}
+
+/**
+ * Delete a person permanently — every trace (§12.5 `attendee_delete_permanent`).
+ *
+ * The night's counts drop, and that is the point: this is for a test account
+ * that should never have been counted, a duplicate, or someone whose number
+ * has to be genuinely free. It is irreversible and there is nothing left to
+ * restore from, so it is a manager action, not a desk one.
+ *
+ * Two things deliberately survive:
+ *
+ *  - The **audit line**, which records that a deletion happened and why —
+ *    never what was deleted.
+ *  - Anything **another module owns**. A Reach lead, or a congregation member
+ *    created by a hand-off, belongs to that module. Deleting them here would
+ *    be this module reaching outside its own tables, so it does not.
+ *
+ * FK order matters: `se_karaoke_entries` is ON DELETE RESTRICT and must go
+ * before the registration (§9.5), while `se_team_moves`, `se_answers`,
+ * `se_buzzes`, `se_survey_responses`, `se_score_events` and `se_handoff_items`
+ * carry a `registration_id` with **no** foreign key — nothing would clean them
+ * up, so they are cleared by hand.
+ *
+ * @return array{deleted:bool, contact_removed:bool, promoted:list<int>}
+ */
+function se_attendee_delete_permanent(PDO $pdo, array $event, int $id, string $reason, int $actorId): array
+{
+    $eventId = (int) $event['id'];
+    $reason  = se_line($reason, 160);
+
+    $result = se_lock_event($pdo, $eventId, function (array $ev) use ($pdo, $id, $reason, $actorId): array {
+        $stmt = $pdo->prepare("SELECT * FROM se_registrations WHERE id = ? AND event_id = ? FOR UPDATE");
+        $stmt->execute([$id, (int) $ev['id']]);
+        $reg = $stmt->fetch();
+        if (!$reg) {
+            throw new SeNotFoundException('That person is not on this list.');
+        }
+
+        $contactId = (int) $reg['contact_id'];
+        $wasOnline = (string) $reg['status'] === 'confirmed' && (string) $reg['seat_pool'] === 'online';
+
+        // --- Things that hang off this registration ----------------------
+        // RESTRICT first: this is the one the database would refuse.
+        if (se_table_exists($pdo, 'se_karaoke_entries')) {
+            $pdo->prepare("DELETE FROM se_karaoke_entries WHERE registration_id = ?")->execute([$id]);
+        }
+
+        foreach ([
+            'se_team_moves',
+            'se_answers',
+            'se_buzzes',
+            'se_survey_responses',
+            'se_score_events',
+            'se_handoff_items',
+        ] as $table) {
+            if (se_table_exists($pdo, $table)) {
+                $pdo->prepare("DELETE FROM {$table} WHERE registration_id = ?")->execute([$id]);
+            }
+        }
+
+        // Rows that merely *point at* them: the round, the game and the team
+        // outlive the person, so the reference is cleared, not the row.
+        if (se_table_exists($pdo, 'se_rounds')) {
+            $pdo->prepare("UPDATE se_rounds SET presenter_registration_id = NULL WHERE presenter_registration_id = ?")
+                ->execute([$id]);
+        }
+        if (se_table_exists($pdo, 'se_games')) {
+            $pdo->prepare("UPDATE se_games SET presenter_registration_id = NULL WHERE presenter_registration_id = ?")
+                ->execute([$id]);
+        }
+        if (se_table_exists($pdo, 'se_teams')) {
+            $pdo->prepare("UPDATE se_teams SET captain_registration_id = NULL WHERE captain_registration_id = ?")
+                ->execute([$id]);
+        }
+
+        // A device is the phone in someone's hand, not the seat they held:
+        // it stays, unbound, so it can be used again (a walk-in desk device
+        // is often the same tablet all night).
+        if (se_table_exists($pdo, 'se_devices')) {
+            $pdo->prepare("UPDATE se_devices SET revoked_at = NOW(), registration_id = NULL WHERE registration_id = ?")
+                ->execute([$id]);
+        }
+
+        // Explicit rather than relying on ON DELETE CASCADE, so this keeps
+        // working if a constraint is ever dropped, and so the row counts are
+        // visible to the audit below.
+        $removed = [];
+        foreach (['se_access_tokens', 'se_checkins', 'se_feedback'] as $table) {
+            if (se_table_exists($pdo, $table)) {
+                $del = $pdo->prepare("DELETE FROM {$table} WHERE registration_id = ?");
+                $del->execute([$id]);
+                $removed[$table] = $del->rowCount();
+            }
+        }
+
+        // Other people's rows survive, but their pointer at this one cannot:
+        // these columns have no foreign key, so a deleted id would simply sit
+        // there looking valid. The person who came as their companion keeps
+        // their seat; only the attribution is cleared.
+        $pdo->prepare(
+            "UPDATE se_registrations SET referred_by_registration_id = NULL WHERE referred_by_registration_id = ?"
+        )->execute([$id]);
+        $pdo->prepare(
+            "UPDATE se_registrations SET companion_of_registration_id = NULL WHERE companion_of_registration_id = ?"
+        )->execute([$id]);
+
+        $pdo->prepare("DELETE FROM se_registrations WHERE id = ? AND event_id = ?")->execute([$id, (int) $ev['id']]);
+
+        // --- The contact -------------------------------------------------
+        // Only when this event was the single reason the contact existed. A
+        // contact tied to a congregation member is that member's record; a
+        // contact with another event on it is still a real relationship.
+        $contactRemoved = false;
+        $other = $pdo->prepare("SELECT COUNT(*) FROM se_registrations WHERE contact_id = ?");
+        $other->execute([$contactId]);
+        $stillUsed = (int) $other->fetchColumn() > 0;
+
+        if (!$stillUsed) {
+            $member = $pdo->prepare("SELECT member_user_id FROM se_contacts WHERE id = ?");
+            $member->execute([$contactId]);
+            $isMember = (int) ($member->fetchColumn() ?: 0) > 0;
+
+            if (!$isMember) {
+                $pdo->prepare("DELETE FROM se_contacts WHERE id = ?")->execute([$contactId]);
+                $contactRemoved = true;
+            }
+        }
+
+        $promoted = $wasOnline ? se_promote_waitlist($pdo, $ev, 1) : [];
+
+        // The one thing that outlives them: that it happened, and why.
+        se_audit($pdo, (int) $ev['id'], 'attendee_delete_permanent', [
+            'registration_id' => $id,
+            'reason'          => $reason,
+            'contact_removed' => $contactRemoved,
+            'rows'            => $removed,
+            'promoted'        => $promoted,
+        ], 'registration', $id, $actorId);
+
+        return ['contact_removed' => $contactRemoved, 'promoted' => $promoted, 'event' => $ev];
+    });
+
+    se_after_capacity_change($pdo, $result['event']);
+    if ($result['promoted']) {
+        se_messages_enqueue_waitlist_promotion($pdo, $result['event'], se_event_days($pdo, $eventId), $result['promoted']);
+    }
+
+    return ['deleted' => true, 'contact_removed' => $result['contact_removed'], 'promoted' => $result['promoted']];
+}
+
+/**
  * Invalidate every link this person holds and hand back a fresh one
  * (§12.5 `attendee_reset_links`). Used when a manage link is shared by
  * mistake or a phone is lost.
@@ -454,7 +692,11 @@ function se_attendee_reset_links(PDO $pdo, array $event, array $days, int $id, i
 }
 
 /**
- * Erase a person at their request (§19.9).
+ * Erase a person at their request (§19.8).
+ *
+ * Anyone in the Studio may run this: it answers a legal request, so holding an
+ * administrative role is not the point. The `erase` outcome is recorded with
+ * the reason, and there is nothing left to restore from once it returns.
  *
  * The registration row survives so the counts of the night stay true, but
  * every identifying field is blanked and the contact is tombstoned. This is
