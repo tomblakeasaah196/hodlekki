@@ -343,7 +343,24 @@ function se_asset_filename(string $extension): string
 const SE_IMAGE_VARIANTS = [
     'hero'  => [480, 960, 1600, 2400],
     'default' => [480, 960, 1600],
+    // Check-in posters are rendered once at their exact print/screen size and
+    // never served responsively (nothing reads their srcset — see
+    // se_asset_srcset()'s only caller, the portal hero). Skipping the resize
+    // pass here more than halves the peak memory a full-bleed A3 (3508×4961)
+    // needs to go from canvas PNG to stored asset.
+    'poster_a4'     => [],
+    'poster_a3'     => [],
+    'poster_screen' => [],
 ];
+
+/**
+ * Roles whose source image is large enough (A3 at 300 dpi is ~17 megapixels)
+ * that decoding and re-encoding it can outrun a shared host's default
+ * memory_limit. GD's fatal "allowed memory size exhausted" is not a
+ * Throwable — it cannot be caught by se_api_fail() — so the only fix is to
+ * not run out in the first place (see se_asset_store()).
+ */
+const SE_IMAGE_HEAVY_ROLES = ['poster_a4', 'poster_a3', 'poster_screen'];
 
 /**
  * Re-encode a raster image with GD and write its responsive WebP variants.
@@ -527,6 +544,13 @@ function se_asset_store(PDO $pdo, array $event, string $role, array $file, array
         // phone and WhatsApp images impossible to upload. The image processor
         // still creates the normal responsive variants; the Studio can show
         // the dimensions so producers can choose a higher-resolution source.
+        if (in_array($role, SE_IMAGE_HEAVY_ROLES, true)) {
+            // A 300 dpi A3 decodes to ~70 MB of raw pixels before GD's own
+            // overhead; raise the ceiling for this one request rather than
+            // the whole host, and give it more than the default 30s too.
+            @ini_set('memory_limit', '512M');
+            @set_time_limit(90);
+        }
         $processed = se_image_process($tmp, $detected, $dir, $role);
         $fileName  = $processed['file'];
         $mime      = $processed['mime'];

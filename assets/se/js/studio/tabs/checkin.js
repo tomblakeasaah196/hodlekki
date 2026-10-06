@@ -437,18 +437,21 @@ function Posters() {
 
     return html`
         <${Card} title="Check-in posters"
-            subtitle="A QR straight to the check-in page. Print A4 for doors and corridors, A3 for the foyer.">
+            subtitle="A QR straight to the check-in page. Print A4 for doors and corridors, A3 for the foyer,
+                      or put the Screen size up on a lobby TV or a projector.">
 
             <p class="text-sm text-gray-500 mb-6">
                 The code points at <span class="font-mono">${data.text.url}</span>, which is also printed
                 underneath in words for anyone whose camera will not focus.
             </p>
 
-            <div class="grid gap-4 sm:grid-cols-2">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 ${Object.entries(data.sizes).map(([kind, spec]) => html`
                     <div class="rounded-2xl border border-gray-100 p-5 space-y-3" key=${kind}>
                         <p class="font-display font-bold text-gray-900">${spec.label}</p>
-                        <p class="text-xs text-gray-400">${spec.width} × ${spec.height} px at 300 dpi</p>
+                        <p class="text-xs text-gray-400">
+                            ${spec.width} × ${spec.height} px${spec.printable ? ' at 300 dpi' : ' (16:9, for a screen)'}
+                        </p>
                         ${can('assets.manage')
                             ? html`<${Button} loading=${busy === kind} disabled=${!!busy}
                                 onClick=${() => make(kind)}>Make the ${spec.label} poster<//>`
@@ -457,8 +460,10 @@ function Posters() {
                             <div class="flex flex-wrap gap-3 pt-1">
                                 <a class="text-sm font-semibold text-hodBlue hover:underline"
                                    href=${saved[kind].asset.path} target="_blank" rel="noopener">PNG</a>
-                                <a class="text-sm font-semibold text-hodBlue hover:underline"
-                                   href=${saved[kind].pdf} target="_blank" rel="noopener">Print PDF</a>
+                                ${saved[kind].pdf ? html`
+                                    <a class="text-sm font-semibold text-hodBlue hover:underline"
+                                       href=${saved[kind].pdf} target="_blank" rel="noopener">Print PDF</a>`
+                                    : null}
                             </div>` : null}
                     </div>`)}
             </div>

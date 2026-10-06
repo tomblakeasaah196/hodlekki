@@ -19,6 +19,7 @@ const ROLE_LABELS = {
     songs_source: 'Song list source (AI input)', og_card: 'Link card',
     story: 'Story format', square: 'Square format', portrait: 'Portrait format',
     projector: 'Projector format', poster_a4: 'Poster A4', poster_a3: 'Poster A3',
+    poster_screen: 'Poster (screen 16:9)',
 };
 
 function bytes(n) {

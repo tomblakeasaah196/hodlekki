@@ -44,6 +44,12 @@ if (!isset(SE_POSTER_SIZES[$role])) {
     http_response_code(400);
     exit('That file is not a check-in poster.');
 }
+if (!isset(SE_POSTER_SIZES[$role]['mm'])) {
+    // The screen size has no physical dimension to print at — it is meant
+    // for a TV or a projector, not paper.
+    http_response_code(400);
+    exit('This poster is for on-screen display, not print.');
+}
 
 // The stored path is web-relative under /uploads/se; resolve it and refuse
 // anything that climbs out, even though the path came from our own table.

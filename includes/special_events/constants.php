@@ -192,6 +192,7 @@ const SE_ASSET_ROLES = [
     'projector'      => ['kind' => 'image', 'max_bytes' => 8388608],
     'poster_a4'      => ['kind' => 'doc',   'max_bytes' => 15728640],
     'poster_a3'      => ['kind' => 'doc',   'max_bytes' => 15728640],
+    'poster_screen'  => ['kind' => 'doc',   'max_bytes' => 15728640],
 ];
 
 /** AI source roles purged by cron after 30 days (§14.1). */

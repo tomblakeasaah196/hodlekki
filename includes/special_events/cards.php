@@ -138,10 +138,16 @@ function se_card_filename(array $event, string $kind, string $firstName): string
 // Check-in posters (§14.2)
 // --------------------------------------------------------------------------
 
-/** The two printable poster sizes, at 300 dpi (§14.2). */
+/**
+ * The check-in poster sizes (§14.2): two printable, at 300 dpi, plus a 16:9
+ * one for a lobby TV or a projector. `mm` is only set for the printable
+ * ones — se_poster_payload() and the print PDF endpoint both key off its
+ * presence to decide whether "Print PDF" makes sense at all.
+ */
 const SE_POSTER_SIZES = [
-    'poster_a4' => ['w' => 2480, 'h' => 3508, 'label' => 'A4', 'mm' => [210, 297]],
-    'poster_a3' => ['w' => 3508, 'h' => 4961, 'label' => 'A3', 'mm' => [297, 420]],
+    'poster_a4'     => ['w' => 2480, 'h' => 3508, 'label' => 'A4',     'mm' => [210, 297]],
+    'poster_a3'     => ['w' => 3508, 'h' => 4961, 'label' => 'A3',     'mm' => [297, 420]],
+    'poster_screen' => ['w' => 1920, 'h' => 1080, 'label' => 'Screen'],
 ];
 
 /**
@@ -165,11 +171,14 @@ function se_poster_payload(PDO $pdo, array $event): array
     $sizes = [];
     foreach (SE_POSTER_SIZES as $kind => $spec) {
         $sizes[$kind] = [
-            'width'    => $spec['w'],
-            'height'   => $spec['h'],
-            'label'    => $spec['label'],
-            'template' => '/assets/se/templates/qr_' . $kind . '.svg',
-            'filename' => se_card_filename($event, 'checkin-' . strtolower($spec['label']), ''),
+            'width'     => $spec['w'],
+            'height'    => $spec['h'],
+            'label'     => $spec['label'],
+            'template'  => '/assets/se/templates/qr_' . $kind . '.svg',
+            'filename'  => se_card_filename($event, 'checkin-' . strtolower($spec['label']), ''),
+            // Only the paper sizes have a physical dimension to print at;
+            // the Studio uses this to decide whether to offer "Print PDF".
+            'printable' => isset($spec['mm']),
         ];
     }
 

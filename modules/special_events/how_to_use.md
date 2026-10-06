@@ -594,13 +594,16 @@ the person. It is built for one hand and a bad signal:
 
 ### Posters
 
-**Check-in → Posters** makes the printable QR, in A4 for doors and corridors
-and A3 for the foyer. Press the button, then use **Print PDF** — it is sized
-to the paper exactly, so "Fit to page" cannot shrink it. The address is also
+**Check-in → Posters** makes the check-in QR in three sizes: **A4** for doors
+and corridors, **A3** for the foyer, and **Screen** — a 16:9 image for a
+lobby TV or a projector, for whenever there is no door to tape a poster to.
+Press the button for A4 or A3, then use **Print PDF** — it is sized to the
+paper exactly, so "Fit to page" cannot shrink it. Screen has no PDF, only the
+PNG: put it up full-screen on the display itself. The address is also
 printed in words underneath, for the camera that refuses to focus.
 
-Print them early. A poster is the only part of check-in that does not need
-anything to be working.
+Print the paper sizes early. A poster is the only part of check-in that does
+not need anything to be working.
 
 ---
 
