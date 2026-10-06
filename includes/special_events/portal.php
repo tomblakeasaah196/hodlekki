@@ -524,7 +524,7 @@ function se_portal_program_public(PDO $pdo, array $event, array $days, array $se
 {
     // The gate is checked before anything is read, so an unpublished
     // programme costs the page nothing at all.
-    if (!se_bool($settings['program']['published'] ?? false)) {
+    if (!se_bool($settings['program']['published'] ?? true)) {
         return null;
     }
     if (!function_exists('se_program_ready') || !se_program_ready($pdo)) {

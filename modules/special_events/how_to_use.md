@@ -805,6 +805,11 @@ the top of the tab always says which it is:
   with the times you chose. Press **Hide it again** at any point; it comes off
   the page immediately and nothing you typed is lost.
 
+One exception, once only: an event whose programme was already on its page
+before this update keeps it there, published, exactly as guests last saw it.
+Nothing disappeared the day the switch arrived. Events created from now on
+start hidden.
+
 Publishing is only about the public page. **The stage screen, the host console
 and the lobby always show the real run of show**, published or not, so the
 crew is never left guessing. Items marked "not on the public page" under

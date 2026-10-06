@@ -571,7 +571,9 @@ function se_event_create(PDO $pdo, array $input, int $actorId): array
     }
     $slug = $slugCheck['slug'];
 
-    $settings = se_settings_normalize($input['settings'] ?? []);
+    // A new event's programme starts unpublished (§10.7.2); a clone passes
+    // the source event's settings and keeps whatever that one chose.
+    $settings = se_settings_for_new_event($input['settings'] ?? []);
 
     // PDO cannot nest a transaction, so join the caller's when there is
     // one (se_clone_event wraps create; create wraps days_save).
@@ -1379,6 +1381,9 @@ function se_clone_event(PDO $pdo, int $sourceId, array $opts, array $input, int 
     // The song list is never published on a clone, and test mode never carries.
     $settings['karaoke']['list_published'] = false;
     $settings['test_mode'] = false;
+    // Nor is the programme: next year's run of show starts as last year's
+    // and is then pulled apart for weeks (§10.7.2).
+    $settings['program']['published'] = false;
     // Message schedules are relative (a time of day, or minutes before the
     // start), so they carry over unshifted; only an absolute stamp would need Δ.
     if (!$opt('registration')) {

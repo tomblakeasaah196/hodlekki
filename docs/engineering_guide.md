@@ -1410,7 +1410,7 @@ $drift_min = round((last eta_end − last planned_end) / 60);   // positive = ru
 
 - Host console shows drift ("Running 8 min late") and suggests skipping a `buffer` item.
 - Public display honours `settings.program.public_time_mode`: `exact` (`7:15 PM`), `approximate` (default: `~7:15 PM`, rounded to 15 min) or `order_only` (no times), the right fit for a flexibly-timed programme (M7, M12).
-- **Publish gate.** `settings.program.published` (default **false**) decides whether the event page shows the programme at all. `se_portal_program_public()` checks it *before* reading anything, so an unpublished programme costs the page no queries, returns `null`, and S4b plus its menu entry are simply not rendered. Studio → Programme has the toggle (`program_publish {id, on}` → `se_event_settings_patch()`, `event.edit`, no `row_version`). The gate is **public-page-only**: `se_snapshot_public()` keeps feeding `program` to the stage, the host console and the lobby, because the crew needs the run of show whether or not guests may read it.
+- **Publish gate.** `settings.program.published` decides whether the event page shows the programme at all. The spec default is **`true`** and new events are created with **`false`** (`se_settings_for_new_event()`, called by `se_event_create()`) — the two are deliberately different. An event written before the key existed has no `published` in its `settings_json`, so the spec default is what its page reads: shipping `false` there would have pulled a live programme off a church's page at file-copy time, before a migration could run or a producer could press anything. A clone keeps whatever the source event chose. `se_portal_program_public()` checks it *before* reading anything, so an unpublished programme costs the page no queries, returns `null`, and S4b plus its menu entry are simply not rendered. Studio → Programme has the toggle (`program_publish {id, on}` → `se_event_settings_patch()`, `event.edit`, no `row_version`). The gate is **public-page-only**: `se_snapshot_public()` keeps feeding `program` to the stage, the host console and the lobby, because the crew needs the run of show whether or not guests may read it.
 - Actions: **Start** (sets `live`, ends any other live item as `done`), **Finish**, **Skip**, **Undo last** (restores the previous status/timestamps from the audit entry), **Reorder** (planned items only).
 - Starting an item linked to a game sets the stage scene to that game's intro.
 
@@ -4656,7 +4656,7 @@ Statistics: {{stats_json}}
     }
   },
   "feud": { "survey_closes_at": null },
-  "program": { "public_time_mode": "approximate", "published": false },
+  "program": { "public_time_mode": "approximate", "published": true },
   "portal": {
     "intro_line": null,
     "show_countdown": true,

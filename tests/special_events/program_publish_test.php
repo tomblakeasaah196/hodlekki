@@ -13,9 +13,35 @@
 
 echo "    the setting itself\n";
 $defaults = se_settings_defaults();
-is_same('a new event starts unpublished', false, $defaults['program']['published']);
-is_same('se_settings_default() reads the same path', false, se_settings_default('program.published'));
+// The spec default and the new-event default deliberately disagree; see
+// se_settings_for_new_event(). An event that predates the key has no
+// `published` in its settings_json, so the spec default is what its page
+// reads — and a deploy must never take a live programme off a church's
+// page before anybody has had the chance to flip a switch.
+is_same('an event written before this key keeps its page', true, $defaults['program']['published']);
+is_same('se_settings_default() reads the same path', true, se_settings_default('program.published'));
 is_same('the time mode is untouched', 'approximate', $defaults['program']['public_time_mode']);
+
+echo "    but a brand new event starts unpublished\n";
+$fresh = se_settings_for_new_event([]);
+is_same('created with the gate shut', false, $fresh['program']['published']);
+is_same('null is the same as nothing', false, se_settings_for_new_event(null)['program']['published']);
+is_same('a JSON string is accepted too', false, se_settings_for_new_event('{}')['program']['published']);
+is_same('everything else is still the Appendix E default', $defaults['portal']['faq'], $fresh['portal']['faq']);
+is_same('an explicit true is still honoured', true,
+    se_settings_for_new_event(['program' => ['published' => true]])['program']['published']);
+ok('a clone shuts the gate itself, like the song list', (bool) preg_match(
+    "/\\\$settings\\['karaoke'\\]\\['list_published'\\] = false;.*?\\\$settings\\['program'\\]\\['published'\\] = false;/s",
+    (string) file_get_contents(__DIR__ . '/../../includes/special_events/events.php')
+));
+is_same('a sibling key in the branch does not open the gate', false,
+    se_settings_for_new_event(['program' => ['public_time_mode' => 'exact']])['program']['published']);
+is_same('and that sibling is honoured', 'exact',
+    se_settings_for_new_event(['program' => ['public_time_mode' => 'exact']])['program']['public_time_mode']);
+ok('se_event_create() uses it', str_contains(
+    (string) file_get_contents(__DIR__ . '/../../includes/special_events/events.php'),
+    'se_settings_for_new_event($input[\'settings\'] ?? [])' 
+));
 
 $on = se_settings_normalize(['program' => ['published' => true]]);
 is_same('publishing stores true', true, $on['program']['published']);
@@ -38,8 +64,8 @@ final class SeUnusablePdo extends PDO
 $event = ['id' => 1, 'slug' => 'chara', 'title' => 'Chara'];
 is_same('unpublished means no section, without touching the database', null,
     se_portal_program_public(new SeUnusablePdo(), $event, [], se_settings_normalize(['program' => ['published' => false]])));
-is_same('a missing setting is also unpublished', null,
-    se_portal_program_public(new SeUnusablePdo(), $event, [], []));
+is_same('an explicit false is enough on its own', null,
+    se_portal_program_public(new SeUnusablePdo(), $event, [], ['program' => ['published' => false]]));
 ok('se_portal_program() renders nothing for a null programme', (static function (): bool {
     ob_start();
     se_portal_program(null);

@@ -321,7 +321,17 @@ function se_settings_spec(): array
             // — times move, items are cut — so it stays off the public page
             // until Studio → Programme says otherwise. Crew screens (stage,
             // host console, lobby) are never gated by this.
-            'published'        => ['type' => 'bool', 'default' => false],
+            //
+            // The DEFAULT is `true`, and that is not the same statement as
+            // "new programmes are public". Every event written before this
+            // key existed has no `published` in its settings_json, and an
+            // absent key reads as its default: shipping `false` here would
+            // have taken a live programme off a church's page the moment
+            // the files were copied, before anybody could flip a switch.
+            // New events are created with it OFF instead — see
+            // se_settings_for_new_event(), which is where "a draft until
+            // you say so" actually lives.
+            'published'        => ['type' => 'bool', 'default' => true],
         ]],
 
         'portal' => ['type' => 'obj', 'children' => [
@@ -692,4 +702,33 @@ function se_portal_settings_patch(mixed $input): array
     }
 
     return $patch;
+}
+
+/**
+ * The settings document a brand new event starts life with.
+ *
+ * Everything is the Appendix E default except the programme's publish gate,
+ * which starts OFF. The two cannot be the same value: an event created
+ * before the gate existed must keep the page it already had (so the spec
+ * default is `true`), while an event created now should not put a half-
+ * built run of show in front of guests the moment the first item is typed.
+ *
+ * A caller that passes an explicit value always wins; se_clone_event() uses
+ * that to hand over the source event's settings with the gate explicitly
+ * shut, the same way it already refuses to carry a published song list.
+ */
+function se_settings_for_new_event(array|string|null $input): array
+{
+    if (is_string($input) || $input === null) {
+        $input = se_json_decode($input);
+    }
+    $input = is_array($input) ? $input : [];
+
+    $program = is_array($input['program'] ?? null) ? $input['program'] : [];
+    if (!array_key_exists('published', $program)) {
+        $program['published'] = false;
+    }
+    $input['program'] = $program;
+
+    return se_settings_normalize($input);
 }

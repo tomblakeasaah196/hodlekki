@@ -335,7 +335,12 @@ test('the portal hides an unpublished programme entirely', () => {
 
     assert.match(portal, /se_portal_program_public/);
     assert.match(portal, /settings\['program'\]\['published'\]/);
-    assert.match(settings, /'published'\s*=>\s*\['type' => 'bool', 'default' => false\]/);
+    // The spec default is `true` so that an event written before the key
+    // existed keeps the page it had; a NEW event is created with the gate
+    // shut instead. program_publish_test.php owns that pair in full.
+    assert.match(settings, /'published'\s*=>\s*\['type' => 'bool', 'default' => true\]/);
+    assert.match(settings, /function se_settings_for_new_event/);
+    assert.match(read('includes/special_events/events.php'), /se_settings_for_new_event\(/);
     // …and the live snapshots keep feeding the crew screens.
     const live = read('includes/special_events/live.php');
     assert.equal(live.includes("['program']['published']"), false);
