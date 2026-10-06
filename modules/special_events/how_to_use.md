@@ -487,7 +487,7 @@ to sing; a 💛 means they would like a Sunday visit.
 | **Promote** | Pull one person off the waitlist now, out of turn. | Producer |
 | **Delete** | Takes them off the list and **frees their number, so they can register again**. Opens both grades — see below. | Producer |
 | **Reset links** | Kills every link that person holds and issues a new one. Use it when a link was forwarded to the wrong group. | Producer |
-| **Erase their data** | Deletes the personal details for good, keeping only the anonymous count. For "please delete my data". | Administrator |
+| **Erase their data** | Deletes the personal details for good, keeping only the anonymous count. For "please delete my data". | Anyone in Envision |
 
 ### Delete — the two grades
 
@@ -504,7 +504,19 @@ to sing; a 💛 means they would like a Sunday visit.
 | **Undo** | Put back on the list | **None.** Not by us, not by you |
 
 Both ask you **why** first, and the crew log keeps the reason. **Delete
-permanently** is available to an **Administrator** only.
+permanently** is available to an **Administrator** only; plain **Delete** is
+available to anyone who can see this list.
+
+**Erase their data** is separate from both, and is open to **anyone in
+Envision** who can open Special Events — it is a privacy obligation, so nobody
+should have to wait for an administrator to be found when a guest asks. It
+deletes the personal details for good but **keeps the night's numbers true**,
+and the log records that an erasure happened and why.
+
+> **Delete permanently or Erase — which one?** If the seat must stop counting
+> (a test account, a duplicate), use **Delete permanently**. If a real guest
+> has asked you to remove their data but they really did come that night, use
+> **Erase their data**.
 
 **"Also keep them out — the door turns them away"** is the tick inside the
 Delete menu. Use it when the crew has decided someone should not come back: it

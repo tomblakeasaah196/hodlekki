@@ -134,9 +134,11 @@ function AddPanel({ eventId, onDone, onCancel }) {
  * duplicate, and it is the only action here that leaves nothing behind.
  *
  * Erase stays its own button because it makes a different promise: the counts
- * survive it, and it is what answers a privacy request. Both it and the
- * permanent grade are manager-only on the server (`se_require_manager`), so
- * they are hidden from a Producer rather than offered and then refused.
+ * survive it, and it is what answers a privacy request — so it is open to
+ * anyone who can open the Studio (§19.8), and carried unsheathed on the row
+ * rather than tucked in here. Only the permanent grade is manager-only on the
+ * server (`se_require_manager`), so that one is hidden from a Producer rather
+ * than offered and then refused.
  */
 function DangerMenu({ row, onDelete }) {
     const [open, setOpen] = useState(false);
@@ -280,8 +282,7 @@ function AttendeeRow({ row, onAct, onEdit, onDelete, onErase, expanded, onToggle
 
                     ${can('attendee.pii') ? html`<${DangerMenu} row=${row} onDelete=${onDelete} />` : null}
 
-                    ${can('settings.manage') ? html`
-                        <${Button} variant="danger" onClick=${() => onErase(row)}>Erase their data<//>` : null}
+                    <${Button} variant="danger" onClick=${() => onErase(row)}>Erase their data<//>
                 </div>
             </div>` : null}
         </li>`;

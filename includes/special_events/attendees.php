@@ -5,7 +5,7 @@
 //
 // This is the crew's view of the registration list: search, correct, cancel,
 // restore, promote, remove, add at the desk, reset links, and erase on a
-// subject request (§19.9). The capacity rules all live in capacity.php, so
+// subject request (§19.8). The capacity rules all live in capacity.php, so
 // anything that frees or takes a seat goes through se_lock_event() there.
 //
 // Personal data: a phone number is only ever returned to a caller holding
@@ -692,7 +692,11 @@ function se_attendee_reset_links(PDO $pdo, array $event, array $days, int $id, i
 }
 
 /**
- * Erase a person at their request (§19.9).
+ * Erase a person at their request (§19.8).
+ *
+ * Anyone in the Studio may run this: it answers a legal request, so holding an
+ * administrative role is not the point. The `erase` outcome is recorded with
+ * the reason, and there is nothing left to restore from once it returns.
  *
  * The registration row survives so the counts of the night stay true, but
  * every identifying field is blanked and the contact is tombstoned. This is
