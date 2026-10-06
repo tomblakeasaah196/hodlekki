@@ -234,6 +234,46 @@ function se_studio_asset_payload(array $asset): array
     ];
 }
 
+/**
+ * Everything Studio → Chapters needs in one response (§13.3 S3).
+ *
+ * The icon catalogue travels with it, SVG and all, so the picker shows the
+ * real artwork rather than a second copy of these drawings in JavaScript
+ * that would quietly drift from the portal's.
+ */
+function se_studio_chapters_payload(PDO $pdo, array $event): array
+{
+    $settings = se_event_settings($event);
+    $features = [];
+    foreach (SE_CHAPTER_FEATURES as $feature) {
+        $features[$feature] = se_bool($settings[$feature]['enabled'] ?? true);
+    }
+
+    $images = [];
+    foreach (se_asset_list($pdo, (int) $event['id']) as $asset) {
+        if ((string) $asset['kind'] !== 'image') {
+            continue;
+        }
+        $images[] = [
+            'id'       => (int) $asset['id'],
+            'role'     => $asset['role'],
+            'title'    => $asset['title'],
+            'alt_text' => $asset['alt_text'],
+            'path'     => $asset['path'],
+        ];
+    }
+
+    return [
+        'ready'    => se_chapters_ready($pdo),
+        'chapters' => array_map('se_chapter_payload', se_chapters_list($pdo, (int) $event['id'])),
+        'icons'    => se_chapter_icon_options(),
+        'features' => $features,
+        'images'   => $images,
+        'max'      => SE_CHAPTERS_MAX,
+        'bg_role'  => 'background',
+    ];
+}
+
 /** Custom registration questions of an event. */
 function se_form_fields_list(PDO $pdo, int $eventId): array
 {
@@ -1321,6 +1361,80 @@ try {
         );
 
         se_api_success('Programme updated.', ['program' => $program]);
+    }
+
+    // ====================================================================
+    // Chapters (§13.3 S3)
+    // ====================================================================
+
+    case 'chapters_get': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+
+        se_api_success('OK', se_studio_chapters_payload($pdo, $event));
+    }
+
+    case 'chapter_save': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        se_chapter_save($pdo, $event, [
+            'chapter_id'  => $body['chapter_id'] ?? 0,
+            'title'       => $body['title'] ?? '',
+            'blurb'       => $body['blurb'] ?? '',
+            'icon'        => $body['icon'] ?? '',
+            'feature'     => $body['feature'] ?? '',
+            'is_active'   => $body['is_active'] ?? true,
+            'bg_asset_id' => $body['bg_asset_id'] ?? null,
+        ], $userId);
+
+        se_api_success('Chapter saved.', se_studio_chapters_payload($pdo, $event));
+    }
+
+    case 'chapter_delete': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        se_chapter_delete($pdo, $event, se_int($body['chapter_id'] ?? 0, 1), $userId);
+
+        se_api_success('Chapter removed.', se_studio_chapters_payload($pdo, $event));
+    }
+
+    case 'chapter_move': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        se_chapter_move(
+            $pdo,
+            $event,
+            se_int($body['chapter_id'] ?? 0, 1),
+            se_enum($body['direction'] ?? 'up', ['up', 'down'], 'up'),
+            $userId
+        );
+
+        se_api_success('Moved.', se_studio_chapters_payload($pdo, $event));
+    }
+
+    case 'chapters_reset': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        se_chapters_reset($pdo, $event, $userId);
+
+        se_api_success('The four default chapters are back.', se_studio_chapters_payload($pdo, $event));
+    }
+
+    case 'chapter_feature_toggle': {
+        $event   = se_studio_event($pdo, $body, 'event.edit');
+        $feature = se_enum($body['feature'] ?? '', SE_CHAPTER_FEATURES, '');
+
+        if ($feature === '') {
+            throw new SeValidationException(['feature' => 'Unknown feature.']);
+        }
+
+        // The chapter and the feature are separate decisions (§13.3 S3): this
+        // only moves settings.<feature>.enabled, and the chapter keeps its own
+        // "show on the portal" switch.
+        $event = se_event_settings_patch($pdo, $event, [
+            $feature => ['enabled' => se_bool($body['enabled'] ?? false)],
+        ], $userId);
+
+        se_api_success('Saved.', se_studio_chapters_payload($pdo, $event));
     }
 
     // ====================================================================

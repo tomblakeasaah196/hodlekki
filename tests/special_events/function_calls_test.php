@@ -133,8 +133,11 @@ is_same('a declared function is known', [], se_fc_unknown_calls('<?php se_fc_kno
 is_same('a built-in is known', [], se_fc_unknown_calls('<?php strlen("x"); array_map(fn($x) => $x, []);', $probeDeclared));
 is_same('methods, static calls and new are not plain calls', [],
     se_fc_unknown_calls('<?php $a->nope(); A::nope(); new Nope(); $a?->nope();', $probeDeclared));
-is_same('an undefined function is reported with its line', [['se_portal_program', 2]],
-    se_fc_unknown_calls("<?php\nse_portal_program(\$pdo);", $probeDeclared));
+// A name nothing in the repo defines: the scanner skips anything
+// function_exists() can see, and se_portal_program() is a real function now
+// that the harness loads portal.php for the chapter catalogue.
+is_same('an undefined function is reported with its line', [['se_portal_never_written', 2]],
+    se_fc_unknown_calls("<?php\nse_portal_never_written(\$pdo);", $probeDeclared));
 
 echo "    every function the module calls exists\n";
 $definitionSources = array_map('file_get_contents', array_merge(

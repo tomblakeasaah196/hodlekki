@@ -38,7 +38,7 @@ function se_portal_render(
     se_portal_topbar($event, $organizer);
     se_portal_hero($event, $days, $settings, $phase, $state, $seatsLeft, $heroAsset, $heroVideoAsset, $registration);
     se_portal_intro($event, $settings);
-    se_portal_chapters($event, $settings, se_portal_team_slots($pdo, $event));
+    se_portal_chapters($pdo, $event, $settings, se_portal_team_slots($pdo, $event));
     se_portal_program($pdo, $event, $days, $settings);
     se_portal_venue($event, $days);
     se_portal_faq($event, $settings);
@@ -333,51 +333,27 @@ function se_portal_intro(array $event, array $settings): void
 // --------------------------------------------------------------------------
 
 /**
- * One chapter per default activity block.
+ * The chapters this portal shows, newest source of truth first.
  *
- * `chapters_from_featured` lets an event drive this off its own featured
- * programme items instead; when it is off, or there is no programme yet,
- * the defaults from §13.3 are used.
+ * They are rows in se_chapters now (Studio → Chapters), seeded with the four
+ * defaults. The feature flags no longer add or remove a chapter: a producer
+ * who turns karaoke off decides separately whether The Mic still belongs on
+ * the page, and the Studio puts both switches side by side.
  *
- * @return list<array{key:string, title:string, blurb:string}>
+ * The $settings argument is kept because the signature is part of the
+ * portal's shape and an event whose database predates the migration still
+ * falls back to the defaults.
+ *
+ * @return list<array<string,mixed>>
  */
-function se_portal_chapter_list(array $settings): array
+function se_portal_chapter_list(PDO $pdo, array $event, array $settings): array
 {
-    $chapters = [];
-
-    if (se_bool($settings['karaoke']['enabled'] ?? true)) {
-        $chapters[] = [
-            'key'   => 'mic',
-            'title' => 'The Mic',
-            'blurb' => 'Tick karaoke when you register — then pick your song before the night, so the queue is ready when you are.',
-        ];
-    }
-    if (se_bool($settings['games']['enabled'] ?? true)) {
-        $chapters[] = [
-            'key'   => 'games',
-            'title' => 'The Games',
-            'blurb' => 'Charades, Live Quiz, Trivia, Buzzer and Family Feud — played on your phone, scored on the big screen.',
-        ];
-    }
-    if (se_bool($settings['teams']['enabled'] ?? true)) {
-        $chapters[] = [
-            'key'   => 'teams',
-            'title' => 'The Teams',
-            'blurb' => "At check-in you'll join a colour team — balanced, friendly, and very competitive by round two.",
-        ];
-    }
-    $chapters[] = [
-        'key'   => 'night',
-        'title' => 'The Night',
-        'blurb' => 'Doors, welcome, games, karaoke, awards. Come as you are and bring someone with you.',
-    ];
-
-    return $chapters;
+    return se_chapters_list($pdo, (int) $event['id'], true);
 }
 
-function se_portal_chapters(array $event, array $settings, array $teams = []): void
+function se_portal_chapters(PDO $pdo, array $event, array $settings, array $teams = []): void
 {
-    $chapters = se_portal_chapter_list($settings);
+    $chapters = se_portal_chapter_list($pdo, $event, $settings);
     if (!$chapters) {
         return;
     }
@@ -387,13 +363,31 @@ function se_portal_chapters(array $event, array $settings, array $teams = []): v
     <h2 class="se-label" id="se-chapters-title">The night, chapter by chapter</h2>
     <ol class="se-chapters se-hero-body">
       <?php foreach ($chapters as $i => $chapter): ?>
-      <li class="se-chapter" data-se-chapter="<?= se_h($chapter['key']) ?>">
+      <?php
+        $icon    = (string) ($chapter['icon'] ?? 'spark');
+        $bgPath  = (string) ($chapter['bg_path'] ?? '');
+        $hasBg   = $bgPath !== '';
+        $bgSrcset = $hasBg ? se_asset_srcset([
+            'path'          => $bgPath,
+            'variants_json' => $chapter['bg_variants'] ?? null,
+        ]) : '';
+      ?>
+      <li class="se-chapter" data-se-chapter="<?= se_h((string) ($chapter['chapter_key'] ?? $chapter['key'] ?? $icon)) ?>">
         <div>
           <p class="se-chapter-index" aria-hidden="true"><?= str_pad((string) ($i + 1), 2, '0', STR_PAD_LEFT) ?></p>
           <h3 class="se-display-lg"><?= se_h($chapter['title']) ?></h3>
           <p class="se-chapter-blurb"><?= se_h($chapter['blurb']) ?></p>
         </div>
-        <div class="se-chapter-art" aria-hidden="true"><?= se_portal_chapter_art($chapter['key'], $teams) ?></div>
+        <div class="se-chapter-art" data-se-chapter-art="<?= se_h($icon) ?>" data-has-bg="<?= $hasBg ? '1' : '0' ?>" aria-hidden="true">
+          <?php if ($hasBg): ?>
+          <img class="se-chapter-art-bg" src="<?= se_h($bgPath) ?>"
+               <?php if ($bgSrcset !== ''): ?>srcset="<?= se_h($bgSrcset) ?>" sizes="(min-width: 768px) 36rem, 100vw"<?php endif; ?>
+               <?php if (!empty($chapter['bg_width']) && !empty($chapter['bg_height'])): ?>width="<?= (int) $chapter['bg_width'] ?>" height="<?= (int) $chapter['bg_height'] ?>"<?php endif; ?>
+               alt="" loading="lazy" decoding="async">
+          <span class="se-chapter-art-scrim"></span>
+          <?php endif; ?>
+          <span class="se-chapter-art-figure"><?= se_portal_chapter_art($icon, $teams) ?></span>
+        </div>
       </li>
       <?php endforeach; ?>
     </ol>
@@ -405,32 +399,13 @@ function se_portal_chapters(array $event, array $settings, array $teams = []): v
 /**
  * The interactive object for a chapter.
  *
- * Inline SVG with `currentColor` and the theme variables, so it costs no
- * request and inherits the event's palette. The animation is CSS/GSAP's job.
+ * One inline SVG from the catalogue in chapters.php — `currentColor` and the
+ * theme variables, so it costs no request and inherits the event's palette.
+ * The motion is CSS/GSAP's job (@se/portal/main.js).
  */
-function se_portal_chapter_art(string $key, array $teams = []): string
+function se_portal_chapter_art(string $icon, array $teams = []): string
 {
-    return match ($key) {
-        'mic' => '<svg viewBox="0 0 120 120" role="img" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3">'
-            . '<rect x="48" y="18" width="24" height="46" rx="12"/>'
-            . '<path d="M36 56a24 24 0 0 0 48 0"/><path d="M60 80v18M46 98h28"/>'
-            . '<circle cx="60" cy="56" r="40" stroke-dasharray="4 10" opacity="0.5" class="se-animate-pulse"/>'
-            . '</svg>',
-        'games' => '<svg viewBox="0 0 160 120" role="img" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3">'
-            . '<rect x="16" y="26" width="46" height="66" rx="8" opacity="0.5"/>'
-            . '<rect x="40" y="18" width="46" height="74" rx="8" opacity="0.75"/>'
-            . '<rect x="66" y="14" width="46" height="80" rx="8"/>'
-            . '<path d="M80 40v28M66 54h28"/>'
-            . '</svg>',
-        'teams' => se_portal_team_orbit($teams),
-        default => '<svg viewBox="0 0 160 120" role="img" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3">'
-            . '<path d="M12 96h136" opacity="0.4"/>'
-            . '<path d="M20 96 46 60l24 20 26-44 24 36 18-14" stroke-linecap="round" stroke-linejoin="round" data-se-draw/>'
-            . '<circle cx="46" cy="60" r="4" fill="currentColor" stroke="none"/>'
-            . '<circle cx="96" cy="36" r="4" fill="currentColor" stroke="none"/>'
-            . '<circle cx="120" cy="72" r="4" fill="currentColor" stroke="none"/>'
-            . '</svg>',
-    };
+    return se_chapter_icon_svg($icon, $teams);
 }
 
 /**

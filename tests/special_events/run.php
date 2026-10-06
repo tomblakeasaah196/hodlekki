@@ -78,6 +78,13 @@ require_once __DIR__ . '/../../includes/special_events/scoring.php';
 require_once __DIR__ . '/../../includes/special_events/party_games.php';
 require_once __DIR__ . '/../../includes/special_events/after_event.php';
 
+// The portal's chapter catalogue: the icon SVGs, the blurb word count and
+// the validation of what a producer types into Studio → Chapters. portal.php
+// comes along because the team-orbit art lives there; neither file runs
+// anything at include time.
+require_once __DIR__ . '/../../includes/special_events/portal.php';
+require_once __DIR__ . '/../../includes/special_events/chapters.php';
+
 $GLOBALS['se_passed'] = 0;
 $GLOBALS['se_failed'] = 0;
 $GLOBALS['se_failures'] = [];
