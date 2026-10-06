@@ -356,9 +356,14 @@ Teams tab, in that team's real colour, drifting together into a single light
 and separating again — four teams, one night — with the colour names printed
 underneath. The **ENVISION presents** credit in the top bar now arrives like a
 title card: the name snaps in letter by letter, a hairline draws, and
-*presents* fades up beneath it. All of it plays once and then holds still, and
-a guest who has asked their phone for reduced motion simply gets the finished
-frame. It counts down to the night, then walks down the page: **what it is**, **the night
+*presents* fades up beneath it. All of it plays once and then holds still —
+with one exception: the **event name itself keeps announcing itself**, its
+letters flickering back in roughly five seconds after each pass settles, so a
+guest who arrives mid-scroll or leaves the page open still catches it. Between
+passes the name sits fully lit and readable, never blank, and it stops
+entirely while the first screen is scrolled out of view or the tab is in the
+background, so it costs nothing on a phone. A guest who has asked their phone
+for reduced motion simply gets the finished frame. It counts down to the night, then walks down the page: **what it is**, **the night
 chapter by chapter**, **where**, and **good to know** (the questions you wrote
 in Details — see §4). The Household of David
 logo has its own clear lockup in the top bar and appears again in the footer. A
