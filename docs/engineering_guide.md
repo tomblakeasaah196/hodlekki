@@ -1105,7 +1105,7 @@ SELECT id, first_name, last_name, gender, email, real_email FROM users
 ```
 
 - If exactly one user matches → member. If two or more → treat as member using the first row and set `member_ambiguous` (shown in the Studio for IDI review). Never block the person.
-- The result is cached on the contact (`member_user_id`, `member_checked_at`) and refreshed if older than 24 h.
+- The result is cached on the contact (`member_user_id`, `member_checked_at`) and background paths refresh it if older than 24 h. The interactive phone-first lookup always checks `users` immediately—even when no `se_contacts` row exists—so a first-time Special Events visitor or newly added Congregation member is recognised at once.
 - The module **never writes to `users`** (D2). Name corrections from members are stored in `se_registrations.name_correction` and listed in the Studio for IDI to apply manually.
 
 #### 10.3.3 Contacts

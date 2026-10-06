@@ -27,36 +27,35 @@ function se_lookup_phone(PDO $pdo, array $event, array $settings, array $phone, 
     $contact = se_contact_find_by_phone($pdo, $phone['e164']);
     $reg     = null;
 
+    // Congregation membership must not depend on a Special Events contact
+    // already existing. This is the first request a member makes on their
+    // first visit, and it must also bypass a cached non-match when a member
+    // profile was added after an earlier lookup.
+    $member = se_find_member($pdo, $phone['e164']);
+
     if ($contact) {
-        $contact = se_contact_refresh_member($pdo, $contact);
+        $contact = se_contact_cache_member($pdo, $contact, $member);
         $reg     = se_registration_find($pdo, (int) $event['id'], (int) $contact['id']);
     }
 
     $fields = (array) ($settings['registration']['fields'] ?? []);
     $needs  = [];
 
-    $firstName = (string) ($contact['first_name'] ?? '');
-    $lastName  = (string) ($contact['last_name'] ?? '');
-    $member    = null;
-
-    if ($contact && $contact['member_user_id'] !== null) {
-        $member = se_find_member($pdo, $phone['e164']);
-        if ($member) {
-            $firstName = $member['first_name'] !== '' ? $member['first_name'] : $firstName;
-            $lastName  = $member['last_name'] !== '' ? $member['last_name'] : $lastName;
-        }
-    }
-
-    $known = $contact !== null && trim($firstName) !== '' && strtolower(trim($firstName)) !== 'guest';
+    $firstName = (string) ($member['first_name'] ?? $contact['first_name'] ?? '');
+    $lastName  = (string) ($member['last_name'] ?? $contact['last_name'] ?? '');
+    $gender    = trim((string) ($member['gender'] ?? $contact['gender'] ?? ''));
+    $email     = trim((string) ($member['email'] ?? $contact['email'] ?? ''));
+    $known     = trim($firstName) !== '' && strtolower(trim($firstName)) !== 'guest';
+    $isMember  = $member !== null;
 
     if (!$known) {
         $needs[] = 'first_name';
         $needs[] = 'last_name';
     }
-    if (($fields['gender'] ?? 'required') !== 'off' && ($contact['gender'] ?? null) === null) {
+    if (($fields['gender'] ?? 'required') !== 'off' && $gender === '') {
         $needs[] = 'gender';
     }
-    if (($fields['email'] ?? 'optional') === 'required' && ($contact['email'] ?? null) === null) {
+    if (($fields['email'] ?? 'optional') === 'required' && $email === '') {
         $needs[] = 'email';
     }
     if (!$contact || !se_bool($contact['consent_followup'] ?? 0)) {
@@ -64,17 +63,11 @@ function se_lookup_phone(PDO $pdo, array $event, array $settings, array $phone, 
     }
 
     $out = [
-        'kind'         => 'new',
+        'kind'         => $isMember ? 'member' : ($known ? 'returning' : 'new'),
         'display_name' => $known ? se_display_name($firstName, $lastName) : null,
         'needs'        => array_values(array_unique($needs)),
-        'is_member'    => $contact !== null && $contact['member_user_id'] !== null,
+        'is_member'    => $isMember,
     ];
-
-    if ($contact && $contact['member_user_id'] !== null) {
-        $out['kind'] = 'member';
-    } elseif ($known) {
-        $out['kind'] = 'returning';
-    }
 
     if ($reg && in_array((string) $reg['status'], ['confirmed', 'waitlisted'], true)) {
         $out['kind']              = 'registered';

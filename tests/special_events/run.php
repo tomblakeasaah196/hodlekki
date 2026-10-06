@@ -178,6 +178,17 @@ if ($GLOBALS['se_failures']) {
     echo str_repeat('-', 58) . "\n";
     foreach ($GLOBALS['se_failures'] as $failure) {
         echo "  • {$failure}\n";
+
+        // Make the actual assertion visible in the Checks UI even when
+        // GitHub truncates this long step's raw log.
+        if (getenv('GITHUB_ACTIONS') === 'true') {
+            $annotation = str_replace(
+                ['%', "\r", "\n"],
+                ['%25', '%0D', '%0A'],
+                $failure
+            );
+            echo "::error title=Special Events unit test::{$annotation}\n";
+        }
     }
 }
 echo str_repeat('=', 58) . "\n";

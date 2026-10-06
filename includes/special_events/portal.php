@@ -56,11 +56,30 @@ function se_portal_topbar(array $event, string $organizer): void
     ?>
 <header class="se-topbar" id="se-topbar" data-scrolled="0">
   <div class="se-container se-topbar-inner">
-    <p class="se-label"><?= se_h(mb_strtoupper($organizer, 'UTF-8')) ?> PRESENTS</p>
+    <a class="se-church-lockup" href="/" aria-label="Household of David Lekki Centre home">
+      <span class="se-church-logo se-church-logo-top" aria-hidden="true">
+        <img src="/assets/images/hod_logo.svg" alt="">
+      </span>
+      <span class="se-label"><?= se_h(mb_strtoupper($organizer, 'UTF-8')) ?> PRESENTS</span>
+    </a>
     <nav class="se-topbar-actions" aria-label="Page">
-      <button type="button" class="se-topbar-link" data-se-share hidden>Share</button>
+      <button type="button" class="se-topbar-link se-topbar-icon-button" aria-label="Share this event" title="Share" data-se-share hidden>
+        <svg class="se-topbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <circle cx="18" cy="5" r="3"></circle>
+          <circle cx="6" cy="12" r="3"></circle>
+          <circle cx="18" cy="19" r="3"></circle>
+          <path d="m8.6 10.5 6.8-4"></path>
+          <path d="m8.6 13.5 6.8 4"></path>
+        </svg>
+      </button>
       <details class="se-topbar-menu">
-        <summary class="se-topbar-link">Menu</summary>
+        <summary class="se-topbar-link se-topbar-icon-button" aria-label="Open page menu" title="Menu">
+          <svg class="se-topbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false">
+            <path d="M4 6h16"></path>
+            <path d="M4 12h16"></path>
+            <path d="M4 18h16"></path>
+          </svg>
+        </summary>
         <ul class="se-glass">
           <li><a href="#se-chapters">Programme</a></li>
           <li><a href="#se-venue">Venue</a></li>
@@ -160,18 +179,29 @@ function se_portal_hero(
     ?>
 <section class="se-hero" aria-labelledby="se-hero-title" id="se-hero">
 
-  <div class="se-hero-bg" aria-hidden="true">
+  <div class="se-hero-bg" data-has-media="<?= ($heroAsset !== null || $useVideo) ? '1' : '0' ?>">
+    <?php if ($heroAsset !== null): ?>
+    <picture class="se-hero-picture">
+      <img class="se-hero-image"
+           src="<?= se_h((string) $heroAsset['path']) ?>"
+           <?php if (se_asset_srcset($heroAsset) !== ''): ?>srcset="<?= se_h(se_asset_srcset($heroAsset)) ?>" sizes="100vw"<?php endif; ?>
+           <?php if (!empty($heroAsset['width']) && !empty($heroAsset['height'])): ?>width="<?= (int) $heroAsset['width'] ?>" height="<?= (int) $heroAsset['height'] ?>"<?php endif; ?>
+           alt="<?= se_h((string) ($heroAsset['alt_text'] ?? '')) ?>"
+           fetchpriority="high" decoding="async">
+    </picture>
+    <?php endif; ?>
     <?php if ($useVideo): ?>
     <video class="se-hero-video" data-se-hero-video
            data-src="<?= se_h((string) $heroVideoAsset['path']) ?>"
            <?php if ($heroAsset !== null): ?>poster="<?= se_h((string) $heroAsset['path']) ?>"<?php endif; ?>
-           muted playsinline loop preload="none"></video>
+           aria-hidden="true" muted playsinline loop preload="none"></video>
     <?php endif; ?>
-    <div class="se-hero-mesh" data-se-mesh></div>
-    <div class="se-hero-beam se-hero-beam-l" data-se-beam="l"></div>
-    <div class="se-hero-beam se-hero-beam-r" data-se-beam="r"></div>
-    <div class="se-hero-grain"></div>
-    <div class="se-hero-vignette"></div>
+    <?php if ($heroAsset !== null || $useVideo): ?><div class="se-hero-shade" aria-hidden="true"></div><?php endif; ?>
+    <div class="se-hero-mesh" data-se-mesh aria-hidden="true"></div>
+    <div class="se-hero-beam se-hero-beam-l" data-se-beam="l" aria-hidden="true"></div>
+    <div class="se-hero-beam se-hero-beam-r" data-se-beam="r" aria-hidden="true"></div>
+    <div class="se-hero-grain" aria-hidden="true"></div>
+    <div class="se-hero-vignette" aria-hidden="true"></div>
   </div>
 
   <div class="se-container se-hero-inner">
@@ -188,7 +218,7 @@ function se_portal_hero(
 
     <ul class="se-chips">
       <?php if ($startsAt !== null): ?>
-      <li class="se-chip">📅 <time datetime="<?= se_h($startsAt->format('c')) ?>"><?= se_h(se_format_day($startsAt)) ?></time></li>
+      <li class="se-chip">📅 <time datetime="<?= se_h($startsAt->format('c')) ?>"><?= se_h(se_format_date($startsAt)) ?></time></li>
       <li class="se-chip">🕔 <?= se_h(ltrim($startsAt->format('g:i A'), '0')) ?></li>
       <?php endif; ?>
       <?php if (!empty($event['venue_name'])): ?>
@@ -523,8 +553,15 @@ function se_portal_footer(array $event, string $organizer): void
     ?>
 <footer class="se-footer">
   <div class="se-container">
-    <p class="se-label"><?= se_h(mb_strtoupper($organizer, 'UTF-8')) ?></p>
-    <p class="se-small se-muted">Household of David Lekki Centre</p>
+    <div class="se-footer-brand">
+      <a class="se-church-logo se-church-logo-footer" href="/" aria-label="Household of David Lekki Centre home">
+        <img src="/assets/images/hod_logo.svg" alt="Household of David Lekki Centre">
+      </a>
+      <div>
+        <p class="se-label"><?= se_h(mb_strtoupper($organizer, 'UTF-8')) ?></p>
+        <p class="se-small se-muted">Household of David Lekki Centre</p>
+      </div>
+    </div>
     <ul class="se-footer-links se-small">
       <li><a class="se-md-link" href="<?= se_h(se_event_url($slug, 'privacy', false)) ?>">How we use your details</a></li>
       <li><a class="se-md-link" href="/">Main site</a></li>

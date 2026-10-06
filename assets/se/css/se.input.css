@@ -443,11 +443,33 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    min-height: 56px;
+    gap: 0.75rem;
+    min-height: 64px;
     padding-block: 0.5rem;
   }
-  .se-topbar-actions { display: flex; align-items: center; gap: 0.5rem; }
+  .se-church-lockup {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 0;
+  }
+  .se-church-lockup .se-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .se-church-logo {
+    display: grid;
+    place-items: center;
+    flex: none;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid rgb(255 255 255 / 0.3);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+  }
+  .se-church-logo img { width: 100%; height: 100%; object-fit: contain; }
+  .se-church-logo-top { width: 38px; height: 38px; padding: 0.2rem; border-radius: 12px; }
+  .se-topbar-actions { display: flex; align-items: center; gap: 0.25rem; }
+  @media (max-width: 420px) {
+    .se-church-lockup .se-label { max-width: 8.75rem; font-size: 0.625rem; }
+    .se-topbar-actions .se-topbar-link { padding-inline: 0.625rem; }
+  }
   .se-topbar-link {
     display: inline-flex;
     align-items: center;
@@ -459,7 +481,15 @@
     font-weight: 600;
   }
   .se-topbar-link:hover { background: color-mix(in oklab, var(--se-surface-2) 70%, transparent); }
+  .se-topbar-icon-button {
+    justify-content: center;
+    width: 44px;
+    padding-inline: 0;
+  }
+  .se-topbar-icon { width: 22px; height: 22px; }
   .se-topbar-menu { position: relative; }
+  .se-topbar-menu > summary { list-style: none; }
+  .se-topbar-menu > summary::-webkit-details-marker { display: none; }
   .se-topbar-menu > ul {
     position: absolute;
     inset-inline-end: 0;
@@ -485,6 +515,23 @@
     isolation: isolate;
   }
   .se-hero-bg { position: absolute; inset: 0; z-index: -2; overflow: hidden; }
+  .se-hero-picture,
+  .se-hero-image,
+  .se-hero-video,
+  .se-hero-shade { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .se-hero-picture { display: block; }
+  .se-hero-image {
+    object-fit: cover;
+    object-position: center;
+    opacity: 0.68;
+    filter: saturate(1.04) contrast(1.04);
+    transform: scale(1.015);
+  }
+  .se-hero-shade {
+    background:
+      linear-gradient(90deg, color-mix(in oklab, var(--se-bg) 88%, transparent) 0%, color-mix(in oklab, var(--se-bg) 55%, transparent) 58%, color-mix(in oklab, var(--se-bg) 68%, transparent) 100%),
+      linear-gradient(to bottom, color-mix(in oklab, var(--se-bg) 44%, transparent), transparent 38%, color-mix(in oklab, var(--se-bg) 88%, transparent));
+  }
   .se-hero-mesh {
     position: absolute;
     inset: -20%;
@@ -494,6 +541,10 @@
       radial-gradient(34rem 34rem at var(--se-mesh-x3, 50%) var(--se-mesh-y3, 88%), color-mix(in oklab, var(--se-accent) 46%, transparent), transparent 62%);
     filter: blur(14px);
     opacity: 0.85;
+  }
+  .se-hero-bg[data-has-media="1"] .se-hero-mesh {
+    mix-blend-mode: screen;
+    opacity: 0.58;
   }
   .se-hero-grain {
     position: absolute;
@@ -673,7 +724,9 @@
 
   /* S7 — footer */
   .se-footer { border-top: 1px solid var(--se-border); padding-block: 2.5rem; }
-  .se-footer-links { display: flex; flex-wrap: wrap; gap: 1rem; padding: 0; margin: 0.75rem 0 0; list-style: none; }
+  .se-footer-brand { display: flex; align-items: center; gap: 1rem; }
+  .se-church-logo-footer { width: 60px; height: 60px; padding: 0.3rem; border-radius: 18px; }
+  .se-footer-links { display: flex; flex-wrap: wrap; gap: 1rem; padding: 0; margin: 1rem 0 0; list-style: none; }
 
   /* Sticky bar */
   .se-sticky {
