@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- /assets/se/templates/qr_poster_screen.svg
+     Check-in poster, 16:9 for a lobby TV or a projector (guide §14.2).
+
+     Unlike the A4/A3 posters this is never printed, so there is no 300 dpi
+     target and no paper size: 1920 x 1080 is simply a size most screens can
+     show at native resolution, full-bleed, from across a foyer. The QR sits
+     left, centred in the frame, so it is never behind a lectern or a plant,
+     and the room can still read the venue/time line from the back without
+     squinting.
+
+     Token ids follow §14.4 and are resolved in the Studio by
+     @se/core/svg.js — the same token set as the A4/A3 posters, just laid
+     out for landscape, so the two stay in sync when the copy changes.
+
+     Live text only, no <foreignObject>, no script, no external references. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Inter, sans-serif">
+
+  <defs>
+    <linearGradient id="se-bg-grad" x1="0" y1="0" x2="1" y2="0.6">
+      <stop id="se__stop__primary" offset="0" stop-color="#1D356A"/>
+      <stop id="se__stop__bg" offset="0.55" stop-color="#0B0D13"/>
+      <stop id="se__stop__secondary--2" offset="1" stop-color="#D11920"/>
+    </linearGradient>
+
+    <radialGradient id="se-glow-grad" cx="0.5" cy="0.5" r="0.5">
+      <stop id="se__stop__glow" offset="0" stop-color="#D11920" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#D11920" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect id="se__fill__bg" x="0" y="0" width="1920" height="1080" fill="#0B0D13"/>
+  <rect x="0" y="0" width="1920" height="1080" fill="url(#se-bg-grad)" opacity="0.9"/>
+  <circle cx="1500" cy="860" r="900" fill="url(#se-glow-grad)" opacity="0.35"/>
+
+  <!-- The QR, left and vertically centred, big enough to scan from across a
+       foyer. qrGroup() paints its own white plate: dark modules on white,
+       quiet zone, error correction H. -->
+  <rect id="se__qr__checkin_url" x="140" y="220" width="640" height="640"/>
+
+  <!-- Right column: who, what, the instruction, when and where -->
+  <text id="se__text__organizer" x="900" y="190" font-size="38" font-weight="700" letter-spacing="12"
+        fill="#FFFFFF" fill-opacity="0.72">ENVISION</text>
+  <rect id="se__box__organizer--fit" x="900" y="150" width="880" height="48"/>
+
+  <text id="se__text__title" x="900" y="320" font-size="110" font-weight="800" font-family="Unbounded, sans-serif"
+        fill="#FFFFFF">Chara</text>
+  <rect id="se__box__title--fit" x="900" y="210" width="880" height="126"/>
+
+  <text id="se__text__edition" x="900" y="400" font-size="56" font-weight="700" font-family="Unbounded, sans-serif"
+        fill="#D11920">2026</text>
+  <rect id="se__box__edition--fit" x="900" y="344" width="880" height="64"/>
+
+  <text id="se__text__headline" x="900" y="490" font-size="72" font-weight="800" font-family="Unbounded, sans-serif"
+        fill="#FFFFFF">Check in here</text>
+  <rect id="se__box__headline--fit" x="900" y="420" width="880" height="88"/>
+
+  <text id="se__text__sub" x="900" y="548" font-size="36" font-weight="500"
+        fill="#FFFFFF" fill-opacity="0.85">Scan with your phone camera</text>
+  <rect id="se__box__sub--fit" x="900" y="516" width="880" height="48"/>
+
+  <!-- ...and the same address in words, for the camera that will not focus -->
+  <rect id="se__fill__primary" x="900" y="600" width="760" height="94" rx="47" fill="#1D356A"/>
+  <text id="se__text__url" x="1280" y="658" font-size="40" font-weight="700"
+        text-anchor="middle" fill="#FFFFFF">hodlc.lpc.cm/e/chara/in</text>
+  <rect id="se__box__url--fit" x="940" y="616" width="680" height="62"/>
+
+  <text id="se__text__date" x="900" y="760" font-size="34" font-weight="700"
+        fill="#FFFFFF">Sat 24 Oct 2026</text>
+  <rect id="se__box__date--fit" x="900" y="726" width="880" height="42"/>
+
+  <text id="se__text__time" x="900" y="806" font-size="30" font-weight="500"
+        fill="#FFFFFF" fill-opacity="0.82">Doors 4:30 PM</text>
+  <rect id="se__box__time--fit" x="900" y="774" width="880" height="38"/>
+
+  <g id="se__if__has_venue">
+    <text id="se__text__venue" x="900" y="850" font-size="28" font-weight="500"
+          fill="#FFFFFF" fill-opacity="0.72">HOD Lekki Centre</text>
+    <rect id="se__box__venue--wrap-1" x="900" y="818" width="880" height="36"/>
+  </g>
+
+  <!-- Nobody should be stuck at the door because of a flat battery -->
+  <text id="se__text__help" x="900" y="910" font-size="26" font-weight="500"
+        fill="#FFFFFF" fill-opacity="0.62">No phone? The desk will check you in.</text>
+  <rect id="se__box__help--fit" x="900" y="880" width="880" height="34"/>
+
+  <text id="se__text__signature" x="900" y="952" font-size="22" font-weight="500"
+        fill="#FFFFFF" fill-opacity="0.45">Chara 2026 by Envision</text>
+  <rect id="se__box__signature--fit" x="900" y="924" width="880" height="30"/>
+
+  <rect id="se__fill__secondary" x="900" y="980" width="160" height="8" rx="4" fill="#D11920"/>
+</svg>

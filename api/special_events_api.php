@@ -1497,7 +1497,7 @@ try {
         $event = se_studio_event($pdo, $body, 'assets.manage');
 
         $role = se_str($body['kind'] ?? '', 30);
-        if (!in_array($role, ['poster_a4', 'poster_a3'], true)) {
+        if (!isset(SE_POSTER_SIZES[$role])) {
             throw new SeValidationException(['kind' => 'That render cannot be saved yet.']);
         }
 
@@ -1507,16 +1507,22 @@ try {
         }
 
         $asset = se_asset_store($pdo, $event, $role, $file, [
-            'title'    => $role === 'poster_a3' ? 'Check-in poster (A3)' : 'Check-in poster (A4)',
+            'title'    => 'Check-in poster (' . SE_POSTER_SIZES[$role]['label'] . ')',
             'alt_text' => 'Check-in poster for ' . $event['title'] . ' with a QR code to the check-in page.',
         ], $userId);
 
-        se_api_success('Poster saved.', [
+        $result = [
             'asset'  => se_studio_asset_payload($asset),
-            'pdf'    => '/api/special_events_poster_pdf.php?event=' . rawurlencode((string) $event['public_id'])
-                . '&asset=' . (int) $asset['id'],
             'assets' => array_map('se_studio_asset_payload', se_asset_list($pdo, (int) $event['id'])),
-        ]);
+        ];
+        // A screen render has no physical size to print at (§14.2); only
+        // offer the PDF for the sizes that do.
+        if (isset(SE_POSTER_SIZES[$role]['mm'])) {
+            $result['pdf'] = '/api/special_events_poster_pdf.php?event=' . rawurlencode((string) $event['public_id'])
+                . '&asset=' . (int) $asset['id'];
+        }
+
+        se_api_success('Poster saved.', $result);
     }
 
     // ====================================================================

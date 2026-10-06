@@ -365,3 +365,71 @@ for (const file of ['im_going.svg', 'im_going_square.svg']) {
         assert.doesNotMatch(out, /se__qr__/, 'every QR placeholder must be resolved');
     });
 }
+
+// --------------------------------------------------------------------------
+// Check-in posters (§14.2): A4, A3 and the 16:9 screen size must all carry
+// the same token set, since se_poster_payload() (cards.php) sends them the
+// same data regardless of which one a producer presses.
+// --------------------------------------------------------------------------
+
+const POSTER_FILES = {
+    'qr_poster_a4.svg': { width: 2480, height: 3508 },
+    'qr_poster_a3.svg': { width: 3508, height: 4961 },
+    'qr_poster_screen.svg': { width: 1920, height: 1080 },
+};
+
+const POSTER_DATA = {
+    text: {
+        organizer: 'Envision', title: 'Chara', edition: '2026', headline: 'Check in here',
+        sub: 'Scan with your phone camera', date: 'Sat 24 Oct 2026', time: 'Doors 4:30 PM',
+        venue: 'HOD Lekki Centre', url: 'hodlc.lpc.cm/e/chara/in',
+        help: 'No phone? The desk will check you in.', signature: 'Chara 2026 by Envision',
+    },
+    colors: { bg: '#0B0D13', primary: '#1D356A', secondary: '#D11920', accent: '#F5C518' },
+    qr: { checkin_url: 'https://hodlc.lpc.cm/e/chara/in' },
+    flags: { has_venue: true },
+};
+
+for (const [file, size] of Object.entries(POSTER_FILES)) {
+    test(`${file} declares the tokens the check-in poster fills`, () => {
+        const source = readFileSync(join(repo, 'assets/se/templates', file), 'utf8');
+        const tokens = readTokens(source);
+
+        for (const field of [
+            'organizer', 'title', 'edition', 'headline', 'sub', 'date', 'time',
+            'venue', 'url', 'help', 'signature',
+        ]) {
+            assert.ok(tokens.text.includes(field), `missing se__text__${field}`);
+        }
+        assert.ok(tokens.qr.includes('checkin_url'), 'the check-in QR is missing');
+        assert.ok(tokens.if.includes('has_venue'), 'the with-venue group is missing');
+        assert.ok(tokens.fill.includes('bg'), 'the background fill token is missing');
+    });
+
+    test(`${file} has no script, foreignObject or external reference (§14.4)`, () => {
+        const source = readFileSync(join(repo, 'assets/se/templates', file), 'utf8')
+            .replace(/<!--[\s\S]*?-->/g, '');
+        assert.doesNotMatch(source, /<script/i);
+        assert.doesNotMatch(source, /foreignObject/i);
+        assert.doesNotMatch(source, /xlink:href\s*=\s*"https?:/i);
+        assert.doesNotMatch(source, /\son[a-z]+\s*=/i);
+    });
+
+    test(`${file} reports its own pixel size for rasterise()`, () => {
+        const source = readFileSync(join(repo, 'assets/se/templates', file), 'utf8');
+        assert.deepEqual(templateSize(source), size);
+    });
+
+    test(`${file} renders end to end`, () => {
+        const source = readFileSync(join(repo, 'assets/se/templates', file), 'utf8');
+        const out = renderTemplate(source, POSTER_DATA);
+
+        assert.match(out, /Chara/);
+        assert.match(out, /Check in here/);
+        assert.doesNotMatch(out, /se__qr__/, 'the QR placeholder must be resolved');
+        // The has_venue group stays (flag is true above) with the venue
+        // drawn inside it; a false flag is covered by the im_going tests'
+        // has_photo case, which exercises the same if/ifnot machinery.
+        assert.match(out, /HOD Lekki Centre/);
+    });
+}
