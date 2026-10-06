@@ -48,6 +48,7 @@ require_once __DIR__ . '/messages.php';
 require_once __DIR__ . '/attendees.php';
 require_once __DIR__ . '/cards.php';
 require_once __DIR__ . '/export.php';
+require_once __DIR__ . '/chapters.php';
 require_once __DIR__ . '/portal.php';
 require_once __DIR__ . '/games.php';
 require_once __DIR__ . '/games_engine.php';

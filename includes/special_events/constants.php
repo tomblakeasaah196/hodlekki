@@ -167,6 +167,89 @@ const SE_PROGRAM_KINDS = [
     'break', 'food', 'announcement', 'performance', 'buffer', 'closing', 'other',
 ];
 
+// --------------------------------------------------------------------------
+// Portal chapters (§13.3 S3)
+// --------------------------------------------------------------------------
+
+/**
+ * The icon catalogue a chapter may choose from.
+ *
+ * Every entry is an inline SVG drawn by se_chapter_icon_svg() and animated by
+ * @se/portal/main.js, so a chapter added years from now gets real motion
+ * rather than a static placeholder. `label` is what the Studio shows in the
+ * picker; `hint` says what the motion does, because a producer is choosing a
+ * behaviour as much as a shape.
+ */
+const SE_CHAPTER_ICONS = [
+    'mic'      => ['label' => 'Microphone',    'hint' => 'The halo ignites, the equaliser sings.'],
+    'cards'    => ['label' => 'Card fan',      'hint' => 'Cards deal out, the buzzer pings, the score ticks.'],
+    'orbit'    => ['label' => 'Team orbs',     'hint' => 'Separate colours fly in and fuse into one light.'],
+    'timeline' => ['label' => 'Timeline',      'hint' => 'A line draws itself through the evening.'],
+    'clock'    => ['label' => 'Clock',         'hint' => 'The hands sweep round.'],
+    'music'    => ['label' => 'Music notes',   'hint' => 'Notes rise and drift.'],
+    'trophy'   => ['label' => 'Trophy',        'hint' => 'A shine passes over the cup.'],
+    'gift'     => ['label' => 'Gift',          'hint' => 'The lid lifts and settles.'],
+    'camera'   => ['label' => 'Camera',        'hint' => 'The shutter blinks.'],
+    'people'   => ['label' => 'People',        'hint' => 'The group gathers in.'],
+    'flame'    => ['label' => 'Flame',         'hint' => 'The flame breathes.'],
+    'cross'    => ['label' => 'Cross',         'hint' => 'Light rises behind it.'],
+    'plate'    => ['label' => 'Plate',         'hint' => 'Steam curls up from the food.'],
+    'spark'    => ['label' => 'Sparks',        'hint' => 'Stars twinkle out of step.'],
+];
+
+/**
+ * Chapters a feature toggle speaks for.
+ *
+ * A chapter may be bound to one of these; the Studio then offers that
+ * feature's own on/off switch beside it, because "take The Mic off the
+ * portal" and "we are not doing karaoke" are different decisions and a
+ * producer should be able to make either one from the Chapters tab.
+ */
+const SE_CHAPTER_FEATURES = ['karaoke', 'games', 'teams'];
+
+/**
+ * The four chapters every new event starts with (§13.3 S3).
+ *
+ * Seeded into se_chapters the first time an event's chapters are read, and
+ * used verbatim as the portal's fallback while the table does not exist.
+ */
+const SE_CHAPTER_DEFAULTS = [
+    [
+        'chapter_key' => 'mic',
+        'title'       => 'The Mic',
+        'blurb'       => 'Tick karaoke when you register — then pick your song before the night, so the queue is ready when you are.',
+        'icon'        => 'mic',
+        'feature'     => 'karaoke',
+    ],
+    [
+        'chapter_key' => 'teams',
+        'title'       => 'The Teams',
+        'blurb'       => "At check-in you'll join a colour team — balanced, friendly, and very competitive by round two.",
+        'icon'        => 'orbit',
+        'feature'     => 'teams',
+    ],
+    [
+        'chapter_key' => 'games',
+        'title'       => 'The Games',
+        'blurb'       => 'Charades, Live Quiz, Trivia, Buzzer and Family Feud — played on your phone, scored on the big screen.',
+        'icon'        => 'cards',
+        'feature'     => 'games',
+    ],
+    [
+        'chapter_key' => 'night',
+        'title'       => 'The Night',
+        'blurb'       => 'Doors, welcome, games, karaoke, awards. Come as you are and bring someone with you.',
+        'icon'        => 'timeline',
+        'feature'     => null,
+    ],
+];
+
+/** How many chapters one event may have. Past this the section stops reading. */
+const SE_CHAPTERS_MAX = 12;
+
+/** Asset roles a chapter background may be picked from (§14.1). */
+const SE_CHAPTER_BG_ROLES = ['background', 'illustration', 'gallery', 'hero'];
+
 /** Asset roles with their kind and byte cap (§14.1). */
 const SE_ASSET_ROLES = [
     'logo'           => ['kind' => 'image', 'max_bytes' => 5242880],
@@ -551,6 +634,7 @@ const SE_STUDIO_TABS = [
     'registration' => ['label' => 'Registration', 'requires' => 'se_form_fields'],
     'checkin'      => ['label' => 'Check-in',     'requires' => 'se_checkins'],
     'program'      => ['label' => 'Programme',    'requires' => 'se_program_items'],
+    'chapters'     => ['label' => 'Chapters',     'requires' => 'se_chapters'],
     'teams'        => ['label' => 'Teams',        'requires' => 'se_teams'],
     'karaoke'      => ['label' => 'Karaoke',      'requires' => 'se_songs'],
     'games'        => ['label' => 'Games',        'requires' => 'se_games'],
@@ -570,7 +654,7 @@ const SE_STUDIO_TABS = [
  * (build_prompts.md PR1: "Tabs belonging to later PRs stay hidden").
  */
 const SE_STUDIO_TABS_READY = [
-    'overview', 'details', 'brand', 'registration', 'checkin', 'program', 'teams',
+    'overview', 'details', 'brand', 'registration', 'checkin', 'program', 'chapters', 'teams',
     'karaoke', 'games', 'messages', 'live', 'attendees', 'insights', 'handoff', 'assets', 'crew', 'settings',
 ];
 

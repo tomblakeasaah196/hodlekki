@@ -892,6 +892,7 @@
   }
   .se-chapter-blurb { color: var(--se-text-muted); max-width: 42ch; }
   .se-chapter-art {
+    position: relative;
     display: grid;
     place-items: center;
     min-height: 12rem;
@@ -899,8 +900,51 @@
     border-radius: var(--radius-card);
     background: color-mix(in oklab, var(--se-surface) 60%, transparent);
     border: 1px solid var(--se-border);
+    overflow: hidden;
+    isolation: isolate;
   }
   .se-chapter-art svg { width: min(100%, 14rem); height: auto; }
+
+  /* A photograph behind the card. The scrim below is NOT optional: a card
+   * whose icon cannot be read on a projector is a worse card, so the overlay
+   * ships with the image and is not something a producer can switch off. */
+  .se-chapter-art[data-has-bg="1"] {
+    background: var(--se-bg-2);
+    border-color: color-mix(in oklab, var(--se-text) 20%, transparent);
+  }
+  .se-chapter-art-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+    transform: scale(1.06);
+    filter: saturate(0.82) blur(1px);
+  }
+  .se-chapter-art-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background:
+      radial-gradient(circle at 50% 45%,
+        color-mix(in oklab, var(--se-bg) 30%, transparent) 0%,
+        color-mix(in oklab, var(--se-bg) 74%, transparent) 70%),
+      linear-gradient(to top,
+        color-mix(in oklab, var(--se-bg) 90%, transparent) 0%,
+        color-mix(in oklab, var(--se-bg) 52%, transparent) 100%);
+  }
+  .se-chapter-art-figure {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    inline-size: 100%;
+    gap: 0.75rem;
+  }
+  .se-chapter-art[data-has-bg="1"] .se-chapter-art-figure {
+    filter: drop-shadow(0 2px 12px color-mix(in oklab, var(--se-bg-2) 85%, transparent));
+  }
   /* S3 — the teams orbit. One orb per real team, painted from the --team-N
    * custom properties the shell writes, converging into a single light and
    * separating again: four teams, one night. */
@@ -954,6 +998,9 @@
   .se-orb-t6 { --orb: var(--team-6, var(--se-accent));    --orb-glow: var(--team-6-glow); --orb-ring: var(--team-6-ring); }
   .se-orb-t7 { --orb: var(--team-7, var(--se-glow));      --orb-glow: var(--team-7-glow); --orb-ring: var(--team-7-ring); }
   .se-orb-t8 { --orb: var(--team-8, var(--se-primary));   --orb-glow: var(--team-8-glow); --orb-ring: var(--team-8-ring); }
+  .se-orbit[data-js="1"] .se-orb,
+  .se-orbit[data-js="1"] .se-orbit-core { animation: none; }
+  .se-orbit[data-js="1"] .se-orb { transform: none; }
   .se-orb-i0 { --se-orb-angle: 0deg;   animation-delay: 0ms; }
   .se-orb-i1 { --se-orb-angle: 90deg;  animation-delay: 90ms; }
   .se-orb-i2 { --se-orb-angle: 180deg; animation-delay: 180ms; }

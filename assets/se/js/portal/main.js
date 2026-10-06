@@ -122,7 +122,283 @@ function animateHero() {
     reveal(qsa('.se-label, .se-chip, .se-cta-cluster', hero), { y: 14, stagger: 0.05 });
 }
 
-/** Chapters reveal on enter; on desktop ScrollTrigger scrubs them in. */
+// --------------------------------------------------------------------------
+// Chapter art (§13.3 S3)
+// --------------------------------------------------------------------------
+//
+// One timeline per icon, built when the card first scrolls into view and
+// then left looping quietly. Every loop goes through pauseWhenHidden(), so a
+// phone scrolled past the section is not still animating four SVGs.
+//
+// Everything here is enhancement: the markup is already painted and legible,
+// and under prefers-reduced-motion (or without GSAP) nothing below runs.
+
+/** The microphone: the halo ignites, the glow breathes, the equaliser sings. */
+function animateMic(art, g) {
+    const ring = qs('[data-se-mic-ring]', art);
+    const capsule = qs('[data-se-mic-capsule]', art);
+    const glow = qs('[data-se-mic-glow]', art);
+    const bars = qsa('[data-se-mic-bar]', art);
+
+    const spin = [ring, glow].filter(Boolean);
+    if (spin.length) g.set(spin, { transformOrigin: '50% 43%' });
+
+    const intro = g.timeline();
+    if (capsule) {
+        intro.fromTo(capsule, { scale: 0.86, opacity: 0.4, transformOrigin: '50% 60%' },
+            { scale: 1, opacity: 1, duration: 0.5, ease: 'back.out(2)' });
+    }
+    if (ring) {
+        intro.fromTo(ring, { scale: 0.65, opacity: 0, rotation: -45 },
+            { scale: 1, opacity: 0.55, rotation: 0, duration: 0.8, ease: 'power3.out' }, 0.1);
+    }
+    if (glow) {
+        intro.fromTo(glow, { opacity: 0, scale: 0.7 },
+            { opacity: 0.2, scale: 1, duration: 0.7, ease: 'power2.out' }, 0.2);
+    }
+    if (bars.length) {
+        intro.fromTo(bars, { scaleY: 0.1, transformOrigin: '50% 50%' },
+            { scaleY: 1, duration: 0.4, ease: 'power2.out', stagger: 0.06 }, 0.3);
+    }
+
+    // Idle: the halo turns slowly, the glow pulses like a warm lamp and each
+    // bar moves on its own clock so the equaliser never reads as a loop.
+    const idle = g.timeline({ repeat: -1 });
+    if (ring) idle.to(ring, { rotation: 360, duration: 44, ease: 'none' }, 0);
+    if (glow) idle.to(glow, { opacity: 0.32, scale: 1.08, duration: 2.2, yoyo: true, repeat: -1, ease: 'sine.inOut' }, 0);
+    bars.forEach((bar, i) => {
+        idle.to(bar, {
+            scaleY: 0.25 + Math.random() * 0.9,
+            duration: 0.45 + Math.random() * 0.5,
+            yoyo: true,
+            repeat: -1,
+            ease: 'sine.inOut',
+            transformOrigin: '50% 50%',
+            delay: i * 0.08,
+        }, 0);
+    });
+
+    return idle;
+}
+
+/** The games: the cards deal out, the buzzer pings, the score ticks. */
+function animateCards(art, g) {
+    const cards = qsa('[data-se-card]', art);
+    const ring = qs('[data-se-buzz-ring]', art);
+    const buzz = qs('[data-se-buzz]', art);
+
+    const intro = g.timeline();
+    cards.forEach((card, i) => {
+        const angle = Number(card.dataset.seCard || 0);
+        g.set(card, { transformOrigin: '50% 100%' });
+        intro.fromTo(card,
+            { rotation: 0, x: 24 - i * 6, y: 14, opacity: 0 },
+            { rotation: angle, x: 0, y: 0, opacity: 1, duration: 0.55, ease: 'back.out(1.4)' },
+            i * 0.09);
+    });
+    if (buzz) {
+        intro.fromTo(buzz, { scale: 0.5, opacity: 0, transformOrigin: '80% 72%' },
+            { scale: 1, opacity: 1, duration: 0.4, ease: 'back.out(2)' }, 0.35);
+    }
+
+    const idle = g.timeline({ repeat: -1, repeatDelay: 1.1 });
+    if (ring) {
+        g.set(ring, { transformOrigin: '50% 50%' });
+        idle.fromTo(ring, { scale: 0.8, opacity: 0.6 },
+            { scale: 1.7, opacity: 0, duration: 1.1, ease: 'power2.out' }, 0);
+    }
+    if (buzz) {
+        idle.to(buzz, { y: 3, duration: 0.12, yoyo: true, repeat: 1, ease: 'power2.inOut' }, 0);
+    }
+    // The top card lifts and falls back, as if somebody is about to play it.
+    if (cards.length) {
+        const top = cards[cards.length - 1];
+        idle.to(top, { y: -8, rotation: Number(top.dataset.seCard || 0) + 3, duration: 0.8, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 0.4);
+    }
+
+    return idle;
+}
+
+/**
+ * The teams: four separate circles arrive from four different places,
+ * converge until they overlap into one light, then settle into an orbit that
+ * keeps breathing in and out. Four people from everywhere, one body.
+ *
+ * The CSS keyframes do a plainer version of this on their own; taking over
+ * here sets data-js on the orbit so the two never fight for the transform.
+ */
+function animateOrbit(art, g) {
+    const orbit = qs('[data-se-orbit]', art);
+    if (!orbit) return null;
+
+    const orbs = qsa('.se-orb', orbit);
+    const core = qs('.se-orbit-core', orbit);
+    if (!orbs.length) return null;
+
+    orbit.dataset.js = '1';
+
+    const size = orbit.getBoundingClientRect().width || 208;
+    const radius = size * 0.34;
+    const step = (Math.PI * 2) / orbs.length;
+    const seat = orbs.map((_, i) => ({
+        x: Math.cos(i * step - Math.PI / 2) * radius,
+        y: Math.sin(i * step - Math.PI / 2) * radius,
+    }));
+
+    // Everyone starts off the card, from their own direction.
+    orbs.forEach((orb, i) => {
+        g.set(orb, {
+            x: seat[i].x * 3.4,
+            y: seat[i].y * 3.4,
+            scale: 0.45,
+            opacity: 0,
+        });
+    });
+    if (core) g.set(core, { scale: 0.2, opacity: 0 });
+
+    const intro = g.timeline();
+    intro.to(orbs, {
+        x: 0, y: 0, scale: 1.08, opacity: 1,
+        duration: 1.15, ease: 'power3.inOut', stagger: 0.07,
+    });
+    if (core) {
+        // The fusion: one light where the four met.
+        intro.to(core, { scale: 1.25, opacity: 1, duration: 0.5, ease: 'power2.out' }, '-=0.25')
+            .to(core, { scale: 1, duration: 0.6, ease: 'sine.out' });
+    }
+    intro.to(orbs, {
+        x: (i) => seat[i].x,
+        y: (i) => seat[i].y,
+        scale: 1,
+        duration: 0.9,
+        ease: 'power2.inOut',
+    }, '-=0.35');
+
+    // Idle: breathe back together and apart, for ever, slowly.
+    const idle = g.timeline({ repeat: -1, repeatDelay: 1.4, paused: true });
+    idle.to(orbs, { x: 0, y: 0, scale: 1.1, duration: 2.6, ease: 'sine.inOut', stagger: 0.04 })
+        .to(orbs, { x: (i) => seat[i].x, y: (i) => seat[i].y, scale: 1, duration: 2.6, ease: 'sine.inOut', stagger: 0.04 });
+    if (core) {
+        idle.to(core, { scale: 1.2, opacity: 1, duration: 2.6, ease: 'sine.inOut' }, 0)
+            .to(core, { scale: 0.9, opacity: 0.75, duration: 2.6, ease: 'sine.inOut' }, 2.6);
+    }
+
+    // The idle loop is wired up only once the arrival has finished: handing
+    // it to pauseWhenHidden() straight away would start it on top of the
+    // intro, and the two would fight over the same four transforms.
+    intro.eventCallback('onComplete', () => {
+        idle.play();
+        pauseWhenHidden(art, idle);
+    });
+
+    return null;
+}
+
+/** Everything else in the catalogue: one entrance, one quiet idle. */
+function animateGenericIcon(art, g, icon) {
+    const svg = qs('svg', art);
+    if (!svg) return null;
+
+    g.fromTo(svg, { scale: 0.9, opacity: 0.3, transformOrigin: '50% 55%' },
+        { scale: 1, opacity: 1, duration: 0.6, ease: 'back.out(1.4)' });
+
+    const idle = g.timeline({ repeat: -1 });
+
+    const hands = qs('[data-se-clock-hands]', art);
+    if (hands) {
+        idle.to(hands, { rotation: 360, duration: 12, ease: 'none', transformOrigin: '50% 35%' }, 0);
+    }
+
+    const notes = qsa('[data-se-note]', art);
+    if (notes.length) {
+        idle.to(notes, { y: -6, duration: 1.6, yoyo: true, repeat: -1, ease: 'sine.inOut', stagger: 0.22 }, 0);
+    }
+
+    const floats = qsa('[data-se-float]', art);
+    if (floats.length) {
+        idle.to(floats, { opacity: 0.15, x: 5, duration: 1.4, yoyo: true, repeat: -1, ease: 'sine.inOut', stagger: 0.3 }, 0);
+    }
+
+    const shine = qs('[data-se-shine]', art);
+    if (shine) {
+        idle.fromTo(shine, { opacity: 0.15, x: -6 }, { opacity: 0.85, x: 6, duration: 1.3, yoyo: true, repeat: -1, ease: 'sine.inOut' }, 0);
+    }
+
+    const lid = qs('[data-se-lid]', art);
+    if (lid) {
+        idle.to(lid, { y: -9, rotation: -3, duration: 0.9, yoyo: true, repeat: -1, repeatDelay: 1.2, ease: 'power2.inOut', transformOrigin: '50% 100%' }, 0);
+    }
+
+    const shutter = qs('[data-se-shutter]', art);
+    const flash = qs('[data-se-flash]', art);
+    if (shutter) {
+        idle.to(shutter, { scale: 0.82, duration: 0.14, yoyo: true, repeat: 1, ease: 'power2.inOut', transformOrigin: '50% 50%', repeatDelay: 0 }, 0)
+            .to({}, { duration: 2.4 });
+    }
+    if (flash) {
+        idle.fromTo(flash, { opacity: 0.2 }, { opacity: 1, duration: 0.12, yoyo: true, repeat: 1 }, 0);
+    }
+
+    const people = qsa('[data-se-person]', art);
+    if (people.length) {
+        people.forEach((person) => {
+            const from = Number(person.dataset.sePerson || 0);
+            g.fromTo(person, { x: from, opacity: 0 }, { x: 0, opacity: 1, duration: 0.8, ease: 'power3.out' });
+        });
+        idle.to(people, { y: -4, duration: 1.8, yoyo: true, repeat: -1, ease: 'sine.inOut', stagger: 0.18 }, 0);
+    }
+
+    const flame = qs('[data-se-flame]', art);
+    const flameCore = qs('[data-se-flame-core]', art);
+    if (flame) {
+        idle.to(flame, { scaleY: 1.07, scaleX: 0.96, duration: 0.9, yoyo: true, repeat: -1, ease: 'sine.inOut', transformOrigin: '50% 100%' }, 0);
+    }
+    if (flameCore) {
+        idle.to(flameCore, { opacity: 0.25, duration: 0.7, yoyo: true, repeat: -1, ease: 'sine.inOut' }, 0);
+    }
+
+    const glow = qs('[data-se-glow]', art);
+    if (glow) {
+        idle.fromTo(glow, { opacity: 0.25, scale: 0.9 }, { opacity: 0.8, scale: 1.1, duration: 2.6, yoyo: true, repeat: -1, ease: 'sine.inOut', transformOrigin: '50% 50%' }, 0);
+    }
+
+    const steam = qsa('[data-se-steam]', art);
+    if (steam.length) {
+        idle.fromTo(steam, { opacity: 0.1, y: 6 }, { opacity: 0.7, y: -4, duration: 1.8, yoyo: true, repeat: -1, ease: 'sine.inOut', stagger: 0.25 }, 0);
+    }
+
+    const twinkles = qsa('[data-se-twinkle]', art);
+    if (twinkles.length) {
+        twinkles.forEach((star, i) => {
+            idle.fromTo(star,
+                { scale: 0.75, opacity: 0.35, transformOrigin: '50% 50%' },
+                { scale: 1.1, opacity: 1, duration: 0.9 + i * 0.35, yoyo: true, repeat: -1, ease: 'sine.inOut' }, i * 0.4);
+        });
+    }
+
+    const dots = qsa('[data-se-dot]', art);
+    if (dots.length) {
+        idle.fromTo(dots, { scale: 0.6, transformOrigin: '50% 50%' },
+            { scale: 1.25, duration: 1.1, yoyo: true, repeat: -1, ease: 'sine.inOut', stagger: 0.35 }, 0);
+    }
+
+    return idle.duration() > 0 ? idle : null;
+}
+
+/** Draw an SVG stroke on, for the paths marked data-se-draw. */
+function drawStroke(line, g) {
+    try {
+        const length = line.getTotalLength();
+        g.fromTo(line,
+            { strokeDasharray: length, strokeDashoffset: length },
+            {
+                strokeDashoffset: 0, duration: 1.2, ease: 'power2.out',
+                scrollTrigger: { trigger: line, start: 'top 85%', once: true },
+            });
+    } catch (e) { /* not a path: nothing to draw */ }
+}
+
+/** Chapters reveal on enter; each card's art then animates on its own. */
 function animateChapters() {
     const chapters = qsa('[data-se-chapter]');
     if (!chapters.length) return;
@@ -144,17 +420,38 @@ function animateChapters() {
             });
     }
 
-    for (const line of qsa('[data-se-draw]')) {
-        try {
-            const length = line.getTotalLength();
-            g.fromTo(line,
-                { strokeDasharray: length, strokeDashoffset: length },
-                {
-                    strokeDashoffset: 0, duration: 1.2, ease: 'power2.out',
-                    scrollTrigger: { trigger: line, start: 'top 85%', once: true },
-                });
-        } catch (e) { /* not a path: nothing to draw */ }
+    for (const art of qsa('[data-se-chapter-art]')) {
+        const icon = art.dataset.seChapterArt || '';
+        let built = false;
+
+        window.ScrollTrigger.create({
+            trigger: art,
+            start: 'top 88%',
+            once: true,
+            onEnter: () => {
+                if (built) return;
+                built = true;
+
+                let idle = null;
+                if (icon === 'mic') idle = animateMic(art, g);
+                else if (icon === 'cards') idle = animateCards(art, g);
+                else if (icon === 'orbit') idle = animateOrbit(art, g);
+                else idle = animateGenericIcon(art, g, icon);
+
+                // A photograph behind the card drifts a hair as it arrives,
+                // which is what makes it feel like a window rather than a
+                // sticker. It never moves far enough to crop the subject.
+                const bg = qs('.se-chapter-art-bg', art);
+                if (bg) {
+                    g.fromTo(bg, { scale: 1.14, opacity: 0 }, { scale: 1.06, opacity: 1, duration: 1.4, ease: 'power2.out' });
+                }
+
+                if (idle) pauseWhenHidden(art, idle);
+            },
+        });
     }
+
+    for (const line of qsa('[data-se-draw]')) drawStroke(line, g);
 }
 
 /** The hero video, skipped on a metered or slow connection (§13.3 S1). */

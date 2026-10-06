@@ -1525,6 +1525,35 @@ function se_clone_event(PDO $pdo, int $sourceId, array $opts, array $input, int 
             }
         }
 
+        // The portal's chapters are page copy, so they travel with the rest
+        // of the written detail (§13.3 S3). The background IMAGES do not:
+        // an asset row belongs to the event it was uploaded to, and pointing
+        // a clone at last year's upload is how a deleted file becomes a
+        // broken card. The words, the icons and the order come across; the
+        // pictures are chosen again.
+        if ($opt('details') && se_chapters_ready($pdo)) {
+            $stmt = $pdo->prepare(
+                "SELECT chapter_key, title, blurb, icon, feature, sort_order, is_active
+                   FROM se_chapters WHERE event_id = ? ORDER BY sort_order, id"
+            );
+            $stmt->execute([$sourceId]);
+            $rows = $stmt->fetchAll() ?: [];
+
+            if ($rows) {
+                $insert = $pdo->prepare(
+                    "INSERT IGNORE INTO se_chapters
+                        (event_id, chapter_key, title, blurb, icon, feature, sort_order, is_active, created_by)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                );
+                foreach ($rows as $c) {
+                    $insert->execute([
+                        $newId, $c['chapter_key'], $c['title'], $c['blurb'], $c['icon'],
+                        $c['feature'], (int) $c['sort_order'], (int) $c['is_active'], $actorId,
+                    ]);
+                }
+            }
+        }
+
         // Programme items carry over with their times shifted by Δ and
         // every status reset to planned (§10.10). The day map pairs the
         // source's days with the new event's, in order.

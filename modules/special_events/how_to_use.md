@@ -801,6 +801,84 @@ everywhere follow. If the night is running late, the portal says so.
 
 ---
 
+## 18b-ii. Chapters — "The night, chapter by chapter"
+
+**Chapters** tab in the Studio (under *Set up*).
+
+The list of numbered blocks on the public page — **01 The Mic**, **02 The
+Teams**, **03 The Games**, **04 The Night** — is content now, not something
+only a developer can change. Every event starts with those four, already
+written, already in that order.
+
+**What you can do**
+
+- **Rewrite one.** Press **Edit** and change the title and the blurb. Keep the
+  blurb to 25 words or fewer; the editor counts as you type and tells you when
+  you have gone past it, because a longer one starts to crowd the card on a
+  phone.
+- **Add one.** **+ Add a chapter** puts a new block at the end of the list —
+  "The Food", "The Awards", "The Testimonies". Up to twelve in total.
+- **Hide one** without losing the words: the **Show this chapter on the
+  portal** switch. Hidden chapters stay here for next time and the numbering
+  closes up on the public page.
+- **Remove one** for good with **Remove**. Any image it used stays in Assets.
+- **Reorder** with the **↑ / ↓** buttons on the left of each row. The order
+  here is exactly the order guests scroll through, and the 01, 02, 03 numbers
+  are recalculated for you — so moving *The Teams* above *The Games* is two
+  clicks.
+- **Start again** with **Restore defaults**, which puts the original four
+  back and throws away everything else in the list.
+
+**Icons, and what they do.** Every chapter carries one icon from a catalogue
+of fourteen — microphone, card fan, team orbs, timeline, clock, music, trophy,
+gift, camera, people, flame, cross, plate, sparks. They are not flat pictures:
+each one brings its own animation that plays when the card scrolls into view
+and then keeps going quietly. The picker shows the real artwork and says what
+the motion does, so a chapter you invent an hour before doors moves like the
+ones that shipped. Three are worth calling out:
+
+- **The microphone** — the dashed halo ignites and turns slowly, a warm glow
+  breathes behind the capsule, and the equaliser bars either side sing, each
+  on its own clock so it never reads as a loop.
+- **The team orbs** — four separate circles fly in from four different
+  directions, converge until they overlap into one light, and then settle into
+  an orbit that keeps breathing in and out. Different people, different
+  places, one body. They are painted in your real team colours from the Teams
+  tab.
+- **The card fan** — the cards deal themselves out, the buzzer pings with a
+  ring that travels outward, the score line draws itself, and the top card
+  lifts as if somebody is about to play it.
+
+**A picture behind the card.** Under **Edit** you can either upload an image
+or reuse one already in the event's **Assets** kit. Uploading here is the same
+pipeline as the Assets tab: the server checks what the file really is, strips
+location data by re-encoding it, and makes smaller versions for phones.
+Landscape, 1200 px wide or more, looks best.
+
+A dark overlay is always laid over the picture, and the icon always sits above
+it. That is deliberate and there is no switch to turn it off — it is what
+keeps the icon, the animation and the words readable over a photograph, on a
+phone in daylight and on a projector in a bright room. The **How the card will
+look** preview beside the picker shows exactly what guests will get.
+
+**Chapters and features are two different decisions.** At the bottom of the
+tab there are switches for **Karaoke**, **Games** and **Teams**. Those say
+whether the night actually runs that thing — they turn it on and off
+everywhere in the Studio. Whether the matching chapter appears on the public
+page is the chapter's own **Show this chapter on the portal** switch. So you
+can advertise the games before the deck is built, or run karaoke quietly
+without putting it on the page.
+
+**Cloning last year's event** brings the chapters with it — the words, the
+icons and the order — as part of the event's detail. The background pictures
+do not come across, because an uploaded file belongs to the event it was
+uploaded to; choose them again on the new event.
+
+**A guest who has asked their phone for reduced motion** gets every chapter
+as a still, finished frame — the words, the icon and the picture, with nothing
+moving. Nothing in this tab can produce a page that only works with the
+animation.
+
 ## 18c. Karaoke
 
 **Karaoke** tab in the Studio.
