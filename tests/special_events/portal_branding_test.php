@@ -182,3 +182,57 @@ ok('reduced motion freezes the credit, the clock and the orbit',
     str_contains($css, '.se-presents-letter, .se-presents-word, .se-presents-word::before')
     && str_contains($css, '.se-count-face::after, .se-count-sep { animation: none !important; }')
     && str_contains($css, '.se-orbit-core { animation: none !important;'));
+
+// --------------------------------------------------------------------------
+// No hardcoded colour on the public event URL: every surface a guest sees
+// paints from the Brand tab's tokens (or the Teams tab's --team-N).
+// --------------------------------------------------------------------------
+
+/** The CSS of one rule, by selector, from the authored stylesheet. */
+$ruleFor = static function (string $selector) use ($css): string {
+    $at = strpos($css, "\n  " . $selector . " {");
+    if ($at === false) {
+        return '';
+    }
+    $end = strpos($css, "\n  }", $at);
+
+    return $end === false ? '' : substr($css, $at, $end - $at);
+};
+
+foreach ([
+    '.se-orb'            => 'the team orbs',
+    '.se-church-logo'    => 'the church logo plate',
+    '.se-sheet-backdrop' => 'the registration sheet backdrop',
+    '.se-test-ribbon'    => 'the test-mode ribbon',
+    '.se-glass'          => 'the glass panels',
+    '.se-count-face'     => 'the countdown faces',
+    '.se-presents-brand' => 'the top-bar credit',
+] as $selector => $what) {
+    $rule = $ruleFor($selector);
+    ok($what . ' carry no hardcoded colour',
+        $rule !== ''
+        && preg_match('/#[0-9a-f]{3,8}\b/i', $rule) !== 1
+        && !str_contains($rule, 'rgb(')
+        && !str_contains($rule, 'rgba(')
+        && !preg_match('/:\s*(white|black)\b/i', $rule));
+}
+
+ok('the orb highlight lifts the team colour instead of glazing it white',
+    str_contains($css, 'oklch(from var(--orb)'));
+ok('the logo plate is a theme token, not a literal white',
+    str_contains($css, '--se-logo-plate: color-mix(in oklab, var(--se-text)')
+    && str_contains($css, 'background: var(--se-logo-plate);'));
+
+// The :root block in the stylesheet is only a fallback — the live page gets
+// the event's own tokens from se_theme_css_vars().
+$portalTheme = se_theme_derive('#2E7D32', '#FFB300');
+$portalVars  = se_theme_css_vars($portalTheme, [se_team_tokens('#E5484D', $portalTheme['tokens']['--se-bg'], 0)]);
+foreach (['--se-bg', '--se-surface', '--se-text', '--se-primary', '--se-secondary', '--se-accent', '--se-glow'] as $token) {
+    ok('the brand tab drives ' . $token . ' on the public page', str_contains($portalVars, $token . ':'));
+}
+ok('a brand change really changes the painted tokens',
+    !str_contains($portalVars, '--se-primary: #415C95;'));
+ok('the teams tab drives the orb colours on the public page',
+    str_contains($portalVars, '--team-0:')
+    && str_contains($portalVars, '--team-0-glow:')
+    && str_contains($portalVars, '--team-0-ring:'));

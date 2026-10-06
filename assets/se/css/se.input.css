@@ -59,6 +59,10 @@
   --se-danger: #FF645F;
   --se-warning: #FDC436;
 
+  /* The plate the church logo sits on: the theme's lightest readable tone,
+   * so even the lockup follows the Brand tab. */
+  --se-logo-plate: color-mix(in oklab, var(--se-text) 96%, var(--se-accent));
+
   --se-font-display: "Unbounded";
   --se-font-body: "Inter";
 
@@ -118,7 +122,7 @@
   .se-play-standings { display: grid; gap: 0.375rem; }
   .se-play-standings li { display: flex; justify-content: space-between; padding: 0.5rem 0.875rem; border-radius: var(--radius-input); border-inline-start: 6px solid var(--team-color, var(--se-border)); background: var(--se-surface); font-size: 0.9375rem; }
   .se-play-standings li[data-mine="1"] { font-weight: 800; background: var(--se-surface-2); }
-  .se-play-test { text-align: center; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.8125rem; color: #fff; background: var(--se-danger); border-radius: 999px; padding: 0.375rem 1rem; }
+  .se-play-test { text-align: center; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.8125rem; color: var(--se-on-secondary); background: var(--se-danger); border-radius: 999px; padding: 0.375rem 1rem; }
   .se-play-net { text-align: center; font-size: 0.875rem; color: var(--se-warning); }
   .se-play-notice { padding: 0.625rem 0.875rem; border-radius: var(--radius-input); background: color-mix(in oklab, var(--se-danger) 18%, var(--se-surface)); font-weight: 600; }
   .se-private-answer { padding: .75rem; border: 1px solid var(--se-warning); border-radius: 12px; color: var(--se-warning); }
@@ -237,7 +241,7 @@
     -webkit-backdrop-filter: blur(18px) saturate(140%);
     border: 1px solid var(--se-border);
     border-radius: var(--radius-sheet);
-    box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.6);
+    box-shadow: 0 30px 80px -20px color-mix(in oklab, var(--se-bg-2) 70%, transparent);
   }
 
   .se-glow {
@@ -529,9 +533,11 @@
     place-items: center;
     flex: none;
     overflow: hidden;
-    background: #fff;
-    border: 1px solid rgb(255 255 255 / 0.3);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+    /* The logo artwork needs a light plate to sit on; it comes from the
+     * theme's own light tone, never a literal white. */
+    background: var(--se-logo-plate);
+    border: 1px solid color-mix(in oklab, var(--se-logo-plate) 30%, transparent);
+    box-shadow: 0 8px 24px color-mix(in oklab, var(--se-bg-2) 45%, transparent);
   }
   .se-church-logo img { width: 100%; height: 100%; object-fit: contain; }
   .se-church-logo-top { width: 44px; height: 44px; padding: 0.25rem; border-radius: 14px; }
@@ -925,7 +931,10 @@
     inline-size: 2.5rem;
     aspect-ratio: 1;
     border-radius: 999px;
-    background: radial-gradient(circle at 32% 30%, color-mix(in oklab, #fff 42%, var(--orb)) 0%, var(--orb) 62%);
+    /* The highlight is the team's own colour lifted in lightness — the orb
+     * glows in its colour instead of being glazed with white. */
+    background: var(--orb);
+    background: radial-gradient(circle at 32% 30%, oklch(from var(--orb) min(0.98, calc(l + 0.3)) c h) 0%, var(--orb) 62%);
     box-shadow:
       0 0 0 1px color-mix(in oklab, var(--orb-ring, transparent) 90%, transparent),
       0 0 26px color-mix(in oklab, var(--orb-glow, var(--orb)) 75%, transparent);
@@ -1036,7 +1045,7 @@
     position: fixed;
     inset: 0;
     z-index: 50;
-    background: rgb(0 0 0 / 0.6);
+    background: color-mix(in oklab, var(--se-bg-2) 72%, transparent);
     display: flex;
     align-items: flex-end;
     justify-content: center;
@@ -1495,7 +1504,7 @@
     top: 0;
     z-index: 30;
     background: var(--se-danger);
-    color: #fff;
+    color: var(--se-on-secondary);
     font-weight: 800;
     letter-spacing: 0.14em;
     text-align: center;

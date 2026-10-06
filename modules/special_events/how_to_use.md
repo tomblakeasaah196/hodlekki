@@ -322,6 +322,13 @@ logo has its own clear lockup in the top bar and appears again in the footer. A
 button follows the guest down the screen and always says the right thing for
 the moment (the table in §6 lists them all).
 
+Every colour on that page comes from the **Brand** tab: the background, the
+glass panels, the glow behind the name, the countdown, the credit in the top
+bar, even the plate the church logo sits on are all derived from your primary,
+secondary and accent. The team orbs come from the **Teams** tab and are shown
+in each team's own colour, lit by lightening that same colour. Nothing on the
+public page is a fixed colour, so changing the brand changes the whole night.
+
 Everything on it comes from what you filled in. There is no separate "website"
 to maintain: change the tagline in Details and the page changes.
 
