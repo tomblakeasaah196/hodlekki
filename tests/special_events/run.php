@@ -52,7 +52,6 @@ require_once __DIR__ . '/../../includes/special_events/identity.php';
 require_once __DIR__ . '/../../includes/special_events/capacity.php';
 require_once __DIR__ . '/../../includes/special_events/cards.php';
 require_once __DIR__ . '/../../includes/special_events/messages.php';
-require_once __DIR__ . '/../../includes/special_events/portal.php';
 
 // PR3's pure layers: the team chooser, the check-in window clamp and the
 // snapshot builders' privacy rules. None of them touch a database either —

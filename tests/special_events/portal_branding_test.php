@@ -2,6 +2,8 @@
 // /tests/special_events/portal_branding_test.php — the public registration
 // page must visibly render the brand choices the Studio saves.
 
+require_once __DIR__ . '/../../includes/special_events/portal.php';
+
 $event = [
     'slug'            => 'chara',
     'title'           => 'Chara Night',
