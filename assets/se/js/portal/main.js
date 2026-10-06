@@ -60,6 +60,9 @@ function startTopbar() {
 // Hero motion (§13.3 S1)
 // --------------------------------------------------------------------------
 
+/** Seconds of stillness between two plays of the wordmark flicker. */
+const HERO_WORDMARK_REPEAT_DELAY = 5;
+
 function animateHero() {
     const hero = qs('#se-hero');
     if (!hero) return;
@@ -72,16 +75,20 @@ function animateHero() {
         return;
     }
 
-    // Wordmark: SplitText chars flicker in, then a slow glow breathing.
+    // Wordmark: SplitText chars flicker in, then the whole figure replays
+    // five seconds after it settles, so the event name keeps announcing
+    // itself. The loop is paused off-screen and in a background tab by
+    // pauseWhenHidden(), like every other infinite timeline in the hero.
     if (title && window.SplitText) {
         try {
             const split = new window.SplitText(title, { type: 'chars' });
-            g.timeline()
+            const timeline = g.timeline({ repeat: -1, repeatDelay: HERO_WORDMARK_REPEAT_DELAY })
                 .fromTo(split.chars,
                     { opacity: 0, filter: 'brightness(2.5)' },
                     { opacity: 1, filter: 'brightness(1)', duration: 0.5, stagger: 0.04, ease: 'power2.out' })
                 .to(split.chars, { opacity: 0.35, duration: 0.07, stagger: { each: 0.01, from: 'random' } }, '-=0.2')
                 .to(split.chars, { opacity: 1, duration: 0.25 }, '-=0.05');
+            pauseWhenHidden(hero, timeline);
         } catch (e) {
             title.style.opacity = '1';
         }
