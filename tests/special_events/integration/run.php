@@ -229,6 +229,46 @@ function se_it_open_doors(PDO $pdo, int $eventId): void
 }
 
 // ==========================================================================
+// Test 0 — phone-first Congregation recognition
+// ==========================================================================
+
+echo "\n  congregation member lookup\n";
+
+$pdo = se_it_pdo();
+$identityEvent = se_it_event($pdo);
+$identitySettings = se_event_settings($identityEvent);
+
+// Ada exists in the Congregation users table, but has never used Special
+// Events. The first phone lookup must recognise her without a se_contacts row.
+$adaPhone = se_phone_normalize('08030000004');
+$pdo->prepare("DELETE FROM se_contacts WHERE phone_e164 = ?")->execute([$adaPhone['e164']]);
+$lookup = se_lookup_phone($pdo, $identityEvent, $identitySettings, $adaPhone, null);
+
+is_same('a first-time Special Events visitor is recognised from Congregation', 'member', $lookup['kind']);
+is_same('the member receives only a masked display name', 'Ada O.', $lookup['display_name']);
+ok('known profile fields are not requested again',
+    count(array_intersect(['first_name', 'last_name', 'gender', 'email'], $lookup['needs'])) === 0);
+ok('the public lookup does not expose private directory fields',
+    !array_key_exists('email', $lookup) && !array_key_exists('first_name', $lookup));
+
+// A previous negative result must not hide somebody who was subsequently
+// added to Congregation for the remainder of the 24-hour cache window.
+$chideraPhone = se_phone_normalize('08030000003');
+$pdo->prepare("DELETE FROM se_contacts WHERE phone_e164 = ?")->execute([$chideraPhone['e164']]);
+$pdo->prepare(
+    "INSERT INTO se_contacts
+        (phone_e164, phone_display, first_name, last_name, member_user_id, member_checked_at)
+     VALUES (?, ?, 'Guest', '', NULL, NOW())"
+)->execute([$chideraPhone['e164'], $chideraPhone['display']]);
+
+$lookup = se_lookup_phone($pdo, $identityEvent, $identitySettings, $chideraPhone, null);
+is_same('an interactive lookup bypasses a fresh cached non-member result', 'member', $lookup['kind']);
+is_same('the newly matched member name comes from Congregation', 'Chidera O.', $lookup['display_name']);
+$stmt = $pdo->prepare("SELECT member_user_id FROM se_contacts WHERE phone_e164 = ?");
+$stmt->execute([$chideraPhone['e164']]);
+is_same('the successful match is cached on the Special Events contact', 3, (int) $stmt->fetchColumn());
+
+// ==========================================================================
 // Test 1 — the seat race (§22.2)
 // ==========================================================================
 //
@@ -238,7 +278,6 @@ function se_it_open_doors(PDO $pdo, int $eventId): void
 
 echo "\n  seat race\n";
 
-$pdo   = se_it_pdo();
 $event = se_it_event($pdo, ['online_capacity' => 20]);
 $eventId = (int) $event['id'];
 

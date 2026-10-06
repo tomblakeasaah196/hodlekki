@@ -237,20 +237,9 @@ function se_contact_get_or_create(PDO $pdo, array $phone, array $fields): array
     return se_contact_refresh_member($pdo, $contact);
 }
 
-/**
- * Keep `member_user_id` fresh. The lookup is cached on the contact and only
- * re-run when it is older than 24 hours (§10.3.2), so a busy registration
- * window does not run the fallback LIKE query for every submission.
- */
-function se_contact_refresh_member(PDO $pdo, array $contact): array
+/** Store the result of a directory lookup on a Special Events contact. */
+function se_contact_cache_member(PDO $pdo, array $contact, ?array $member): array
 {
-    $checkedAt = se_parse_datetime($contact['member_checked_at'] ?? null);
-    if ($checkedAt !== null && $checkedAt > se_now()->modify('-24 hours')) {
-        return $contact;
-    }
-
-    $member = se_find_member($pdo, (string) $contact['phone_e164']);
-
     try {
         $stmt = $pdo->prepare(
             "UPDATE se_contacts
@@ -263,7 +252,7 @@ function se_contact_refresh_member(PDO $pdo, array $contact): array
             (int) $contact['id'],
         ]);
     } catch (Throwable $e) {
-        error_log('SE identity/refresh_member: ' . $e->getMessage());
+        error_log('SE identity/cache_member: ' . $e->getMessage());
         return $contact;
     }
 
@@ -272,6 +261,27 @@ function se_contact_refresh_member(PDO $pdo, array $contact): array
     $contact['member_checked_at'] = se_sql_datetime(se_now());
 
     return $contact;
+}
+
+/**
+ * Keep `member_user_id` fresh. The lookup is cached on the contact and only
+ * re-run when it is older than 24 hours (§10.3.2), so background operations
+ * do not run the fallback directory query repeatedly. The interactive phone
+ * lookup deliberately checks the directory immediately instead: somebody
+ * may have joined the congregation since a previous negative result.
+ */
+function se_contact_refresh_member(PDO $pdo, array $contact): array
+{
+    $checkedAt = se_parse_datetime($contact['member_checked_at'] ?? null);
+    if ($checkedAt !== null && $checkedAt > se_now()->modify('-24 hours')) {
+        return $contact;
+    }
+
+    return se_contact_cache_member(
+        $pdo,
+        $contact,
+        se_find_member($pdo, (string) $contact['phone_e164'])
+    );
 }
 
 /** A trimmed, valid email, or null. */

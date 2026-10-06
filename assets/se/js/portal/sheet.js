@@ -12,6 +12,7 @@ import { popIn, haptic, HAPTIC } from '@se/core/motion.js';
 import { prefersReducedMotion } from '@se/core/boot.js';
 import { normalizePhone, displayPhone } from '@se/core/phone.js';
 import { el, qs, openSheet, dots, field, decorate, copyText } from './dom.js';
+import { shouldAskEmail } from './registration-fields.js';
 import { saveLocal } from './storage.js';
 
 const GENDERS = [['Male', 'Male'], ['Female', 'Female']];
@@ -231,7 +232,7 @@ function stepIdentity(sheet, draft, form, config) {
         });
     }
 
-    if (form.fields?.email && form.fields.email !== 'off') {
+    if (shouldAskEmail(lookup, form.fields)) {
         const email = el('input', { class: 'se-input', type: 'email', autocomplete: 'email', value: draft.email });
         const emailField = field('se-reg-email', form.fields.email === 'required' ? 'Email' : 'Email (optional)', email);
         nodes.push(emailField);

@@ -421,10 +421,13 @@ function se_sql_to_ms(?string $value): ?int
     return $when !== null ? se_epoch_ms($when) : null;
 }
 
-/**
- * A human date range for one event ("Sat 24 Oct, 5:00 PM" or
- * "24-26 Oct 2026"), used in the shell, cards and SMS.
- */
+/** A compact date with no time, used when time has its own clock pill. */
+function se_format_date(DateTimeImmutable $start): string
+{
+    return $start->format('D j M');
+}
+
+/** A compact date and time used where both must fit in one label. */
 function se_format_day(DateTimeImmutable $start): string
 {
     return $start->format('D j M, g:i A');

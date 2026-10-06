@@ -299,10 +299,12 @@ Press **Publish** and `/e/your-link` is live.
 ## 10. The public page
 
 `hodlc.lpc.cm/e/your-link` is the page you send people to. It opens on your
-hero image and your colours, counts down to the night, then walks down the
-page: **what it is**, **the night chapter by chapter**, **where**, and
-**good to know**. A button follows the guest down the screen and always says
-the right thing for the moment (the table in §6 lists them all).
+hero image blended beneath the animated event colours and spotlights, counts
+down to the night, then walks down the page: **what it is**, **the night
+chapter by chapter**, **where**, and **good to know**. The Household of David
+logo is always visible in the top bar and again in the footer. A button follows
+the guest down the screen and always says the right thing for the moment (the
+table in §6 lists them all).
 
 Everything on it comes from what you filled in. There is no separate "website"
 to maintain: change the tagline in Details and the page changes.
