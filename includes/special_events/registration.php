@@ -70,12 +70,36 @@ function se_lookup_phone(PDO $pdo, array $event, array $settings, array $phone, 
     ];
 
     if ($reg && in_array((string) $reg['status'], ['confirmed', 'waitlisted'], true)) {
+        $owns = se_device_owns($device, $reg);
+
         $out['kind']              = 'registered';
         $out['display_name']      = (string) $reg['display_name'];
         $out['needs']             = [];
         $out['reg_status']        = (string) $reg['status'];
         $out['waitlist_position'] = se_waitlist_position($pdo, $reg);
-        $out['device_owns']       = se_device_owns($device, $reg);
+        $out['device_owns']       = $owns;
+
+        // Step 2 shows the ticket and the action cards to everyone, exactly
+        // as the success screen does (§13.4). What does NOT travel is the
+        // manage link, which stays on the device that holds the seat
+        // (§10.3.5) — and the registration code, which goes with it.
+        $out['first_name']    = (string) $reg['first_name'];
+        $out['ref_url']       = se_event_url((string) $event['slug']) . '?r=' . rawurlencode((string) $reg['ref_code']);
+        $out['can_make_card'] = se_bool($settings['share_cards']['im_going'] ?? true);
+
+        if ($owns) {
+            $out['reg_code'] = (string) $reg['reg_code'];
+        }
+    }
+
+    // The crew took them off the list, and the portal will refuse them
+    // (`outcome: 'blocked'`, §12.2) — so say it HERE, at step one. Otherwise
+    // the first thing a removed person hears is a rejection, after typing in
+    // their whole name and email.
+    if ($reg && (string) $reg['status'] === 'removed') {
+        $out['kind']         = 'blocked';
+        $out['display_name'] = (string) $reg['display_name'];
+        $out['needs']        = [];
     }
 
     return $out;
@@ -363,9 +387,14 @@ function se_reactivate_registration(PDO $pdo, array $reg, string $status, ?strin
 {
     $now = se_sql_datetime(se_now());
 
+    // `deleted_at` / `deleted_by` are cleared with the rest of the exit
+    // state: registering again is exactly the thing a Delete is meant to
+    // allow (§12.5 `attendee_delete`), so the person cannot be left sitting
+    // on the list wearing a "deleted" badge.
     $stmt = $pdo->prepare(
         "UPDATE se_registrations
             SET status = ?, seat_pool = ?, cancelled_at = NULL, cancelled_by = NULL, cancel_reason = NULL,
+                deleted_at = NULL, deleted_by = NULL,
                 first_name = ?, last_name = ?, gender = COALESCE(?, gender), email = COALESCE(?, email),
                 display_name = ?, is_member = ?, how_heard = COALESCE(?, how_heard),
                 how_heard_other = COALESCE(?, how_heard_other), src = COALESCE(?, src),

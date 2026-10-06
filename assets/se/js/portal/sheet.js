@@ -164,6 +164,11 @@ function stepIdentity(sheet, draft, form, config) {
         return;
     }
 
+    if (lookup.kind === 'blocked') {
+        stepBlocked(sheet, lookup);
+        return;
+    }
+
     const nodes = [];
     const fields = [];
 
@@ -488,65 +493,85 @@ async function submitRegistration(sheet, draft, config, submit, honeypot) {
 // --------------------------------------------------------------------------
 
 function stepAlready(sheet, draft, config) {
-    const lookup = draft.lookup;
-    const nodes = [
-        el('p', { class: 'se-h2', text: `You're already in, ${lookup.display_name} 🎉` }),
-    ];
+    const lookup = draft.lookup || {};
 
-    if (lookup.reg_status === 'waitlisted') {
-        nodes.push(el('p', { class: 'se-muted', text: `You're #${lookup.waitlist_position} on the waitlist. We'll text you the moment a seat opens.` }));
-    }
-
+    // A returning guest lands back on the confirmation they saw the first
+    // time — the ticket and all four cards — instead of a bare "you're in"
+    // line (§13.4). The one thing that differs is what the device is allowed
+    // to hold: the seat link belongs to the phone that made the registration
+    // (§10.3.5), so every other device gets "Text me my link" in that slot.
     if (lookup.device_owns) {
-        nodes.push(el('p', {}, el('button', {
-            class: 'se-btn se-btn-primary',
-            type: 'button',
-            text: 'See my ticket',
-            onclick: async () => {
-                try {
-                    const data = await call('public', 'me', eventRef());
-                    me.value = data;
-                    stepSuccess(sheet, {
-                        outcome: 'already',
-                        reg_code: data.registration.reg_code,
-                        display_name: data.registration.display_name,
-                        first_name: data.registration.first_name,
-                        status: data.registration.status,
-                        ref_url: data.links.ref_url,
-                        manage_url: data.links.manage_url,
-                        waitlist_position: data.registration.waitlist_position,
-                        can_make_card: config.flags?.im_going_card,
-                    }, config, draft);
-                } catch (error) {
-                    toast(error.message, 'error');
-                }
-            },
-        })));
-    } else if (config.flags?.link_on_demand) {
-        const button = el('button', {
-            class: 'se-btn se-btn-primary',
-            type: 'button',
-            text: 'Text me my link',
-            onclick: async () => {
-                busy(button, true);
-                try {
-                    await call('public', 'request_link', { ...eventRef(), phone: draft.phone });
-                    button.replaceWith(el('p', { class: 'se-glass se-pad se-small', text: 'If that number is registered, we have texted the link.' }));
-                } catch (error) {
-                    busy(button, false);
-                    toast(error.message, 'error');
-                }
-            },
-        });
-        nodes.push(el('p', {}, button));
-        nodes.push(el('p', { class: 'se-small se-muted', text: 'Or just check in at the door — your phone number is enough.' }));
-    } else {
-        nodes.push(el('p', { class: 'se-small se-muted', text: 'Just check in at the door — your phone number is enough.' }));
+        // This device does hold the registration, so the server can hand back
+        // a live ticket and a live seat link. One round trip, no tap.
+        sheet.render(head(sheet, 'Welcome back', 2),
+            el('p', { class: 'se-small se-muted', text: 'Getting your ticket…' }));
+
+        call('public', 'me', eventRef())
+            .then((data) => {
+                me.value = data;
+                stepSuccess(sheet, {
+                    outcome: 'already',
+                    reg_code: data.registration.reg_code,
+                    display_name: data.registration.display_name,
+                    first_name: data.registration.first_name,
+                    status: data.registration.status,
+                    ref_url: data.links.ref_url,
+                    manage_url: data.links.manage_url,
+                    waitlist_position: data.registration.waitlist_position,
+                    can_make_card: config.flags?.im_going_card,
+                    // They answered this the first time round. Asking again on
+                    // a return visit reads as though we had forgotten them.
+                    ask_wants_visit: false,
+                }, config, draft);
+            })
+            .catch(() => {
+                // The lookup said this device owns it, but the ticket would
+                // not load. Show what is already known rather than an error.
+                stepSuccess(sheet, alreadyPayload(lookup, config), config, draft);
+            });
+        return;
     }
 
-    nodes.push(el('p', {}, el('button', { class: 'se-btn se-btn-ghost', type: 'button', text: 'Close', onclick: () => sheet.close(true) })));
+    stepSuccess(sheet, alreadyPayload(lookup, config), config, draft);
+}
 
-    sheet.render(head(sheet, 'Welcome back', 2), nodes);
+/**
+ * The crew took this number off the list, and the portal will refuse it
+ * (outcome 'blocked', §12.2).
+ *
+ * Say it here, on step one, rather than letting them type their whole name,
+ * gender and email and refusing them at the end — which is what used to
+ * happen, because the lookup only recognised a *live* registration.
+ */
+function stepBlocked(sheet, lookup) {
+    const who = lookup.display_name ? ` about ${lookup.display_name}` : '';
+
+    sheet.render(head(sheet, 'One moment', 2),
+        el('p', {
+            class: 'se-muted',
+            text: `There is something to sort out${who} before this number can register. Please see the desk when you arrive — they can help you straight away.`,
+        }),
+        el('p', {}, el('button', {
+            class: 'se-btn se-btn-ghost', type: 'button', text: 'Close', onclick: () => sheet.close(true),
+        })));
+}
+
+/** The success screen's data, built from what a phone lookup alone returns. */
+function alreadyPayload(lookup, config) {
+    return {
+        outcome: 'already',
+        first_name: lookup.first_name || String(lookup.display_name || '').split(' ')[0],
+        display_name: lookup.display_name,
+        reg_code: lookup.reg_code || null,
+        status: lookup.reg_status,
+        waitlist_position: lookup.waitlist_position,
+        ref_url: lookup.ref_url || null,
+        // Never a seat link here: this is not the device that holds the seat,
+        // and its absence is what swaps the first card for "Text me my link".
+        manage_url: null,
+        can_make_card: lookup.can_make_card !== false && config.flags?.im_going_card !== false,
+        ask_wants_visit: false,
+    };
 }
 
 // --------------------------------------------------------------------------
@@ -582,7 +607,7 @@ export function stepSuccess(sheet, data, config, draft) {
         el('p', { class: 'se-small', text: config.days?.[0]?.starts_at
             ? new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'full', timeStyle: 'short' }).format(new Date(config.days[0].starts_at))
             : '' }),
-        el('p', { class: 'se-ticket-code', text: data.reg_code }));
+        data.reg_code ? el('p', { class: 'se-ticket-code', text: data.reg_code }) : null);
 
     const actions = el('div', { class: 'se-action-grid' });
 
@@ -596,6 +621,25 @@ export function stepSuccess(sheet, data, config, draft) {
                 toast(await copyText(data.manage_url) ? 'Link copied.' : data.manage_url, 'success');
             },
         }));
+    } else if (config.flags?.link_on_demand) {
+        // Someone is looking at this ticket on a phone that does not hold the
+        // seat, so there is no link to save. Texting it to the number that
+        // does is the only safe way to hand it over (§10.3.5), and the
+        // server's answer is deliberately the same either way.
+        const text = el('button', {
+            class: 'se-action', type: 'button', text: '🔗  Text me my link',
+            onclick: async () => {
+                busy(text, true);
+                try {
+                    await call('public', 'request_link', { ...eventRef(), phone: draft?.phone });
+                    text.replaceWith(el('p', { class: 'se-glass se-pad se-small', text: 'If that number is registered, we have texted the link.' }));
+                } catch (error) {
+                    busy(text, false);
+                    toast(error.message, 'error');
+                }
+            },
+        });
+        actions.appendChild(text);
     }
 
     if (data.can_make_card !== false && config.flags?.im_going_card !== false) {
@@ -629,14 +673,24 @@ export function stepSuccess(sheet, data, config, draft) {
         }));
     }
 
+    // A returning guest is welcomed back by name, not told again that they
+    // are in — this screen is also the answer to "am I registered?" (§13.4).
+    const already = data.outcome === 'already';
+
     const nodes = [
-        head(sheet, waitlisted ? `You're #${data.waitlist_position || 1} on the waitlist` : `You're in, ${firstName}! 🎉`, 2),
+        head(sheet, waitlisted
+            ? `You're #${data.waitlist_position || 1} on the waitlist`
+            : (already
+                ? `You're already in, ${data.display_name || firstName} 🎉`
+                : `You're in, ${firstName}! 🎉`), 2),
     ];
 
     if (waitlisted) {
         nodes.push(el('p', { class: 'se-muted', text: "We'll text you the moment a seat opens." }));
-    } else {
+    } else if (data.manage_url) {
         nodes.push(el('p', { class: 'se-small se-muted', text: "Save your link — it's how you manage your seat." }));
+    } else {
+        nodes.push(el('p', { class: 'se-small se-muted', text: 'Just check in at the door — your phone number is enough.' }));
     }
 
     nodes.push(ticket, actions);

@@ -429,6 +429,14 @@ A success screen with a bit of confetti, their **ticket**, and four things:
 | **Share "I'm going"** | A card with the event art, their name and a QR — see §13. |
 | **Invite a friend** | Their own link, so you can see who brought whom. |
 
+**If they come back and type their number again**, they get the same ticket and
+the same four cards, headed **"You're already in, Ada O. 🎉"** — they are never
+asked to fill the form twice. The one difference is the first card: the private
+link is only given to the phone that actually made the registration, so on any
+other device it reads **Text me my link** instead. That is deliberate — the
+alternative would let anyone who knows a phone number take over that seat. On
+the phone that holds the registration, the link card is there as normal.
+
 If the seats were gone they are told plainly that they are **on the waitlist**
 and where they are in the queue. When a seat opens they are promoted in order
 and get one text message — nobody has to watch the page.
@@ -462,7 +470,9 @@ waiting for one, and who let theirs go.
 
 Along the top: **Confirmed**, **Waitlist**, **Cancelled**, **Walk-ins**,
 **Checked in**. Below that a search box (name, phone or email), a status
-filter, and the list.
+filter, and the list. The status filter has a **Deleted** option of its own —
+deleted people keep the status they left with (Cancelled, or Removed if you
+also kept them out), so that is how you find them again.
 
 Tap anyone to open them. A 🎤 beside a name means they said they would like
 to sing; a 💛 means they would like a Sunday visit.
@@ -475,9 +485,38 @@ to sing; a 💛 means they would like a Sunday visit.
 | **Release seat** | They are out, and the first person on the waitlist is confirmed. | Producer, Desk |
 | **Put back** | Undo a release, if there is still room. | Producer |
 | **Promote** | Pull one person off the waitlist now, out of turn. | Producer |
-| **Remove** | For a duplicate or a bad entry. Asks you why, and the crew log keeps it. | Producer |
+| **Delete** | Takes them off the list and **frees their number, so they can register again**. Opens both grades — see below. | Producer |
 | **Reset links** | Kills every link that person holds and issues a new one. Use it when a link was forwarded to the wrong group. | Producer |
-| **Erase** | Deletes the personal details for good, keeping only the anonymous count. For "please delete my data". | Producer |
+| **Erase their data** | Deletes the personal details for good, keeping only the anonymous count. For "please delete my data". | Administrator |
+
+### Delete — the two grades
+
+**Delete** is one button with two answers, because "take this off my list" and
+"pretend this never happened" are different things:
+
+| | **Delete** | **Delete permanently** |
+| --- | --- | --- |
+| **What it is for** | A duplicate, a mistake, someone who asked to come off | A test account, a bad entry, a number that must be free |
+| **Their seat** | Released, and the next person on the waitlist is confirmed | Released, and the next person is confirmed |
+| **Their details** | Kept — you can still see who they were and export them | Gone: registration, contact, check-ins, karaoke entries, game answers, feedback and links |
+| **The night's numbers** | Unchanged | **They drop** — that seat stops being counted |
+| **Can they register again?** | **Yes.** Their links stop working, but the number is free | **Yes.** There is nothing left to stop them |
+| **Undo** | Put back on the list | **None.** Not by us, not by you |
+
+Both ask you **why** first, and the crew log keeps the reason. **Delete
+permanently** is available to an **Administrator** only.
+
+**"Also keep them out — the door turns them away"** is the tick inside the
+Delete menu. Use it when the crew has decided someone should not come back: it
+releases the seat *and* makes the door refuse them if they try the form again.
+Without the tick, Delete leaves the door open — which is what you want for a
+test account or a typo.
+
+> **One thing Delete permanently cannot reach.** If you have already run the
+> **Hand-off**, a Reach lead or a congregation member created from this event
+> belongs to that module, and it stays. Deleting them here would be this event
+> reaching outside its own records. Check the Hand-off tab before you delete
+> someone who was handed over — see §12 of this guide.
 
 **Add someone by hand** is at the top of the tab, for the desk and for the
 phone call: a phone number and a name is enough, and it works even when

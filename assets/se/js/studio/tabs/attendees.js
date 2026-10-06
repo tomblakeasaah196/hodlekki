@@ -3,11 +3,15 @@
 // Studio → Attendees (guide §12.5, §13.13).
 //
 // The crew's working list: search, filter, correct, cancel, restore,
-// promote, remove, add by hand, reset links, erase, and export.
+// promote, delete, add by hand, reset links, erase, and export.
 //
-// Phone numbers appear in full only when the server says so (`pii` in the
-// list response, from the `attendee.pii` capability). A Media or DJ crew
-// member sees "0803 *** 4567" and nothing more (§19.1).
+// Two destructive actions and no more (§12.5): Delete, which carries both the
+// soft grade and the permanent one behind a single button, and Erase, which is
+// the privacy request. Everything else on the row is reversible.
+//
+// Phone numbers appear in full only when the server masks nothing: the list
+// payload masks them unless the caller holds `attendee.pii` (§19.1), so a
+// Media or DJ crew member sees "0803 *** 4567" and nothing more.
 
 import { html } from '@se/core/html.js';
 import { useState, useEffect, useCallback } from 'preact/hooks';
@@ -22,6 +26,9 @@ const STATUS_FILTERS = [
     { value: 'waitlisted', label: 'Waitlist' },
     { value: 'cancelled', label: 'Cancelled' },
     { value: 'removed', label: 'Removed' },
+    // Deleted registrations keep the status they left with, so they need
+    // their own filter — the server matches on `deleted_at`, not on status.
+    { value: 'deleted', label: 'Deleted' },
     { value: 'all', label: 'Everyone' },
 ];
 
@@ -30,12 +37,16 @@ const STATUS_STYLES = {
     waitlisted: 'bg-amber-50 text-amber-700',
     cancelled: 'bg-gray-100 text-gray-600',
     removed: 'bg-red-50 text-hodRed',
+    deleted: 'bg-gray-100 text-gray-400',
 };
 
-function StatusChip({ status }) {
+function StatusChip({ status, deleted }) {
+    const label = deleted ? 'deleted' : status;
+    const style = deleted ? STATUS_STYLES.deleted : (STATUS_STYLES[status] || STATUS_STYLES.cancelled);
+
     return html`
-        <span class=${'px-2 py-0.5 rounded-full text-[11px] font-bold ' + (STATUS_STYLES[status] || STATUS_STYLES.cancelled)}>
-            ${status}
+        <span class=${'px-2 py-0.5 rounded-full text-[11px] font-bold ' + style}>
+            ${label}
         </span>`;
 }
 
@@ -107,10 +118,90 @@ function AddPanel({ eventId, onDone, onCancel }) {
 }
 
 // --------------------------------------------------------------------------
+// Delete — both grades, one button
+// --------------------------------------------------------------------------
+
+/**
+ * The destructive actions, behind one button (§12.5).
+ *
+ * Delete and Erase are the only things in this tab that a crew member cannot
+ * take back, so they live in a menu rather than on the row, where a mis-tap is
+ * one thumb away from somebody's seat.
+ *
+ * Delete carries both grades. The soft one is the everyday tool: off the list,
+ * links dead, seat back in the room and — the whole point — free to register
+ * again. The permanent one is the escape hatch for a test account or a
+ * duplicate, and it is the only action here that leaves nothing behind.
+ *
+ * Erase stays its own button because it makes a different promise: the counts
+ * survive it, and it is what answers a privacy request. Both it and the
+ * permanent grade are manager-only on the server (`se_require_manager`), so
+ * they are hidden from a Producer rather than offered and then refused.
+ */
+function DangerMenu({ row, onDelete }) {
+    const [open, setOpen] = useState(false);
+    const [block, setBlock] = useState(false);
+    const manager = can('settings.manage');
+
+    // A menu that outlives the click that opened it ends up hiding the list
+    // underneath it. A click anywhere outside — or Escape — closes it; clicks
+    // inside never reach these listeners, because the wrapper stops them. That
+    // is deliberate: a `closest()` test would depend on whether the listener
+    // had been attached yet when the opening click was still bubbling.
+    useEffect(() => {
+        if (!open) return undefined;
+        const close = () => setOpen(false);
+        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        document.addEventListener('click', close);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('click', close);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+
+    const pick = (permanent) => {
+        setOpen(false);
+        onDelete(row, permanent, block);
+    };
+
+    return html`
+        <div class="relative" data-se-danger="1" onClick=${(e) => e.stopPropagation()}>
+            <${Button} variant="danger" onClick=${() => setOpen(!open)}>Delete ▾<//>
+
+            ${open ? html`
+            <div class="absolute mt-2 w-56 p-2 bg-white border border-gray-200 rounded-2xl shadow-lg z-50 text-left"
+                style=${{ right: 0 }}>
+
+                <label class="flex items-start gap-2 px-3 py-2 cursor-pointer">
+                    <input type="checkbox" checked=${block} class="w-4 h-4 mt-1 shrink-0"
+                        onChange=${(e) => setBlock(e.currentTarget.checked)} />
+                    <span class="text-xs text-gray-700">Also keep them out — the door turns them away</span>
+                </label>
+
+                <div class="border-t border-gray-100 mt-1 pt-1">
+                    <button type="button" onClick=${() => pick(false)}
+                        class="block w-full text-left px-3 py-2 rounded-xl text-sm text-gray-800 hover:bg-gray-50">
+                        <span class="block font-semibold">Delete</span>
+                        <span class="block text-xs text-gray-500">Off the list. They can register again.</span>
+                    </button>
+
+                    ${manager ? html`
+                    <button type="button" onClick=${() => pick(true)}
+                        class="block w-full text-left px-3 py-2 rounded-xl text-sm text-red-600 hover:bg-gray-50">
+                        <span class="block font-semibold">Delete permanently</span>
+                        <span class="block text-xs text-gray-500">Every trace goes, and the counts drop.</span>
+                    </button>` : null}
+                </div>
+            </div>` : null}
+        </div>`;
+}
+
+// --------------------------------------------------------------------------
 // One person
 // --------------------------------------------------------------------------
 
-function AttendeeRow({ row, pii, onAct, onEdit, expanded, onToggle }) {
+function AttendeeRow({ row, onAct, onEdit, onDelete, onErase, expanded, onToggle }) {
     return html`
         <li class="border-b border-gray-50 last:border-0">
             <div class="py-3 flex flex-wrap items-center gap-3">
@@ -124,7 +215,7 @@ function AttendeeRow({ row, pii, onAct, onEdit, expanded, onToggle }) {
                     <p class="text-xs text-gray-500 font-mono">${row.reg_code} · ${row.phone || 'no phone'}</p>
                 </button>
 
-                <${StatusChip} status=${row.status} />
+                <${StatusChip} status=${row.status} deleted=${row.deleted} />
 
                 ${row.is_member
                     ? html`<span class="text-[11px] font-bold text-hodBlue bg-blue-50 px-2 py-0.5 rounded-full">Member</span>`
@@ -146,7 +237,10 @@ function AttendeeRow({ row, pii, onAct, onEdit, expanded, onToggle }) {
                         ['Consent', row.consent ? 'Given' : 'Not given'],
                         ['Opted out', row.opted_out ? 'Yes' : 'No'],
                         ['Invite code', row.ref_code],
-                    ].map(([k, v]) => html`
+                    ].concat(row.deleted_at ? [
+                        ['Deleted', formatDateTime(row.deleted_at)],
+                        ['Why', row.cancel_reason || '—'],
+                    ] : []).map(([k, v]) => html`
                     <div key=${k}>
                         <dt class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">${k}</dt>
                         <dd class="text-gray-800 break-words">${v}</dd>
@@ -184,11 +278,10 @@ function AttendeeRow({ row, pii, onAct, onEdit, expanded, onToggle }) {
                         <${Button} variant="secondary" onClick=${() => onAct('attendee_reset_links', row,
                             'Kill every link this person holds and issue a new one?')}>Reset links<//>` : null}
 
-                    ${['confirmed', 'waitlisted'].includes(row.status) && can('attendee.pii') ? html`
-                        <${Button} variant="danger" onClick=${() => onAct('attendee_remove', row, null, 'reason')}>Remove<//>` : null}
+                    ${can('attendee.pii') ? html`<${DangerMenu} row=${row} onDelete=${onDelete} />` : null}
 
-                    ${can('attendee.pii') ? html`
-                        <${Button} variant="danger" onClick=${() => onAct('attendee_erase', row, null, 'erase')}>Erase their data<//>` : null}
+                    ${can('settings.manage') ? html`
+                        <${Button} variant="danger" onClick=${() => onErase(row)}>Erase their data<//>` : null}
                 </div>
             </div>` : null}
         </li>`;
@@ -337,6 +430,40 @@ export function AttendeesTab() {
         }
     };
 
+    /**
+     * Delete, in both grades (§12.5).
+     *
+     * The wording of the confirm is the only place a crew member is told what
+     * they are about to lose, so it says it plainly: the soft grade frees the
+     * number, the permanent grade takes the counts with it.
+     */
+    const deleteAttendee = async (row, permanent, block) => {
+        const question = permanent
+            ? `Delete ${row.display_name} permanently? This erases every trace — their registration, contact, check-ins, karaoke entries, game answers, feedback and links. The counts for the night will drop. This cannot be undone.`
+            : (block
+                ? `Delete ${row.display_name} and keep them out? Their seat is released and the door will turn them away if they try to register again.`
+                : `Delete ${row.display_name} from the list? Their seat is released, their links stop working, and they can register again.`);
+
+        if (!confirm(question)) return;
+
+        const reason = prompt(permanent
+            ? 'Why is this being deleted permanently? The crew log keeps this — the data does not.'
+            : 'Why? The crew log keeps this.');
+        if (!reason) return;
+
+        try {
+            const result = await studio(permanent ? 'attendee_delete_permanent' : 'attendee_delete',
+                permanent
+                    ? { id: event.id, attendee_id: row.id, reason }
+                    : { id: event.id, attendee_id: row.id, reason, block });
+            toast(result.message || 'Done.', 'success');
+            setOpen(null);
+            load();
+        } catch (e) {
+            toast(e.message, 'error');
+        }
+    };
+
     const exportList = async () => {
         setExporting(true);
         try {
@@ -401,10 +528,12 @@ export function AttendeesTab() {
                         : html`
                         <ul>
                             ${data.items.map((row) => html`
-                            <${AttendeeRow} key=${row.id} row=${row} pii=${data.pii}
+                            <${AttendeeRow} key=${row.id} row=${row}
                                 expanded=${open === row.id}
                                 onToggle=${() => setOpen(open === row.id ? null : row.id)}
                                 onEdit=${(r) => setPanel({ kind: 'edit', row: r })}
+                                onDelete=${deleteAttendee}
+                                onErase=${(r) => act('attendee_erase', r, null, 'erase')}
                                 onAct=${act} />`)}
                         </ul>`)}
 

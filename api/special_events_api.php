@@ -966,6 +966,53 @@ try {
         se_api_success('Old links are dead. Here is the new one.', ['manage_url' => $url]);
     }
 
+    case 'attendee_delete': {
+        // The soft grade. Not manager-only: this is a cancellation with a
+        // memory, and the crew who can release a seat can take someone off
+        // the list. What it does NOT do is keep them out — that is the
+        // `block` flag, which stores 'removed' instead of 'cancelled' and so
+        // reuses the portal's existing refusal (§12.2).
+        $event  = se_studio_event($pdo, $body, 'attendee.pii');
+        $days   = se_event_days($pdo, (int) $event['id']);
+        $reason = se_line($body['reason'] ?? '', 160);
+        if ($reason === '') {
+            throw new SeValidationException(['reason' => 'Say why, so the next person reading the log understands.']);
+        }
+
+        $result = se_attendee_delete(
+            $pdo,
+            $event,
+            $days,
+            se_int($body['attendee_id'] ?? 0, 1),
+            $reason,
+            se_bool($body['block'] ?? false),
+            $userId
+        );
+
+        se_api_success(
+            $result['blocked'] ? 'Deleted, and the door will turn them away.' : 'Deleted. They can register again.',
+            $result + ['counts' => se_event_counts($pdo, (int) $event['id'])]
+        );
+    }
+
+    case 'attendee_delete_permanent': {
+        // Irreversible and it moves the night's numbers, so it is a manager
+        // action (§19.9), exactly like Erase and for the same reason.
+        se_require_manager($pdo);
+        $event  = se_studio_event($pdo, $body, 'attendee.pii');
+        $reason = se_line($body['reason'] ?? '', 160);
+        if ($reason === '') {
+            throw new SeValidationException(['reason' => 'Record why this deletion was asked for.']);
+        }
+
+        $result = se_attendee_delete_permanent($pdo, $event, se_int($body['attendee_id'] ?? 0, 1), $reason, $userId);
+
+        se_api_success('Deleted permanently. The audit log is all that is left.', [
+            'erased'  => true,
+            'deleted' => true,
+        ] + $result + ['counts' => se_event_counts($pdo, (int) $event['id'])]);
+    }
+
     case 'attendee_erase': {
         // Irreversible, so it is a manager action, not a desk one (§19.9).
         se_require_manager($pdo);
