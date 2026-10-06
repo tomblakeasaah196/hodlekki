@@ -176,6 +176,38 @@ function startHeroVideo() {
 // Countdown (§13.3 S1)
 // --------------------------------------------------------------------------
 
+// A single digit column: a 0–9 strip inside a one-character window. Rolling
+// it is one transform, so four units ticking every second stay cheap.
+function digitColumn() {
+    const strip = el('span', { class: 'se-count-strip' });
+    for (let n = 0; n <= 9; n += 1) strip.append(el('span', { text: String(n) }));
+
+    const column = el('span', { class: 'se-count-digit' }, strip);
+    column.dataset.value = '';
+    return column;
+}
+
+function rollTo(numNode, text) {
+    const digits = qsa('.se-count-digit', numNode);
+
+    // The number grew (9 → 10 days): add columns, never rebuild the row.
+    while (digits.length < text.length) {
+        const column = digitColumn();
+        numNode.append(column);
+        digits.push(column);
+    }
+    while (digits.length > text.length) digits.pop().remove();
+
+    text.split('').forEach((char, i) => {
+        const column = digits[i];
+        if (column.dataset.value === char) return;
+        column.dataset.value = char;
+        column.dataset.rolling = '1';
+        qs('.se-count-strip', column).style.setProperty('--se-digit', char);
+        setTimeout(() => { column.dataset.rolling = '0'; }, 860);
+    });
+}
+
 function startCountdown() {
     const host = qs('[data-se-countdown]');
     if (!host) return;
@@ -187,18 +219,35 @@ function startCountdown() {
     const skew = (config.server_ms || Date.now()) - Date.now();
     const units = Object.fromEntries(qsa('[data-unit]', host).map((n) => [n.dataset.unit, n]));
 
+    // Swap the server's plain text for odometer columns once, up front. The
+    // rolling strips read as "0123456789" to a screen reader, so the faces
+    // are hidden from it and one spoken summary carries the real value.
+    Object.values(units).forEach((node) => {
+        node.replaceChildren(digitColumn(), digitColumn());
+        node.closest('.se-count-face')?.setAttribute('aria-hidden', 'true');
+    });
+    const spoken = el('li', { class: 'se-sr-only', role: 'status' });
+    host.append(spoken);
+    host.dataset.ready = '1';
+
     const tick = () => {
         const left = target - (Date.now() + skew);
         if (left <= 0) {
-            host.replaceChildren(el('li', { class: 'se-count-unit' }, el('span', { class: 'se-count-num', text: 'Now' })));
+            host.replaceChildren(el('li', { class: 'se-count-unit' },
+                el('span', { class: 'se-count-face' }, el('span', { class: 'se-count-num se-count-now', text: 'Tonight' }))));
             clearInterval(timer);
             return;
         }
         const pad = (v) => String(v).padStart(2, '0');
-        units.d.textContent = String(Math.floor(left / 86400000));
-        units.h.textContent = pad(Math.floor((left % 86400000) / 3600000));
-        units.m.textContent = pad(Math.floor((left % 3600000) / 60000));
-        units.s.textContent = pad(Math.floor((left % 60000) / 1000));
+        rollTo(units.d, String(Math.floor(left / 86400000)).padStart(2, '0'));
+        rollTo(units.h, pad(Math.floor((left % 86400000) / 3600000)));
+        rollTo(units.m, pad(Math.floor((left % 3600000) / 60000)));
+        rollTo(units.s, pad(Math.floor((left % 60000) / 1000)));
+
+        const days = Math.floor(left / 86400000);
+        const hours = Math.floor((left % 86400000) / 3600000);
+        const spokenText = `Starts in ${days} ${days === 1 ? 'day' : 'days'} and ${hours} ${hours === 1 ? 'hour' : 'hours'}.`;
+        if (spoken.textContent !== spokenText) spoken.textContent = spokenText;
     };
 
     tick();

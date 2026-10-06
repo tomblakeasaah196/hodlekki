@@ -120,3 +120,65 @@ ok('the shrinking compact-title behaviour is gone',
 ok('stacked wordmarks break each word onto its own line',
     str_contains($css, '.se-wordmark[data-se-wordmark-layout="stacked"] .se-wordmark-word')
     && str_contains($css, '@media (max-width: 520px)'));
+
+// --------------------------------------------------------------------------
+// The cinematic treatments: countdown, team orbit, "Envision presents"
+// --------------------------------------------------------------------------
+
+ok('the countdown renders an odometer face per unit with its label',
+    substr_count($heroHtml, 'class="se-count-face"') === 4
+    && str_contains($heroHtml, 'data-unit="d"')
+    && str_contains($heroHtml, '<span class="se-count-label">Days</span>')
+    && substr_count($heroHtml, 'class="se-count-sep"') === 3);
+ok('the countdown still reads as a labelled list before JavaScript',
+    str_contains($heroHtml, 'aria-label="Countdown to the start"')
+    && substr_count($heroHtml, '>–<') === 4);
+ok('the countdown numerals use the editorial serif, not the display font',
+    str_contains($css, '.se-count-num')
+    && str_contains($css, 'font-family: "Playfair Display", Georgia, "Times New Roman", serif')
+    && !str_contains($css, "  .se-count-num {\n    display: block;\n    font-family: var(--se-font-display)"));
+ok('the digits roll on a 0-9 strip instead of snapping',
+    str_contains($css, '.se-count-strip')
+    && str_contains($css, 'translateY(calc(var(--se-digit, 0) * -10%))'));
+ok('the shell asks for the countdown numeral face',
+    str_contains((string) file_get_contents(__DIR__ . '/../../e/index.php'), 'Playfair+Display'));
+
+$teamOrbit = se_portal_team_orbit([
+    ['index' => 0, 'label' => 'Red'],
+    ['index' => 1, 'label' => 'Blue'],
+    ['index' => 2, 'label' => 'Gold'],
+    ['index' => 3, 'label' => 'Green'],
+]);
+ok('every configured team gets its own orb in its own colour slot',
+    substr_count($teamOrbit, 'class="se-orb ') === 4
+    && str_contains($teamOrbit, 'se-orb-t0 se-orb-i0')
+    && str_contains($teamOrbit, 'se-orb-t3 se-orb-i3'));
+ok('the orbit names the colours it is showing',
+    str_contains($teamOrbit, 'Red · Blue · Gold · Green'));
+ok('the orbit carries no style attribute (the CSP drops them)',
+    !str_contains($teamOrbit, 'style='));
+ok('an event with no teams yet still renders neutral orbs',
+    str_contains(se_portal_team_orbit([]), 'se-orb-neutral')
+    && !str_contains(se_portal_team_orbit([]), 'se-orbit-caption'));
+ok('the orbs are painted from the shell team variables and converge',
+    str_contains($css, '.se-orb-t0 { --orb: var(--team-0')
+    && str_contains($css, '@keyframes se-orbit-merge')
+    && str_contains($css, '--se-orb-r: 0%'));
+ok('the team colours reach the page shell as --team-N properties',
+    str_contains((string) file_get_contents(__DIR__ . '/../../e/index.php'), 'se_theme_css_vars($theme, $teamTokens)'));
+
+ok('the top bar credit is staged letter by letter, not one flat label',
+    str_contains($brandHtml, 'class="se-presents"')
+    && str_contains($brandHtml, '<span class="se-presents-letter">E</span>')
+    && str_contains($brandHtml, '<span class="se-presents-word">presents</span>'));
+is_same('the staged credit still reads as "ENVISION presents"', 'ENVISION presents',
+    trim((string) preg_replace('/\s+/', ' ', strip_tags(
+        (string) (preg_match('~<span class="se-presents"[^>]*>(.*?)</span>\s*</a>~s', $brandHtml, $m) ? $m[1] : '')
+    ))));
+ok('the credit animation plays once and then holds',
+    str_contains($css, '@keyframes se-presents-letter')
+    && str_contains($css, '@keyframes se-presents-word'));
+ok('reduced motion freezes the credit, the clock and the orbit',
+    str_contains($css, '.se-presents-letter, .se-presents-word, .se-presents-word::before')
+    && str_contains($css, '.se-count-face::after, .se-count-sep { animation: none !important; }')
+    && str_contains($css, '.se-orbit-core { animation: none !important;'));

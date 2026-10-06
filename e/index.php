@@ -191,6 +191,12 @@ function se_render_shell(
     se_send_page_headers($nonce);
 
     $theme     = se_event_theme($event);
+
+    // The event's real team colours become --team-N custom properties in the
+    // page's <style nonce> block, so the portal can paint them without a
+    // style="" attribute (which the §19.7 CSP drops) and without JavaScript.
+    $teamTokens = se_portal_team_tokens($pdo, $event, $theme);
+
     $slug      = (string) $event['slug'];
     $title     = (string) $event['title'];
     $edition   = (string) ($event['edition_label'] ?? '');
@@ -232,9 +238,12 @@ function se_render_shell(
     // Google Fonts: the two families the event chose (§13.1.2).
     $fontDisplay = rawurlencode(str_replace(' ', '+', (string) $event['font_display']));
     $fontBody    = rawurlencode(str_replace(' ', '+', (string) $event['font_body']));
+    // Plus one high-contrast editorial serif, used only for the countdown
+    // numerals so the clock reads like a premiere title card (§13.3 S1).
     $fontsHref   = 'https://fonts.googleapis.com/css2'
         . '?family=' . $fontDisplay . ':wght@600;700;800'
         . '&family=' . $fontBody . ':wght@400;500;700'
+        . '&family=Playfair+Display:wght@500;700;900'
         . '&display=swap';
 
     ?>
@@ -276,7 +285,7 @@ function se_render_shell(
 <?php endforeach; ?>
 
 <style nonce="<?= se_h($nonce) ?>">
-<?= se_theme_css_vars($theme) ?>
+<?= se_theme_css_vars($theme, $teamTokens) ?>
 :root {
   --se-font-display: "<?= se_h($event['font_display']) ?>";
   --se-font-body: "<?= se_h($event['font_body']) ?>";
