@@ -47,9 +47,17 @@ ok('the selected hero is prioritised for first paint',
     str_contains($heroHtml, 'fetchpriority="high"'));
 ok('the image activates the media blending treatment',
     str_contains($heroHtml, 'data-has-media="1"') && str_contains($heroHtml, 'se-hero-shade'));
-ok('short event names use the compact wordmark treatment',
-    str_contains($heroHtml, 'data-se-wordmark-fit="compact"')
-    && str_contains($heroHtml, '<span class="se-wordmark-title">Chara Night</span>'));
+ok('a two-word event name stacks onto two deliberate wordmark lines',
+    str_contains($heroHtml, 'data-se-wordmark-layout="stacked"')
+    && str_contains($heroHtml, '<span class="se-wordmark-word">Chara</span> <span class="se-wordmark-word">Night</span>'));
+ok('the stacked wordmark stays one accessible heading',
+    substr_count($heroHtml, '<h1 ') === 1
+    && str_contains($heroHtml, 'id="se-hero-title"')
+    && !str_contains($heroHtml, '<br'));
+preg_match('~<h1\b[^>]*>(.*?)</h1>~s', $heroHtml, $headingMatch);
+is_same('the stacked heading still reads as the full title', 'Chara Night 2026',
+    trim((string) preg_replace('/\s+/', ' ', strip_tags($headingMatch[1] ?? ''))));
+
 ok('the calendar pill contains the date without duplicating the time',
     str_contains($heroHtml, '>Sat 31 Oct</time>')
     && !str_contains($heroHtml, 'Sat 31 Oct, 3:30 PM'));
@@ -68,8 +76,9 @@ $longTitleEvent['title'] = 'The Big Envision Celebration';
 ob_start();
 se_portal_hero($longTitleEvent, $days, $settings, $phase, 'open', null, null, null, null);
 $longTitleHeroHtml = (string) ob_get_clean();
-ok('long event names retain natural wrapping instead of the compact treatment',
-    str_contains($longTitleHeroHtml, 'data-se-wordmark-fit="natural"'));
+ok('long event names retain natural wrapping instead of stacking',
+    str_contains($longTitleHeroHtml, 'data-se-wordmark-layout="natural"')
+    && str_contains($longTitleHeroHtml, '<span class="se-wordmark-word">The Big Envision Celebration</span>'));
 
 ob_start();
 se_portal_topbar($event, 'Envision');
@@ -102,7 +111,128 @@ ok('the selected image keeps the animated mesh blend at a controlled strength',
     str_contains($css, '.se-hero-bg[data-has-media="1"] .se-hero-mesh')
     && str_contains($css, 'mix-blend-mode: screen')
     && str_contains($css, 'opacity: 0.4'));
-ok('compact wordmarks remain one line with responsive size and spacing',
-    str_contains($css, '.se-wordmark[data-se-wordmark-fit="compact"] .se-wordmark-title')
-    && str_contains($css, 'white-space: nowrap')
+ok('the hero wordmark is restored to the large display scale',
+    str_contains($css, '.se-display-xl { font-size: clamp(3.5rem, 12vw, 9rem);')
+    && str_contains($css, "font-size: clamp(3.5rem, 12vw, 9rem);\n    line-height: 0.92;"));
+ok('the shrinking compact-title behaviour is gone',
+    !str_contains($css, 'data-se-wordmark-fit="compact"')
+    && !str_contains($css, 'clamp(2.15rem, 10.6vw, 3.75rem)'));
+ok('stacked wordmarks break each word onto its own line',
+    str_contains($css, '.se-wordmark[data-se-wordmark-layout="stacked"] .se-wordmark-word')
     && str_contains($css, '@media (max-width: 520px)'));
+
+// --------------------------------------------------------------------------
+// The cinematic treatments: countdown, team orbit, "Envision presents"
+// --------------------------------------------------------------------------
+
+ok('the countdown renders an odometer face per unit with its label',
+    substr_count($heroHtml, 'class="se-count-face"') === 4
+    && str_contains($heroHtml, 'data-unit="d"')
+    && str_contains($heroHtml, '<span class="se-count-label">Days</span>')
+    && substr_count($heroHtml, 'class="se-count-sep"') === 3);
+ok('the countdown still reads as a labelled list before JavaScript',
+    str_contains($heroHtml, 'aria-label="Countdown to the start"')
+    && substr_count($heroHtml, '>–<') === 4);
+ok('the countdown numerals use the editorial serif, not the display font',
+    str_contains($css, '.se-count-num')
+    && str_contains($css, 'font-family: "Playfair Display", Georgia, "Times New Roman", serif')
+    && !str_contains($css, "  .se-count-num {\n    display: block;\n    font-family: var(--se-font-display)"));
+ok('the digits roll on a 0-9 strip instead of snapping',
+    str_contains($css, '.se-count-strip')
+    && str_contains($css, 'translateY(calc(var(--se-digit, 0) * -10%))'));
+ok('the shell asks for the countdown numeral face',
+    str_contains((string) file_get_contents(__DIR__ . '/../../e/index.php'), 'Playfair+Display'));
+
+$teamOrbit = se_portal_team_orbit([
+    ['index' => 0, 'label' => 'Red'],
+    ['index' => 1, 'label' => 'Blue'],
+    ['index' => 2, 'label' => 'Gold'],
+    ['index' => 3, 'label' => 'Green'],
+]);
+ok('every configured team gets its own orb in its own colour slot',
+    substr_count($teamOrbit, 'class="se-orb ') === 4
+    && str_contains($teamOrbit, 'se-orb-t0 se-orb-i0')
+    && str_contains($teamOrbit, 'se-orb-t3 se-orb-i3'));
+ok('the orbit names the colours it is showing',
+    str_contains($teamOrbit, 'Red · Blue · Gold · Green'));
+ok('the orbit carries no style attribute (the CSP drops them)',
+    !str_contains($teamOrbit, 'style='));
+ok('an event with no teams yet still renders neutral orbs',
+    str_contains(se_portal_team_orbit([]), 'se-orb-neutral')
+    && !str_contains(se_portal_team_orbit([]), 'se-orbit-caption'));
+ok('the orbs are painted from the shell team variables and converge',
+    str_contains($css, '.se-orb-t0 { --orb: var(--team-0')
+    && str_contains($css, '@keyframes se-orbit-merge')
+    && str_contains($css, '--se-orb-r: 0%'));
+ok('the team colours reach the page shell as --team-N properties',
+    str_contains((string) file_get_contents(__DIR__ . '/../../e/index.php'), 'se_theme_css_vars($theme, $teamTokens)'));
+
+ok('the top bar credit is staged letter by letter, not one flat label',
+    str_contains($brandHtml, 'class="se-presents"')
+    && str_contains($brandHtml, '<span class="se-presents-letter">E</span>')
+    && str_contains($brandHtml, '<span class="se-presents-word">presents</span>'));
+is_same('the staged credit still reads as "ENVISION presents"', 'ENVISION presents',
+    trim((string) preg_replace('/\s+/', ' ', strip_tags(
+        (string) (preg_match('~<span class="se-presents"[^>]*>(.*?)</span>\s*</a>~s', $brandHtml, $m) ? $m[1] : '')
+    ))));
+ok('the credit animation plays once and then holds',
+    str_contains($css, '@keyframes se-presents-letter')
+    && str_contains($css, '@keyframes se-presents-word'));
+ok('reduced motion freezes the credit, the clock and the orbit',
+    str_contains($css, '.se-presents-letter, .se-presents-word, .se-presents-word::before')
+    && str_contains($css, '.se-count-face::after, .se-count-sep { animation: none !important; }')
+    && str_contains($css, '.se-orbit-core { animation: none !important;'));
+
+// --------------------------------------------------------------------------
+// No hardcoded colour on the public event URL: every surface a guest sees
+// paints from the Brand tab's tokens (or the Teams tab's --team-N).
+// --------------------------------------------------------------------------
+
+/** The CSS of one rule, by selector, from the authored stylesheet. */
+$ruleFor = static function (string $selector) use ($css): string {
+    $at = strpos($css, "\n  " . $selector . " {");
+    if ($at === false) {
+        return '';
+    }
+    $end = strpos($css, "\n  }", $at);
+
+    return $end === false ? '' : substr($css, $at, $end - $at);
+};
+
+foreach ([
+    '.se-orb'            => 'the team orbs',
+    '.se-church-logo'    => 'the church logo plate',
+    '.se-sheet-backdrop' => 'the registration sheet backdrop',
+    '.se-test-ribbon'    => 'the test-mode ribbon',
+    '.se-glass'          => 'the glass panels',
+    '.se-count-face'     => 'the countdown faces',
+    '.se-presents-brand' => 'the top-bar credit',
+] as $selector => $what) {
+    $rule = $ruleFor($selector);
+    ok($what . ' carry no hardcoded colour',
+        $rule !== ''
+        && preg_match('/#[0-9a-f]{3,8}\b/i', $rule) !== 1
+        && !str_contains($rule, 'rgb(')
+        && !str_contains($rule, 'rgba(')
+        && !preg_match('/:\s*(white|black)\b/i', $rule));
+}
+
+ok('the orb highlight lifts the team colour instead of glazing it white',
+    str_contains($css, 'oklch(from var(--orb)'));
+ok('the logo plate is a theme token, not a literal white',
+    str_contains($css, '--se-logo-plate: color-mix(in oklab, var(--se-text)')
+    && str_contains($css, 'background: var(--se-logo-plate);'));
+
+// The :root block in the stylesheet is only a fallback — the live page gets
+// the event's own tokens from se_theme_css_vars().
+$portalTheme = se_theme_derive('#2E7D32', '#FFB300');
+$portalVars  = se_theme_css_vars($portalTheme, [se_team_tokens('#E5484D', $portalTheme['tokens']['--se-bg'], 0)]);
+foreach (['--se-bg', '--se-surface', '--se-text', '--se-primary', '--se-secondary', '--se-accent', '--se-glow'] as $token) {
+    ok('the brand tab drives ' . $token . ' on the public page', str_contains($portalVars, $token . ':'));
+}
+ok('a brand change really changes the painted tokens',
+    !str_contains($portalVars, '--se-primary: #415C95;'));
+ok('the teams tab drives the orb colours on the public page',
+    str_contains($portalVars, '--team-0:')
+    && str_contains($portalVars, '--team-0-glow:')
+    && str_contains($portalVars, '--team-0-ring:'));

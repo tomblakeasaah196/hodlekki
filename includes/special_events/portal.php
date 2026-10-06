@@ -38,7 +38,7 @@ function se_portal_render(
     se_portal_topbar($event, $organizer);
     se_portal_hero($event, $days, $settings, $phase, $state, $seatsLeft, $heroAsset, $heroVideoAsset, $registration);
     se_portal_intro($event, $settings);
-    se_portal_chapters($event, $settings);
+    se_portal_chapters($event, $settings, se_portal_team_slots($pdo, $event));
     se_portal_program($pdo, $event, $days, $settings);
     se_portal_venue($event, $days);
     se_portal_faq($event, $settings);
@@ -60,7 +60,10 @@ function se_portal_topbar(array $event, string $organizer): void
       <span class="se-church-logo se-church-logo-top" aria-hidden="true">
         <img src="/assets/images/hod_logo.svg" alt="">
       </span>
-      <span class="se-label"><?= se_h(mb_strtoupper($organizer, 'UTF-8')) ?> PRESENTS</span>
+      <span class="se-presents" data-se-presents>
+        <span class="se-presents-brand"><?php foreach (preg_split('//u', mb_strtoupper($organizer, 'UTF-8'), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $letter): ?><span class="se-presents-letter"><?= se_h($letter) ?></span><?php endforeach; ?></span>
+        <span class="se-presents-word">presents</span>
+      </span>
     </a>
     <nav class="se-topbar-actions" aria-label="Page">
       <button type="button" class="se-topbar-link se-topbar-icon-button" aria-label="Share this event" title="Share" data-se-share hidden>
@@ -166,11 +169,16 @@ function se_portal_hero(
     $organizer = (string) ($event['organizer_label'] ?? 'Envision');
     $slug      = (string) $event['slug'];
 
-    // Short event names deserve to read as one deliberate wordmark, even on
-    // a narrow phone. Longer names retain their natural wrapping instead of
-    // being forced into an unreadably small line.
-    $titleCharacters = mb_strlen((string) preg_replace('/\s+/u', '', $title), 'UTF-8');
-    $wordmarkFit = $titleCharacters > 0 && $titleCharacters <= 12 ? 'compact' : 'natural';
+    // A short two-word name ("Chara Night") reads best as a deliberate stacked
+    // wordmark: one word per line at the full display scale, rather than being
+    // shrunk to survive on a single line. Every other name keeps its natural
+    // wrapping. The words are emitted as spans inside the one <h1>, separated
+    // by real whitespace, so assistive technology still reads one heading.
+    $titleWords = preg_split('/\s+/u', trim($title), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $titleCharacters = mb_strlen(implode('', $titleWords), 'UTF-8');
+    $stackWordmark = count($titleWords) === 2 && $titleCharacters > 0 && $titleCharacters <= 14;
+    $wordmarkLayout = $stackWordmark ? 'stacked' : 'natural';
+    $wordmarkWords = $stackWordmark ? $titleWords : [$title];
 
     $firstDay = $days[0] ?? null;
     $startsAt = se_parse_datetime($firstDay['starts_at'] ?? ($event['starts_at'] ?? null));
@@ -214,8 +222,8 @@ function se_portal_hero(
 
     <p class="se-label"><?= se_h(mb_strtoupper(trim($title . ' ' . $edition), 'UTF-8')) ?> · BY <?= se_h(mb_strtoupper($organizer, 'UTF-8')) ?></p>
 
-    <h1 id="se-hero-title" class="se-display-xl se-wordmark" data-se-wordmark data-se-wordmark-fit="<?= se_h($wordmarkFit) ?>">
-      <span class="se-wordmark-title"><?= se_h($title) ?></span><?php if ($edition !== ''): ?> <span class="se-wordmark-edition"><?= se_h($edition) ?></span><?php endif; ?>
+    <h1 id="se-hero-title" class="se-display-xl se-wordmark" data-se-wordmark data-se-wordmark-layout="<?= se_h($wordmarkLayout) ?>">
+      <span class="se-wordmark-title"><?php foreach ($wordmarkWords as $i => $word): ?><?= $i > 0 ? ' ' : '' ?><span class="se-wordmark-word"><?= se_h($word) ?></span><?php endforeach; ?></span><?php if ($edition !== ''): ?> <span class="se-wordmark-edition"><?= se_h($edition) ?></span><?php endif; ?>
     </h1>
 
     <?php if ($tagline !== ''): ?>
@@ -244,10 +252,15 @@ function se_portal_hero(
 
     <?php if ($showCountdown): ?>
     <ul class="se-countdown" data-se-countdown data-target="<?= se_h($startsAt->format('c')) ?>" aria-label="Countdown to the start">
-      <li class="se-count-unit"><span class="se-count-num" data-unit="d">–</span><span class="se-count-label">Days</span></li>
-      <li class="se-count-unit"><span class="se-count-num" data-unit="h">–</span><span class="se-count-label">Hours</span></li>
-      <li class="se-count-unit"><span class="se-count-num" data-unit="m">–</span><span class="se-count-label">Min</span></li>
-      <li class="se-count-unit"><span class="se-count-num" data-unit="s">–</span><span class="se-count-label">Sec</span></li>
+      <?php foreach ([['d', 'Days'], ['h', 'Hours'], ['m', 'Min'], ['s', 'Sec']] as [$unitKey, $unitLabel]): ?>
+      <li class="se-count-unit">
+        <span class="se-count-face">
+          <span class="se-count-num" data-unit="<?= se_h($unitKey) ?>">–</span>
+        </span>
+        <span class="se-count-label"><?= se_h($unitLabel) ?></span>
+      </li>
+      <?php if ($unitKey !== 's'): ?><li class="se-count-sep" aria-hidden="true"></li><?php endif; ?>
+      <?php endforeach; ?>
     </ul>
     <?php endif; ?>
 
@@ -362,7 +375,7 @@ function se_portal_chapter_list(array $settings): array
     return $chapters;
 }
 
-function se_portal_chapters(array $event, array $settings): void
+function se_portal_chapters(array $event, array $settings, array $teams = []): void
 {
     $chapters = se_portal_chapter_list($settings);
     if (!$chapters) {
@@ -380,7 +393,7 @@ function se_portal_chapters(array $event, array $settings): void
           <h3 class="se-display-lg"><?= se_h($chapter['title']) ?></h3>
           <p class="se-chapter-blurb"><?= se_h($chapter['blurb']) ?></p>
         </div>
-        <div class="se-chapter-art" aria-hidden="true"><?= se_portal_chapter_art($chapter['key']) ?></div>
+        <div class="se-chapter-art" aria-hidden="true"><?= se_portal_chapter_art($chapter['key'], $teams) ?></div>
       </li>
       <?php endforeach; ?>
     </ol>
@@ -395,7 +408,7 @@ function se_portal_chapters(array $event, array $settings): void
  * Inline SVG with `currentColor` and the theme variables, so it costs no
  * request and inherits the event's palette. The animation is CSS/GSAP's job.
  */
-function se_portal_chapter_art(string $key): string
+function se_portal_chapter_art(string $key, array $teams = []): string
 {
     return match ($key) {
         'mic' => '<svg viewBox="0 0 120 120" role="img" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3">'
@@ -409,12 +422,7 @@ function se_portal_chapter_art(string $key): string
             . '<rect x="66" y="14" width="46" height="80" rx="8"/>'
             . '<path d="M80 40v28M66 54h28"/>'
             . '</svg>',
-        'teams' => '<div class="se-orbit">'
-            . '<span class="se-orb se-team-chip" data-orb="1"></span>'
-            . '<span class="se-orb se-team-chip" data-orb="2"></span>'
-            . '<span class="se-orb se-team-chip" data-orb="3"></span>'
-            . '<span class="se-orb se-team-chip" data-orb="4"></span>'
-            . '</div>',
+        'teams' => se_portal_team_orbit($teams),
         default => '<svg viewBox="0 0 160 120" role="img" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3">'
             . '<path d="M12 96h136" opacity="0.4"/>'
             . '<path d="M20 96 46 60l24 20 26-44 24 36 18-14" stroke-linecap="round" stroke-linejoin="round" data-se-draw/>'
@@ -423,6 +431,98 @@ function se_portal_chapter_art(string $key): string
             . '<circle cx="120" cy="72" r="4" fill="currentColor" stroke="none"/>'
             . '</svg>',
     };
+}
+
+/**
+ * The event's real teams, as orbit slots (§10.6, §13.3 S3).
+ *
+ * Only what the public art needs: the slot index the --team-N custom
+ * properties are keyed on, and the colour's plain-language label for the
+ * accessible description. Before the teams tables exist, or for an event
+ * whose crew has not set any up, the list is empty and the art falls back to
+ * neutral orbs.
+ *
+ * @return list<array{index:int, label:string}>
+ */
+function se_portal_team_slots(PDO $pdo, array $event): array
+{
+    if (!function_exists('se_teams') || !se_teams_ready($pdo)) {
+        return [];
+    }
+
+    $slots = [];
+    foreach (se_teams($pdo, (int) $event['id']) as $i => $team) {
+        $slots[] = [
+            'index' => (int) ($team['sort_order'] ?? $i),
+            'label' => (string) ($team['name'] ?? '') !== ''
+                ? (string) $team['name']
+                : (string) ($team['color_label'] ?? 'Team'),
+        ];
+    }
+
+    return $slots;
+}
+
+/**
+ * The --team-N declarations for the page shell's <style nonce> block.
+ *
+ * se_theme_css_vars() wants team TOKENS (colour, on, glow, ring), derived
+ * against this event's background so a colour that cannot be told apart from
+ * the page gets its ring.
+ *
+ * @return list<array<string, mixed>>
+ */
+function se_portal_team_tokens(PDO $pdo, array $event, array $theme): array
+{
+    if (!function_exists('se_teams') || !se_teams_ready($pdo)) {
+        return [];
+    }
+
+    $bg     = (string) ($theme['tokens']['--se-bg'] ?? '#0B0D13');
+    $tokens = [];
+    foreach (se_teams($pdo, (int) $event['id']) as $i => $team) {
+        $tokens[] = se_team_tokens((string) $team['color_hex'], $bg, (int) ($team['sort_order'] ?? $i));
+    }
+
+    return $tokens;
+}
+
+/**
+ * The teams chapter art: one orb per real team, in that team's colour.
+ *
+ * The colours arrive as the --team-N custom properties the shell wrote, so
+ * there is no style="" attribute here (§19.7). The orbs converge into one
+ * light and separate again — four teams, one night — which @se/portal/main.js
+ * drives and prefers-reduced-motion turns into a still row.
+ */
+function se_portal_team_orbit(array $teams): string
+{
+    if (!$teams) {
+        // No teams configured yet: keep the composition, drop the claim that
+        // these are anybody's colours.
+        $teams = [['index' => -1, 'label' => ''], ['index' => -1, 'label' => ''], ['index' => -1, 'label' => '']];
+    }
+
+    $orbs   = '';
+    $labels = [];
+    foreach (array_values($teams) as $i => $team) {
+        $slot = (int) ($team['index'] ?? $i);
+        $tone = $slot >= 0 && $slot <= SE_MAX_TEAMS ? 'se-orb-t' . $slot : 'se-orb-neutral';
+        $orbs .= '<span class="se-orb ' . $tone . ' se-orb-i' . min($i, 7) . '"></span>';
+        if (($team['label'] ?? '') !== '') {
+            $labels[] = (string) $team['label'];
+        }
+    }
+
+    $caption = $labels !== []
+        ? '<span class="se-orbit-caption">' . se_h(implode(' · ', $labels)) . '</span>'
+        : '';
+
+    return '<div class="se-orbit" data-se-orbit data-orbs="' . count($teams) . '">'
+        . '<span class="se-orbit-core" aria-hidden="true"></span>'
+        . $orbs
+        . '</div>'
+        . $caption;
 }
 
 // --------------------------------------------------------------------------

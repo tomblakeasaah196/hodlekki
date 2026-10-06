@@ -300,14 +300,34 @@ Press **Publish** and `/e/your-link` is live.
 
 `hodlc.lpc.cm/e/your-link` is the page you send people to. It opens on your
 hero image across the full first screen, with the animated event colours and
-spotlights layered over it in a calm, readable order. The event name scales and
-tightens slightly on smaller phones so short names such as **Chara Night** stay
-on one line; long names wrap naturally rather than becoming too small. It
-counts down to the night, then walks down the page: **what it is**, **the night
+spotlights layered over it in a calm, readable order. The event name is printed
+large and expressively: a short two-word name such as **Chara Night** is set
+deliberately on two lines — *Chara* above, *Night* below — at full size instead
+of being shrunk to squeeze onto one line. Longer names keep their natural
+wrapping. Either way it is still one heading for screen readers.
+
+Under the name, the clock counts down like a premiere: tall editorial serif
+numerals on smoked glass, each digit rolling over like an odometer, with one
+light sweep across the row when the page arrives. In the **night, chapter by
+chapter** list, *The Teams* shows one glowing orb per team you set up in the
+Teams tab, in that team's real colour, drifting together into a single light
+and separating again — four teams, one night — with the colour names printed
+underneath. The **ENVISION presents** credit in the top bar now arrives like a
+title card: the name snaps in letter by letter, a hairline draws, and
+*presents* fades up beneath it. All of it plays once and then holds still, and
+a guest who has asked their phone for reduced motion simply gets the finished
+frame. It counts down to the night, then walks down the page: **what it is**, **the night
 chapter by chapter**, **where**, and **good to know**. The Household of David
 logo has its own clear lockup in the top bar and appears again in the footer. A
 button follows the guest down the screen and always says the right thing for
 the moment (the table in §6 lists them all).
+
+Every colour on that page comes from the **Brand** tab: the background, the
+glass panels, the glow behind the name, the countdown, the credit in the top
+bar, even the plate the church logo sits on are all derived from your primary,
+secondary and accent. The team orbs come from the **Teams** tab and are shown
+in each team's own colour, lit by lightening that same colour. Nothing on the
+public page is a fixed colour, so changing the brand changes the whole night.
 
 Everything on it comes from what you filled in. There is no separate "website"
 to maintain: change the tagline in Details and the page changes.
