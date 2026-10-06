@@ -52,7 +52,9 @@ The internal ERP is organised as one directory per module under
 **Events & experiences**
 - `special_events` — the Special Events Studio: create, brand and run a
   one-off event (Chara, karaoke and games nights) end to end. Standalone
-  `se_*` tables, a public portal at `/e/<slug>`, poster-QR check-in, colour
+  `se_*` tables, a public portal at `/e/<slug>` (with an optional background
+  music playlist, started on the guest's first gesture and muteable from a
+  two-icon dock), poster-QR check-in, colour
   teams, live games and a guided hand-off to Reach and Embrace. Design and
   build plan: [`docs/engineering_guide.md`](docs/engineering_guide.md); user
   guide: [`modules/special_events/how_to_use.md`](modules/special_events/how_to_use.md).

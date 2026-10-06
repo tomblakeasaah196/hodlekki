@@ -467,6 +467,13 @@ function se_boot_payload(
         'server_ms' => se_epoch_ms(),
     ];
 
+    // Portal music (§13.3 S0b). Only the home view gets it: /in is a queue at
+    // a door, /play is a game in a loud room and /me is a receipt — none of
+    // them is a page anybody browses, and all three would fight the PA.
+    $payload['music'] = $view === 'home'
+        ? se_music_boot($pdo, $event, $settings)
+        : ['enabled' => false, 'volume' => SE_MUSIC_DEFAULT_VOLUME, 'shuffle' => false, 'tracks' => []];
+
     // Registration (§13.4). Everything the sheet needs to build itself
     // without a round trip: which fields to ask for, the consent wording,
     // the custom questions and the live state of the seats.

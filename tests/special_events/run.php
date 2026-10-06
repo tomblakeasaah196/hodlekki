@@ -85,6 +85,11 @@ require_once __DIR__ . '/../../includes/special_events/after_event.php';
 require_once __DIR__ . '/../../includes/special_events/portal.php';
 require_once __DIR__ . '/../../includes/special_events/chapters.php';
 
+// The portal music playlist. se_music_playable() and se_music_tracks() are
+// the pure half: the rule that decides what a public page is allowed to
+// play. The rest of the file needs a PDO, but nothing runs at include time.
+require_once __DIR__ . '/../../includes/special_events/music.php';
+
 $GLOBALS['se_passed'] = 0;
 $GLOBALS['se_failed'] = 0;
 $GLOBALS['se_failures'] = [];

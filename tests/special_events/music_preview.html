@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en" data-se-ready="1">
+<!--
+  /tests/special_events/music_preview.html
+
+  A database-free harness for the portal music dock (guide §13.3 S0b).
+
+  It loads the REAL stylesheet, the REAL engine (@se/portal/music.js) and a
+  copy of the dock markup from se_portal_music_dock(), so what you see and
+  hear here is what the portal does. Only the boot payload is synthetic.
+
+  Serve the repository root over HTTP and open /tests/special_events/music_preview.html:
+
+      python3 -m http.server 8080 --bind 0.0.0.0
+
+  You also need a track. The committed tree has none on purpose (audio is a
+  runtime upload), so generate one first — see the comment at the bottom of
+  this file, or point TRACK_SRC at any local MP3.
+
+  tests/ is excluded from the deploy by .deployignore, so this never reaches
+  the public docroot.
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portal music — preview</title>
+<link rel="stylesheet" href="/assets/se/css/se.css">
+<script type="importmap">
+{ "imports": { "@se/": "/assets/se/js/" } }
+</script>
+<style>
+  /* Harness chrome only — none of this ships. */
+  .pv { max-width: 56rem; margin-inline: auto; padding: 3rem 1.25rem 10rem; }
+  .pv h1 { font-size: clamp(2rem, 6vw, 3.25rem); margin-bottom: .75rem; }
+  .pv p { color: var(--se-text-muted); max-width: 44rem; line-height: 1.7; }
+  .pv ol { color: var(--se-text-muted); max-width: 44rem; line-height: 1.9; padding-left: 1.25rem; margin-top: 1rem; }
+  .pv ol li { list-style: decimal; }
+  .pv-card {
+    border: 1px solid var(--se-border); border-radius: 20px; padding: 1.5rem;
+    background: color-mix(in oklab, var(--se-surface) 55%, transparent); margin-top: 2rem;
+  }
+  .pv-tag {
+    display: inline-block; font-size: .7rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--se-accent); font-weight: 700; margin-bottom: .75rem;
+  }
+  .pv-spacer { height: 70vh; }
+  code { background: color-mix(in oklab, var(--se-surface-2) 80%, transparent); padding: .1rem .35rem; border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<main class="pv">
+  <span class="pv-tag">Special Events · portal music</span>
+  <h1>Tap anywhere, or scroll.</h1>
+  <p>
+    The page loaded silent, because every browser blocks audible autoplay until you
+    interact with it. Your first tap, scroll or key press fades the track in at 30%.
+    Watch the ring around the speaker in the bottom-left corner — it is driven by the
+    live waveform, so it breathes with the music rather than on a timer.
+  </p>
+
+  <div class="pv-card">
+    <span class="pv-tag">What to try</span>
+    <ol>
+      <li>Tap the speaker to mute. Reload — it stays muted, because the choice is remembered.</li>
+      <li>Tap the dial to slide out the volume rail. Drag it to zero: that mutes too, and the two controls agree.</li>
+      <li>Switch to another browser tab. The music stops, and resumes when you come back.</li>
+      <li>Turn on your OS "reduce motion" setting and reload: the ring stops moving, the music still works.</li>
+      <li>Turn your phone to silent. Nothing on this page can detect that — the sound simply stops being audible.</li>
+    </ol>
+  </div>
+
+  <div class="pv-spacer"></div>
+  <p>Still playing. The dock follows you down the page and never covers the content.</p>
+  <div class="pv-spacer"></div>
+</main>
+
+<!-- ==================================================================== -->
+<!-- Copied verbatim from se_portal_music_dock() in                        -->
+<!-- includes/special_events/portal.php. If you change one, change both.   -->
+<!-- ==================================================================== -->
+<div class="se-music" id="se-music" data-state="off" hidden>
+  <!-- Sound on/off. The ring behind it breathes with the track. -->
+  <button type="button" class="se-music-key" data-se-music="toggle"
+          aria-pressed="false" aria-label="Play the background music">
+    <span class="se-music-ring" aria-hidden="true"></span>
+    <svg class="se-music-glyph se-music-glyph-on" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M11 5 6.5 8.5H4a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h2.5L11 19z"
+            fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+      <path class="se-music-wave se-music-wave-1" d="M14.8 9.4a3.6 3.6 0 0 1 0 5.2"
+            stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path class="se-music-wave se-music-wave-2" d="M17.4 7a7.1 7.1 0 0 1 0 10"
+            stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    <svg class="se-music-glyph se-music-glyph-off" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M11 5 6.5 8.5H4a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h2.5L11 19z"
+            fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+      <path d="m15.5 10 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+    </svg>
+  </button>
+
+  <!-- Volume. Tapping it slides the rail out; it never covers the page. -->
+  <div class="se-music-vol" data-open="0">
+    <button type="button" class="se-music-key" data-se-music="volume"
+            aria-expanded="false" aria-controls="se-music-rail" aria-label="Volume">
+      <svg class="se-music-glyph" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M5 14.5a7.5 7.5 0 0 1 14 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="m12 14.5 3.6-3.9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <circle cx="12" cy="14.6" r="1.25" fill="currentColor"/>
+      </svg>
+    </button>
+    <input type="range" class="se-music-rail" id="se-music-rail"
+           min="0" max="100" step="5" value="30"
+           aria-label="Music volume" tabindex="-1">
+  </div>
+</div>
+
+<script type="module">
+// The boot payload e/index.php would have emitted, with one track.
+//
+// Generate the demo loop first (from the repository root):
+//
+//   mkdir -p uploads/se/preview/music
+//   python3 tests/special_events/make_preview_track.py
+//
+// uploads/ is git-ignored, so the audio never enters the repository.
+const TRACK_SRC = '/uploads/se/preview/music/demo-loop.wav';
+
+const config = {
+    event: { public_id: 'preview00000', title: 'Preview' },
+    view: 'home',
+    music: {
+        enabled: true,
+        volume: 30,
+        shuffle: false,
+        tracks: [{ src: TRACK_SRC, title: 'Golden Hour', artist: 'Preview loop', bpm: 92 }],
+    },
+};
+
+const { startMusic } = await import('/assets/se/js/portal/music.js');
+startMusic(config);
+
+// Fail loudly here (and only here): without this, a missing demo file looks
+// like a broken dock rather than a missing file.
+fetch(TRACK_SRC, { method: 'HEAD' }).then((r) => {
+    if (!r.ok) {
+        document.querySelector('.pv-card').insertAdjacentHTML('afterbegin',
+            '<p style="color:var(--se-danger);font-weight:700">'
+            + 'No demo track at ' + TRACK_SRC + ' — run tests/special_events/make_preview_track.py first.</p>');
+    }
+}).catch(() => {});
+</script>
+
+</body>
+</html>

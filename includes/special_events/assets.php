@@ -460,7 +460,7 @@ function se_image_write(\GdImage $image, string $path, string $extension): void
  *
  * @param array $file  One entry of $_FILES.
  * @param array $event The event row (for public_id).
- * @param array $meta  {title?, alt_text?}
+ * @param array $meta  {title?, alt_text?, rights_confirmed?}
  * @return array The created se_assets row.
  */
 function se_asset_store(PDO $pdo, array $event, string $role, array $file, array $meta, ?int $actorId): array
@@ -470,6 +470,16 @@ function se_asset_store(PDO $pdo, array $event, string $role, array $file, array
     }
     if (!isset(SE_ASSET_ROLES[$role])) {
         throw new SeValidationException(['role' => 'Unknown asset role.']);
+    }
+
+    // Rights attestation (§14.1). Music is the one kind of upload the church
+    // can be billed for getting wrong, so the tick is checked BEFORE the file
+    // is written: an unattested track never reaches the disk at all.
+    if (in_array($role, SE_ASSET_ROLES_NEED_RIGHTS, true) && !se_bool($meta['rights_confirmed'] ?? false)) {
+        throw new SeValidationException(
+            ['rights_confirmed' => 'Tick the box to confirm this track is clear to use.'],
+            'Confirm the music rights first.'
+        );
     }
 
     $error = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
@@ -589,6 +599,17 @@ function se_asset_store(PDO $pdo, array $event, string $role, array $file, array
 
     $webPath = '/uploads/se/' . $publicId . '/' . $role . '/' . $fileName;
 
+    // Record the attestation on the asset itself, not only on whatever row
+    // points at it. The claim belongs to the FILE: if the track is later
+    // moved, re-pointed or audited, the tick travels with the bytes.
+    if (in_array($role, SE_ASSET_ROLES_NEED_RIGHTS, true)) {
+        $metaJson['rights'] = [
+            'confirmed' => true,
+            'by'        => $actorId,
+            'at'        => se_now()->format('c'),
+        ];
+    }
+
     $stmt = $pdo->prepare(
         "INSERT INTO se_assets
             (event_id, kind, role, title, alt_text, path, mime, bytes, width, height, sha256, variants_json, meta_json, created_by)
@@ -669,6 +690,16 @@ function se_asset_delete(PDO $pdo, int $eventId, int $assetId, ?int $actorId): v
             og_asset_id         = IF(og_asset_id = ?, NULL, og_asset_id)
          WHERE id = ?"
     )->execute([$assetId, $assetId, $assetId, $assetId, $eventId]);
+
+    // Same for the playlist. The FK is ON DELETE CASCADE, but this is a SOFT
+    // delete, so it never fires — se_music_list() would keep an orphan row
+    // that the JOIN then hides, leaving a producer a track they can neither
+    // see nor replace. Deleting the row here keeps the two in step whichever
+    // door the file was removed through.
+    if (se_table_exists($pdo, 'se_music')) {
+        $pdo->prepare("DELETE FROM se_music WHERE event_id = ? AND asset_id = ?")
+            ->execute([$eventId, $assetId]);
+    }
 
     se_audit($pdo, $eventId, 'asset_delete', ['asset_id' => $assetId], 'asset', $assetId, $actorId);
 }

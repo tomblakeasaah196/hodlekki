@@ -274,6 +274,41 @@ function se_studio_chapters_payload(PDO $pdo, array $event): array
     ];
 }
 
+/**
+ * Everything Studio → Music needs in one response (§13.3 S0b).
+ *
+ * `limits.max_bytes` comes from SE_ASSET_ROLES rather than being repeated in
+ * JavaScript, so the browser's "that file is too big" and the server's are
+ * always the same number.
+ */
+function se_studio_music_payload(PDO $pdo, array $event): array
+{
+    $settings = se_event_settings($event);
+    $tracks   = array_map('se_music_payload', se_music_list($pdo, (int) $event['id']));
+
+    return [
+        'ready'    => se_music_ready($pdo),
+        'tracks'   => $tracks,
+        'max'      => SE_MUSIC_MAX,
+        'playable' => count(array_filter(
+            $tracks,
+            static fn(array $t): bool => $t['is_active'] && $t['rights']['confirmed']
+        )),
+        'settings' => [
+            'enabled' => se_bool(se_settings_path($settings, 'portal.music_enabled', true)),
+            'volume'  => se_int(
+                se_settings_path($settings, 'portal.music_volume', SE_MUSIC_DEFAULT_VOLUME),
+                5, 100, SE_MUSIC_DEFAULT_VOLUME
+            ),
+            'shuffle' => se_bool(se_settings_path($settings, 'portal.music_shuffle', false)),
+        ],
+        'limits' => [
+            'max_bytes'      => SE_ASSET_ROLES['music']['max_bytes'],
+            'default_volume' => SE_MUSIC_DEFAULT_VOLUME,
+        ],
+    ];
+}
+
 /** Custom registration questions of an event. */
 function se_form_fields_list(PDO $pdo, int $eventId): array
 {
@@ -1435,6 +1470,89 @@ try {
         ], $userId);
 
         se_api_success('Saved.', se_studio_chapters_payload($pdo, $event));
+    }
+
+    // ====================================================================
+    // Portal music (§13.3 S0b)
+    // ====================================================================
+
+    case 'music_get': {
+        $event = se_studio_event($pdo, $body, 'insights.view');
+
+        se_api_success('OK', se_studio_music_payload($pdo, $event));
+    }
+
+    case 'music_upload': {
+        $event = se_studio_event($pdo, $body, 'assets.manage');
+
+        $file = $_FILES['file'] ?? null;
+        if (!is_array($file)) {
+            throw new SeValidationException(['file' => 'Choose an MP3 or M4A to upload.']);
+        }
+
+        // One gesture, two records: the file goes through the ordinary asset
+        // pipeline (magic bytes, size cap, nosniff) and the playlist row is
+        // created from it. Both refuse without the rights tick.
+        $rights = se_bool($body['rights_confirmed'] ?? false);
+        $title  = se_line($body['title'] ?? '', 120);
+
+        $asset = se_asset_store($pdo, $event, 'music', $file, [
+            'title'            => $title,
+            'rights_confirmed' => $rights,
+        ], $userId);
+
+        se_music_add($pdo, $event, (int) $asset['id'], [
+            'title'            => $title,
+            'artist'           => $body['artist'] ?? '',
+            'bpm'              => $body['bpm'] ?? null,
+            'rights_confirmed' => $rights,
+        ], $userId);
+
+        se_api_success('Track added.', se_studio_music_payload($pdo, $event));
+    }
+
+    case 'music_update': {
+        $event = se_studio_event($pdo, $body, 'assets.manage');
+
+        se_music_update($pdo, $event, se_int($body['track_id'] ?? 0, 1), $body, $userId);
+
+        se_api_success('Saved.', se_studio_music_payload($pdo, $event));
+    }
+
+    case 'music_remove': {
+        $event = se_studio_event($pdo, $body, 'assets.manage');
+
+        se_music_remove($pdo, $event, se_int($body['track_id'] ?? 0, 1), $userId);
+
+        se_api_success('Track removed.', se_studio_music_payload($pdo, $event));
+    }
+
+    case 'music_move': {
+        $event = se_studio_event($pdo, $body, 'assets.manage');
+
+        se_music_move(
+            $pdo,
+            $event,
+            se_int($body['track_id'] ?? 0, 1),
+            se_enum($body['direction'] ?? 'up', ['up', 'down'], 'up'),
+            $userId
+        );
+
+        se_api_success('Moved.', se_studio_music_payload($pdo, $event));
+    }
+
+    case 'music_settings': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        $event = se_event_settings_patch($pdo, $event, [
+            'portal' => [
+                'music_enabled' => se_bool($body['enabled'] ?? false),
+                'music_volume'  => se_int($body['volume'] ?? SE_MUSIC_DEFAULT_VOLUME, 5, 100, SE_MUSIC_DEFAULT_VOLUME),
+                'music_shuffle' => se_bool($body['shuffle'] ?? false),
+            ],
+        ], $userId);
+
+        se_api_success('Saved.', se_studio_music_payload($pdo, $event));
     }
 
     // ====================================================================
