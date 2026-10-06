@@ -128,6 +128,19 @@ export function applyEvent(event) {
     discardDraft();
 }
 
+/**
+ * Re-read the open event after a save that was NOT the tab's own form.
+ *
+ * A side panel with its own Save button (the portal page and its FAQ, for
+ * one) shares a tab with the draft form above it. applyEvent() would throw
+ * that draft away, so a half-typed tagline would vanish the moment someone
+ * saved a question. The next save still carries the fresh row_version,
+ * because saveSection() reads it at save time.
+ */
+export function refreshEvent(event) {
+    if (event) current.value = event;
+}
+
 export function goHome() {
     screen.value = 'home';
     current.value = null;

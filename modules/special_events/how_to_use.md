@@ -109,6 +109,44 @@ into it.
 
 A multi-day event just gets more rows.
 
+### The public page
+
+Three small decisions about `/e/your-link` that belong nowhere else:
+
+- **Opening line** — one sentence under the countdown. Leave it empty and the
+  page uses your tagline on its own.
+- **Count down to the first day** — off hides the clock, which is what you
+  want for an event with no fixed start time.
+- **Play the hero video when there is one** — off always shows the hero image,
+  even if a video is sitting in Assets.
+
+### Good to know — the questions guests ask
+
+The list at the bottom of the public page, the one that opens when a guest taps
+a question. A new event starts with six **starter questions** (is it free, what
+to wear, do I have to sing, can I bring a friend, what time to arrive, will
+there be food) and you change all of them here.
+
+- **Add a question** — a new empty row at the bottom. Up to 20.
+- **↑ / ↓** — the order here is the order on the page, so put the one everybody
+  asks first.
+- **Remove** — takes it off the page.
+- **Restore the starter questions** — puts the original six back, replacing
+  whatever is there now. You are asked to confirm first.
+- **✨ Help me write this answer** — three suggestions from the AI helper for
+  that one answer. Nothing is used until you pick it, and you can edit it
+  afterwards. (Hidden when no AI key is configured.)
+
+Answers are plain words — no Markdown, no links. A question needs an answer and
+an answer needs a question: save a half-filled row and that row is highlighted
+rather than quietly showing a blank panel to a guest.
+
+**Remove every question and the whole section disappears from the page.** That
+is a real choice, not a mistake, so nothing is put back for you.
+
+Press **Save the public page** when you are done — this box saves separately
+from the name, venue and dates above it, and neither one disturbs the other.
+
 ---
 
 ## 5. Brand
@@ -317,7 +355,8 @@ title card: the name snaps in letter by letter, a hairline draws, and
 *presents* fades up beneath it. All of it plays once and then holds still, and
 a guest who has asked their phone for reduced motion simply gets the finished
 frame. It counts down to the night, then walks down the page: **what it is**, **the night
-chapter by chapter**, **where**, and **good to know**. The Household of David
+chapter by chapter**, **where**, and **good to know** (the questions you wrote
+in Details — see §4). The Household of David
 logo has its own clear lockup in the top bar and appears again in the footer. A
 button follows the guest down the screen and always says the right thing for
 the moment (the table in §6 lists them all).
@@ -1052,6 +1091,11 @@ Overview lists exactly what is missing, in red, each with where to fix it.
 **Why is "Suggest palettes" missing?**
 No AI key is configured. Everything else works; you just choose the accent
 yourself.
+
+**Can I change the questions at the bottom of the public page?**
+Yes — Details → **Good to know**. The six an event starts with are only a
+starting point: rewrite them, reorder them, add your own, or delete the lot and
+the section disappears.
 
 **Can I delete an event?**
 Only a draft, and only an administrator. Once anyone has registered it is

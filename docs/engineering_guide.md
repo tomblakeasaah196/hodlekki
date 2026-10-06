@@ -345,7 +345,7 @@ Each journey lists the steps and the system behaviour behind them. Section refer
 ### 7.1 Producer creates Chara (or clones last year's)
 
 1. **Studio → Special Events → "New event"** (or **"Clone…"** on a past event, §10.10).
-2. **Details.** Title `Chara`, edition `2026`, tagline, rich description, organiser label `Envision`, venue (name, address, map link, notes such as "Check-in is downstairs"). Then the **days**: for a single day, one row (doors open 4:00 PM, starts 5:00 PM, ends 10:00 PM). For multi-day events, one row per day.
+2. **Details.** Title `Chara`, edition `2026`, tagline, rich description, organiser label `Envision`, venue (name, address, map link, notes such as "Check-in is downstairs"). Then the **days**: for a single day, one row (doors open 4:00 PM, starts 5:00 PM, ends 10:00 PM). For multi-day events, one row per day. Last on the tab, the **public page** panel: the portal's opening line, the countdown and hero-video switches, and the **Good to know** questions (S6) — the `settings.portal` branch, saved on its own through `portal_settings_save` so it never collides with the form above it.
 3. **Slug.** Type `chara`. The field validates live: format, reserved words, availability (§10.2). The preview shows `hodlc.lpc.cm/e/chara`.
 4. **Brand.** Paste the **primary** and **secondary** hex codes (optional accent). The derived palette appears immediately, with contrast badges on the live preview. **"Suggest palettes ✨"** returns four AI palettes built around the two colours, each with a mini portal/stage/team preview (§13.2, §15). Then pick the display and body fonts and upload the logo/wordmark, hero image and hero video (§14.1).
 5. **Registration & capacity.** Field toggles (email optional/required/hidden, how-heard, karaoke interest), consent mode and text, custom questions; online capacity `120`, auto-close ✓, waitlist ☐/✓, self-cancel ☐/✓, walk-ins `30` (hard cap ☐/✓), seats-left mode; registration window (opens now, closes at event start).
@@ -1889,6 +1889,7 @@ Auth: ERP session + `X-SE-CSRF` + module access (§6.2) + capability on the even
 | Attendees | `attendees_list {filters, q, page}`, `attendee_get {id}`, `attendee_update {id, fields}` (crew corrections), `attendee_cancel`, `attendee_restore`, `attendee_promote`, `attendee_remove {reason}`, `attendee_add` (studio channel), `attendee_reset_links`, `attendee_erase {reason}`, `attendees_export` (xlsx), `possible_duplicates`, `possible_members` |
 | Insights | `insights {id, range?}`, `report_pdf {id}`, `report_summary_ai {id}` |
 | Hand-off | `handoff_preview {id}`, `handoff_commit {id, overrides[]}`, `handoff_history {id}` |
+| Portal page | `portal_settings_save {id, settings: {intro_line?, show_countdown?, hero_video_enabled?, chapters_from_featured?, faq?[{q, a}]}}` (patches `settings.portal`, no row_version), `portal_faq_reset {id}` (the Appendix E questions again) |
 | Ops | `audit_list {id, filters}`, `health {id}`, `settings_get`, `settings_save` (manager) |
 
 Response shapes mirror the tables in §9. Every list action paginates (`page`, `per_page ≤ 100`), returning `{items, page, pages, total}`.
@@ -2086,7 +2087,7 @@ Mobile-first; desktop enhances. Sections in order:
 
 **S5 · Venue.** Glass card: venue name, address, notes ("Check-in is downstairs"), **Open in Maps**, **Add to calendar** (`/e/<slug>/calendar.ics`).
 
-**S6 · FAQ.** Accordion from `settings.portal.faq` (defaults in Appendix E): cost, dress code, singing optional, friends, arrival time, food.
+**S6 · FAQ.** Accordion from `settings.portal.faq`. The Appendix E list (cost, dress code, singing optional, friends, arrival time, food) is **starter content**, not fixed copy: Studio → Details → **Good to know** rewrites, reorders, extends (to `SE_PORTAL_FAQ_MAX` = 20) or empties it, and an empty list drops the whole section. Server-side, `se_portal_faq_clean()` trims, drops fully blank rows and refuses a half-filled one (`faq_<i>_q` / `faq_<i>_a` field errors); the normaliser only re-seeds the six when the key is absent entirely.
 
 **S7 · Footer.** Organiser, HOD Lekki logo, Privacy, "Designed by Envision".
 
@@ -4673,7 +4674,7 @@ Statistics: {{stats_json}}
 
 ## Appendix F — Copy deck (microcopy)
 
-Tone: joyful, warm, short, inclusive of guests; Nigerian-English friendly; no church jargon without a hint. These strings are the defaults; the Studio can override portal headline/tagline/FAQ per event.
+Tone: joyful, warm, short, inclusive of guests; Nigerian-English friendly; no church jargon without a hint. These strings are the defaults; the Studio overrides portal headline/tagline (Details) and the FAQ (Details → Good to know, `portal_settings_save`) per event. The `portal.faq` default is only applied when the stored document has no `faq` key at all — an event that saves `[]` keeps an empty list and shows no FAQ section.
 
 | Key | Text |
 |---|---|

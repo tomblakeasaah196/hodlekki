@@ -1,7 +1,9 @@
 // /assets/se/js/studio/tabs/details.js
 //
 // Details (guide §13.13): name, link with live slug validation, venue,
-// description, and the event days.
+// description, the event days — and the public page itself: its opening
+// line, the hero switches and the "Good to know" questions (§13.2 S6),
+// which live in settings.portal and had no editor at all before.
 
 import { html } from '@se/core/html.js';
 import { useState, useEffect, useRef } from 'preact/hooks';
@@ -11,6 +13,7 @@ import {
     saveSection, toast, applyEvent, can,
 } from '../state.js';
 import { Card, Field, TextInput, TextArea, Select, Button, SaveBar, Spinner } from '../ui.js';
+import { PortalPage } from '../portal_page.js';
 
 // Kept out of the template below: a backtick inside an html`` literal ends
 // the literal, and a syntax error in this module blanks the whole Studio.
@@ -290,6 +293,8 @@ export function DetailsTab() {
                         }}>Discard<//>
                     </div>` : null}
             <//>
+
+            <${PortalPage} />
 
             <${SaveBar} dirty=${isDirty.value} saving=${saving.value}
                 onSave=${saveDetails} onDiscard=${discardDraft} />

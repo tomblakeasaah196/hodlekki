@@ -324,9 +324,13 @@ function se_settings_spec(): array
             'show_countdown'        => ['type' => 'bool', 'default' => true],
             'hero_video_enabled'    => ['type' => 'bool', 'default' => true],
             'chapters_from_featured' => ['type' => 'bool', 'default' => true],
-            'faq' => ['type' => 'obj_list', 'max_items' => 20, 'children' => [
-                'q' => ['type' => 'str',  'max' => 160, 'default' => ''],
-                'a' => ['type' => 'text', 'max' => 1000, 'default' => ''],
+            // Starter questions, not fixed copy: Studio → Details → "Good to
+            // know" writes this list, and se_portal_faq_reset_value() puts
+            // these six back. An event that saves an empty list simply has no
+            // FAQ section on its portal (§13.2 S6).
+            'faq' => ['type' => 'obj_list', 'max_items' => SE_PORTAL_FAQ_MAX, 'children' => [
+                'q' => ['type' => 'str',  'max' => SE_PORTAL_FAQ_Q_MAX, 'default' => ''],
+                'a' => ['type' => 'text', 'max' => SE_PORTAL_FAQ_A_MAX, 'default' => ''],
             ], 'default' => [
                 ['q' => 'Is it free?',                   'a' => "Yes! Just register so we can save you a seat."],
                 ['q' => 'What should I wear?',           'a' => "Come comfortable and colourful — it's a night of joy."],
@@ -573,4 +577,114 @@ function se_settings_path(array $settings, string $path, mixed $default = null):
     }
 
     return $node;
+}
+
+/** The Appendix E default at a dotted path, e.g. se_settings_default('portal.faq'). */
+function se_settings_default(string $path, mixed $fallback = null): mixed
+{
+    static $defaults = null;
+    $defaults ??= se_settings_defaults();
+
+    return se_settings_path($defaults, $path, $fallback);
+}
+
+// --------------------------------------------------------------------------
+// Portal page (§13.2) — the branch Studio → Details writes
+// --------------------------------------------------------------------------
+
+/** The six starter questions a new event begins with (Appendix E). */
+function se_portal_faq_reset_value(): array
+{
+    return (array) se_settings_default('portal.faq', []);
+}
+
+/**
+ * Clean a FAQ list on its way in from the Studio.
+ *
+ * The normaliser would quietly coerce anything, which is right for a stored
+ * document arriving from an older Studio but wrong for a form someone is
+ * looking at: a question typed with no answer should come back as an error,
+ * not as an empty accordion on the public page. A row left completely blank
+ * is simply dropped — that is the empty row the editor adds for you.
+ *
+ * @return list<array{q: string, a: string}>
+ * @throws SeValidationException
+ */
+function se_portal_faq_clean(mixed $rows): array
+{
+    if (!is_array($rows)) {
+        throw new SeValidationException(['faq' => 'Those questions did not arrive in a shape we could read.']);
+    }
+
+    $clean  = [];
+    $errors = [];
+    $index  = -1;
+
+    foreach ($rows as $row) {
+        $index++;
+        if (!is_array($row)) {
+            continue;
+        }
+
+        $q = se_line($row['q'] ?? '', SE_PORTAL_FAQ_Q_MAX * 2);
+        $a = se_str($row['a'] ?? '', SE_PORTAL_FAQ_A_MAX * 2);
+
+        if ($q === '' && $a === '') {
+            continue;
+        }
+
+        if ($q === '') {
+            $errors["faq_{$index}_q"] = 'Give this answer a question.';
+        } elseif (mb_strlen($q, 'UTF-8') > SE_PORTAL_FAQ_Q_MAX) {
+            $errors["faq_{$index}_q"] = sprintf('Keep the question under %d characters.', SE_PORTAL_FAQ_Q_MAX);
+        }
+
+        if ($a === '') {
+            $errors["faq_{$index}_a"] = 'Answer this one, or remove the row.';
+        } elseif (mb_strlen($a, 'UTF-8') > SE_PORTAL_FAQ_A_MAX) {
+            $errors["faq_{$index}_a"] = sprintf('Keep the answer under %d characters.', SE_PORTAL_FAQ_A_MAX);
+        }
+
+        $clean[] = ['q' => $q, 'a' => $a];
+    }
+
+    if (count($clean) > SE_PORTAL_FAQ_MAX) {
+        $errors['faq'] = sprintf('The page shows at most %d questions.', SE_PORTAL_FAQ_MAX);
+    }
+
+    if ($errors) {
+        throw new SeValidationException($errors, 'Please check the highlighted questions.');
+    }
+
+    return $clean;
+}
+
+/**
+ * The portal branch of a settings patch, built from what the Studio sent.
+ *
+ * Only keys that were actually submitted are returned, so saving the FAQ
+ * never silently rewrites the intro line (and vice versa).
+ *
+ * @throws SeValidationException
+ */
+function se_portal_settings_patch(mixed $input): array
+{
+    $input = is_array($input) ? $input : [];
+    $patch = [];
+
+    foreach (['intro_line', 'show_countdown', 'hero_video_enabled', 'chapters_from_featured'] as $key) {
+        if (array_key_exists($key, $input)) {
+            $patch[$key] = $input[$key];
+        }
+    }
+
+    if (array_key_exists('faq', $input)) {
+        $patch['faq'] = se_portal_faq_clean($input['faq']);
+    }
+
+    if (!$patch) {
+        throw new SeValidationException(['portal' => 'There was nothing to save.']);
+    }
+
+    return $patch;
 }

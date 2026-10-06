@@ -337,6 +337,16 @@ const SE_MAX_JSON_BODY_BYTES = 1048576;   // 1 MB (§12.1)
 const SE_SNAPSHOT_DEBOUNCE_MS = 400;
 const SE_TICK_MS = 1000;
 
+/**
+ * The portal's "Good to know" accordion (§13.2 S6). The same three numbers
+ * drive the settings spec, the Studio editor and the server-side check, so a
+ * producer never sees a limit in the Studio that the normaliser disagrees
+ * with. Boot hands the maximum to the Studio as `limits.faq_max`.
+ */
+const SE_PORTAL_FAQ_MAX = 20;
+const SE_PORTAL_FAQ_Q_MAX = 160;
+const SE_PORTAL_FAQ_A_MAX = 1000;
+
 /** Token / code lengths (§10.3, §9.3). */
 const SE_PUBLIC_ID_LENGTH = 12;
 const SE_PREVIEW_KEY_LENGTH = 22;

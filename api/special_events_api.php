@@ -1438,6 +1438,39 @@ try {
     }
 
     // ====================================================================
+    // Portal page (§13.2) — Studio → Details
+    // ====================================================================
+
+    // The settings.portal branch: the opening line, the two hero switches and
+    // the "Good to know" questions. A settings patch, not a form section, so
+    // it carries no row_version — last save wins, like every other switch
+    // that goes through se_event_settings_patch() (§12.5).
+    case 'portal_settings_save': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        $patch   = se_portal_settings_patch($body['settings'] ?? null);
+        $updated = se_event_settings_patch($pdo, $event, ['portal' => $patch], $userId);
+
+        se_api_success('The public page is updated.', [
+            'settings' => se_event_settings($updated)['portal'] ?? [],
+            'event'    => se_studio_event_payload($pdo, $updated, $userId, $accessLevel, true),
+        ]);
+    }
+
+    case 'portal_faq_reset': {
+        $event = se_studio_event($pdo, $body, 'event.edit');
+
+        $updated = se_event_settings_patch(
+            $pdo, $event, ['portal' => ['faq' => se_portal_faq_reset_value()]], $userId
+        );
+
+        se_api_success('The starter questions are back.', [
+            'settings' => se_event_settings($updated)['portal'] ?? [],
+            'event'    => se_studio_event_payload($pdo, $updated, $userId, $accessLevel, true),
+        ]);
+    }
+
+    // ====================================================================
     // Karaoke (§10.8)
     // ====================================================================
 
