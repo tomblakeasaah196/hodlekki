@@ -633,12 +633,28 @@ position. **The photo never leaves the phone** — the card is drawn on the
 device, so there is no copy of anyone's selfie on our server. A card without a
 photo looks just as good; it is genuinely optional.
 
-Then **Share** hands it to WhatsApp, Instagram or anywhere else, and
-**Download** saves it. Both a tall story-shaped card and a square one are
-made, so it fits wherever they post it. A confirmed or waitlisted guest can
-rebuild the card from any device by entering the phone number on their event
-registration; cancelled and removed registrations are not eligible. Making it
-again does not create a server-side copy or change their registration.
+The builder is only ever three buttons — **Add photo**, **Remove photo** and
+**Save** — and never more than two on screen at once. There is no shape
+question at the top, no separate cropping screen and no Close: the circle in
+the card itself is the button, dragging it moves the photo, and the sheet
+closes by dragging its handle, tapping the background or pressing Escape.
+
+**Save** asks the shape *afterwards*, when they have decided to keep the card:
+**Story** (1080 × 1920 — WhatsApp Status, IG/FB Story, TikTok) or **Square**
+(1080 × 1080 — WhatsApp DP, group chat, IG feed), each with the places it
+goes. Choosing one redraws the preview and opens the phone's own share sheet —
+that is how it reaches WhatsApp, Instagram or anywhere else. On a computer,
+where there is no share sheet, a quiet **Download instead** link saves the
+file. A confirmed or waitlisted guest can rebuild the card from any device by
+entering the phone number on their event registration; cancelled and removed
+registrations are not eligible. Making it again does not create a server-side
+copy or change their registration.
+
+The card is drawn over the event's **hero image**, blurred into atmosphere
+behind the ring, signed with the church crest, and closed with the verse set
+for this card — Psalm 16:11 in the approved design, which the Studio can
+change without anybody touching the artwork. If the event has no hero
+uploaded, the palette alone carries it; nothing looks broken.
 
 This is the cheapest invitation you have: it goes out in your guests' own
 voice, to people no flyer reaches.
