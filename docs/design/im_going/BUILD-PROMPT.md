@@ -39,15 +39,34 @@ committed in `docs/design/im_going/`. The decisions are final:
 
 ### Current state of the work
 
+**Read this twice — main moved under this PR, and one part of the builder is
+now load-bearing.**
+
 - `assets/se/templates/im_going.svg` — **rewritten and committed** to the
-  approved direction. Proofed at 1080×1920 in both photo states.
-- `assets/se/templates/im_going_square.svg` — **not yet started.**
-- `assets/se/js/portal/card.js` and `assets/se/js/portal/photo.js` —
-  **not yet changed.** They still implement the old builder (a Story/Square
-  toggle at the top, a separate cropper screen, Reset, a zoom slider, Close).
-- `includes/special_events/cards.php` — **not yet changed.** It does not send
-  the hero path or the doors line to the card.
+  approved direction. Proofed at 1080×1920 in both photo states. Carries
+  `se__slot__photo`, both `se__if__/se__ifnot__has_photo` groups, and the
+  `se__text__signature` token the unit tests require.
+- `assets/se/templates/im_going_square.svg` — **not yet started.** It is still
+  the *old* flat-gradient artwork.
+- `assets/se/js/portal/card.js` — **already touched, and it must stay
+  compatible.** PR #67 added the cross-device "I'm going" path: the builder now
+  takes `openCardBuilder(kind, options)` and forwards `options.phone` to the
+  server so a guest who registered on another phone can still make the card.
+  The *layout* is still the old one (a Story/Square toggle at the top, a
+  separate cropper screen, Reset, a zoom slider, Close) — that is what you are
+  replacing — but **the phone plumbing is not yours to remove.** See the
+  hard constraint in Task 2.
+- `assets/se/js/portal/photo.js` — unchanged since the original build.
+- `includes/special_events/cards.php` — **already touched.** PR #67 added
+  `se_card_registration_is_active()`, `se_card_registration_for_phone()` and a
+  `NOT_REGISTERED` rule so a phone lookup can only ever resolve to an active
+  registration for this event. **Keep all of it.** What is still missing is the
+  hero path, the doors line, the crest and the card's own font families —
+  Task 3.
 - CSS — **not yet changed**, so `assets/se/css/se.css` has not been rebuilt.
+- `tests/special_events/js/card_reentry.test.mjs` — **a new test that guards
+  the phone path.** It asserts *exact strings* inside `card.js` and `sheet.js`.
+  Read the Task 2 constraint before you edit either file.
 
 ### Task 1 — the square template
 
@@ -65,6 +84,23 @@ Rewrite `assets/se/js/portal/card.js` and `assets/se/js/portal/photo.js` to the
 flow in `docs/design/im_going/builder-flow.jpg` and §4 of the README. The whole
 point is that there are **three buttons — Add photo, Remove photo, Save — and
 never more than two on screen at once.**
+
+> **HARD CONSTRAINT — do not break the cross-device phone path (PR #67).**
+> `tests/special_events/js/card_reentry.test.mjs` greps the source for exact
+> strings, so a from-scratch rewrite will fail CI unless you preserve them
+> verbatim. In `card.js` you must keep:
+> - the signature `export async function openCardBuilder(kind = 'im_going', options = {})`
+> - the line `request.phone = options.phone;` inside the `options.phone` guard
+> - the call `call('public', 'card', request)`
+>
+> In `sheet.js` you must keep the string
+> `openCardBuilder('im_going', { phone: draft?.phone })`.
+> In `includes/special_events/cards.php` you must keep
+> `se_card_registration_for_phone(`, the `$kind === 'im_going' && array_key_exists('phone', $body)`
+> check, `se_public_limit($pdo, $event, 'lookup', 20, 400, 600)`,
+> `'lookup_phone'` and `se_public_actor(`. Run
+> `node --test "tests/special_events/js/*.test.mjs"` before you push — it is
+> 198 tests and it is fast.
 
 1. **One sheet, one canvas.** No Story/Square toggle at the top of the sheet.
    No separate cropper screen. No Reset button. No Close button (drag the
@@ -107,6 +143,10 @@ documented in §3.3 of the README. **Never** build a larger hero data URI.
 
 In `includes/special_events/cards.php`:
 
+- **Keep everything PR #67 added** — `se_card_registration_is_active()`,
+  `se_card_registration_for_phone()`, and the `NOT_REGISTERED` throw for an
+  inactive registration on an `im_going` card. You are adding to this file, not
+  rewriting it.
 - Add `hero` to the `im_going` payload: the path of the preferred ≤ 480 px hero
   variant (see `se_asset_srcset()` in `assets.php`), or `null`.
 - Add the doors line (`doors`) from `se_event_days()`.
