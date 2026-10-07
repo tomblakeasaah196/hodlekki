@@ -191,22 +191,26 @@
         text-anchor="middle" fill="#F5C518" fill-opacity="0.9">PSALM 16:11</text>
   <rect id="se__box__verse_ref--fit" x="300" y="1650" width="480" height="38" fill="none"/>
 
-  <!-- 15 · where and when -->
-  <text id="se__text__date" x="516" y="1728" font-size="30" font-weight="700" font-family="Fraunces, Unbounded, serif"
-        text-anchor="end" fill="#FFFFFF">Sat 24 Oct</text>
-  <rect id="se__box__date--fit" x="180" y="1692" width="336" height="46" fill="none"/>
-  <circle cx="540" cy="1718" r="4" fill="#FFFFFF" fill-opacity="0.5"/>
-  <text id="se__text__time" x="564" y="1728" font-size="30" font-weight="700" font-family="Fraunces, Unbounded, serif"
-        text-anchor="start" fill="#FFFFFF">5:00 PM</text>
-  <rect id="se__box__time--fit" x="564" y="1692" width="300" height="46" fill="none"/>
-
-  <text id="se__text__venue" x="540" y="1766" font-size="28" font-weight="500" text-anchor="middle"
+  <!-- 15 · where and when: the approved Jubilee foot -->
+  <text id="se__text__date" x="260" y="1728" font-size="30" font-weight="700" font-family="Fraunces, Unbounded, serif"
+        text-anchor="middle" fill="#FFFFFF">Sat 24 Oct</text>
+  <rect id="se__box__date--fit" x="80" y="1692" width="360" height="46" fill="none"/>
+  <circle cx="450" cy="1718" r="4" fill="#FFFFFF" fill-opacity="0.5"/>
+  <text id="se__text__time" x="535" y="1728" font-size="30" font-weight="700" font-family="Fraunces, Unbounded, serif"
+        text-anchor="middle" fill="#FFFFFF">5:00 PM</text>
+  <rect id="se__box__time--fit" x="460" y="1692" width="150" height="46" fill="none"/>
+  <circle cx="625" cy="1718" r="4" fill="#FFFFFF" fill-opacity="0.5"/>
+  <text id="se__text__venue" x="815" y="1728" font-size="28" font-weight="500" text-anchor="middle"
         fill="#FFFFFF" fill-opacity="0.72">HOD Lekki Centre</text>
-  <rect id="se__box__venue--fit" x="120" y="1732" width="840" height="44" fill="none"/>
+  <rect id="se__box__venue--fit" x="640" y="1692" width="360" height="46" fill="none"/>
 
-  <text id="se__text__url" x="540" y="1806" font-size="24" font-weight="500" letter-spacing="2"
+  <text id="se__text__doors" x="300" y="1770" font-size="26" font-weight="500" letter-spacing="2"
+        text-anchor="middle" text-transform="uppercase" fill="#FFFFFF" fill-opacity="0.45">Doors open 4:30 PM</text>
+  <rect id="se__box__doors--fit" x="80" y="1742" width="440" height="40" fill="none"/>
+  <circle cx="540" cy="1760" r="3" fill="#FFFFFF" fill-opacity="0.35"/>
+  <text id="se__text__url" x="770" y="1770" font-size="24" font-weight="500" letter-spacing="2"
         text-anchor="middle" fill="#FFFFFF" fill-opacity="0.5">hodlc.lpc.cm/e/chara</text>
-  <rect id="se__box__url--fit" x="120" y="1774" width="840" height="40" fill="none"/>
+  <rect id="se__box__url--fit" x="560" y="1742" width="440" height="40" fill="none"/>
 
   <text id="se__text__signature" x="540" y="1850" font-size="19" font-weight="500" letter-spacing="3"
         text-anchor="middle" fill="#FFFFFF" fill-opacity="0.38">Chara 2026 by Envision</text>

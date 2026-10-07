@@ -26,12 +26,18 @@ const TEMPLATES = {
     'im_going_square.svg': { width: 1080, height: 1080, margin: 48 },
 };
 
-/** Every text field the card payload fills, on both formats. */
+/** Text fields shared by both card formats. */
 const TEXT_FIELDS = [
     'title', 'edition', 'headline', 'first_name',
     'date', 'time', 'venue', 'url', 'organizer', 'signature',
     'verse_text', 'verse_ref',
 ];
+
+/** The approved story foot has one extra line; the square stays one-line. */
+const STORY_ONLY_TEXT_FIELDS = ['doors'];
+const fieldsFor = (file) => file === 'im_going.svg'
+    ? [...TEXT_FIELDS, ...STORY_ONLY_TEXT_FIELDS]
+    : TEXT_FIELDS;
 
 const num = (value) => parseFloat(value || '0');
 
@@ -136,7 +142,7 @@ for (const [file, spec] of Object.entries(TEMPLATES)) {
     });
 
     test(`${file} declares the fields the card payload fills`, () => {
-        for (const field of TEXT_FIELDS) {
+        for (const field of fieldsFor(file)) {
             assert.ok(byId(nodes, `se__text__${field}`), `missing se__text__${field}`);
         }
     });
@@ -160,7 +166,7 @@ for (const [file, spec] of Object.entries(TEMPLATES)) {
     test(`${file} keeps every text box inside the ${spec.margin} px safe margin`, () => {
         const boxes = nodes.filter((node) => /^se__box__/.test(node.attrs.id || ''));
 
-        assert.ok(boxes.length >= TEXT_FIELDS.length - 2, 'every fitted line needs a box');
+        assert.ok(boxes.length >= fieldsFor(file).length - 2, 'every fitted line needs a box');
         for (const box of boxes) {
             const x = num(box.attrs.x);
             const y = num(box.attrs.y);
@@ -184,7 +190,7 @@ for (const [file, spec] of Object.entries(TEMPLATES)) {
     });
 }
 
-test('both formats fill the same tokens, so the builder needs no per-size map', () => {
+test('both formats share the base tokens; only the story draws doors', () => {
     const fieldsOf = (file) => scan(read(file)).nodes
         .map((node) => node.attrs.id)
         .filter((id) => id && /^se__text__/.test(id))
@@ -193,5 +199,10 @@ test('both formats fill the same tokens, so the builder needs no per-size map', 
     const story = fieldsOf('im_going.svg');
     const square = fieldsOf('im_going_square.svg');
 
-    assert.deepEqual(story, square, 'the square is a recomposition, not a different card');
+    assert.deepEqual(
+        story.filter((id) => id !== 'se__text__doors'),
+        square,
+        'the square is a recomposition with no doors line',
+    );
+    assert.ok(story.includes('se__text__doors'), 'the story renders the approved doors line');
 });

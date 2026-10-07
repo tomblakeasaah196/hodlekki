@@ -9,13 +9,11 @@ engine the card uses.
 
 Two notes from the build, for whoever picks this up next:
 
-- **The doors line is carried but not drawn.** `cards.php` sends `text.doors`
-  ("Doors open 4:30 PM") and neither template declares a `se__text__doors`
-  token, because §3.1's approved story foot (`date · time` / `venue` /
-  `url` / signature at y 1728–1850) has no free slot and §3.2's square foot
-  is specified as one line without one. Printing it is a one-line token
-  change to the artwork plus a box, and the engine already renders text it
-  is not given a box for.
+- **The doors line is story-only by design.** `cards.php` sends `text.doors`
+  ("Doors open 4:30 PM"). The story now declares `se__text__doors` and folds
+  it with the short URL onto the final details line, matching
+  `direction-g-jubilee.png`; the square keeps its deliberately compact
+  one-line foot without doors.
 - **The card embeds Fraunces and Inter, not the event's faces.** Fraunces is
   in `SE_FONT_PAIRS`, so this adds no dependency, but Chara runs Unbounded —
   hence `fonts.card_display` / `fonts.card_body` beside the existing
@@ -328,6 +326,7 @@ must read before the pretty part starts.
 | `se__text__verse_text`, `se__text__verse_ref` | text | the verse |
 | `se__box__verse_text--wrap-2` | box | verse fit box |
 | `se__text__title`, `se__text__edition`, `se__text__headline`, `se__text__first_name`, `se__text__date`, `se__text__time`, `se__text__venue`, `se__text__organizer`, `se__text__url` | text | existing fields |
+| `se__text__doors` | text | story-only doors line, paired with the short URL |
 | `se__fill__*`, `se__stroke__*`, `se__stop__*` | colour | existing palette roles |
 | `se__qr__ref_url` | qr | the guest's referral link |
 | `se__if__has_photo` / `se__ifnot__has_photo` | flag | exactly one layout survives |
