@@ -51,12 +51,20 @@ function getLinkStyle($isActive) {
 // NAVIGATION ACCESS CONTROL (RBAC & DEPARTMENT MATRIX)
 // ========================================================================
 
-// 1. Fetch user's active departments once to avoid overloading the database
+// 1. Fetch user's active departments once to avoid overloading the database.
+//    The role inside each department comes along in the same query: the
+//    Departments module is gated on a LIVE leadership seat rather than on the
+//    global role, so relieving somebody of duty (which clears is_active on
+//    their roster row) takes their access away on their very next page load.
 $user_dept_ids = [];
+$user_dept_roles = [];
 if (isset($pdo)) {
-    $deptStmt = $pdo->prepare("SELECT department_id FROM user_departments WHERE user_id = ? AND is_active = 1");
+    $deptStmt = $pdo->prepare("SELECT department_id, role_in_dept FROM user_departments WHERE user_id = ? AND is_active = 1");
     $deptStmt->execute([$_SESSION['user_id']]);
-    $user_dept_ids = $deptStmt->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($deptStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $user_dept_ids[] = (int) $row['department_id'];
+        $user_dept_roles[] = $row['role_in_dept'];
+    }
 }
 
 // 2. Check if user is a Super Admin
@@ -97,6 +105,13 @@ function userHasNavAccess($allowed_roles = [], $allowed_dept_ids = []) {
     
     return false;
 }
+
+// Departments module: leadership only, and leadership that is CURRENT. Rank
+// roles (Super Admin / pastors) always see it; a Director, HOD or Sub-Unit Head
+// sees it while they hold that seat in the live ministry year — `is_active` is
+// cleared the moment they are replaced or removed from the roster.
+$can_view_departments = userHasNavAccess(['Resident_Pastor', 'Assoc_Pastor'])
+    || (bool) array_intersect($user_dept_roles, ['Director', 'HOD', 'Sub_Unit_Head']);
 
 // Define specific role groupings based on your matrix
 $pastors = ['Resident_Pastor', 'Assoc_Pastor'];
@@ -383,7 +398,7 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
     <?php if (userHasNavAccess(array_merge($pastors_directors, $sms_roles), [1, 3, 13])): // Wrapper for Core Operations header ?>
     <p class="px-4 pt-5 pb-2 text-[10px] font-bold text-blue-300/60 uppercase tracking-widest">Core Operations</p>
     
-    <?php if (userHasNavAccess($pastors, [1])): // IDI ?>
+    <?php if ($can_view_departments): // Leadership with a live seat this ministry year ?>
     <a href="/modules/departments/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'departments') ?>">
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
         <span class="font-medium text-sm">Departments</span>
