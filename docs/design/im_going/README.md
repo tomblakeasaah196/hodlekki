@@ -338,6 +338,45 @@ PR, not with this proposal.
 
 ---
 
+## 7. Decisions taken (running log)
+
+| # | Decision | Answer | Date |
+|---|---|---|---|
+| 1 | Hero boldness | **Blurred atmosphere** — the hero is light, not a second subject | 2026-10-07 |
+| 2 | The verse | **Psalm 16:11** (KJV): "Thou wilt shew me the path of life: in thy presence is fulness of joy; at thy right hand there are pleasures for evermore." | 2026-10-07 |
+| 3 | Crest | **Masthead + 5 % corner ghost** | 2026-10-07 |
+| 4 | Ring | **Go further** — the flat ring is rejected as too plain; see `directions-round3.jpg` | 2026-10-07 |
+| 5 | Safe frame | **Full frame.** The story keeps the full-frame composition; the safe-box study (`safe-frame.jpg`) stays on record as the fallback if Instagram proves the point in the wild | 2026-10-07 |
+| 6 | Reveal | **One light sweep + a confetti drift**, once, silent, off under reduced-motion | 2026-10-07 |
+| 7 | Verse voice | **A script/serif voice for the verse** — Fraunces italic, not body sans | 2026-10-07 |
+| — | Palette | **The event's own brand colours**, always. `se_event_theme()` reads `brand_primary` / `brand_secondary` / `brand_accent`; Chara happens to sit on the HOD blues because that is how it is configured. The church crest, by contrast, is with the church's brand | 2026-10-07 |
+
+### Why the safe frame was overruled
+
+The user's own experience is the evidence: a full-frame card posted to
+WhatsApp Status looks right, because Status shows the image whole. The
+overlay study still stands as the reference for the day a card is posted to
+Instagram specifically — at that point the safe-box variant of the same
+artwork is a token-compatible drop-in, nothing more to design.
+
+### The type finding
+
+`SE_FONT_PAIRS` (constants.php) already ships six display faces — **Unbounded,
+Syne, Bricolage Grotesque, Space Grotesk, Fraunces, Monoton** — and the
+programme poster (§14.2b) uses `data.fonts.display` / `data.fonts.body` from
+the event. **The card templates hardcode `Unbounded` three times each**, so
+the card has never once honoured the event's font choice. That is the
+mechanical reason the poster reads more beautifully than the card.
+
+`type-specimen.jpg` shows all six on the card's own lines. Fraunces — a
+"soft-serif with wonk", a true italic with swash terminals and old-style
+figures — is the face whose beauty is hard to explain: it makes the verse
+read as scripture and "I'm going!" read as hand-set. It is already in the
+event's font list, so no new dependency is needed.
+
+
+---
+
 ## 6. Open questions
 
 | # | Question | Recommendation |
@@ -346,7 +385,7 @@ PR, not with this proposal.
 | 2 | Which verse is hardcoded? | **Zechariah 8:5**, or the Studio's approved list |
 | 3 | Where does the crest go? | **Masthead + 5 % ghost on the corner** |
 | 4 | The ring treatment | **Primary ring + accent hairline + halo** |
-| 5 | Instagram/WhatsApp safe bands | **Safe-box composition** |
+| 5 | Instagram/WhatsApp safe bands | **Full frame** (safe-box study kept on record) |
 | 6 | The reveal moment | **One light sweep + a confetti drift** |
 
-Answers are recorded here when given, then the build starts.
+Answers are recorded in §7 as they arrive, then the build starts.
