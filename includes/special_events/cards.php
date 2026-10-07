@@ -26,10 +26,40 @@ function se_card_template_url(string $kind, string $size = 'story'): string
     return '/assets/se/templates/' . $name . '.svg';
 }
 
+/** An active registration is a confirmed seat or a place on the waitlist. */
+function se_card_registration_is_active(array $registration): bool
+{
+    return in_array((string) ($registration['status'] ?? ''), ['confirmed', 'waitlisted'], true);
+}
+
+/**
+ * Resolve the current event's active registration by the phone the guest
+ * entered. This is only used for the "I'm going" card: it does not bind the
+ * browser to the seat or grant access to the manage page.
+ */
+function se_card_registration_for_phone(PDO $pdo, int $eventId, string $e164): ?array
+{
+    if (!se_tables_exist($pdo, ['se_contacts', 'se_registrations'])) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT r.*
+           FROM se_registrations r
+           JOIN se_contacts c ON c.id = r.contact_id
+          WHERE r.event_id = ? AND c.phone_e164 = ?
+          LIMIT 1"
+    );
+    $stmt->execute([$eventId, $e164]);
+    $registration = $stmt->fetch();
+
+    return $registration && se_card_registration_is_active($registration) ? $registration : null;
+}
+
 /**
  * Data for one personal card.
  *
- * @throws SeRuleException FEATURE_DISABLED | NOT_CHECKED_IN
+ * @throws SeRuleException FEATURE_DISABLED | NOT_CHECKED_IN | NOT_REGISTERED
  */
 function se_card_payload(PDO $pdo, array $event, array $days, array $settings, string $kind, array $registration): array
 {
@@ -38,6 +68,9 @@ function se_card_payload(PDO $pdo, array $event, array $days, array $settings, s
     }
     if (!se_bool($settings['share_cards'][$kind] ?? true)) {
         throw new SeRuleException('FEATURE_DISABLED', 'That card is switched off for this event.');
+    }
+    if ($kind === 'im_going' && !se_card_registration_is_active($registration)) {
+        throw new SeRuleException('NOT_REGISTERED', 'An active registration is required to make this card.');
     }
 
     $first = $days[0] ?? null;
