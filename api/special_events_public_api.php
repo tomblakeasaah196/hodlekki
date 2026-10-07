@@ -6,8 +6,10 @@
 //
 //   * X-SE-Request: 1 plus the Origin / Sec-Fetch-Site checks (§19.3), which
 //     a cross-origin page cannot forge without a preflight we never grant;
-//   * the device cookie, or a 22-character manage token, for anything that
-//     touches one person's own registration;
+//   * the device cookie, or a 22-character manage token, for actions on one
+//     person's registration;
+//   * for the `im_going` card only, a rate-limited event-scoped phone lookup
+//     returns card data without binding the device or granting manage access;
 //   * rate limits per device, per IP and per phone (§12.1).
 //
 // Implemented so far: time, bootstrap, lookup, register, wants_visit,
@@ -792,10 +794,33 @@ try {
             $event = se_public_event($pdo, $body);
             se_public_limit($pdo, $event, 'card', 60, 2000, 600);
 
-            [$reg] = se_public_actor($pdo, $event, $body);
+            $kind = se_enum($body['kind'] ?? 'im_going', ['im_going', 'welcome', 'team', 'my_night'], 'im_going');
+
+            if ($kind === 'im_going' && array_key_exists('phone', $body)) {
+                // A returning attendee may be on a different browser from the
+                // one that holds their seat. A phone lookup can authorize this
+                // share card only; it never binds the device or grants access
+                // to the ticket/manage actions.
+                if (!se_tables_exist($pdo, ['se_contacts', 'se_registrations'])) {
+                    se_api_error('Registration is not available yet.', 'FEATURE_NOT_READY');
+                }
+
+                $phone = se_public_phone($body['phone']);
+                // Reuse the phone-lookup budget as well as the card budget so
+                // this path cannot be used to enumerate numbers more quickly.
+                se_public_limit($pdo, $event, 'lookup', 20, 400, 600);
+                se_rate_limit_or_fail($pdo, 'lookup_phone', (int) $event['id'] . ':' . $phone['e164'], 10, 600);
+                $reg = se_card_registration_for_phone($pdo, (int) $event['id'], $phone['e164']);
+
+                if (!$reg) {
+                    se_api_error('An active registration is required to make this card.', 'NOT_REGISTERED');
+                }
+            } else {
+                [$reg] = se_public_actor($pdo, $event, $body);
+            }
+
             $days     = se_event_days($pdo, (int) $event['id']);
             $settings = se_event_settings($event);
-            $kind     = se_enum($body['kind'] ?? 'im_going', ['im_going', 'welcome', 'team', 'my_night'], 'im_going');
 
             se_api_success('OK', se_card_payload($pdo, $event, $days, $settings, $kind, $reg));
         }

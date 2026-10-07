@@ -366,10 +366,10 @@ Each journey lists the steps and the system behaviour behind them. Section refer
    - **New person** → the form step: first name, last name (`given-name`/`family-name` autocomplete), gender (two big chips), email (optional), "How did you hear?" chips, karaoke toggle (animated mic), consent tick (+ privacy link), custom questions.
    - **Member** (phone in `users`) → "Hi Ada O. 👋 Is this you?" → **Yes, register me** → karaoke toggle + consent (if not on file) → submit. **"Not me"** → "Please double-check the number". If the number is theirs but the name is wrong → "Register me, my name is …" (stored as a name correction for IDI review; never written to `users`).
    - **Returning guest** (`se_contacts` from a previous event) → pre-filled form: "Welcome back, Ada!" → confirm.
-   - **Already registered** → "You're already in, Ada O. 🎉". If this device holds the registration: show the ticket. Otherwise offer **"Text me my link"** (if enabled), or "Your link comes with your reminder; you can also just check in at the door".
+   - **Already registered** → "You're already in, Ada O. 🎉". If this device holds the registration: show the ticket and private seat link. Otherwise offer **"Text me my link"** (if enabled), or "Your link comes with your reminder; you can also just check in at the door". In either case, a confirmed or waitlisted attendee can remake the **"I'm going" card** on this or another device using the phone number they entered; this does not bind the browser or grant seat-management access.
 4. Submit → the server allocates a seat atomically (§10.4):
    - **Confirmed** → confetti in brand colours; ticket card "You're in, Ada! · CHARA · Sat 24 Oct · 5 PM"; reg code; **Save your link** (copy / share / add to home screen); **Make your "I'm going" card**; **Add to calendar**; **Invite friends** (personal link `?r=<ref_code>`). Then an optional one-tap question: "Would you like to visit HOD Lekki on a Sunday?" (sets `wants_visit`).
-   - **Waitlisted** → "You're #4 on the waitlist. We'll text you the moment a seat opens."
+   - **Waitlisted** → "You're #4 on the waitlist. We'll text you the moment a seat opens." The active waitlist entry is also eligible for the repeatable "I'm going" card.
    - **Full / closed** → "We're full online — walk-ins are welcome on the day while space lasts." (only if walk-ins are enabled).
 5. The device is bound (cookie). Revisiting `/e/chara` shows the "You're registered ✓" state, with **Manage** in the sticky bar.
 6. **Register someone else** (e.g. a friend without data): from the success screen, the guest registers another phone number. Their own device identity is kept, and the friend's manage link is shown with **Send to Tobi** (WhatsApp/SMS share sheet) (§10.3.5).
@@ -1758,6 +1758,7 @@ Each game's `weight` (default 1.00) multiplies its **team** points at write time
 | `request_link` | 3 / hour | 30 / hour | per phone: 1 / 30 min and 3 per event |
 | `transfer`, `claim_link` | 5 / 10 min | 100 / 10 min | — |
 | `karaoke` (songs, pick, release) | 60 / 10 min | 1 500 / 10 min | — |
+| `card` | 60 / 10 min | 2 000 / 10 min | `im_going` phone lookup also spends the `lookup` limits: 20 / device, 400 / IP and 10 / phone per 10 min |
 | `survey`, `feedback`, `wants_visit`, `optout` | 30 / 10 min | 1 500 / 10 min | — |
 | `beacon` | 60 / 10 min | 3 000 / 10 min | — |
 | Studio AI actions | — | — | per user 30 / hour; per event 300 / day |
@@ -1789,7 +1790,7 @@ Auth columns: **none** (anyone), **device** (device cookie bound to a registrati
 | `survey` | device/token | `{item_id, text}` | `{saved: true}` | `VALIDATION` (length/profanity) | UNIQUE(event, item, reg) (update allowed until closed) |
 | `feedback` | device/token | `{nps, favorite?, one_word?, comment?, wants_visit?, future_optin?}` | `{saved: true}` | `VALIDATION` | UNIQUE(event, reg) (update) |
 | `optout` | device/token | — | `{opted_out: true}` | — | yes |
-| `card` | device/token | `{kind: "im_going"\|"welcome"\|"team"\|"my_night"}` | data for the card template (§14.3) | `NOT_CHECKED_IN` (welcome/team), `FEATURE_DISABLED` | read |
+| `card` | device/token; phone lookup for `im_going` only | `{kind: "im_going"\|"welcome"\|"team"\|"my_night", phone?}` (`phone` is required for cross-device `im_going`) | data for the card template (§14.3) | `NOT_REGISTERED` (no active confirmed/waitlisted registration), `NOT_CHECKED_IN` (welcome/team), `FEATURE_DISABLED`, `RATE_LIMITED` | read |
 | `beacon` | none | `{m: "view"\|"reg_start"\|"reg_done"\|"share"\|"card", d?: "<dimension>", t_ms?}` | `{}` | `RATE_LIMITED` (silently dropped client-side) | counter |
 | `rt_token` | device | — | Ably token request (only when the push driver is enabled) | `FEATURE_DISABLED` | read |
 
@@ -2119,7 +2120,7 @@ Playlist: `se_music` rows (max `SE_MUSIC_MAX` = 5), each joined to an `se_assets
   - `member`: big avatar initials, "Hi Ada O. 👋 — is this you?" → **Yes, register me** / Not me. Then the karaoke switch and consent (if needed).
   - `returning`: "Welcome back, Ada!" with pre-filled, editable email/gender. Names are shown read-only with "Not right? Tell us" (stored as a correction).
   - `new`: First name (`given-name`), Last name (`family-name`), Gender (radiogroup of two big chips), Email (optional, `email`), "How did you hear about Chara?" (chips: WhatsApp, Instagram, Facebook, TikTok, Friend/family, Church announcement, Flyer/poster, SMS, Other → text), Karaoke switch (mic wiggles on), consent checkbox + privacy link, custom questions.
-  - `registered`: **the success screen itself, headed "You're already in, Ada O. 🎉"** — ticket and all four cards, on every device. The seat link is device-owned (§10.3.5), so a device that does not hold the registration gets **Text me my link** in the "Save your link" slot instead, and the registration code is not returned to it. `lookup` carries `first_name`, `ref_url` and `can_make_card` for exactly this. Asking "would you like a Sunday visit?" again on a return visit is suppressed (`ask_wants_visit: false`).
+  - `registered`: **the success screen itself, headed "You're already in, Ada O. 🎉"**. The seat link is device-owned (§10.3.5), so a device that does not hold the registration gets **Text me my link** in the "Save your link" slot, and the registration code is not returned to it. A confirmed or waitlisted attendee can still rebuild the **"I'm going" card** on any device using the phone entered in the flow; this phone-only card lookup neither binds the device nor authorizes seat management. Cancelled and removed registrations cannot make it. Asking "would you like a Sunday visit?" again on a return visit is suppressed (`ask_wants_visit: false`).
   - `blocked`: the crew removed this number — "Please see the desk when you arrive", shown at step 1 rather than after the whole form is filled in and refused.
 - **Submit**: spinner in the button; network failure keeps all input and shows **Retry**.
 - **Success (confirmed)**: confetti burst in brand colours (reduced motion → none). Ticket card (event wordmark, name, date, reg code, subtle holographic gradient that follows device tilt where `DeviceOrientationEvent` is permitted). An action grid:
@@ -2324,7 +2325,7 @@ Rendered **on the attendee's phone** with the same engine. Data comes from `publ
 
 | Card | When | Content |
 |---|---|---|
-| **I'm going** | after registering (and on the manage page) | wordmark, "I'm going!", first name, date · time · venue, short URL, QR to the guest's **referral link** (`?r=`), organiser credit. **Optional photo**: if the guest adds a photo, the template's photo **circle** (ring in `--se-primary-raw` + glow) shows it; without a photo, the photo-less layout is used (`se__if__has_photo` / `se__ifnot__has_photo` groups). |
+| **I'm going** | after registering, on the manage page, or after entering the registered phone on any device | only confirmed/waitlisted registrations for this event qualify; the card can be rebuilt repeatedly. Content: wordmark, "I'm going!", first name, date · time · venue, short URL, QR to the guest's **referral link** (`?r=`), organiser credit. Phone lookup returns card data only—it does not bind the device or reveal the manage link/registration code. **Optional photo**: if the guest adds a photo, the template's photo **circle** (ring in `--se-primary-raw` + glow) shows it; without a photo, the photo-less layout is used (`se__if__has_photo` / `se__ifnot__has_photo` groups). |
 | **Welcome verse** | at check-in (and in `/play` → Me) | "Dear Ada," + KJV verse text + reference + prayer line + script signature "Chara 2026 by Envision" (M8), team colour accent. Same spirit as the Exousia card. |
 | **Team** | after check-in | team colour field, team name/label, "#47", first name, event wordmark |
 | **My Night** | after the event (manage link → recap) | team final rank and points, personal quiz points/rank, correct answers, MVP badge (if any), song sung (if any), "Thank you for bringing the joy" |
@@ -2663,9 +2664,9 @@ For events in a series: edition-over-edition registrations, show-up, returning g
 
 | Asset | Threat | Mitigation |
 |---|---|---|
-| Attendee PII (names, phones, emails) | Scraping via public endpoints or snapshots | `public.json` has no names; names only in key-protected snapshots and only as "Ada O."; lookups return display names only, in-window and rate-limited; full PII only to crew with the PII capability (§6.2) |
+| Attendee PII (names, phones, emails) | Scraping via public endpoints or snapshots | `public.json` has no names; names only in key-protected snapshots and only as "Ada O."; phone lookups and card requests are rate-limited; the `im_going` response is limited to card data (first name + referral QR), never phone/email or a manage link; full PII only to crew with the PII capability (§6.2) |
 | Seats | Overselling under concurrency; bot registrations | Event-row lock; honeypot + timing + rate limits; per-phone uniqueness |
-| Someone's registration | Cancelling or hijacking by typing their phone | Phone alone never grants manage rights before the event (manage token required); duplicate same-day check-in from another device → read-only; desk transfer codes |
+| Someone's registration | Cancelling or managing a seat by typing their phone | Phone alone never grants seat-management rights (manage token required); it can only request the `im_going` card for a confirmed/waitlisted registration; duplicate same-day check-in from another device → read-only; desk transfer codes |
 | Game integrity | Answering for others; multiple answers; pre-reading questions | One answer per registration per round (unique key); device bound to a checked-in registration; scoring window starts at `opens_at`; pre-reading accepted as low-impact (§8.5.5) |
 | Crew powers | Unauthorised control of the show; CSRF | ERP session + capability per action + `X-SE-CSRF` + Origin checks; audit log |
 | Display keys | Leaked stage/lobby URLs | Keys in URL fragment; read-only data; rotation in one click; lobby names toggle |
@@ -2677,7 +2678,7 @@ For events in a series: edition-over-edition registrations, show-up, returning g
 ### 19.2 Authentication and authorisation
 
 - **Crew/Studio**: the existing ERP session (`includes/db.php` → `security_enforce_session()`), with capability checks from §6.2 in every action (`se_require_capability()`). `must_change_password` is honoured: crew pages under `/e/…/host|desk|dj` redirect to `/auth/change_password.php`, exactly as `header.php` does.
-- **Attendees**: device cookie (§10.3.5) and manage tokens (§10.3.6). No passwords, no OTP in v1.
+- **Attendees**: device cookie (§10.3.5) and manage tokens (§10.3.6) protect ticket management. No passwords, no OTP in v1. The `im_going` share card is the limited exception: an event phone lookup can rebuild it for confirmed/waitlisted registrations on any device, but does not bind the device or return seat-management credentials.
 - **Displays**: room/lobby keys (read) and stage key (tick only).
 - **Drafts**: hidden (404) unless crew or `?preview=<preview_key>`.
 
@@ -2895,6 +2896,7 @@ There is still no full test suite in the repo. This module adds focused automate
 | `phone_test.php` + `js/phone.test.mjs` | Shared fixture `fixtures/phones.json` (≥ 40 vectors: `0803…`, `803…`, `+234 (0) 803…`, `00234…`, spaces/dashes, landlines → null, `+44…` international, garbage). PHP and JS must agree. |
 | `slug_test.php` | format, reserved words, case folding, suggestions |
 | `display_name_test.php` | casing, unicode, missing last name, length cap |
+| `cards_test.php` + `js/card_reentry.test.mjs` | only confirmed/waitlisted registrations qualify; entered phone flows from the returning-registration screen into the `im_going` card API path |
 | `capacity_state_test.php` | table-driven `se_registration_state()` over phases × overrides × counts × waitlist settings; `se_walkin_pool()`, seats-left modes, `se_can_self_cancel()` |
 | `team_algorithm_test.php` | I1–I3 over 100 000 random sequences (k = 2…8); deterministic replay; pointer rotation |
 | `eta_test.php` | planned timeline, live drift, skips, explicit start times, overlaps |
@@ -2926,6 +2928,7 @@ The cases:
 - **Karaoke race**: 10 parallel picks of the same song with unique songs on → exactly 1 success.
 - **Scoring idempotency**: score the same round 5 times concurrently → one set of ledger rows.
 - **Cancel/promotion**: cancel 3 confirmed → top 3 waitlisted promoted in order.
+- **Repeatable card lookup**: an entered phone resolves confirmed and waitlisted registrations without a device binding; unknown and cancelled registrations resolve to no card.
 
 ### 22.3 Manual smoke tests
 
@@ -3329,6 +3332,7 @@ Every design change made during the build is logged here (newest last), and the 
 | 2026-10-04 | Review and fix (PR1–PR7) | §17.3 | `se_handoff_push()` overrides may only redirect a **ready** person between Reach and Embrace or hold them back. | Before, an override turned any row ready, so a crafted request could hand off a guest who never consented, had opted out, is a member or was already handed off. Integration-tested. |
 | 2026-10-04 | Review and fix (PR1–PR7) | §22.1, §22.2 | CI now parses every module in `assets/se/js` (`node --check`), runs `tests/special_events/function_calls_test.php` (every plain call must be a built-in or defined in the repo), and runs the migrations twice plus the integration suite on **MySQL 8.0 and MariaDB 10.11** service containers; deploy waits for them. 116/116 locally on MySQL 8.0.46 and MariaDB 10.11.14. | A syntax error blanked the Studio (#39) and a call to a function never written cut every portal page off (PR4); neither was visible to `php -l`. PR7 noted the database-backed suite had not been run. |
 | 2026-10-04 | Review and fix (PR1–PR7) | §13.1.6 | Unchanged and still open: `assets/se/sfx/se-sfx.mp3` has not been delivered, so the stage plays no sound (it fails quietly, as designed). Commit it only with every cue's source and licence recorded in `assets/se/sfx/LICENSES.md`. | Licensing has to be recorded by the owner; the review did not invent audio. |
+| 2026-10-07 | Working branch | §12.2, §13.4, §14.3, §19 | An active registrant can regenerate only the "I'm going" card from any device by entering the phone on their event registration. Confirmed and waitlisted registrations qualify; cancelled and removed do not. This phone-only card request returns card data but does not bind the device or grant seat-management access; repeat requests stay rate-limited. | The already-registered screen can identify the attendee by phone without binding that browser, while the card endpoint formerly required a bound device/manage token. This keeps the card exclusive to active registrants without making the private seat link transferable. |
 
 ---
 
@@ -4812,7 +4816,7 @@ Tone: joyful, warm, short, inclusive of guests; Nigerian-English friendly; no ch
 
 ### H.2 Smoke tests after each phase deploy
 
-- **Portal**: loads on phone; hero animates (and is static with reduced motion); register as new/member/returning; waitlist when full (lower capacity to test); self-cancel promotes; seats-left visible per mode; manage link works on a second device; "I'm going" card renders with and without a photo; calendar file opens.
+- **Portal**: loads on phone; hero animates (and is static with reduced motion); register as new/member/returning; waitlist when full (lower capacity to test); self-cancel promotes; seats-left visible per mode; manage link works on a second device; enter a confirmed/waitlisted phone on a different device and rebuild the "I'm going" card twice; verify cancelled/removed registrations cannot make it and the other device still receives no manage link or registration code; card renders with and without a photo; calendar file opens.
 - **Check-in**: outside the window shows the countdown; inside: registered, walk-in, member-without-registration, missing gender, already checked in (same/other phone), desk check-in, transfer code, undo; lobby animates; team counts balanced.
 - **Live**: stage start overlay, scene changes, announcement, sound cue; snapshot age < 3 s; host shortcuts work; `STALE_VERSION` handled when two consoles act.
 - **Games**: one round of each game type end-to-end in test mode; void a round; award/penalty + undo; leaderboard and MVP correct; reset rehearsal clears everything.

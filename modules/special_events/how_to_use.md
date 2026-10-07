@@ -430,12 +430,19 @@ A success screen with a bit of confetti, their **ticket**, and four things:
 | **Invite a friend** | Their own link, so you can see who brought whom. |
 
 **If they come back and type their number again**, they get the same ticket and
-the same four cards, headed **"You're already in, Ada O. 🎉"** — they are never
-asked to fill the form twice. The one difference is the first card: the private
-link is only given to the phone that actually made the registration, so on any
-other device it reads **Text me my link** instead. That is deliberate — the
-alternative would let anyone who knows a phone number take over that seat. On
-the phone that holds the registration, the link card is there as normal.
+the same action cards, headed **"You're already in, Ada O. 🎉"** — they are never
+asked to fill the form twice. The private seat link is only shown on a device
+that holds the registration; on another device it says **Text me my link** when
+that option is enabled. That link is still needed to manage the seat.
+
+The **"I'm going" card can be made again on any device** after the guest enters
+the phone number on their active registration for this event. Confirmed and
+waitlisted guests qualify; cancelled or removed registrations do not. Each tap
+builds a fresh image on the device, so there is no one-time card or saved image.
+The phone number is used only to find the card data — it does not bind the
+browser or expose the seat-management link or registration code. The card itself
+uses the guest's first name and personal referral QR, but never prints their
+phone number or email.
 
 If the seats were gone they are told plainly that they are **on the waitlist**
 and where they are in the queue. When a seat opens they are promoted in order
@@ -628,7 +635,10 @@ photo looks just as good; it is genuinely optional.
 
 Then **Share** hands it to WhatsApp, Instagram or anywhere else, and
 **Download** saves it. Both a tall story-shaped card and a square one are
-made, so it fits wherever they post it.
+made, so it fits wherever they post it. A confirmed or waitlisted guest can
+rebuild the card from any device by entering the phone number on their event
+registration; cancelled and removed registrations are not eligible. Making it
+again does not create a server-side copy or change their registration.
 
 This is the cheapest invitation you have: it goes out in your guests' own
 voice, to people no flyer reaches.

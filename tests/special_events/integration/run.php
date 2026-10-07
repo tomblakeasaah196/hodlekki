@@ -269,6 +269,48 @@ $stmt->execute([$chideraPhone['e164']]);
 is_same('the successful match is cached on the Special Events contact', 3, (int) $stmt->fetchColumn());
 
 // ==========================================================================
+// Test 0b — "I'm going" card can be remade by phone on another device
+// ==========================================================================
+
+echo "\n  repeatable card lookup by phone\n";
+
+$cardEvent = se_it_event($pdo, ['online_capacity' => 1]);
+$cardConfirmed = se_it_register($pdo, $cardEvent, 60001)['registration'];
+$cardWaitlisted = se_it_register($pdo, $cardEvent, 60002)['registration'];
+$confirmedPhone = se_it_phone(60001);
+$waitlistedPhone = se_it_phone(60002);
+$unknownPhone = se_it_phone(60003);
+
+is_same('phone lookup finds a confirmed registration without a device binding',
+    (int) $cardConfirmed['id'],
+    (int) (se_card_registration_for_phone($pdo, (int) $cardEvent['id'], $confirmedPhone['e164'])['id'] ?? 0));
+is_same('phone lookup also finds a waitlisted registration',
+    (int) $cardWaitlisted['id'],
+    (int) (se_card_registration_for_phone($pdo, (int) $cardEvent['id'], $waitlistedPhone['e164'])['id'] ?? 0));
+is_same('an unregistered phone cannot resolve a card registration', null,
+    se_card_registration_for_phone($pdo, (int) $cardEvent['id'], $unknownPhone['e164']));
+$otherCardEvent = se_it_event($pdo);
+is_same('a registration for another event cannot make this event card', null,
+    se_card_registration_for_phone($pdo, (int) $otherCardEvent['id'], $confirmedPhone['e164']));
+
+$cancelEvent = se_it_event($pdo);
+$cancelled = se_it_register($pdo, $cancelEvent, 60004)['registration'];
+$cancelledPhone = se_it_phone(60004);
+se_registration_cancel($pdo, $cancelEvent, se_event_days($pdo, (int) $cancelEvent['id']), $cancelled, 'crew');
+is_same('a cancelled registration cannot resolve a card on another device', null,
+    se_card_registration_for_phone($pdo, (int) $cancelEvent['id'], $cancelledPhone['e164']));
+$stmt = $pdo->prepare("SELECT * FROM se_registrations WHERE id = ?");
+$stmt->execute([(int) $cancelled['id']]);
+$cancelled = $stmt->fetch();
+try {
+    se_card_payload($pdo, $cancelEvent, se_event_days($pdo, (int) $cancelEvent['id']),
+        se_event_settings($cancelEvent), 'im_going', $cancelled);
+    ok('the card payload rejects a cancelled registration', false, 'no exception');
+} catch (SeRuleException $e) {
+    is_same('the card payload rejects it as NOT_REGISTERED', 'NOT_REGISTERED', $e->errorCode);
+}
+
+// ==========================================================================
 // Test 1 — the seat race (§22.2)
 // ==========================================================================
 //

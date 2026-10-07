@@ -29,9 +29,10 @@ async function loadTemplate(url) {
 /**
  * Open the card builder for one card kind.
  *
- * @param {'im_going'} kind
+ * @param {'im_going'|'welcome'|'team'|'my_night'} kind
+ * @param {{phone?: string}} [options] The registration phone for a cross-device "I'm going" card.
  */
-export async function openCardBuilder(kind = 'im_going') {
+export async function openCardBuilder(kind = 'im_going', options = {}) {
     const config = boot.value || {};
     const sheet = openSheet({ label: 'Make your card' });
 
@@ -40,7 +41,11 @@ export async function openCardBuilder(kind = 'im_going') {
 
     let data;
     try {
-        data = await call('public', 'card', { event: config.event?.public_id, slug: config.event?.slug, kind });
+        const request = { event: config.event?.public_id, slug: config.event?.slug, kind };
+        if (typeof options?.phone === 'string' && options.phone.trim() !== '') {
+            request.phone = options.phone;
+        }
+        data = await call('public', 'card', request);
     } catch (error) {
         sheet.render(el('h2', { class: 'se-h2', text: 'Not just yet' }),
             el('p', { class: 'se-glass se-pad', text: error.message }),
