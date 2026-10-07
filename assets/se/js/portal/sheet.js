@@ -651,7 +651,7 @@ export function stepSuccess(sheet, data, config, draft) {
                 // that most visitors never need: load them only when
                 // somebody actually asks for a card (§13.15).
                 const { openCardBuilder } = await import('./card.js');
-                openCardBuilder('im_going');
+                openCardBuilder('im_going', { phone: draft?.phone });
             },
         }));
     }
