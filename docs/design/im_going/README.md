@@ -1,7 +1,9 @@
 # The "I'm going" card, v2 — Envision design proposal
 
-**Status:** design agreed in principle; three decisions left open (see *Open
-questions* at the foot of this file).
+**Status:** design approved (§7 — the decisions are final). The **story** and
+**square** templates are built to the approved direction; the builder, the
+server payload and the tests follow in the build PR. Proof renders of both
+formats in both photo states are committed here as `proof-*.png`.
 **Scope:** the *I'm going* share card on the public portal — its artwork
 (the output) and its builder (the UI/UX). The welcome, team and My Night
 cards keep their current layouts until this one is signed off, then inherit
