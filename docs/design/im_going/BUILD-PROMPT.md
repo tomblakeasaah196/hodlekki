@@ -112,8 +112,23 @@ In `includes/special_events/cards.php`:
 - Add the doors line (`doors`) from `se_event_days()`.
 - Add the default `verse_text` / `verse_ref` (Psalm 16:11) so the Studio can
   override them later without touching the artwork.
+- **Send the crest.** The artwork has two `se__image__logo` elements (the
+  masthead and the corner ghost) and the payload sends no logo today, so the
+  engine removes them and the card goes out unsigned. Read the event's
+  `logo_asset_id` (falling back to `/assets/images/hod_logo.svg`, inlined as a
+  small data URI — the studio poster payload already does this for
+  `church_logo`) and pass it as `images.logo`.
+- **Send the card's own font families.** `card.js` calls
+  `embedFontCss([data.fonts.display, data.fonts.body])`, which inlines the
+  *event's* faces — Unbounded and Inter — so the template's Fraunces is not
+  embedded and the display lines lose their voice. Add `fonts.card_display`
+  (`'Fraunces'`) and `fonts.card_body` (`'Inter'`) to the payload and have
+  `card.js` embed those instead. The template already declares
+  `font-family="Fraunces, Unbounded, serif"` as a fallback chain, so nothing
+  looks broken in the meantime — it simply upgrades to Fraunces once this
+  lands.
 - No behaviour change when there is no hero: the gradients alone must still
-  render, exactly as today.
+  render, exactly as today. The same goes for a missing logo.
 
 ### Task 4 — CSS, and the freshness contract
 
