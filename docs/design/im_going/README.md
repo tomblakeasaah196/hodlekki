@@ -1,9 +1,28 @@
 # The "I'm going" card, v2 — Envision design proposal
 
-**Status:** design approved (§7 — the decisions are final). The **story** and
-**square** templates are built to the approved direction; the builder, the
-server payload and the tests follow in the build PR. Proof renders of both
-formats in both photo states are committed here as `proof-*.png`.
+**Status:** design approved (§7 — the decisions are final) and **built**.
+Both templates, the three-button builder, the server payload and the tests
+are in `arena/3480da45-hodlekki` (tasks 1–5 of `BUILD-PROMPT.md`). Proof
+renders of both formats in both photo states are committed here as
+`proof-*.png` — four of them, drawn from the templates by the same token
+engine the card uses.
+
+Two notes from the build, for whoever picks this up next:
+
+- **The doors line is carried but not drawn.** `cards.php` sends `text.doors`
+  ("Doors open 4:30 PM") and neither template declares a `se__text__doors`
+  token, because §3.1's approved story foot (`date · time` / `venue` /
+  `url` / signature at y 1728–1850) has no free slot and §3.2's square foot
+  is specified as one line without one. Printing it is a one-line token
+  change to the artwork plus a box, and the engine already renders text it
+  is not given a box for.
+- **The card embeds Fraunces and Inter, not the event's faces.** Fraunces is
+  in `SE_FONT_PAIRS`, so this adds no dependency, but Chara runs Unbounded —
+  hence `fonts.card_display` / `fonts.card_body` beside the existing
+  `display` / `body`. `embedFontCss()` also had to learn to ask for the
+  `ital` axis and to filter Google's subsets to Latin: it had been inlining
+  cyrillic and greek and then dropping the un-inlined latin faces, so the
+  card had been rendering in a fallback font all along.
 **Scope:** the *I'm going* share card on the public portal — its artwork
 (the output) and its builder (the UI/UX). The welcome, team and My Night
 cards keep their current layouts until this one is signed off, then inherit
