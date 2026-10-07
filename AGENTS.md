@@ -392,6 +392,30 @@ does for Reach and Assimilation.
   MariaDB rejects `GROUP BY t.id` when other `t` columns are selected — list
   them in the `GROUP BY`.
 
+## Departments module (ministry years)
+
+`modules/departments/` is ministry-year aware, and its rules are worth knowing
+before touching anything that reads `user_departments`:
+
+- Every roster row belongs to one **ministry year** (`ministry_years`), and one
+  person has at most **one** row per department per year. The old
+  `UNIQUE(user_id, department_id)` key is gone — do not reintroduce a unique key
+  that spans years.
+- `user_departments.membership_type` is `Primary` | `Secondary`, and
+  `roster_status` is `Active` | `Removed` *inside that year*. Removed rows are
+  never rendered anywhere in the module; the record is kept for audit and is
+  reactivated (not duplicated) if the person is added back.
+- `is_active` still means **"serving now, in the live year"** and is what the
+  rest of the platform should keep reading (nav clearance, special_events,
+  charis, reach). Archiving a year clears it on that year's rows.
+- `includes/department_helpers.php` is the only place that builds roster data;
+  `api/department_api.php`, `api/department_export_excel.php` and
+  `assets/js/department_export.js` all consume it. See
+  `modules/departments/how_to_use.md`.
+- The A4 roster JPEG is a **canvas renderer**, not a DOM capture (same reasoning
+  as `assets/js/celebrants_export.js`): geometry is arithmetic, names are
+  measured with `ctx.measureText`, and the fitter guarantees one A4 page.
+
 ## Common pitfalls spotted during onboarding
 
 - `includes/auth_middleware.php` is currently an **empty file**. Do not
