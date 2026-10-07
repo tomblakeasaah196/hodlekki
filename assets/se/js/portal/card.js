@@ -177,7 +177,7 @@ export async function openCardBuilder(kind = 'im_going', options = {}) {
         return;
     }
 
-    const state = { size: 'story', photo: null, busy: false };
+    const state = { size: 'story', photo: null, busy: false, assets: null, refreshTimer: 0 };
     const preview = el('div', { class: 'se-card-preview', 'data-size': state.size, role: 'img', 'aria-label': 'Preview of your card' });
     const frame = el('div', { class: 'se-card-frame' }, preview);
     const ring = el('button', {
@@ -208,7 +208,6 @@ export async function openCardBuilder(kind = 'im_going', options = {}) {
     let currentSource = '';
     let currentSize = { width: 1080, height: 1920 };
     let slot = null;
-    let rendered = null;      // { svg, fontCss, images } — what refresh() draws
 
     /** Move the ring button over the medallion the template actually declares. */
     function placeRing() {
@@ -225,7 +224,13 @@ export async function openCardBuilder(kind = 'im_going', options = {}) {
 
     async function refresh() {
         try {
-            const [svgText, fontCss, hero, crest] = await Promise.all([
+            // The hero and the crest are fetched and inlined once, then reused
+            // for every redraw — fitting a photo must not re-fetch them.
+            state.assets ??= Promise.all([heroDataUri(data.hero), crestDataUri(data.images?.logo)])
+                .then(([hero, crest]) => ({ hero, crest }))
+                .catch(() => ({ hero: '', crest: '' }));
+
+            const [svgText, fontCss, { hero, crest }] = await Promise.all([
                 loadTemplate(data.templates[state.size]),
                 // The card's OWN faces, not the event's (§14.3): Chara runs
                 // Unbounded, but the approved artwork is Fraunces, italic.
@@ -233,11 +238,8 @@ export async function openCardBuilder(kind = 'im_going', options = {}) {
                     { family: data.fonts?.card_display || data.fonts?.display, italic: true },
                     data.fonts?.card_body || data.fonts?.body,
                 ]),
-                state.hero === undefined ? heroDataUri(data.hero) : state.hero,
-                state.crest === undefined ? crestDataUri(data.images?.logo) : state.crest,
+                state.assets,
             ]);
-            state.hero = hero;
-            state.crest = crest;
 
             const images = {};
             if (state.photo) images.photo = state.photo;
@@ -255,7 +257,6 @@ export async function openCardBuilder(kind = 'im_going', options = {}) {
                 fontCss,
             });
 
-            rendered = currentSource;
             const image = new Image();
             image.alt = '';
             image.className = 'se-card-art';
@@ -283,14 +284,10 @@ export async function openCardBuilder(kind = 'im_going', options = {}) {
                 : 'Tap your picture to add a photo.';
 
             // The ring repaints itself every frame; the card behind it does
-            // not need to keep up with a finger, only to be right at Save.
-            if (had !== Boolean(dataUri)) {
-                clearTimeout(state.refreshTimer);
-                state.refreshTimer = setTimeout(refresh, 120);
-            } else {
-                clearTimeout(state.refreshTimer);
-                state.refreshTimer = setTimeout(refresh, 320);
-            }
+            // not have to keep up with a finger, only to be right at Save — so
+            // a photo appearing or going redraws sooner than a nudge does.
+            clearTimeout(state.refreshTimer);
+            state.refreshTimer = setTimeout(refresh, had === Boolean(dataUri) ? 320 : 120);
         },
     });
 
@@ -312,7 +309,7 @@ export async function openCardBuilder(kind = 'im_going', options = {}) {
 
         try {
             await refresh();
-            const blob = await rasterise(rendered, currentSize.width, currentSize.height);
+            const blob = await rasterise(currentSource, currentSize.width, currentSize.height);
             const result = await shareOrDownload(blob, data.filename, data.text?.title || 'My card');
             if (download || result === 'downloaded') toast('Saved to your downloads.', 'success');
         } catch (error) {
