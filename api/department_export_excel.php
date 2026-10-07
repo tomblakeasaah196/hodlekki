@@ -46,7 +46,6 @@ if (!$year) {
 
 $data       = dept_report_dataset($pdo, $year);
 $heading    = $data['year']['heading'];                 // "Ministry Year 2026"
-$period     = $data['year']['period'];
 $churchName = $data['church']['name'];
 $flat       = $data['flat'];
 $rows       = dept_flat_worker_rows($pdo, (int) $year['id']);
@@ -68,7 +67,7 @@ if ($format === 'csv') {
     fwrite($out, "\xEF\xBB\xBF");   // BOM so Excel opens UTF-8 names correctly
 
     fputcsv($out, [$churchName]);
-    fputcsv($out, [$heading . '  (' . $period . ')']);
+    fputcsv($out, [$heading]);
     fputcsv($out, ['Generated ' . $data['generated_at']]);
     fputcsv($out, []);
 
@@ -109,8 +108,8 @@ $brandRed  = 'D11920';   // hodRed
 
 $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
 
-/** Masthead: church, ministry year, period, generated stamp. Returns the header row index. */
-function dept_banner($sheet, int $cols, string $church, string $heading, string $period, string $generated, string $blue, string $red): int
+/** Masthead: church, ministry year, generated stamp. Returns the header row index. */
+function dept_banner($sheet, int $cols, string $church, string $heading, string $generated, string $blue, string $red): int
 {
     $last = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cols);
 
@@ -122,7 +121,7 @@ function dept_banner($sheet, int $cols, string $church, string $heading, string 
     $sheet->getRowDimension(1)->setRowHeight(28);
 
     $sheet->mergeCells("A2:{$last}2");
-    $sheet->setCellValue('A2', $heading . '  •  ' . $period);
+    $sheet->setCellValue('A2', $heading);
     $sheet->getStyle('A2')->getFont()->setBold(true)->setSize(12)->getColor()->setARGB('FF' . $red);
     $sheet->getStyle('A2')->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
     $sheet->getRowDimension(2)->setRowHeight(20);
@@ -185,7 +184,7 @@ $sheet = $spreadsheet->getActiveSheet();
 $sheet->setTitle('Summary');
 $headers = ['#', 'Department', 'Type', 'Pastor in Charge', 'Director in Charge', 'Head of Department', 'Primary Members', 'Secondary Members', 'Total'];
 $cols = count($headers);
-$headerRow = dept_banner($sheet, $cols, $churchName, $heading, $period, $data['generated_at'], $brandBlue, $brandRed);
+$headerRow = dept_banner($sheet, $cols, $churchName, $heading, $data['generated_at'], $brandBlue, $brandRed);
 
 foreach ($headers as $i => $label) {
     $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
@@ -255,7 +254,7 @@ foreach ($flat as $dept) {
 
     $headers = ['#', 'Member Type', 'Role', 'Name', 'Gender', 'Phone', 'Email', 'Joined'];
     $cols = count($headers);
-    $headerRow = dept_banner($sheet, $cols, $churchName, $heading, $period, $data['generated_at'], $brandBlue, $brandRed);
+    $headerRow = dept_banner($sheet, $cols, $churchName, $heading, $data['generated_at'], $brandBlue, $brandRed);
 
     // Department subtitle
     $last = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cols);
@@ -331,7 +330,7 @@ $sheet = $spreadsheet->createSheet();
 $sheet->setTitle('All Workers');
 $headers = ['#', 'Department', 'Member Type', 'Role', 'Name', 'Gender', 'Phone', 'Email', 'Spiritual Status', 'Joined'];
 $cols = count($headers);
-$headerRow = dept_banner($sheet, $cols, $churchName, $heading, $period, $data['generated_at'], $brandBlue, $brandRed);
+$headerRow = dept_banner($sheet, $cols, $churchName, $heading, $data['generated_at'], $brandBlue, $brandRed);
 
 foreach ($headers as $i => $label) {
     $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);

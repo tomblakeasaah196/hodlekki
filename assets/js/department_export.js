@@ -202,11 +202,18 @@
     }
 
     // ── Card model ──────────────────────────────────────────────────────────
+    function collectionValues(value) {
+        if (Array.isArray(value)) {
+            return value;
+        }
+        return value && typeof value === 'object' ? Object.values(value) : [];
+    }
+
     function buildCards(data) {
         const cards = [];
-        (data.departments || []).forEach((dept) => {
+        collectionValues(data.departments).forEach((dept) => {
             cards.push(makeCard(dept, 0));
-            (dept.sub_units || []).forEach((sub) => cards.push(makeCard(sub, 1)));
+            collectionValues(dept.sub_units).forEach((sub) => cards.push(makeCard(sub, 1)));
         });
         return cards;
     }
@@ -477,7 +484,7 @@
         }
         drawText(ctx, ellipsize(ctx, churchName, headMaxW), textX, top, font(800, nameSize, true), '#FFFFFF');
 
-        const yearLine = (year.heading || 'Ministry Year') + (year.period ? '   ·   ' + year.period : '');
+        const yearLine = year.heading || 'Ministry Year';
         ctx.font = font(600, s.title);
         drawText(ctx, ellipsize(ctx, yearLine, headMaxW), textX, top + s.title * 1.9, font(600, s.title), '#FCA5A5');
 

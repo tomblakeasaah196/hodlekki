@@ -1105,7 +1105,7 @@ if (!$dept_schema_ok) {
     // Downloads
     // ============================================================
     function openDownloadModal(deptId) {
-        $('#downloadYearLabel').text((state.year ? state.year.heading + '  ·  ' + state.year.period : ''));
+        $('#downloadYearLabel').text((state.year ? state.year.heading : ''));
         $('#downloadSummary').html('Preparing the roster…');
         openModal('downloadModal');
 
@@ -1121,7 +1121,7 @@ if (!$dept_schema_ok) {
                     ? 'The A4 image always shows every department, as the year-end sheet.'
                     : '';
                 $('#downloadSummary').html(`
-                    <p class="font-bold text-gray-800">${esc(res.data.year.heading)} <span class="font-medium text-gray-500">· ${esc(res.data.year.period)}</span></p>
+                    <p class="font-bold text-gray-800">${esc(res.data.year.heading)}</p>
                     <p class="mt-1">${t.departments} departments · <span class="font-bold text-hodRed">${t.primary} primary</span> · <span class="font-bold text-gray-600">${t.secondary} secondary</span> · ${t.people} people in total.</p>
                     ${scope ? `<p class="mt-1 text-[11px] text-gray-400">${esc(scope)}</p>` : ''}`);
             })

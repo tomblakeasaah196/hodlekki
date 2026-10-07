@@ -95,14 +95,16 @@ screen:
 
 | Format | What you get |
 | ------ | ------------ |
-| **A4 image (JPEG)** | One A4 page at 300 dpi: church logo, **Ministry Year** heading at the top, then every department with its Pastor in Charge / Director / HOD and its Primary and Secondary members. |
+| **A4 image (JPEG)** | One A4 page at 300 dpi: church logo, **Ministry Year** heading (e.g. `Ministry Year 2026`, without the date range), then every department with its Pastor in Charge / Director / HOD and its Primary and Secondary members. |
 | **Excel workbook (.xlsx)** | A *Summary* sheet (every department with both counts and leadership), one sheet per department (leaders, then Primary, then Secondary, with phone and email), and an **All Workers** sheet. |
 | **CSV** | One flat table of every worker in every department. |
 
-The A4 image always fits on a single page. It is drawn with the browser's
-canvas at A4 proportions, and the fitter picks the largest type size that still
-fits; for a very large roster the sheet switches to a denser arrangement rather
-than spilling onto a second page. The download tells you which layout was used.
+The downloads identify the roster by its Ministry Year label only; the date
+range is not printed. The A4 image always fits on a single page. It is drawn
+with the browser's canvas at A4 proportions, and the fitter picks the largest
+type size that still fits; for a very large roster the sheet switches to a
+denser arrangement rather than spilling onto a second page. The download tells
+you which layout was used.
 
 ---
 
