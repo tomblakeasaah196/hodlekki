@@ -410,7 +410,7 @@ function dept_report_dataset(PDO $pdo, array $year): array
             'accent'  => '#D11920',
             'ink'     => '#0A0E17',
         ],
-        'departments' => $master,
+        'departments' => array_values($master),
         'flat'        => $all_nodes,
         'totals'      => [
             'departments' => count($all_nodes),
