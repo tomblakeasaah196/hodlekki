@@ -1091,6 +1091,14 @@ if (!$dept_schema_ok) {
     }
 
     function openAssignModal() {
+        const departmentId = Number(state.currentDeptId);
+        if (!departmentId) {
+            showToast('Open a department before adding a member.', 'warning');
+            return;
+        }
+        // The label names the department, but the API relies on this hidden ID.
+        $('#assignDeptId').val(departmentId);
+
         const hidden = state.deptActiveUserIds.map(String);
         const pool = state.people.workers.filter(p => !hidden.includes(String(p.id)));
         pickerInit($('#assignPickerWrap').get(0), pickerOptionsFrom(pool, p => p.gender || ''), 'Type a name to search…');
