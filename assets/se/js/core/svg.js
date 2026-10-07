@@ -216,35 +216,101 @@ export function qrGroup(value, rect) {
 
 const fontCache = new Map();
 
+/** Weights every render asks for. Italic faces are requested alongside them. */
+const FONT_WEIGHTS = [400, 700, 800];
+
+/**
+ * One `family=` query parameter for a font request.
+ *
+ * @param {string|{family: string, italic?: boolean}} entry
+ * @returns {string|null}
+ */
+function fontQuery(entry) {
+    const spec = typeof entry === 'string' ? { family: entry } : (entry || {});
+    const family = String(spec.family || '').trim();
+    if (family === '') return null;
+
+    const name = 'family=' + encodeURIComponent(family.replace(/ /g, '+'));
+
+    // The `ital` axis has to be asked for explicitly. Google serves the
+    // upright faces only for `wght@…`, so a template that declares
+    // font-style="italic" — the card's verse and its "I'm going!" — renders
+    // in a synthesised slant unless the italics are requested here.
+    if (!spec.italic) return `${name}:wght@${FONT_WEIGHTS.join(';')}`;
+
+    const pairs = [];
+    for (const ital of [0, 1]) {
+        for (const weight of FONT_WEIGHTS) pairs.push(`${ital},${weight}`);
+    }
+
+    return `${name}:ital,wght@${pairs.join(';')}`;
+}
+
+/** Does one `unicode-range` value cover the capitals of basic latin? */
+function rangeCoversLatin(range) {
+    const match = /^u\+([0-9a-f]+)(?:-([0-9a-f]+))?$/i.exec(range.trim());
+    if (!match) return false;
+    const low = parseInt(match[1], 16);
+    const high = match[2] ? parseInt(match[2], 16) : low;
+
+    return low <= 0x5a && high >= 0x41;
+}
+
+/**
+ * Is this face one an English card can actually use?
+ *
+ * Google answers with one `@font-face` per subset and lists them in a fixed
+ * order that puts **latin last**. Inlining "the first N URLs" therefore
+ * inlined cyrillic, greek and vietnamese, and then the cleanup below deleted
+ * every `@font-face` whose url had not been inlined — latin among them. The
+ * card has been rendering in a fallback face ever since, which is the exact
+ * reason it never looked like its own artwork. Keep the subsets the card
+ * needs and drop the rest before anything is fetched.
+ */
+function coversLatin(block) {
+    const match = /unicode-range\s*:\s*([^;}]+)/i.exec(block);
+    if (!match) return true;   // no range declared: the face covers everything
+
+    return match[1].split(',').some(rangeCoversLatin);
+}
+
 /**
  * Google Fonts CSS with the WOFF2 files inlined as data URIs.
  *
  * An SVG drawn to a canvas cannot fetch anything, so every glyph has to be
  * inside the document. Failure is not fatal: the card still renders in the
  * fallback family.
+ *
+ * Each entry is a family name, or `{family, italic}` when the template sets
+ * its display lines in an italic face.
  */
 export async function embedFontCss(families) {
-    const wanted = [...new Set(families.filter(Boolean))];
+    const wanted = [];
+    for (const entry of (families || [])) {
+        const query = fontQuery(entry);
+        if (query && !wanted.includes(query)) wanted.push(query);
+    }
     if (!wanted.length) return '';
 
-    const key = wanted.join('|');
+    const key = wanted.join('&');
     if (fontCache.has(key)) return fontCache.get(key);
 
     const promise = (async () => {
-        const query = wanted
-            .map((f) => 'family=' + encodeURIComponent(f.replace(/ /g, '+')) + ':wght@400;700;800')
-            .join('&');
+        const query = wanted.join('&');
 
         try {
             const css = await (await fetch(`https://fonts.googleapis.com/css2?${query}&display=swap`, {
                 headers: { Accept: 'text/css' },
             })).text();
 
-            const urls = [...css.matchAll(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+\.woff2)\)/g)].map((m) => m[1]);
-            const unique = [...new Set(urls)].slice(0, 12);
+            const blocks = (css.match(/@font-face\s*\{[^}]*\}/g) || []).filter(coversLatin);
+            const urls = [...new Set(blocks
+                .flatMap((block) => [...block.matchAll(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+\.woff2)\)/g)])
+                .map((m) => m[1]))]
+                .slice(0, 12);
 
             const dataUris = new Map();
-            await Promise.all(unique.map(async (url) => {
+            await Promise.all(urls.map(async (url) => {
                 try {
                     const blob = await (await fetch(url)).blob();
                     dataUris.set(url, await blobToDataUri(blob));
@@ -253,7 +319,7 @@ export async function embedFontCss(families) {
                 }
             }));
 
-            let out = css;
+            let out = blocks.join('');
             for (const [url, data] of dataUris) out = out.split(url).join(data);
 
             // Drop any face we could not inline, so the renderer never waits.

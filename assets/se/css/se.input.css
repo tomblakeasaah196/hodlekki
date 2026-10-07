@@ -1379,10 +1379,18 @@
   }
   .se-action:hover { border-color: var(--se-secondary); }
 
-  /* Share card builder (§14.3) */
+  /* Share card builder (§14.3): three buttons, one canvas, and the medallion
+     is both the mask and the button. The frame shrink-wraps the preview so
+     the ring's pixel offsets — read from the template's own se__slot__photo,
+     never hardcoded — line up exactly with the circle they cover. */
   .se-card-stage { display: grid; gap: 1rem; justify-items: center; }
-  .se-card-preview {
+  .se-card-frame {
+    position: relative;
     width: min(100%, 300px);
+    margin-inline: auto;
+  }
+  .se-card-preview {
+    width: 100%;
     aspect-ratio: 9 / 16;
     border-radius: var(--radius-card);
     overflow: hidden;
@@ -1392,18 +1400,79 @@
   }
   .se-card-preview[data-size="square"] { aspect-ratio: 1 / 1; }
   .se-card-preview img, .se-card-preview svg { width: 100%; height: 100%; object-fit: contain; }
-  .se-cropper {
-    position: relative;
-    width: min(100%, 260px);
-    aspect-ratio: 1 / 1;
+
+  /* Empty, the ring is transparent and the template's own "Add photo"
+     invitation shows through it; filled, it holds the guest's photo. */
+  .se-card-ring {
+    position: absolute;
     border-radius: 999px;
     overflow: hidden;
-    background: var(--se-surface-2);
-    box-shadow: 0 0 0 3px var(--se-primary-raw), 0 0 32px color-mix(in oklab, var(--se-glow) 60%, transparent);
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
     touch-action: none;
-    cursor: grab;
+    display: grid;
+    place-items: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: box-shadow 0.25s ease;
   }
-  .se-cropper canvas { width: 100%; height: 100%; display: block; }
+  .se-card-ring[data-filled="1"] { cursor: grab; }
+  .se-card-ring[data-dragging="1"] { cursor: grabbing; }
+  .se-card-ring canvas { width: 100%; height: 100%; display: block; }
+  .se-card-ring:focus-visible { outline: 3px solid var(--se-accent); outline-offset: 3px; }
+  .se-card-ring[data-filled="1"]:focus-visible {
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--se-accent) 35%, transparent),
+                0 0 40px 6px color-mix(in oklab, var(--se-glow) 45%, transparent);
+  }
+
+  .se-card-zoom { width: min(100%, 300px); margin-inline: auto; }
+  .se-card-actions { display: flex; gap: 0.625rem; }
+  .se-card-actions .se-btn { flex: 1; min-width: 0; }
+
+  /* The format ask (§4.3): two big cards, then one quiet line. */
+  .se-format-list { display: grid; gap: 0.625rem; margin-top: 0.5rem; }
+  .se-format {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+    text-align: left;
+    padding: 1rem;
+    border-radius: var(--radius-card);
+    border: 1px solid var(--se-border);
+    background: var(--se-surface-2);
+    color: var(--se-text);
+    cursor: pointer;
+  }
+  .se-format:hover { border-color: var(--se-accent); }
+  .se-format b { display: block; font-size: 1rem; }
+  .se-format small { display: block; color: var(--se-text-muted); font-size: 0.8125rem; line-height: 1.35; }
+  .se-format-shape {
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    border: 1px solid var(--se-border);
+    background: color-mix(in oklab, var(--se-text) 12%, transparent);
+    color: var(--se-text-muted);
+    font-size: 1.125rem;
+    line-height: 1;
+  }
+  .se-format-shape[data-format="story"] { width: 3rem; height: 4.25rem; }
+  .se-format-shape[data-format="square"] { width: 4.25rem; height: 4.25rem; }
+
+  /* "Download instead" — a link, not a third button (§4.3). */
+  .se-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--se-text-muted);
+    text-decoration: underline;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .se-link:hover { color: var(--se-text); }
 
   /* Manage page (§13.5) */
   .se-status-hero { display: grid; gap: 0.5rem; }

@@ -18,6 +18,36 @@ const SE_CARD_SIZES = [
     'square' => ['w' => 1080, 'h' => 1080],
 ];
 
+/**
+ * The faces the "I'm going" templates are drawn in (§14.3, decided 2026-10-07).
+ *
+ * Fraunces is in SE_FONT_PAIRS, so it needs no new dependency — but it is
+ * NOT the event's own `font_display` (Chara runs Unbounded), and the card
+ * template says `font-family="Fraunces, Unbounded, serif"`. The builder must
+ * therefore embed these, not the event's, or the display lines fall through
+ * to Unbounded and lose the voice the design was approved for.
+ */
+const SE_CARD_FONTS = [
+    'display' => 'Fraunces',
+    'body'    => 'Inter',
+];
+
+/**
+ * The verse the card carries when the Studio has not overridden it.
+ *
+ * Psalm 16:11, KJV, verbatim (D26, §7 decision 2). It is a *default*, sent in
+ * the payload so a Studio override can take over later without touching the
+ * artwork: the template renders whichever one arrives.
+ */
+const SE_CARD_VERSE = [
+    'text' => 'Thou wilt shew me the path of life: in thy presence is fulness of joy;'
+        . ' at thy right hand there are pleasures for evermore.',
+    'ref'  => 'PSALM 16:11',
+];
+
+/** The house crest, used when the event has no `logo` asset of its own. */
+const SE_CARD_DEFAULT_LOGO = '/assets/images/hod_logo.svg';
+
 /** Template file for a card kind and size, relative to the web root. */
 function se_card_template_url(string $kind, string $size = 'story'): string
 {
@@ -75,6 +105,9 @@ function se_card_payload(PDO $pdo, array $event, array $days, array $settings, s
 
     $first = $days[0] ?? null;
     $start = se_parse_datetime($first['starts_at'] ?? ($event['starts_at'] ?? null));
+    // Doors are per day and optional; the card prints them only when they
+    // are set, and never invents them (§3.1, approved render).
+    $doors = se_parse_datetime($first['doors_open_at'] ?? null);
     $theme = se_event_theme($event);
 
     $refUrl = se_event_url((string) $event['slug']) . '?r=' . rawurlencode((string) $registration['ref_code']);
@@ -88,6 +121,10 @@ function se_card_payload(PDO $pdo, array $event, array $days, array $settings, s
     if ($kind === 'welcome' || $kind === 'team' || $kind === 'my_night') {
         return se_card_night_payload($pdo, $event, $settings, $kind, $registration, $theme, $signature);
     }
+
+    $heroId   = isset($event['hero_asset_id']) ? (int) $event['hero_asset_id'] : 0;
+    $heroRow  = $heroId > 0 ? se_asset_find($pdo, $heroId) : null;
+    $heroPath = $heroRow !== null ? se_card_hero_path($heroRow) : null;
 
     return [
         'kind'  => $kind,
@@ -104,9 +141,12 @@ function se_card_payload(PDO $pdo, array $event, array $days, array $settings, s
             'first_name' => (string) $registration['first_name'],
             'date'       => $start !== null ? $start->format('D j M') : '',
             'time'       => $start !== null ? ltrim($start->format('g:i A'), '0') : '',
+            'doors'      => $doors !== null ? 'Doors open ' . ltrim($doors->format('g:i A'), '0') : '',
             'venue'      => (string) ($event['venue_name'] ?? ''),
             'url'        => se_card_short_url($event),
             'organizer'  => (string) ($event['organizer_label'] ?? 'Envision'),
+            'verse_text' => SE_CARD_VERSE['text'],
+            'verse_ref'  => SE_CARD_VERSE['ref'],
             'signature'  => trim((string) $event['title'] . ' ' . (string) ($event['edition_label'] ?? ''))
                 . ' by ' . (string) ($event['organizer_label'] ?? 'Envision'),
         ],
@@ -116,7 +156,16 @@ function se_card_payload(PDO $pdo, array $event, array $days, array $settings, s
         'fonts' => [
             'display' => (string) $event['font_display'],
             'body'    => (string) $event['font_body'],
+            // What the builder actually embeds (§14.3). The card is drawn in
+            // Fraunces/Inter whatever the event's own faces are, so the two
+            // are separate keys rather than a rewrite of `display`.
+            'card_display' => SE_CARD_FONTS['display'],
+            'card_body'    => SE_CARD_FONTS['body'],
         ],
+        // Paths, not bytes: @se/core/svg.js cannot fetch, so portal/card.js
+        // inlines both before the template is resolved (§14.2 step 2).
+        'hero'   => $heroPath,
+        'images' => ['logo' => se_card_logo_path($pdo, $event)],
         'filename' => se_card_filename($event, $kind, (string) $registration['first_name']),
         'privacy'  => 'Your photo stays on your phone.',
     ];
@@ -149,6 +198,72 @@ function se_card_short_url(array $event): string
     $url = se_event_url((string) $event['slug']);
 
     return preg_replace('#^https?://#', '', $url) ?? $url;
+}
+
+/**
+ * The hero variant a personal card should draw (§3.3).
+ *
+ * The card only ever uses the hero as a ~96 px atmosphere thumbnail, so the
+ * largest variant at or under 480 px is the right one: it arrives as a 2–4 KB
+ * data URI, it is already on disk, and there is nothing left to downscale on
+ * a cheap phone. Falls back to the smallest variant we do have, then to the
+ * original, when an upload predates the resize pass.
+ */
+function se_card_hero_path(array $asset): ?string
+{
+    $path     = (string) ($asset['path'] ?? '');
+    $variants = se_json_decode($asset['variants_json'] ?? null);
+    if ($path === '') {
+        return null;
+    }
+    $dir      = dirname($path);
+    $best     = null;
+    $smallest = null;
+
+    foreach ($variants as $variant) {
+        if (!isset($variant['file'], $variant['width'])) {
+            continue;
+        }
+        $width = (int) $variant['width'];
+        if ($width < 1) {
+            continue;
+        }
+        if ($width <= 480 && ($best === null || $width > $best['width'])) {
+            $best = ['file' => (string) $variant['file'], 'width' => $width];
+        }
+        if ($smallest === null || $width < $smallest['width']) {
+            $smallest = ['file' => (string) $variant['file'], 'width' => $width];
+        }
+    }
+
+    $pick = $best ?? $smallest;
+
+    return $pick !== null ? $dir . '/' . $pick['file'] : $path;
+}
+
+/**
+ * The crest the card is signed with (§3.5).
+ *
+ * The artwork carries two `se__image__logo` elements — the masthead and the
+ * 5 % ghost bleeding off a corner — and the engine REMOVES an image token it
+ * has no source for, so a payload without one ships an unsigned card. The
+ * event's own Studio `logo` wins; the church crest is the fallback, exactly
+ * as `church_logo` is on the programme poster.
+ *
+ * A path, not bytes: the builder fetches it same-origin and inlines it,
+ * because an SVG drawn to a canvas can fetch nothing (§14.2 step 2).
+ */
+function se_card_logo_path(PDO $pdo, array $event): string
+{
+    $id = isset($event['logo_asset_id']) ? (int) $event['logo_asset_id'] : 0;
+    if ($id > 0) {
+        $asset = se_asset_find($pdo, $id);
+        if ($asset !== null && trim((string) ($asset['path'] ?? '')) !== '') {
+            return (string) $asset['path'];
+        }
+    }
+
+    return SE_CARD_DEFAULT_LOGO;
 }
 
 /** `<slug>-<edition>-<card>-<firstname>.png`, slugified (§14.3). */

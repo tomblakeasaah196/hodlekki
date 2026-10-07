@@ -1,85 +1,182 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- /assets/se/templates/im_going_square.svg
-     "I'm going" share card, 1080 x 1080 — the Square toggle in §14.3.
+     "I'm going" share card, 1080 x 1080 — the Jubilee medallion squared (§14.3).
 
-     Same tokens as im_going.svg, laid out side by side instead of stacked.
-     Safe margin is 48 px for squares (§14.4). -->
+     A recomposition of im_going.svg, not a crop of it: the QR takes its own
+     corner, the crest and the kicker take the other, and the medallion is
+     centred with the verse beneath it. Matches square-v2-1080x1080.png.
+
+     Token ids follow §14.4 and are resolved on the guest's phone by
+     @se/core/svg.js; the guest's photo never leaves the device.
+
+     se__slot__photo is an inert marker (the engine ignores an unknown se__
+     token) that tells the builder where the circle is, so the in-ring
+     cropper sits exactly over it. Read by portal/card.js.
+
+     Type: Fraunces for the display lines and the verse, Inter for details.
+     Safe margin 48 px (squares). -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080" font-family="Inter, sans-serif">
 
   <defs>
-    <linearGradient id="se-bg-grad" x1="0" y1="0" x2="1" y2="1">
-      <stop id="se__stop__primary" offset="0" stop-color="#1D356A"/>
-      <stop id="se__stop__bg" offset="0.6" stop-color="#0B0D13"/>
-      <stop id="se__stop__secondary--2" offset="1" stop-color="#D11920"/>
+    <clipPath id="se-photo-clip"><circle cx="540" cy="540" r="145"/></clipPath>
+    <clipPath id="se-frame"><rect x="0" y="0" width="1080" height="1080"/></clipPath>
+
+    <filter id="se-blur-hero" x="-6%" y="-6%" width="112%" height="112%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+    <filter id="se-blur-soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+
+    <linearGradient id="se-veil" x1="0" y1="0" x2="0" y2="1">
+      <stop id="se__stop__bg" offset="0" stop-color="#0B0D13" stop-opacity="0.86"/>
+      <stop id="se__stop__bg--2" offset="0.34" stop-color="#0B0D13" stop-opacity="0.52"/>
+      <stop id="se__stop__bg--3" offset="0.62" stop-color="#0B0D13" stop-opacity="0.60"/>
+      <stop id="se__stop__bg--4" offset="1" stop-color="#0B0D13" stop-opacity="1"/>
     </linearGradient>
 
-    <radialGradient id="se-glow-grad" cx="0.5" cy="0.5" r="0.5">
-      <stop id="se__stop__glow" offset="0" stop-color="#D11920" stop-opacity="0.7"/>
-      <stop offset="1" stop-color="#D11920" stop-opacity="0"/>
+    <radialGradient id="se-core" cx="0.5" cy="0.52" r="0.56">
+      <stop id="se__stop__bg--5" offset="0" stop-color="#0B0D13" stop-opacity="0.50"/>
+      <stop id="se__stop__bg--6" offset="0.6" stop-color="#0B0D13" stop-opacity="0.16"/>
+      <stop id="se__stop__bg--7" offset="1" stop-color="#0B0D13" stop-opacity="0"/>
     </radialGradient>
 
-    <clipPath id="se-photo-clip">
-      <circle cx="800" cy="440" r="190"/>
-    </clipPath>
+    <radialGradient id="se-bloom" cx="0.5" cy="0.5" r="0.5">
+      <stop id="se__stop__primary" offset="0" stop-color="#1D356A" stop-opacity="0.62"/>
+      <stop id="se__stop__primary--2" offset="1" stop-color="#1D356A" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="se-halo" cx="0.5" cy="0.5" r="0.5">
+      <stop id="se__stop__accent" offset="0.58" stop-color="#F5C518" stop-opacity="0.26"/>
+      <stop id="se__stop__glow" offset="0.84" stop-color="#D11920" stop-opacity="0.12"/>
+      <stop id="se__stop__glow--2" offset="1" stop-color="#D11920" stop-opacity="0"/>
+    </radialGradient>
   </defs>
 
+  <!-- 1 · the night -->
   <rect id="se__fill__bg" x="0" y="0" width="1080" height="1080" fill="#0B0D13"/>
-  <rect x="0" y="0" width="1080" height="1080" fill="url(#se-bg-grad)" opacity="0.92"/>
-  <circle cx="800" cy="440" r="430" fill="url(#se-glow-grad)" opacity="0.3"/>
 
-  <text id="se__text__organizer" x="48" y="104" font-size="26" font-weight="700" letter-spacing="6"
-        fill="#FFFFFF" fill-opacity="0.72">ENVISION</text>
-  <rect id="se__box__organizer--fit" x="48" y="78" width="600" height="38"/>
-
-  <text id="se__text__title" x="48" y="214" font-size="84" font-weight="800" font-family="Unbounded, sans-serif"
-        fill="#FFFFFF">Chara</text>
-  <rect id="se__box__title--fit" x="48" y="148" width="520" height="90"/>
-
-  <text id="se__text__edition" x="48" y="276" font-size="44" font-weight="700" font-family="Unbounded, sans-serif"
-        fill="#D11920">2026</text>
-  <rect id="se__box__edition--fit" x="48" y="238" width="320" height="50"/>
-
-  <g id="se__if__has_photo">
-    <circle id="se__stroke__primary" cx="800" cy="440" r="198" fill="none" stroke="#1D356A" stroke-width="12"/>
-    <g clip-path="url(#se-photo-clip)">
-      <rect x="610" y="250" width="380" height="380" fill="#151822"/>
-      <image id="se__image__photo" x="610" y="250" width="380" height="380"
+  <!-- 2 · the event's hero photograph, turned to atmosphere.
+         The builder replaces it with a 96px thumbnail as a data URI (§3.3). -->
+  <g clip-path="url(#se-frame)">
+    <g filter="url(#se-blur-hero)">
+      <image id="se__image__hero" x="-90" y="-90" width="1260" height="1260"
              preserveAspectRatio="xMidYMid slice" href=""/>
     </g>
-    <circle id="se__stroke__accent" cx="800" cy="440" r="190" fill="none" stroke="#F5C518" stroke-width="4" stroke-opacity="0.6"/>
+    <rect x="0" y="0" width="1080" height="1080" fill="#0B0D13" fill-opacity="0.26"/>
+    <rect id="se__fill__primary" x="0" y="0" width="1080" height="1080" fill="#1D356A" fill-opacity="0.30"/>
+    <rect x="0" y="0" width="1080" height="1080" fill="url(#se-veil)"/>
   </g>
 
+  <!-- 3 · light behind the medallion -->
+  <circle cx="540" cy="540" r="430" fill="url(#se-bloom)"/>
+  <circle cx="540" cy="540" r="330" fill="url(#se-halo)"/>
+  <ellipse cx="540" cy="560" rx="640" ry="600" fill="url(#se-core)"/>
+
+  <!-- 4 · bokeh in the upper third, kept in the corners -->
+  <g filter="url(#se-blur-soft)">
+    <circle cx="188" cy="142" r="34" fill="#F5C518" fill-opacity="0.12"/>
+    <circle cx="884" cy="118" r="26" fill="#FFFFFF" fill-opacity="0.10"/>
+    <circle cx="120" cy="322" r="21" fill="#D11920" fill-opacity="0.14"/>
+    <circle cx="962" cy="356" r="28" fill="#FFFFFF" fill-opacity="0.08"/>
+    <circle cx="70" cy="520" r="24" fill="#F5C518" fill-opacity="0.08"/>
+    <circle cx="1014" cy="560" r="22" fill="#1D356A" fill-opacity="0.30"/>
+  </g>
+
+  <!-- 5 · masthead: the crest, then the ministry -->
+  <image id="se__image__logo" x="64" y="52" width="56" height="56" href=""/>
+  <text id="se__text__organizer" x="136" y="92" font-size="21" font-weight="600" letter-spacing="8"
+        fill="#FFFFFF" fill-opacity="0.64">ENVISION PRESENTS</text>
+  <rect id="se__box__organizer--fit" x="136" y="66" width="600" height="36" fill="none"/>
+
+  <!-- 6 · scan to join me, in its own corner -->
+  <rect x="904" y="48" width="112" height="112" rx="16" fill="#FFFFFF"/>
+  <rect id="se__qr__ref_url" x="904" y="48" width="112" height="112" rx="16" fill="#000000"/>
+  <text x="960" y="184" font-size="16" font-weight="600" letter-spacing="1.4" text-anchor="middle"
+        fill="#FFFFFF" fill-opacity="0.55">SCAN TO JOIN ME</text>
+
+  <!-- 7 · the wordmark -->
+  <text id="se__text__title" x="540" y="296" font-size="96" font-weight="900" font-family="Fraunces, Unbounded, serif"
+        text-anchor="middle" fill="#FFFFFF">CHARA</text>
+  <rect id="se__box__title--fit" x="120" y="212" width="840" height="100" fill="none"/>
+
+  <text id="se__text__edition" x="540" y="344" font-size="30" font-weight="700" font-family="Fraunces, Unbounded, serif"
+        letter-spacing="12" text-anchor="middle" fill="#F5C518">2026</text>
+  <rect id="se__box__edition--fit" x="320" y="312" width="440" height="46" fill="none"/>
+
+  <!-- 8 · the medallion -->
+  <circle id="se__stroke__accent" cx="540" cy="540" r="182" fill="none" stroke="#F5C518" stroke-width="3" stroke-opacity="0.45"/>
+  <circle id="se__stroke__primary" cx="540" cy="540" r="172" fill="none" stroke="#1D356A" stroke-width="14"/>
+  <circle cx="540" cy="540" r="156" fill="none" stroke="#F5C518" stroke-width="16"/>
+  <circle cx="540" cy="540" r="147" fill="none" stroke="#FFE9A3" stroke-width="3" stroke-opacity="0.5"/>
+  <g filter="url(#se-blur-soft)">
+    <path d="M 424 412 A 160 160 0 0 1 500 366" fill="none" stroke="#FFFFFF" stroke-opacity="0.5"
+          stroke-width="6" stroke-linecap="round"/>
+  </g>
+
+  <!-- 9 · the guest, or the invitation to add one -->
   <g id="se__ifnot__has_photo">
-    <circle id="se__fill__surface" cx="800" cy="440" r="190" fill="#151822" fill-opacity="0.5"/>
-    <circle id="se__stroke__accent--2" cx="800" cy="440" r="190" fill="none" stroke="#F5C518" stroke-width="4" stroke-opacity="0.4"/>
-    <text x="800" y="490" font-size="140" text-anchor="middle">🎉</text>
+    <circle id="se__fill__surface" cx="540" cy="540" r="145" fill="#151822" fill-opacity="0.75"/>
+    <circle cx="540" cy="540" r="145" fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="2"/>
+    <text x="540" y="546" font-size="84" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.30" font-family="Inter, sans-serif">+</text>
+    <text id="se__text__cta" x="540" y="596" font-size="22" font-weight="600" text-anchor="middle"
+          fill="#FFFFFF" fill-opacity="0.45">Add photo</text>
+    <rect id="se__box__cta--fit" x="380" y="566" width="320" height="42" fill="none"/>
   </g>
 
-  <text id="se__text__headline" x="48" y="470" font-size="84" font-weight="800" font-family="Unbounded, sans-serif"
-        fill="#FFFFFF">I&#8217;m going!</text>
-  <rect id="se__box__headline--fit" x="48" y="396" width="540" height="92"/>
+  <g id="se__if__has_photo">
+    <g clip-path="url(#se-photo-clip)">
+      <rect x="395" y="395" width="290" height="290" fill="#151822"/>
+      <image id="se__image__photo" x="395" y="395" width="290" height="290"
+             preserveAspectRatio="xMidYMid slice" href=""/>
+    </g>
+  </g>
+  <rect id="se__slot__photo" x="395" y="395" width="290" height="290" rx="145" fill="none"/>
 
-  <text id="se__text__first_name" x="48" y="546" font-size="48" font-weight="700" fill="#F5C518">Ada</text>
-  <rect id="se__box__first_name--fit" x="48" y="500" width="540" height="58"/>
+  <!-- 10 · the statement -->
+  <text id="se__text__headline" x="540" y="798" font-size="76" font-weight="900" font-style="italic"
+        font-family="Fraunces, Unbounded, serif" text-anchor="middle" fill="#FFFFFF">I&#8217;m going!</text>
+  <rect id="se__box__headline--fit" x="140" y="722" width="800" height="92" fill="none"/>
 
-  <rect id="se__fill__surface--2" x="48" y="640" width="760" height="212" rx="32" fill="#151822" fill-opacity="0.72"/>
+  <text id="se__text__first_name" x="540" y="854" font-size="30" font-weight="700" font-family="Fraunces, Unbounded, serif"
+        letter-spacing="11" text-anchor="middle" fill="#F5C518">Ada</text>
+  <rect id="se__box__first_name--fit" x="240" y="822" width="600" height="44" fill="none"/>
 
-  <text id="se__text__date" x="88" y="716" font-size="40" font-weight="700" fill="#FFFFFF">Sat 24 Oct</text>
-  <rect id="se__box__date--fit" x="88" y="680" width="420" height="50"/>
+  <!-- 11 · the verse -->
+  <path d="M 470 878 c 20 -13 40 -13 60 0 c 20 13 40 13 60 0" fill="none" stroke="#F5C518"
+        stroke-opacity="0.75" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="540" cy="861" r="3.6" fill="#F5C518" fill-opacity="0.85"/>
 
-  <text id="se__text__time" x="88" y="778" font-size="36" font-weight="500" fill="#FFFFFF" fill-opacity="0.82">5:00 PM</text>
-  <rect id="se__box__time--fit" x="88" y="744" width="420" height="46"/>
+  <text id="se__text__verse_text" x="540" y="908" font-size="25" font-weight="500" font-style="italic"
+        font-family="Fraunces, Unbounded, serif" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.86">Thou wilt shew me the path of life: in thy presence is fulness of joy;
+    <tspan x="540" dy="30">at thy right hand there are pleasures for evermore.</tspan></text>
+  <rect id="se__box__verse_text--wrap-2" x="84" y="880" width="912" height="66" fill="none"/>
 
-  <text id="se__text__venue" x="88" y="832" font-size="30" font-weight="500" fill="#FFFFFF" fill-opacity="0.72">HOD Lekki Centre</text>
-  <rect id="se__box__venue--wrap-1" x="88" y="802" width="420" height="40"/>
+  <text id="se__text__verse_ref" x="540" y="964" font-size="19" font-weight="600" letter-spacing="6"
+        text-anchor="middle" fill="#F5C518" fill-opacity="0.9">PSALM 16:11</text>
+  <rect id="se__box__verse_ref--fit" x="300" y="938" width="480" height="34" fill="none"/>
 
-  <rect id="se__qr__ref_url" x="856" y="672" width="152" height="152"/>
+  <!-- 12 · where and when, one line: date · time · venue · short URL -->
+  <text id="se__text__date" x="205" y="998" font-size="22" font-weight="600" text-anchor="middle"
+        fill="#FFFFFF" fill-opacity="0.82">Sat 24 Oct</text>
+  <rect id="se__box__date--fit" x="110" y="974" width="190" height="34" fill="none"/>
+  <circle cx="310" cy="991" r="3" fill="#FFFFFF" fill-opacity="0.45"/>
+  <text id="se__text__time" x="405" y="998" font-size="22" font-weight="600" text-anchor="middle"
+        fill="#FFFFFF" fill-opacity="0.82">5:00 PM</text>
+  <rect id="se__box__time--fit" x="315" y="974" width="180" height="34" fill="none"/>
+  <circle cx="500" cy="991" r="3" fill="#FFFFFF" fill-opacity="0.45"/>
+  <text id="se__text__venue" x="650" y="998" font-size="22" font-weight="500" text-anchor="middle"
+        fill="#FFFFFF" fill-opacity="0.72">HOD Lekki Centre</text>
+  <rect id="se__box__venue--fit" x="505" y="974" width="290" height="34" fill="none"/>
+  <circle cx="762" cy="991" r="3" fill="#FFFFFF" fill-opacity="0.45"/>
+  <text id="se__text__url" x="915" y="998" font-size="22" font-weight="500" text-anchor="middle"
+        fill="#FFFFFF" fill-opacity="0.60">hodlc.lpc.cm/e/chara</text>
+  <rect id="se__box__url--fit" x="800" y="974" width="230" height="34" fill="none"/>
 
-  <text id="se__text__url" x="48" y="950" font-size="34" font-weight="700" fill="#FFFFFF">hodlc.lpc.cm/e/chara</text>
-  <rect id="se__box__url--fit" x="48" y="912" width="700" height="48"/>
+  <text id="se__text__signature" x="540" y="1026" font-size="14" font-weight="500" letter-spacing="3"
+        text-anchor="middle" fill="#FFFFFF" fill-opacity="0.32">Chara 2026 by Envision</text>
+  <rect id="se__box__signature--fit" x="240" y="1002" width="600" height="30" fill="none"/>
 
-  <text id="se__text__signature" x="48" y="1004" font-size="26" font-weight="500" fill="#FFFFFF" fill-opacity="0.62">Chara 2026 by Envision</text>
-  <rect id="se__box__signature--fit" x="48" y="970" width="700" height="40"/>
-
-  <rect id="se__fill__secondary" x="48" y="1036" width="180" height="8" rx="4" fill="#D11920"/>
+  <!-- 13 · the crest over the corner, almost subliminal -->
+  <image id="se__image__logo--2" x="810" y="840" width="420" height="420" opacity="0.05" href=""/>
 </svg>
