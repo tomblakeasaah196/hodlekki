@@ -2113,7 +2113,7 @@ Playlist: `se_music` rows (max `SE_MUSIC_MAX` = 5), each joined to an `se_assets
 
 ### 13.4 Registration sheet
 
-- Opens as a bottom sheet (mobile) or centred 520 px modal (≥ 768 px), glass, with 2–3 progress dots. Drag-to-dismiss asks "Leave registration?" if anything is typed.
+- Opens as a bottom sheet (mobile) or centred 520 px modal (≥ 768 px), glass, with 2–3 progress dots. The form surface uses an 85% `--se-surface` mix (15% transparency) over the same 18 px glass blur for legibility while keeping the event imagery softly visible. Drag-to-dismiss asks "Leave registration?" if anything is typed.
 - **Step 1 — Phone**: label "Your phone number", hint "We'll use it to welcome you at the door." `type="tel" inputmode="tel" autocomplete="tel"`, a `+234` prefix chip (tap → international), font-size ≥ 16 px (prevents iOS zoom). **Continue**.
 - **Step 2 — Identity** (by `lookup.kind`):
   - `member`: big avatar initials, "Hi Ada O. 👋 — is this you?" → **Yes, register me** / Not me. Then the karaoke switch and consent (if needed).
