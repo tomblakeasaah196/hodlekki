@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en-NG">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>“I’m going” card — tap-through prototype</title>
+<!--
+  /docs/design/im_going/prototype.html
+  ================================
+  A no-build tap-through of the proposed builder, for review only. It is NOT
+  production code and it is not what ships: the real builder is
+  assets/se/js/portal/card.js against the §14.4 token engine.
+
+  What is real here:
+    · the flow: two buttons, the circle is the button, Save asks the format
+    · the fit: your photo, dragged and pinched inside the card's own ring
+    · the artwork: the actual concept renders committed beside this file
+
+  What is a stand-in:
+    · "Save" downloads the concept render (story or square) — it is not a
+      live render of your photo. The real builder rasterises the SVG with
+      your photo composited in.
+    · nothing is uploaded here either; the file never leaves the page.
+-->
+<style>
+  :root {
+    --bg: #07080C; --night: #0B0D13; --surface: #151822;
+    --text: #FFFFFF; --muted: rgba(255,255,255,.55);
+    --primary: #1D356A; --secondary: #D11920; --accent: #F5C518;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #07080C; color: var(--text);
+    font: 400 15px/1.45 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: grid; place-items: center; padding: 16px;
+  }
+  .phone {
+    position: relative; width: min(430px, 100%); height: min(880px, 100%);
+    display: flex; flex-direction: column;
+    background:
+      radial-gradient(120% 60% at 50% 0%, rgba(29,53,106,.55), transparent 60%),
+      radial-gradient(90% 50% at 80% 10%, rgba(209,25,32,.28), transparent 60%),
+      var(--night);
+    border-radius: 30px; overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.10), 0 30px 80px rgba(0,0,0,.6);
+  }
+  header { padding: 18px 20px 8px; }
+  header .kicker { font-size: 11px; letter-spacing: .16em; color: var(--muted); text-transform: uppercase; }
+  header h1 { margin: 2px 0 0; font-size: 22px; font-weight: 800; letter-spacing: .02em; font-family: Unbounded, Inter, sans-serif; }
+
+  main { flex: 1; display: flex; flex-direction: column; padding: 10px 20px 18px; min-height: 0; }
+  h2 { margin: 6px 0 4px; font-size: 19px; font-weight: 700; }
+  .hint { margin: 0 0 12px; font-size: 12.5px; color: var(--muted); }
+
+  .stage { flex: 1; display: grid; place-items: center; min-height: 0; }
+  .cardwrap { position: relative; height: 100%; max-height: 100%; aspect-ratio: 9/16; }
+  .cardwrap[data-format="square"] { aspect-ratio: 1/1; }
+  .cardwrap img.art { width: 100%; height: 100%; display: block; border-radius: 16px; }
+  .cardwrap .glowring { position: absolute; border-radius: 50%; pointer-events: none; transition: box-shadow .25s ease; }
+  .cardwrap.lit .glowring { box-shadow: 0 0 0 1px rgba(245,197,24,.35), 0 0 60px 10px rgba(245,197,24,.18); }
+
+  /* the photo circle — the mask, the button, and the drag surface in one */
+  .circle {
+    position: absolute; left: 50%; border-radius: 50%; overflow: hidden;
+    transform: translate(-50%, -50%); cursor: grab; touch-action: none;
+    background: #151822; border: 0; padding: 0;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.10);
+  }
+  .circle:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+  .circle img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform-origin: 50% 50%; will-change: transform; }
+  .circle .add { position: absolute; inset: 0; display: grid; place-content: center; gap: 6px; text-align: center; color: rgba(255,255,255,.5); }
+  .circle .add b { font-size: 34px; font-weight: 300; line-height: 1; }
+  .circle .add span { font-size: 13px; font-weight: 600; }
+
+  .actions { display: flex; gap: 10px; margin-top: 14px; }
+  button.btn {
+    flex: 1; min-height: 56px; border-radius: 28px; font: 700 15px/1 Inter, sans-serif;
+    border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.06); color: var(--text);
+    cursor: pointer; transition: transform .12s ease;
+  }
+  button.btn:active { transform: scale(.97); }
+  button.btn.primary {
+    border: 0; background: linear-gradient(135deg, var(--secondary), #8E1015);
+    box-shadow: 0 10px 30px rgba(209,25,32,.35);
+  }
+  .privacy { margin: 10px 0 0; text-align: center; font-size: 11.5px; color: rgba(255,255,255,.4); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+  /* the format ask */
+  .ask { position: absolute; inset: 0; display: none; align-items: flex-end; background: rgba(4,5,8,.72); backdrop-filter: blur(6px); }
+  .ask.open { display: flex; }
+  .ask .panel { width: 100%; background: linear-gradient(180deg, rgba(16,20,32,.97), rgba(11,13,19,.99)); border-radius: 26px 26px 0 0; padding: 18px 18px 20px; border-top: 1px solid rgba(255,255,255,.10); animation: up .28s cubic-bezier(.2,.8,.2,1); }
+  @keyframes up { from { transform: translateY(24px); opacity: .6 } to { transform: none; opacity: 1 } }
+  .ask h3 { margin: 0 0 4px; font-size: 18px; }
+  .ask p.sub { margin: 0 0 14px; font-size: 12.5px; color: var(--muted); }
+  .opt { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 14px; margin-bottom: 10px;
+         border-radius: 20px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); color: var(--text); cursor: pointer; font: inherit; }
+  .opt:hover, .opt:focus-visible { border-color: var(--accent); outline: none; }
+  .opt .shape { flex: none; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.22); border-radius: 6px; }
+  .opt[data-format="story"] .shape { width: 38px; height: 56px; }
+  .opt[data-format="square"] .shape { width: 52px; height: 56px; }
+  .opt b { display: block; font-size: 15px; }
+  .opt small { display: block; color: var(--muted); font-size: 12.5px; }
+  .ask .cancel { width: 100%; margin-top: 2px; background: none; border: 0; color: var(--muted); font: 600 13px Inter, sans-serif; padding: 10px; cursor: pointer; }
+  .toast { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); opacity: 0;
+           background: rgba(20,24,34,.96); border: 1px solid rgba(255,255,255,.16); padding: 10px 16px; border-radius: 999px;
+           font-size: 13px; transition: all .25s ease; pointer-events: none; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translateX(-50%); }
+</style>
+</head>
+<body>
+<div class="phone">
+  <header>
+    <div class="kicker">Special events · Household of David Lekki</div>
+    <h1>CHARA <span style="color:var(--accent)">2026</span></h1>
+  </header>
+
+  <main>
+    <div id="title">
+      <h2>Your “I’m going” card</h2>
+      <p class="hint">Tap your picture to add a photo. It never leaves your phone.</p>
+    </div>
+
+    <div class="stage">
+      <div class="cardwrap" id="cardwrap" data-format="story">
+        <img class="art" id="art" src="story-1080x1920.png" alt="Concept render of the card">
+        <div class="glowring" id="ring" aria-hidden="true"></div>
+        <button class="circle" id="circle" type="button" aria-label="Add your photo">
+          <img id="photo" alt="" hidden>
+          <span class="add" id="addHint"><b>＋</b><span>Add photo</span></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="photoBtn" type="button">Add photo</button>
+      <button class="btn primary" id="saveBtn" type="button">Save / share</button>
+    </div>
+    <p class="privacy">Your photo stays on your phone.</p>
+    <input class="sr" type="file" id="file" accept="image/*">
+  </main>
+
+  <div class="ask" id="ask" role="dialog" aria-modal="true" aria-labelledby="askTitle">
+    <div class="panel">
+      <h3 id="askTitle">Save or share as…</h3>
+      <p class="sub">Pick the shape. Your phone’s share sheet opens next.</p>
+      <button class="opt" data-format="story" type="button">
+        <span class="shape"></span>
+        <span><b>Story</b><small>1080 × 1920 · WhatsApp Status, IG/FB Story, TikTok</small></span>
+      </button>
+      <button class="opt" data-format="square" type="button">
+        <span class="shape"></span>
+        <span><b>Square</b><small>1080 × 1080 · WhatsApp DP, group chat, IG feed</small></span>
+      </button>
+      <button class="cancel" id="cancel" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script type="module">
+// ---------------------------------------------------------------- geometry
+// The empty ring in the concept renders, in image coordinates:
+//   story  1080 x 1920, circle centre (540, 800), r 256  ->  41.667% down, 23.70% wide
+//   square 1080 x 1080, circle centre (540, 540), r 150  ->  50.000% down, 13.89% wide
+const GEOM = {
+  story:  { top: 800 / 1920 * 100, size: 2 * 256 / 1080 * 100, art: 'story-1080x1920.png' },
+  square: { top: 540 / 1080 * 100, size: 2 * 150 / 1080 * 100, art: 'square-1080x1080.png' },
+};
+
+const cardwrap = document.getElementById('cardwrap');
+const art = document.getElementById('art');
+const ring = document.getElementById('ring');
+const circle = document.getElementById('circle');
+const photo = document.getElementById('photo');
+const addHint = document.getElementById('addHint');
+const file = document.getElementById('file');
+const photoBtn = document.getElementById('photoBtn');
+const saveBtn = document.getElementById('saveBtn');
+const ask = document.getElementById('ask');
+const toastEl = document.getElementById('toast');
+
+let format = 'story';
+let hasPhoto = false;
+
+function place() {
+  const g = GEOM[format];
+  circle.style.top = g.top + '%';
+  circle.style.width = g.size + '%';
+  circle.style.aspectRatio = '1 / 1';
+  ring.style.top = circle.style.top;
+  ring.style.width = circle.style.width;
+  ring.style.aspectRatio = '1 / 1';
+  art.src = g.art;
+  cardwrap.dataset.format = format;
+  resetFit();
+}
+place();
+
+// ---------------------------------------------------------------- the photo
+const state = { bitmap: null, base: 1, scale: 1, x: 0, y: 0 };
+
+function resetFit() {
+  state.scale = 1; state.x = 0; state.y = 0;
+  apply();
+}
+
+function apply() {
+  photo.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+}
+
+function toast(message) {
+  toastEl.textContent = message;
+  toastEl.classList.add('show');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => toastEl.classList.remove('show'), 2600);
+}
+
+async function loadFile(f) {
+  if (!f) return;
+  let bitmap;
+  try { bitmap = await createImageBitmap(f, { imageOrientation: 'from-image' }); }
+  catch { bitmap = await createImageBitmap(f); }
+
+  const longest = Math.max(bitmap.width, bitmap.height);
+  if (longest > 1600) {
+    const s = 1600 / longest;
+    const small = await createImageBitmap(bitmap, { resizeWidth: Math.round(bitmap.width * s), resizeHeight: Math.round(bitmap.height * s), resizeQuality: 'high' });
+    bitmap.close?.();
+    bitmap = small;
+  }
+  state.bitmap = bitmap;
+
+  const url = URL.createObjectURL(f);
+  photo.onload = () => URL.revokeObjectURL(url);
+  photo.src = url;
+  photo.hidden = false;
+  addHint.hidden = true;
+  hasPhoto = true;
+  photoBtn.textContent = 'Remove photo';
+  circle.setAttribute('aria-label', 'Your photo — drag to move, pinch to zoom');
+  cardwrap.classList.add('lit');
+  resetFit();
+}
+
+file.addEventListener('change', () => loadFile(file.files?.[0]));
+photoBtn.addEventListener('click', () => {
+  if (!hasPhoto) { file.click(); return; }
+  hasPhoto = false;
+  state.bitmap = null;
+  state.x = 0; state.scale = 1;
+  photo.removeAttribute('src'); photo.hidden = true; addHint.hidden = false;
+  photoBtn.textContent = 'Add photo';
+  circle.setAttribute('aria-label', 'Add your photo');
+  cardwrap.classList.remove('lit');
+  file.value = '';
+});
+circle.addEventListener('click', () => { if (!hasPhoto) file.click(); });
+circle.addEventListener('dragstart', (e) => e.preventDefault());
+
+// drag + pinch inside the ring
+const pointers = new Map();
+let pinch = null;
+circle.addEventListener('pointerdown', (e) => {
+  if (!hasPhoto) return;
+  circle.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), scale: state.scale };
+  }
+  circle.style.cursor = 'grabbing';
+});
+circle.addEventListener('pointermove', (e) => {
+  if (!hasPhoto || !pointers.has(e.pointerId)) return;
+  const prev = pointers.get(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (pointers.size === 2 && pinch) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    state.scale = Math.min(3.2, Math.max(1, pinch.scale * (d / (pinch.d || 1))));
+    apply();
+    return;
+  }
+  state.x += e.clientX - prev.x;
+  state.y += e.clientY - prev.y;
+  apply();
+});
+const end = (e) => {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (!pointers.size) circle.style.cursor = 'grab';
+};
+circle.addEventListener('pointerup', end);
+circle.addEventListener('pointercancel', end);
+
+// ------------------------------------------------------------- the format ask
+saveBtn.addEventListener('click', () => {
+  ask.classList.add('open');
+  ask.querySelector('.opt')?.focus();
+});
+document.getElementById('cancel').addEventListener('click', () => ask.classList.remove('open'));
+
+for (const opt of ask.querySelectorAll('.opt')) {
+  opt.addEventListener('click', () => {
+    format = opt.dataset.format;
+    ask.classList.remove('open');
+    place();
+
+    // In the real builder this rasterises the SVG with your photo in it.
+    // Here it hands you the concept render for that format.
+    const link = document.createElement('a');
+    link.href = GEOM[format].art;
+    link.download = `chara-2026-im-going-${format}.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    toast('This prototype downloads the concept render — the real card is drawn on your device.');
+  });
+}
+</script>
+</body>
+</html>
