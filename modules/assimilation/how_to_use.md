@@ -84,11 +84,19 @@ message tells you how many.
   status, departments, region, attendance totals, case status and the assigned
   volunteer.
 
-Both workbooks use Household of David's blue, red and white brand, include the
-church logo when available, and keep phone numbers as text in `+234…` format.
-When no last-service date is recorded, the workbook shows **2025** because the
-attendance data starts in 2026; the report note explains this fallback. The
-export follows the filters currently selected in **Find people**.
+Both workbooks use Household of David's blue, red and white brand and keep
+phone numbers as text in `+234…` format. When no last-service date is recorded,
+the workbook shows **2025** because the attendance data starts in 2026; the
+report note explains this fallback. The export follows the filters currently
+selected in **Find people**.
+
+The logo is the one optional part. PhpSpreadsheet can only embed a picture when
+PHP can inspect it, which needs the **Fileinfo** extension; the production web
+PHP does not load Fileinfo (the CLI PHP on the same server does), so live
+exports are fully branded but arrive without the logo, and the reason is
+written to PHP's error log. Enabling `fileinfo` for the site's PHP at the
+server level (WHM → EasyApache 4, or the host's PHP selector) brings the logo
+back — no code change is needed, and a server without it never fails an export.
 
 ## 4. Watchlists
 

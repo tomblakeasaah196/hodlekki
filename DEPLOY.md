@@ -36,6 +36,27 @@ Every push to `main` triggers `.github/workflows/deploy.yml`, which:
    disconnects, the deploy still finishes and the full log is available
    in cPanel → Terminal.
 
+### PHP extensions: `ext-fileinfo`
+
+Composer installs on the server pass `--ignore-platform-req=ext-fileinfo`
+because the host's **web** PHP does not load Fileinfo while its **CLI** PHP
+does. That gap is easy to miss: a package requirement satisfied in the terminal
+can still be missing in the browser.
+
+- `phpoffice/phpspreadsheet` declares `ext-fileinfo` as a hard requirement, and
+  its `Worksheet\Drawing` uses `mime_content_type()` (plus `getimagesize()`)
+  for every local image. On the web SAPI that call is a fatal
+  "Call to undefined function … mime_content_type()" — it took both Assimilation
+  Excel exports down on 2026-10-08 (`includes/assimilation_export_excel.php`).
+- Any feature that depends on an optional extension must therefore degrade on
+  the web SAPI instead of assuming Composer's platform check passed. The
+  Assimilation export probes `function_exists('mime_content_type')` and skips
+  its optional logo, logging the reason, so the workbook still goes out.
+- To restore the logo, enable `fileinfo` for the site's PHP at the server level
+  (WHM → EasyApache 4, or the host's PHP selector). **Do not add
+  `extension=fileinfo` to the cPanel-generated `php.ini`** — it is managed by
+  cPanel, and editing it by hand is the owner's call, not a deploy step.
+
 ## Why a webhook and not cPanel's UAPI
 
 I first wired this against cPanel's `VersionControl::update` UAPI. That
