@@ -143,9 +143,9 @@ try {
                 Advanced filters
                 <svg id="advChevron" class="w-4 h-4 text-gray-400 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
             </button>
-            <button type="button" onclick="exportCsv()" class="ml-auto min-h-[48px] px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 flex items-center gap-2">
-                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                Export CSV
+            <button type="button" onclick="openExportModal()" class="ml-auto min-h-[48px] px-4 py-2.5 rounded-xl border border-blue-200 bg-white text-sm font-bold text-blue-900 hover:border-red-300 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 flex items-center gap-2">
+                <svg class="w-4 h-4 text-blue-800" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3.5h5.5L19 9v10.5a1 1 0 01-1 1H6a1 1 0 01-1-1v-15a1 1 0 011-1H8zm5 0V9h6M8 13h8M8 16h8M8 10h1"/></svg>
+                Download Excel
             </button>
         </div>
 
@@ -717,6 +717,56 @@ try {
 </div>
 <?php endif; ?>
 
+<?php if ($assim_manager): ?>
+<div id="exportModal" class="fixed inset-0 w-screen h-screen bg-gray-950/70 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform scale-95 transition-transform duration-300">
+        <div class="relative overflow-hidden bg-hodBlue px-6 py-6 text-white">
+            <div class="absolute -right-10 -top-12 h-40 w-40 rounded-full bg-red-600/20 blur-3xl" aria-hidden="true"></div>
+            <div class="relative flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-200">Household of David · Lekki Centre</p>
+                    <h3 id="exportTitle" class="mt-1 text-xl font-display font-bold">Choose your Excel report</h3>
+                    <p class="mt-1 text-sm text-blue-100/80">Both options use the people and filters currently shown in Find people.</p>
+                </div>
+                <button type="button" onclick="closeModal('exportModal')" aria-label="Close" class="shrink-0 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="space-y-4 p-5 sm:p-6">
+            <button type="button" onclick="exportExcel('general')" class="group w-full rounded-2xl border border-blue-100 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-700">
+                <span class="flex items-start gap-4">
+                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-900 group-hover:bg-blue-100" aria-hidden="true">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 4.75A1.75 1.75 0 016.75 3h7.5L19 7.75v11.5A1.75 1.75 0 0117.25 21h-10.5A1.75 1.75 0 015 19.25V4.75zM14 3v5h5M8 12h8M8 15.5h8"/></svg>
+                    </span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block font-bold text-gray-900">General Assimilation Register</span>
+                        <span class="mt-1 block text-sm leading-relaxed text-gray-500">Full name, clean +234 phone number, gender and last service attended. Made for a simple, shareable list.</span>
+                    </span>
+                    <svg class="mt-1 h-5 w-5 shrink-0 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-blue-800" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </span>
+            </button>
+            <button type="button" onclick="exportExcel('detailed')" class="group w-full rounded-2xl border border-red-100 bg-white p-4 text-left transition hover:border-red-300 hover:bg-red-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600">
+                <span class="flex items-start gap-4">
+                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-700 group-hover:bg-red-100" aria-hidden="true">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 5.75A1.75 1.75 0 015.75 4h12.5A1.75 1.75 0 0120 5.75v12.5A1.75 1.75 0 0118.25 20H5.75A1.75 1.75 0 014 18.25V5.75zM4 9h16M9 9v11m5-11v11M7 6.5h.01M10 6.5h.01"/></svg>
+                    </span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block font-bold text-gray-900">Full Assimilation Report</span>
+                        <span class="mt-1 block text-sm leading-relaxed text-gray-500">Everything in the general register, plus spiritual status, departments, region, attendance totals, case status and assigned volunteer.</span>
+                    </span>
+                    <svg class="mt-1 h-5 w-5 shrink-0 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </span>
+            </button>
+            <p class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-xs leading-relaxed text-gray-500">The workbook uses Household of David colours and logo. Phone numbers are cleaned to +234; “2025” marks people with no last-service date in records that begin in 2026.</p>
+            <div class="flex justify-end border-t border-gray-100 pt-4">
+                <button type="button" onclick="closeModal('exportModal')" class="min-h-[44px] rounded-xl px-5 font-bold text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <div id="globalActionBlocker" class="fixed inset-0 w-screen h-screen z-[10000] hidden items-center justify-center bg-gray-900/40 backdrop-blur-sm cursor-not-allowed transition-opacity duration-300 opacity-0">
     <div class="bg-white p-4 rounded-2xl shadow-2xl flex items-center gap-3">
         <svg class="animate-spin h-6 w-6 text-emerald-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
@@ -1060,9 +1110,15 @@ try {
             if (res.status === 'success') { clearSelection(); runFind(); }
         }, 'json').fail(() => { unlockScreen(); showToast('Server error', 'error'); });
     }
-    function exportCsv() {
+    function openExportModal() {
+        openModal('exportModal');
+    }
+    function exportExcel(reportType) {
+        if (!['general', 'detailed'].includes(reportType)) return;
+        closeModal('exportModal');
         const form = $('<form method="post" target="_blank">').attr('action', API_URL);
-        form.append($('<input type="hidden" name="action" value="export_csv">'));
+        form.append($('<input type="hidden" name="action" value="export_excel">'));
+        form.append($('<input type="hidden" name="report_type">').val(reportType));
         form.append($('<input type="hidden" name="rule">').val(JSON.stringify(currentRule())));
         form.appendTo('body').trigger('submit').remove();
     }
