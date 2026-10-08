@@ -196,34 +196,30 @@ try {
             break;
 
         // ------------------------------------------------------------------
-        // export_csv — the current rule's full result set
+        // export_excel — a clean general register or the full case-management report
         // ------------------------------------------------------------------
-        case 'export_csv':
+        case 'export_excel':
             if (!$is_manager) {
                 assim_deny();
             }
-            $rule = assim_rule_from_request();
-            $q    = assim_find_query($rule, ['order' => 'att.last_attended IS NULL, att.last_attended ASC']);
-            $stmt = $pdo->prepare($q['sql']);
-            $stmt->execute($q['params']);
 
-            header('Content-Type: text/csv; charset=utf-8');
-            header('Content-Disposition: attachment; filename="assimilation_' . date('Y-m-d') . '.csv"');
-            $out = fopen('php://output', 'w');
-            fwrite($out, "\xEF\xBB\xBF");
-            fputcsv($out, ['First name', 'Last name', 'Phone', 'Spiritual status', 'Departments', 'Region',
-                'Last attended', 'How long ago', 'Services in window', 'Services before', 'Total services',
-                'Case status', 'Assigned to'], ',', '"', '');
-            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                fputcsv($out, array_map('assim_csv_safe', [
-                    $r['first_name'], $r['last_name'], $r['phone'],
-                    str_replace('_', ' ', (string) $r['spiritual_status']), $r['departments'], $r['region_name'],
-                    $r['last_attended'], assim_since_words($r['last_attended']),
-                    $r['services_in_window'], $r['services_previous'], $r['total_services'],
-                    $r['case_status'] ? assim_status_words($r['case_status']) : '', $r['assignee_name'],
-                ]), ',', '"', '');
+            $report_type = (string) ($_POST['report_type'] ?? '');
+            if (!in_array($report_type, ['general', 'detailed'], true)) {
+                http_response_code(400);
+                header('Content-Type: text/plain; charset=utf-8');
+                echo 'Choose either the general register or the full assimilation report.';
+                exit;
             }
-            fclose($out);
+
+            try {
+                require_once __DIR__ . '/../includes/assimilation_export_excel.php';
+                assim_export_stream_excel($pdo, assim_rule_from_request(), $report_type);
+            } catch (Throwable $e) {
+                error_log('Assimilation Excel export error: ' . $e->getMessage());
+                http_response_code(500);
+                header('Content-Type: text/plain; charset=utf-8');
+                echo 'The Excel report could not be generated. Please try again or contact an administrator.';
+            }
             exit;
 
         // ------------------------------------------------------------------

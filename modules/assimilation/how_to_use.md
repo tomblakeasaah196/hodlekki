@@ -76,7 +76,19 @@ appears choose a volunteer and click **Send someone after them**. Choose
 themselves. Anyone who already has an open follow-up is skipped, and the
 message tells you how many.
 
-**Export CSV** downloads everyone the rule catches, safe to open in Excel.
+**Download Excel** offers two branded workbooks for everyone the current rule catches:
+
+- **General Assimilation Register** — one Full Name column, normalized Nigerian
+  phone number, gender and last service attended.
+- **Full Assimilation Report** — the same clean profile details, plus spiritual
+  status, departments, region, attendance totals, case status and the assigned
+  volunteer.
+
+Both workbooks use Household of David's blue, red and white brand, include the
+church logo when available, and keep phone numbers as text in `+234…` format.
+When no last-service date is recorded, the workbook shows **2025** because the
+attendance data starts in 2026; the report note explains this fallback. The
+export follows the filters currently selected in **Find people**.
 
 ## 4. Watchlists
 

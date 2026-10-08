@@ -1055,9 +1055,3 @@ function assim_opening_line(PDO $pdo, int $case_id, string $person_name, ?string
     $out = reach_gemini($prompt, 0.7);
     return $out !== null && trim($out) !== '' ? trim(strip_tags($out)) : null;
 }
-
-// Spreadsheet apps execute cells that start with these as formulas.
-function assim_csv_safe($v): string {
-    $v = (string) $v;
-    return ($v !== '' && strpbrk($v[0], '=+-@') !== false) ? "'" . $v : $v;
-}
