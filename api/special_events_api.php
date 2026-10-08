@@ -1261,8 +1261,25 @@ try {
         }
 
         se_api_success('OK', [
-            'verses' => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+            'verses'    => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+            'catalogue' => se_chara_verse_catalogue($pdo, $event),
         ]);
+    }
+
+    case 'chara_verses_add': {
+        // Ready-made joy verses: `verses` names the ones to add (catalogue
+        // keys); without it, all of them. Each is approved as it is added.
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $only  = is_array($body['verses'] ?? null) ? array_values(array_filter($body['verses'], 'is_string')) : null;
+        $out   = se_chara_verses_add($pdo, $event, $userId, $only);
+
+        se_api_success(
+            $out['added'] ? ($out['added'] === 1 ? 'Verse added and approved.' : $out['added'] . ' verses added and approved.') : 'Already in your list.',
+            $out + [
+                'verses'    => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+                'catalogue' => se_chara_verse_catalogue($pdo, $event),
+            ]
+        );
     }
 
     case 'verse_add': {
@@ -1278,8 +1295,9 @@ try {
         );
 
         se_api_success('Added.', [
-            'verse'  => se_verse_payload($verse),
-            'verses' => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+            'verse'     => se_verse_payload($verse),
+            'verses'    => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+            'catalogue' => se_chara_verse_catalogue($pdo, $event),
         ]);
     }
 
@@ -1299,7 +1317,8 @@ try {
         se_verse_approve($pdo, $event, se_int($body['verse_id'] ?? 0, 0), $userId);
 
         se_api_success('Approved.', [
-            'verses' => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+            'verses'    => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+            'catalogue' => se_chara_verse_catalogue($pdo, $event),
         ]);
     }
 
@@ -1309,7 +1328,8 @@ try {
         se_verse_delete($pdo, $event, se_int($body['verse_id'] ?? 0, 0), $userId);
 
         se_api_success('Removed.', [
-            'verses' => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+            'verses'    => array_map('se_verse_payload', se_verses_list($pdo, (int) $event['id'])),
+            'catalogue' => se_chara_verse_catalogue($pdo, $event),
         ]);
     }
 
@@ -1347,7 +1367,7 @@ try {
         $dropped = count($result['rejected']);
         se_api_success(
             $added . ' added and approved.' . ($dropped ? ' ' . $dropped . ' could not be added.' : ''),
-            $result
+            $result + ['catalogue' => se_chara_verse_catalogue($pdo, $event)]
         );
     }
 
@@ -1443,7 +1463,12 @@ try {
 
         se_api_success(
             $on ? 'The programme is live on the page.' : 'The programme is hidden from the page.',
-            ['published' => se_bool(se_event_settings($updated)['program']['published'] ?? false)]
+            [
+                'published' => se_bool(se_event_settings($updated)['program']['published'] ?? false),
+                // A settings patch moves row_version; without the fresh event
+                // the next Details save reports a clash with nobody.
+                'event'     => se_studio_event_payload($pdo, $updated, $userId, $accessLevel, true),
+            ]
         );
     }
 
@@ -1463,13 +1488,19 @@ try {
 
         // The public time mode travels with the builder, because it is the
         // one programme setting a Producer changes while looking at it.
+        $updated = null;
         if (isset($body['public_time_mode'])) {
-            se_event_settings_patch($pdo, $event, [
+            $updated = se_event_settings_patch($pdo, $event, [
                 'program' => ['public_time_mode' => se_enum($body['public_time_mode'], SE_PROGRAM_TIME_MODES, 'approximate')],
             ], $userId);
         }
 
-        se_api_success('Programme saved.', ['program' => $program]);
+        // The settings patch moves row_version; the Studio needs the new one
+        // or its next Details save reports a clash with nobody.
+        se_api_success('Programme saved.', [
+            'program' => $program,
+            'event'   => $updated ? se_studio_event_payload($pdo, $updated, $userId, $accessLevel, true) : null,
+        ]);
     }
 
     case 'program_import': {
@@ -1578,7 +1609,9 @@ try {
             $feature => ['enabled' => se_bool($body['enabled'] ?? false)],
         ], $userId);
 
-        se_api_success('Saved.', se_studio_chapters_payload($pdo, $event));
+        se_api_success('Saved.', se_studio_chapters_payload($pdo, $event) + [
+            'event' => se_studio_event_payload($pdo, $event, $userId, $accessLevel, true),
+        ]);
     }
 
     // ====================================================================
@@ -1694,7 +1727,9 @@ try {
             ],
         ], $userId);
 
-        se_api_success('Saved.', se_studio_music_payload($pdo, $event));
+        se_api_success('Saved.', se_studio_music_payload($pdo, $event) + [
+            'event' => se_studio_event_payload($pdo, $event, $userId, $accessLevel, true),
+        ]);
     }
 
     // ====================================================================
@@ -1774,6 +1809,7 @@ try {
 
         se_api_success($on ? 'The song list is live.' : 'The song list is hidden again.', [
             'settings' => se_event_settings($updated)['karaoke'] ?? [],
+            'event'    => se_studio_event_payload($pdo, $updated, $userId, $accessLevel, true),
         ]);
     }
 
@@ -1793,7 +1829,9 @@ try {
 
         $updated = se_event_settings_patch($pdo, $event, ['messages' => $in], $userId);
 
-        se_api_success('Messages saved.', se_messages_studio($pdo, $updated));
+        se_api_success('Messages saved.', se_messages_studio($pdo, $updated) + [
+            'event' => se_studio_event_payload($pdo, $updated, $userId, $accessLevel, true),
+        ]);
     }
 
     case 'messages_preview':
@@ -2272,13 +2310,16 @@ try {
     // ====================================================================
 
     case 'chara_starter_content': {
+        // Ready-made games: `games` names the ones to add (keys of
+        // se_chara_starter_games()); without it, all six are added.
         $event = se_studio_event($pdo, $body, 'event.edit');
-        $out   = se_chara_starter_content($pdo, $event, $userId);
+        $only  = is_array($body['games'] ?? null) ? array_values(array_filter($body['games'], 'is_string')) : null;
+        $out   = se_chara_starter_content($pdo, $event, $userId, $only);
         se_api_success(
-            $out['items'] || $out['games']
-                ? 'Starter pack added: ' . $out['items'] . ' questions and ' . $out['games'] . ' games.'
-                : 'The starter pack is already here.',
-            $out
+            $out['games']
+                ? ($out['games'] === 1 ? 'Game added to your lineup.' : $out['games'] . ' games added to your lineup.')
+                : 'Already in your lineup.',
+            $out + ['catalogue' => se_chara_catalogue($pdo, $event)]
         );
     }
 
@@ -2358,6 +2399,7 @@ try {
             'charade_categories' => SE_CHARADE_CATEGORIES,
             'test_mode'     => se_bool(se_event_settings($event)['test_mode'] ?? false),
             'ai'            => se_ai_available(),
+            'catalogue'     => se_chara_catalogue($pdo, $event),
         ]);
     }
 

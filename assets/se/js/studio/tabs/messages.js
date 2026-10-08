@@ -15,7 +15,7 @@
 import { html } from '@se/core/html.js';
 import { useState, useEffect } from 'preact/hooks';
 import { studio } from '@se/core/api.js';
-import { current, toast, can } from '../state.js';
+import { current, toast, can, refreshEvent } from '../state.js';
 import { Card, Button, Spinner, Field, TextInput, TextArea, Switch, Select } from '../ui.js';
 
 function Preview({ preview }) {
@@ -77,6 +77,7 @@ function KindCard({ event, kind, onSaved }) {
             };
             const data = await studio('messages_save', { id: event.id, settings: patch });
             onSaved(data);
+            refreshEvent(data.event);
             toast('Saved.', 'success');
         } catch (e) {
             toast(e.message, 'error');
@@ -109,21 +110,21 @@ function KindCard({ event, kind, onSaved }) {
                 <${Field} label="Time of day" name=${'at-' + form.kind}
                     hint="On a multi-day event this goes out the day before each day.">
                     <input type="time" id=${'at-' + form.kind} value=${form.at}
-                        class="rounded-xl border-gray-200 text-sm" disabled=${readOnly}
+                        class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm" disabled=${readOnly}
                         onInput=${(e) => setForm({ ...form, at: e.currentTarget.value })} />
                 <//>` : null}
 
             ${form.minutes_before !== null && form.minutes_before !== undefined ? html`
                 <${Field} label="Minutes before the doors" name=${'mb-' + form.kind}>
                     <input type="number" min="0" max="1440" id=${'mb-' + form.kind}
-                        value=${form.minutes_before} class="rounded-xl border-gray-200 text-sm" disabled=${readOnly}
+                        value=${form.minutes_before} class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm" disabled=${readOnly}
                         onInput=${(e) => setForm({ ...form, minutes_before: Number(e.currentTarget.value) || 0 })} />
                 <//>` : null}
 
             <${Field} label="What it says" name=${'tpl-' + form.kind}
                 hint="Tokens: {first_name} {event} {date} {time} {venue} {link}">
                 <${TextArea} name=${'tpl-' + form.kind} value=${form.template} rows=${4} maxLength=${600}
-                    onInput=${(e) => setForm({ ...form, template: e.currentTarget.value })} />
+                    onInput=${(v) => setForm({ ...form, template: v })} />
             <//>
 
             <${Preview} preview=${preview} />
@@ -139,7 +140,7 @@ function KindCard({ event, kind, onSaved }) {
                     <div class="w-56">
                         <${Field} label="Send a test to" name=${'test-' + form.kind}>
                             <${TextInput} name=${'test-' + form.kind} value=${phone}
-                                placeholder="024 123 4567" onInput=${(e) => setPhone(e.currentTarget.value)} />
+                                placeholder="024 123 4567" onInput=${setPhone} />
                         <//>
                     </div>
                     <${Button} variant="ghost" onClick=${test} disabled=${busy || !phone.trim()}>Test send</${Button}>
@@ -193,12 +194,12 @@ function AdHoc({ event, segments, onSent }) {
             <${Field} label="Who gets it" name="adhoc-segment">
                 <${Select} name="adhoc-segment" value=${segment}
                     options=${segments.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))}
-                    onChange=${(e) => { setSegment(e.currentTarget.value); setConfirming(false); }} />
+                    onChange=${(v) => { setSegment(v); setConfirming(false); }} />
             <//>
             <${Field} label="What it says" name="adhoc-template"
                 hint="Tokens: {first_name} {event} {date} {time} {venue} {link}">
                 <${TextArea} name="adhoc-template" value=${template} rows=${4} maxLength=${600}
-                    onInput=${(e) => { setTemplate(e.currentTarget.value); setConfirming(false); }} />
+                    onInput=${(v) => { setTemplate(v); setConfirming(false); }} />
             <//>
 
             ${preview ? html`<${Preview} preview=${preview} />` : null}

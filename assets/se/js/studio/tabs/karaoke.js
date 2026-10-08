@@ -14,8 +14,12 @@
 import { html } from '@se/core/html.js';
 import { useState, useEffect } from 'preact/hooks';
 import { studio } from '@se/core/api.js';
-import { current, toast, can } from '../state.js';
+import { current, toast, can, refreshEvent } from '../state.js';
 import { Card, Button, Spinner, EmptyState, Field, TextInput, TextArea, Switch } from '../ui.js';
+
+// The same look as TextInput, for the number boxes.
+const NUMBER = 'w-full px-4 py-3 rounded-xl border border-gray-200 outline-none transition-colors bg-white '
+    + 'focus:border-hodBlue disabled:bg-gray-50 disabled:text-gray-400';
 
 const STATUS_NOTE = {
     new: 'New song',
@@ -27,18 +31,23 @@ const STATUS_NOTE = {
 
 function Settings({ event, settings, onSaved }) {
     const [form, setForm] = useState(settings || {});
+    const [dirty, setDirty] = useState(false);
     const [busy, setBusy] = useState(false);
     const readOnly = !can('event.edit');
 
-    useEffect(() => { setForm(settings || {}); }, [settings]);
+    // The switches above save on their own; that must not wipe what is
+    // being typed here.
+    useEffect(() => { if (!dirty) setForm(settings || {}); }, [settings]);
 
-    const set = (key, value) => setForm({ ...form, [key]: value });
+    const set = (key, value) => { setForm({ ...form, [key]: value }); setDirty(true); };
 
     async function save() {
         setBusy(true);
         try {
-            const data = await studio('karaoke_settings_save', { id: event.id, settings: form });
-            onSaved(data.settings);
+            const { enabled, list_published, ...rest } = form;
+            const data = await studio('karaoke_settings_save', { id: event.id, settings: rest });
+            setDirty(false);
+            onSaved(data);
             toast('Karaoke settings saved.', 'success');
         } catch (e) {
             toast(e.message, 'error');
@@ -48,11 +57,9 @@ function Settings({ event, settings, onSaved }) {
     }
 
     return html`
-        <${Card} title="How karaoke runs tonight"
+        <${Card} title="How karaoke runs"
             actions=${html`<${Button} onClick=${save} loading=${busy} disabled=${readOnly}>Save</${Button}>`}>
             <div class="grid gap-4 sm:grid-cols-2">
-                <${Switch} label="Karaoke is happening" checked=${form.enabled !== false}
-                    onChange=${(v) => set('enabled', v)} />
                 <${Switch} label="Let people pre-pick on their phone"
                     hint="Picks made before the doors open are holds, and turn into queue numbers at check-in."
                     checked=${form.prepick_enabled !== false} onChange=${(v) => set('prepick_enabled', v)} />
@@ -61,25 +68,25 @@ function Settings({ event, settings, onSaved }) {
                     checked=${form.unique_songs !== false} onChange=${(v) => set('unique_songs', v)} />
 
                 <${Field} label="Songs per person" name="k-per-person">
-                    <input type="number" min="1" max="5" class="w-full rounded-xl border-gray-200 text-sm"
+                    <input type="number" min="1" max="5" class=${NUMBER} disabled=${readOnly}
                         id="k-per-person" value=${form.songs_per_person ?? 1}
                         onInput=${(e) => set('songs_per_person', Number(e.currentTarget.value) || 1)} />
                 <//>
                 <${Field} label="Most singers tonight" name="k-max"
                     hint="Leave empty for no limit.">
-                    <input type="number" min="1" max="500" class="w-full rounded-xl border-gray-200 text-sm"
+                    <input type="number" min="1" max="500" class=${NUMBER} disabled=${readOnly}
                         id="k-max" value=${form.max_singers ?? ''}
                         onInput=${(e) => set('max_singers', e.currentTarget.value === '' ? null : Number(e.currentTarget.value))} />
                 <//>
                 <${Field} label="Release a hold after (minutes)" name="k-release"
                     hint="If someone pre-picks and never checks in, their song goes back on the list this long after the doors open.">
-                    <input type="number" min="0" max="600" class="w-full rounded-xl border-gray-200 text-sm"
+                    <input type="number" min="0" max="600" class=${NUMBER} disabled=${readOnly}
                         id="k-release" value=${form.release_holds_after_min ?? 30}
                         onInput=${(e) => set('release_holds_after_min', Number(e.currentTarget.value) || 0)} />
                 <//>
                 <${Field} label="Minutes per song" name="k-avg"
                     hint="Used for the 'about 40 minutes left' line on the DJ console.">
-                    <input type="number" min="1" max="15" class="w-full rounded-xl border-gray-200 text-sm"
+                    <input type="number" min="1" max="15" class=${NUMBER} disabled=${readOnly}
                         id="k-avg" value=${form.avg_song_min ?? 4}
                         onInput=${(e) => set('avg_song_min', Number(e.currentTarget.value) || 4)} />
                 <//>
@@ -130,7 +137,7 @@ function ImportPanel({ event, onCommitted }) {
             <${Field} label="The list" name="songs-import-text">
                 <${TextArea} name="songs-import-text" value=${text} rows=${7}
                     placeholder=${'Imela — Nathaniel Bassey\nWay Maker - Sinach 5:12\nOceans — Hillsong'}
-                    onInput=${(e) => setText(e.currentTarget.value)} maxLength=${60000} />
+                    onInput=${setText} maxLength=${60000} />
             <//>
             <div class="flex flex-wrap gap-2">
                 <${Button} onClick=${() => read(false)} loading=${busy} disabled=${!text.trim()}>Read it</${Button}>
@@ -204,7 +211,7 @@ function SongList({ event, list, onChanged }) {
             subtitle="Turning a song off hides it from guests. It stays in the library for next time.">
             <div class="mb-4 max-w-sm">
                 <${TextInput} name="songs-filter" value=${q} placeholder="Find a song"
-                    onInput=${(e) => setQ(e.currentTarget.value)} />
+                    onInput=${setQ} />
             </div>
 
             ${shown.length === 0
@@ -261,11 +268,92 @@ function Queue({ queue }) {
 
 // --------------------------------------------------------------------------
 
+/**
+ * The first thing on the tab: is there karaoke at this event, and can guests
+ * pick yet? Both are single switches, so they save the moment they are
+ * pressed — no Save button to forget.
+ */
+function OnOff({ event, data, onChanged }) {
+    const [busy, setBusy] = useState('');
+    const settings = data.settings || {};
+    const on = settings.enabled !== false;
+    const published = !!settings.list_published;
+    const songs = data.total || 0;
+    const readOnly = !can('event.edit');
+
+    async function turn(next) {
+        setBusy('turn');
+        try {
+            const result = await studio('karaoke_settings_save', { id: event.id, settings: { enabled: next } });
+            onChanged(result);
+            toast(next ? 'Karaoke is on for this event.' : 'Karaoke is off for this event.', 'success');
+        } catch (e) {
+            toast(e.message, 'error');
+        } finally {
+            setBusy('');
+        }
+    }
+
+    async function publish(next) {
+        setBusy('publish');
+        try {
+            const result = await studio('karaoke_publish_list', { id: event.id, on: next });
+            onChanged(result);
+            toast(next ? 'The song list is live. Guests can pick a song now.' : 'The song list is hidden again.', 'success');
+        } catch (e) {
+            toast(e.message, 'error');
+        } finally {
+            setBusy('');
+        }
+    }
+
+    let step;
+    if (!on) {
+        step = 'Guests will not see karaoke on the event page or the registration form, and nobody can pick a song. '
+            + 'You can still get the song list ready below.';
+    } else if (published) {
+        step = 'The song list is published. Guests can pick a song on their phones.';
+    } else if (songs === 0) {
+        step = 'Next: add tonight’s songs below, then publish the list. Nobody can pick a song until you do.';
+    } else {
+        step = 'The song list is not published yet, so nobody can pick. Publish it when the list is final.';
+    }
+
+    return html`
+        <section class=${'rounded-3xl border p-6 sm:p-8 ' + (on ? 'bg-white border-gray-100 shadow-sm' : 'bg-gray-50 border-gray-200')}>
+            <div class="flex flex-wrap items-center gap-4">
+                <div class="flex-1 min-w-[14rem]">
+                    <h2 class="text-lg font-display font-bold text-gray-900">Karaoke at this event</h2>
+                    <p class="text-sm text-gray-500 mt-1">
+                        ${on ? 'On. Guests can sign up to sing.' : 'Off. There is no karaoke at this event.'}</p>
+                </div>
+                <button type="button" role="switch" aria-checked=${on ? 'true' : 'false'}
+                    aria-label="Karaoke at this event" disabled=${readOnly || busy !== ''}
+                    onClick=${() => turn(!on)}
+                    class="inline-flex items-center gap-3 rounded-full py-1 pl-1 pr-4 font-bold text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${on ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600'}">
+                    <span class="relative inline-flex h-7 w-12 items-center rounded-full ${on ? 'bg-emerald-400' : 'bg-gray-300'}">
+                        <span class="inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-6' : 'translate-x-1'}"></span>
+                    </span>
+                    ${busy === 'turn' ? 'Saving…' : (on ? 'On' : 'Off')}
+                </button>
+            </div>
+
+            <div class=${'mt-5 rounded-2xl p-4 flex flex-wrap items-center gap-3 border '
+                + (on && published ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200')}>
+                <p class=${'flex-1 min-w-[14rem] text-sm ' + (on && published ? 'text-emerald-900' : 'text-gray-600')}>${step}</p>
+                ${on ? html`
+                    <${Button} variant=${published ? 'ghost' : 'primary'} loading=${busy === 'publish'}
+                        disabled=${readOnly || busy !== '' || (!published && songs === 0)}
+                        onClick=${() => publish(!published)}>
+                        ${published ? 'Unpublish' : 'Publish the list'}</${Button}>` : null}
+            </div>
+        </section>`;
+}
+
 export function KaraokeTab() {
     // current.value is already the complete Studio event payload.
     const event = current.value;
     const [data, setData] = useState(null);
-    const [busy, setBusy] = useState(false);
 
     function load() {
         if (!event) return;
@@ -276,42 +364,23 @@ export function KaraokeTab() {
 
     useEffect(load, [event?.id]);
 
-    async function publish(on) {
-        setBusy(true);
-        try {
-            const result = await studio('karaoke_publish_list', { id: event.id, on });
-            setData({ ...data, settings: result.settings });
-            toast(on ? 'The song list is live on the portal.' : 'The song list is hidden.', 'success');
-        } catch (e) {
-            toast(e.message, 'error');
-        } finally {
-            setBusy(false);
-        }
+    // A karaoke switch moves the event's row version, so the Studio takes
+    // the fresh event too; otherwise the next Details save would report a
+    // clash with nobody.
+    function settled(result) {
+        if (result.settings) setData((previous) => ({ ...previous, settings: result.settings }));
+        refreshEvent(result.event);
     }
 
     if (!event) return null;
     if (!data) return html`<${Spinner} label="Loading the songs…" />`;
 
-    const published = !!data.settings?.list_published;
-
     return html`
         <div class="space-y-6">
-            <div class=${'rounded-2xl p-4 flex flex-wrap items-center gap-3 ' +
-                (published ? 'bg-emerald-50 border border-emerald-200' : 'bg-gray-50 border border-gray-200')}>
-                <p class="flex-1 text-sm ${published ? 'text-emerald-900' : 'text-gray-600'}">
-                    ${published
-                        ? 'The song list is published. Guests can pick on their phones.'
-                        : 'The song list is not published yet, so nobody can pick. Publish it when the list is final.'}
-                </p>
-                <${Button} variant=${published ? 'ghost' : 'primary'} loading=${busy}
-                    disabled=${!can('event.edit')} onClick=${() => publish(!published)}>
-                    ${published ? 'Unpublish' : 'Publish the list'}</${Button}>
-            </div>
-
+            <${OnOff} event=${event} data=${data} onChanged=${settled} />
             <${SongList} event=${event} list=${data} onChanged=${(d) => setData({ ...data, ...d })} />
             ${can('event.edit') ? html`<${ImportPanel} event=${event} onCommitted=${(d) => setData({ ...data, ...d })} />` : null}
             <${Queue} queue=${data.queue} />
-            <${Settings} event=${event} settings=${data.settings}
-                onSaved=${(settings) => setData({ ...data, settings })} />
+            <${Settings} event=${event} settings=${data.settings} onSaved=${settled} />
         </div>`;
 }

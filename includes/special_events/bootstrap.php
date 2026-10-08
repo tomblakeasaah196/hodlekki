@@ -38,6 +38,7 @@ require_once __DIR__ . '/capacity.php';
 require_once __DIR__ . '/registration.php';
 require_once __DIR__ . '/realtime.php';
 require_once __DIR__ . '/live.php';
+require_once __DIR__ . '/kjv_bundle.php';
 require_once __DIR__ . '/bible.php';
 require_once __DIR__ . '/verses.php';
 require_once __DIR__ . '/teams.php';

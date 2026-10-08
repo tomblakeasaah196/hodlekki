@@ -39,7 +39,7 @@ if (!function_exists('security_client_ip')) {
 // below could never pass.
 require_once $root . '/includes/sms_functions.php';
 foreach (['constants', 'util', 'db', 'theme', 'settings', 'security', 'events', 'assets', 'ai',
-          'identity', 'capacity', 'registration', 'realtime', 'live', 'bible', 'verses',
+          'identity', 'capacity', 'registration', 'realtime', 'live', 'kjv_bundle', 'bible', 'verses',
           'teams', 'checkin', 'program', 'karaoke', 'messages', 'attendees', 'cards', 'export',
           'portal', 'games', 'games_engine', 'scoring', 'party_games', 'after_event'] as $lib) {
     require_once $root . '/includes/special_events/' . $lib . '.php';
@@ -619,6 +619,46 @@ if (!se_checkin_ready($pdo) || !se_teams_ready($pdo)) {
 }
 
 // ==========================================================================
+// Test 5b — ready-made welcome verses (Appendix G, §15.7)
+// ==========================================================================
+//
+// The Studio's "Pick your verses" adds the joy set with its prayer lines,
+// approved, with words from the bundled KJV — no Bible service involved, so
+// this runs with no network at all.
+
+echo "\n  ready-made welcome verses\n";
+
+if (!se_verses_ready($pdo)) {
+    echo "    (se_event_verses is not in this database — skipped)\n";
+} else {
+    $vEvent = se_it_event($pdo);
+    $vId    = (int) $vEvent['id'];
+    $keys   = array_column(se_chara_verse_catalogue($pdo, $vEvent), 'key');
+    is_same('the picker offers the 22 joy verses', 22, count($keys));
+
+    $two = se_chara_verses_add($pdo, $vEvent, 1, ['nehemiah 8:10', 'psalms 118:24']);
+    is_same('picking two adds two', 2, $two['added']);
+    $listed = se_verses_list($pdo, $vId);
+    is_same('…both approved and ready for a card', [true, true], array_map('se_verse_is_usable', $listed));
+    is_same('…with the KJV words and the prayer line', [se_kjv_bundle()['nehemiah 8:10'], '{name}, may the joy of the Lord be your strength tonight and always.'],
+        [$listed[0]['text'], $listed[0]['prayer_template']]);
+    is_same('…marked as looked up, so no second approval is needed', ['lookup', 'lookup'], array_column($listed, 'text_source'));
+
+    $rest = se_chara_verses_add($pdo, $vEvent, 1);
+    is_same('Add all adds the other twenty', 20, $rest['added']);
+    is_same('…and pressing it again adds nothing', 0, se_chara_verses_add($pdo, $vEvent, 1)['added']);
+    ok('the picker then shows every verse as added', !in_array(false, array_column(se_chara_verse_catalogue($pdo, $vEvent), 'added'), true));
+    ok('a guest checking in can be given one', se_pick_verse($pdo, $vId) !== null);
+
+    try {
+        se_chara_verses_add($pdo, $vEvent, 1, ['not a verse']);
+        ok('an unknown ready-made verse is refused', false, 'no exception');
+    } catch (SeValidationException $e) {
+        ok('an unknown ready-made verse is refused', isset($e->fields['verses']));
+    }
+}
+
+// ==========================================================================
 // Test 6 — the karaoke song race (§10.8.1, §22.2)
 // ==========================================================================
 //
@@ -745,6 +785,15 @@ if (!se_karaoke_ready($pdo)) {
     is_same('checking in turned both holds into queued entries', 2, count($numbers));
     is_same('numbered from one…', 1, $numbers[0] ?? 0);
     is_same('…upwards, in arrival order', 2, $numbers[1] ?? 0);
+
+    // The Studio's "Karaoke at this event" switch saves that one key.
+    $off = se_event_settings_patch($pdo, se_it_event_row($pdo, $kId), ['karaoke' => ['enabled' => false]], 1);
+    $offSettings = se_event_settings($off);
+    is_same('turning karaoke off keeps the rest of its settings',
+        [false, true, true], [$offSettings['karaoke']['enabled'], $offSettings['karaoke']['list_published'], $offSettings['karaoke']['unique_songs']]);
+    is_same('…and closes the song picker', 'FEATURE_DISABLED', se_karaoke_open($off, $offSettings)['reason']);
+    $on = se_event_settings_patch($pdo, $off, ['karaoke' => ['enabled' => true]], 1);
+    ok('turning it back on reopens it', se_karaoke_open($on, se_event_settings($on))['open']);
 }
 
 // ==========================================================================
@@ -965,14 +1014,40 @@ if (!se_game_ready($pdo) || !se_teams_ready($pdo)) {
 
     $starter = se_chara_starter_content($pdo, $gEvent, 1);
     is_same('the starter pack creates the six suggested games', 6, $starter['games']);
+    is_same('…and a ready board for each Feud question', 5, $starter['boards']);
     $again = se_chara_starter_content($pdo, $gEvent, 1);
-    is_same('pressing it again adds nothing', [0, 0], [$again['items'], $again['games']]);
+    is_same('pressing it again adds nothing', [0, 0, 0], [$again['items'], $again['games'], $again['boards']]);
+
+    // The Studio's picker adds one ready-made game at a time.
+    $pEvent = se_it_event($pdo);
+    $picked = se_chara_starter_content($pdo, $pEvent, 1, ['feud']);
+    is_same('picking one ready-made game adds just that game', [1, 5], [$picked['games'], $picked['boards']]);
+    $stmt = $pdo->prepare("SELECT COUNT(DISTINCT deck_item_id), MIN(approved), COUNT(*) FROM se_feud_answers WHERE event_id = ?");
+    $stmt->execute([(int) $pEvent['id']]);
+    is_same('…its five boards are approved, five answers each', [5, 1, 25], array_map('intval', $stmt->fetch(PDO::FETCH_NUM)));
+    is_same('…and the picker shows only that one as added',
+        ['live_quiz' => false, 'trivia' => false, 'buzzer' => false, 'who_am_i' => false, 'charades' => false, 'feud' => true],
+        array_column(se_chara_catalogue($pdo, $pEvent), 'added', 'key'));
+    $more = se_chara_starter_content($pdo, $pEvent, 1, ['feud', 'live_quiz']);
+    is_same('adding another leaves the first and its boards alone', [1, 0], [$more['games'], $more['boards']]);
+    try {
+        se_chara_starter_content($pdo, $pEvent, 1, ['not_a_game']);
+        ok('an unknown ready-made game is refused', false, 'no exception');
+    } catch (SeValidationException $e) {
+        ok('an unknown ready-made game is refused', isset($e->fields['games']));
+    }
 
     $games = [];
     foreach (se_game_list($pdo, $gId) as $g) {
         $games[$g['type']] = $g;
     }
     ok('every starter game has questions and is ready', count(array_filter($games, static fn(array $g): bool => $g['items_total'] > 0 && $g['status'] === 'ready')) === 6);
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(*) FROM se_game_items a JOIN se_game_items b ON b.deck_item_id = a.deck_item_id
+          WHERE a.game_id = ? AND b.game_id = ?"
+    );
+    $stmt->execute([$games['live_quiz']['id'], $games['trivia']['id']]);
+    is_same('Live Quiz and Bible Trivia never ask the same question', 0, (int) $stmt->fetchColumn());
 
     $live    = static fn(): int => (int) se_live_state($pdo, $gId)['version'];
     $publicJson = static function () use ($pdo, $gId): string {

@@ -57,10 +57,11 @@ export function TextArea({ name, value, onInput, rows = 5, placeholder, maxLengt
             disabled=${disabled}
             aria-invalid=${error ? 'true' : undefined}
             aria-describedby=${error ? `se-err-${name}` : undefined}
+            value=${value ?? ''}
             onInput=${(e) => onInput?.(e.currentTarget.value)}
             class=${'w-full px-4 py-3 rounded-xl border outline-none transition-colors bg-white font-mono text-sm '
                 + (error ? 'border-hodRed focus:border-hodRed' : 'border-gray-200 focus:border-hodBlue')}
-        >${value ?? ''}</textarea>`;
+        ></textarea>`;
 }
 
 export function Select({ name, value, onChange, options, disabled }) {

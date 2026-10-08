@@ -87,8 +87,9 @@ export function FeudSection({ eventId, overview, reload }) {
 
     return html`
         <div class="space-y-4">
-            <p class="text-sm text-gray-600">Guests answer these on their phones until the Feud starts. Build each board when the answers are in,
-                tidy the labels, and approve it — the host cannot play a board that is not approved.</p>
+            <p class="text-sm text-gray-600">Guests answer these on their phones until the Feud starts. The ready-made questions come with
+                a board already; to play your guests' own answers instead, press <strong>Edit board</strong>${' → '}<strong>Build from answers</strong>,
+                tidy the labels and approve it. The host cannot play a board that is not approved.</p>
             ${items.map((item) => html`
                 <section key=${item.item_id} class="bg-white rounded-3xl border border-gray-100 p-5 space-y-3">
                     <div class="flex flex-wrap items-start justify-between gap-3">

@@ -21,7 +21,7 @@
 import { html } from '@se/core/html.js';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { studio, studioUpload } from '@se/core/api.js';
-import { current, toast, can } from '../state.js';
+import { current, toast, can, refreshEvent } from '../state.js';
 import { Card, Button, Spinner, EmptyState, Field, TextInput, Switch } from '../ui.js';
 
 function bytes(n) {
@@ -254,7 +254,9 @@ export function MusicTab() {
     const saveSettings = async () => {
         setSavingSettings(true);
         try {
-            absorb(await studio('music_settings', { id: event.id, enabled, volume, shuffle }));
+            const result = await studio('music_settings', { id: event.id, enabled, volume, shuffle });
+            absorb(result);
+            refreshEvent(result.event);
             toast('Saved.', 'success');
         } catch (e) {
             toast(e.message, 'error');

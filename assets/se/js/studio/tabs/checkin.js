@@ -13,18 +13,87 @@ import { html } from '@se/core/html.js';
 import { useState, useEffect } from 'preact/hooks';
 import { studio, studioUpload } from '@se/core/api.js';
 import { current, toast, can } from '../state.js';
-import { Card, Button, Spinner, EmptyState, Field, TextInput } from '../ui.js';
+import { Card, Button, Spinner, EmptyState, Field, TextInput, TextArea } from '../ui.js';
 
 // --------------------------------------------------------------------------
 // Verses
 // --------------------------------------------------------------------------
 
+/**
+ * Where a verse stands, in the words the crew needs. `usable` comes from the
+ * server and already counts the second approval a typed-in verse needs.
+ */
+function verseState(verse) {
+    if (verse.usable) return { label: 'approved', tone: 'text-emerald-600' };
+    if (!verse.approved) return { label: 'needs review', tone: 'text-amber-600' };
+    if (verse.text_source === 'manual' && !verse.second_approved_by) {
+        return { label: 'typed in — a second person must approve it', tone: 'text-amber-600' };
+    }
+    return { label: 'switched off', tone: 'text-gray-400' };
+}
+
+/**
+ * The ready-made joy verses, each with its prayer line: pick the ones you
+ * want, or add them all. The words are on screen, so pressing Add is the
+ * approval (§15.7).
+ */
+function ReadyVerses({ eventId, catalogue, empty, onChanged }) {
+    const [busy, setBusy] = useState(null);
+    const missing = catalogue.filter((v) => !v.added);
+    if (!missing.length) return null;
+
+    const add = async (keys, label) => {
+        setBusy(label);
+        try {
+            const data = await studio('chara_verses_add', { id: eventId, verses: keys });
+            onChanged(data);
+            toast(data.added ? (data.added === 1 ? 'Verse added and approved.' : data.added + ' verses added and approved.')
+                : 'Already in your list.', 'success');
+        } catch (e) {
+            toast(e.message, 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    return html`
+        <section class=${'rounded-3xl border p-5 sm:p-6 space-y-4 mb-6 '
+            + (empty ? 'bg-gradient-to-br from-blue-50 to-amber-50 border-blue-100' : 'bg-gray-50 border-gray-100')}>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="max-w-2xl">
+                    <h3 class="font-display text-lg font-bold text-gray-900">${empty ? 'Pick your verses' : 'More ready-made verses'}</h3>
+                    <p class="text-sm text-gray-600">Verses about joy from the KJV, each with a short prayer line for the
+                        guest's card. Read them, then add the ones you want: they are approved as you add them.</p>
+                </div>
+                ${missing.length > 1 ? html`
+                    <${Button} variant="secondary" loading=${busy === 'all'} disabled=${busy !== null}
+                        onClick=${() => add(missing.map((v) => v.key), 'all')}>Add all ${missing.length}<//>` : null}
+            </div>
+            <ul class="grid gap-3 lg:grid-cols-2">
+                ${missing.map((verse) => html`
+                    <li key=${verse.key} class="rounded-2xl border border-gray-200 bg-white p-4 flex flex-col gap-2">
+                        <p class="font-bold text-gray-900">${verse.ref}</p>
+                        <p class="text-sm text-gray-700 flex-1">${verse.text}</p>
+                        <p class="text-xs text-gray-500 italic">${verse.prayer}</p>
+                        <div>
+                            <${Button} variant="primary" loading=${busy === verse.key} disabled=${busy !== null}
+                                onClick=${() => add([verse.key], verse.key)}>Add ${verse.ref}<//>
+                        </div>
+                    </li>`)}
+            </ul>
+        </section>`;
+}
+
 function Verses() {
     const event = current.value;
     const [verses, setVerses] = useState(null);
+    const [catalogue, setCatalogue] = useState([]);
     const [error, setError] = useState(null);
     const [ref, setRef] = useState('');
     const [prayer, setPrayer] = useState('');
+    // The KJV text typed by hand, offered only when the Bible service could
+    // not be reached; null hides the box.
+    const [manual, setManual] = useState(null);
     const [theme, setTheme] = useState('');
     const [busy, setBusy] = useState(false);
     const [suggesting, setSuggesting] = useState(false);
@@ -36,10 +105,17 @@ function Verses() {
 
     const editable = can('event.edit');
 
+    /** Every verse action answers with the list and the ready-made catalogue. */
+    const absorb = (data) => {
+        if (data.verses) setVerses(data.verses);
+        if (data.catalogue) setCatalogue(data.catalogue);
+    };
+
     const load = async () => {
         try {
             const data = await studio('verses_list', { id: event.id });
             setVerses(data.verses || []);
+            setCatalogue(data.catalogue || []);
         } catch (e) { setError(e.message); }
     };
 
@@ -52,7 +128,7 @@ function Verses() {
     }
     if (!verses) return html`<${Spinner} label="Loading verses…" />`;
 
-    const approved = verses.filter((v) => v.approved).length;
+    const approved = verses.filter((v) => v.usable).length;
 
     /** Turn a suggestions response into the editable picker state and open it. */
     const openPicker = (result, themeWords) => {
@@ -99,7 +175,7 @@ function Verses() {
         setAdding(true);
         try {
             const data = await studio('verses_accept', { id: event.id, job_id: picker.jobId, picks });
-            setVerses(data.verses);
+            absorb(data);
 
             // A rejected pick keeps its row with the server's reason pinned
             // under it; everything else graduated into the list below.
@@ -143,26 +219,44 @@ function Verses() {
                 ? approved + ' approved. Each guest gets one at check-in, spread evenly across the list.'
                 : 'Nobody sees a verse until at least one is approved.'}>
 
+            ${editable ? html`<${ReadyVerses} eventId=${event.id} catalogue=${catalogue} empty=${!verses.length}
+                onChanged=${absorb} />` : null}
+
             ${editable ? html`
                 <div class="grid gap-4 sm:grid-cols-2 mb-6">
                     <${Field} label="Add a reference" name="ref" hint="For example Psalms 16:11. KJV text is fetched for you.">
-                        <${TextInput} name="ref" value=${ref} onInput=${setRef} maxLength=${60} />
+                        <${TextInput} name="ref" value=${ref} onInput=${(v) => { setRef(v); setManual(null); }} maxLength=${60} />
                     <//>
                     <${Field} label="Prayer line (optional)" name="prayer_template"
                         hint="Must contain {name} — that is where the guest's first name goes.">
                         <${TextInput} name="prayer_template" value=${prayer} onInput=${setPrayer} maxLength=${300} />
                     <//>
+                    ${manual !== null ? html`
+                        <div class="sm:col-span-2">
+                            <${Field} label="The KJV text" name="verse_text"
+                                hint="We could not reach the Bible service. Paste the verse from a KJV Bible; a second person must approve it.">
+                                <${TextArea} name="verse_text" value=${manual} rows=${3} maxLength=${2000} onInput=${setManual} />
+                            <//>
+                        </div>` : null}
                     <div>
-                        <${Button} disabled=${busy || !ref.trim()} loading=${busy} onClick=${async () => {
-                            setBusy(true);
-                            try {
-                                const data = await studio('verse_add', { id: event.id, ref, prayer_template: prayer });
-                                setVerses(data.verses);
-                                setRef(''); setPrayer('');
-                                toast('Added.', 'success');
-                            } catch (e) { toast(e.message, 'error'); }
-                            setBusy(false);
-                        }}>Add verse<//>
+                        <${Button} disabled=${busy || !ref.trim() || (manual !== null && !manual.trim())} loading=${busy}
+                            onClick=${async () => {
+                                setBusy(true);
+                                try {
+                                    const data = await studio('verse_add', {
+                                        id: event.id, ref, prayer_template: prayer, ...(manual !== null ? { text: manual } : {}),
+                                    });
+                                    absorb(data);
+                                    toast(manual !== null ? 'Added. A second person must approve a typed-in verse.'
+                                        : 'Added. Read it, then press Approve.', 'success');
+                                    setRef(''); setPrayer(''); setManual(null);
+                                } catch (e) {
+                                    // No Bible service: offer the paste box instead of a dead end.
+                                    if (e.code === 'BIBLE_UNAVAILABLE') setManual('');
+                                    toast(e.message, 'error');
+                                }
+                                setBusy(false);
+                            }}>${manual !== null ? 'Add with this text' : 'Add verse'}<//>
                     </div>
                 </div>` : null}
 
@@ -173,9 +267,7 @@ function Verses() {
                             <div class="min-w-0 flex-1">
                                 <p class="font-semibold text-gray-900">
                                     ${verse.ref_display}
-                                    ${verse.approved
-                                        ? html`<span class="ml-2 text-xs font-bold text-emerald-600">approved</span>`
-                                        : html`<span class="ml-2 text-xs font-bold text-amber-600">needs review</span>`}
+                                    <span class=${'ml-2 text-xs font-bold ' + verseState(verse).tone}>${verseState(verse).label}</span>
                                     ${verse.ai_suggested ? html`<span class="ml-2 text-xs text-gray-400">suggested by AI</span>` : null}
                                 </p>
                                 <p class="text-sm text-gray-600 mt-1">${verse.text}</p>
@@ -185,24 +277,22 @@ function Verses() {
                             </div>
                             ${editable ? html`
                                 <div class="flex gap-2 shrink-0">
-                                    ${!verse.approved ? html`
+                                    ${!verse.usable && verse.is_active ? html`
                                         <${Button} variant="secondary" onClick=${async () => {
                                             try {
-                                                const data = await studio('verse_approve', { id: event.id, verse_id: verse.id });
-                                                setVerses(data.verses);
+                                                absorb(await studio('verse_approve', { id: event.id, verse_id: verse.id }));
                                             } catch (e) { toast(e.message, 'error'); }
                                         }}>Approve<//>` : null}
                                     <${Button} variant="ghost" onClick=${async () => {
                                         try {
-                                            const data = await studio('verse_delete', { id: event.id, verse_id: verse.id });
-                                            setVerses(data.verses);
+                                            absorb(await studio('verse_delete', { id: event.id, verse_id: verse.id }));
                                         } catch (e) { toast(e.message, 'error'); }
                                     }}>Remove<//>
                                 </div>` : null}
                         </li>`)}
                 </ul>`
                 : html`<${EmptyState} title="No verses yet"
-                    message="Add a few references, or ask for suggestions below." />`}
+                    message="Pick ready-made verses above, add a reference, or ask for suggestions below." />`}
 
             ${editable ? html`
                 <div class="mt-8 pt-6 border-t border-gray-100 space-y-4">

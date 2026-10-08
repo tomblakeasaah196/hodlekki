@@ -332,6 +332,11 @@ via `source(none)`). Consequences:
   The module adds one merge field, `{{link}}` (guide §21.2).
 - AI only through `se_ai()`. **No attendee personal data in a prompt, ever**,
   and nothing an AI returns is applied without human review.
+- Scripture text comes only from the Bible service (`se_bible_lookup()`) or
+  `kjv_bundle.php`, which is generated verbatim from the same KJV — never typed
+  into code. Ready-made questions cut verses from it with
+  `se_chara_verse_payload()`; `tests/special_events/starter_content_test.php`
+  checks every ready-made item.
 - **Response schemas stay small.** Gemini compiles `responseSchema` into a
   constrained decoder and refuses anything with too many states ("The
   specified schema produces a constraint that has too many states for

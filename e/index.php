@@ -495,7 +495,9 @@ function se_boot_payload(
                 'gender'    => se_settings_path($settings, 'registration.fields.gender', 'required'),
                 'email'     => se_settings_path($settings, 'registration.fields.email', 'optional'),
                 'how_heard' => se_settings_path($settings, 'registration.fields.how_heard', 'optional'),
-                'karaoke'   => (bool) se_settings_path($settings, 'registration.fields.karaoke_interest', true),
+                // No karaoke tonight, no "I'd love to sing" box.
+                'karaoke'   => (bool) se_settings_path($settings, 'registration.fields.karaoke_interest', true)
+                               && (bool) se_settings_path($settings, 'karaoke.enabled', true),
             ],
             'how_heard'  => SE_HOW_HEARD,
             'questions'  => array_map('se_form_field_public', se_form_fields($pdo, (int) $event['id'])),
