@@ -100,6 +100,19 @@ expect_export_value(
 );
 expect_export_value(false, str_contains($streamerSource, 'mime_content_type('), 'the workbook streamer never calls mime_content_type() itself');
 
+// Two entry points feed export_excel: Find people's chooser and the Download
+// Excel menu on the watchlist builder's last step. Both must offer the same
+// two workbooks and post through the one shared form builder, so a change to
+// either cannot quietly drop a report type or drift from the other.
+$moduleSource = (string) file_get_contents(__DIR__ . '/../modules/assimilation/index.php');
+expect_export_value(true, str_contains($moduleSource, 'id="bwExportMenu"'), 'the watchlist builder has a Download Excel menu');
+expect_export_value(true, str_contains($moduleSource, "onclick=\"bwExport('general')\""), 'the builder menu offers the General Assimilation Register');
+expect_export_value(true, str_contains($moduleSource, "onclick=\"bwExport('detailed')\""), 'the builder menu offers the Full Assimilation Report');
+expect_export_value(true, str_contains($moduleSource, 'postExcelExport(reportType, bwRule())'), 'the builder downloads the draft rule behind its live count');
+expect_export_value(true, str_contains($moduleSource, 'postExcelExport(reportType, currentRule())'), 'Find people still downloads its on-screen filters');
+expect_export_value(1, substr_count($moduleSource, 'name="action" value="export_excel"'), 'both entry points share one export form builder');
+expect_export_value(true, str_contains($moduleSource, "onclick=\"exportExcel('general')\"") && str_contains($moduleSource, "onclick=\"exportExcel('detailed')\""), 'the Find people chooser keeps both workbooks');
+
 // ---------------------------------------------------------------------------
 // Workbook behaviour. The logo-skipping branch is the production case, so it
 // runs wherever PhpSpreadsheet is; the log lines it writes are expected.

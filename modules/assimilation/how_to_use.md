@@ -88,7 +88,9 @@ Both workbooks use Household of David's blue, red and white brand and keep
 phone numbers as text in `+234…` format. When no last-service date is recorded,
 the workbook shows **2025** because the attendance data starts in 2026; the
 report note explains this fallback. The export follows the filters currently
-selected in **Find people**.
+selected in **Find people**. The same two workbooks are also one tap away on
+the last step of the **Build a List** wizard — see *Download a watchlist*
+below.
 
 The logo is the one optional part. PhpSpreadsheet can only embed a picture when
 PHP can inspect it, which needs the **Fileinfo** extension; the production web
@@ -107,6 +109,18 @@ been away, who to watch, any fine-tuning (department, region, gender, age),
 and who should go after them — then shows a live count of who matches and
 lets you name and launch it. Power users can still open **Advanced filters**,
 build the rule by hand, and click **Save as watchlist**.
+
+### Download a watchlist
+
+The wizard's last step (*Name it. Launch it.*) has three buttons: **Back**,
+**Download Excel** and **Launch watchlist**. **Download Excel** opens a small
+menu with the two branded workbooks described in *Download Excel* above —
+**General Assimilation Register** and **Full Assimilation Report** — for
+everyone the list matches right now, which is exactly the number shown above
+the list name. The wizard stays open after the download, so you can launch the
+list straight after, or close the wizard if you only wanted the file. If
+nobody matches yet, the menu says so instead of handing you an empty workbook.
+On a phone the button sits on its own row above Back and Launch.
 
 ### Open watchlists (pushed to every volunteer)
 

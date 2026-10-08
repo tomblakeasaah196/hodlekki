@@ -704,11 +704,41 @@ try {
         </div>
 
         <!-- footer -->
-        <div class="shrink-0 border-t border-gray-100 bg-white px-5 md:px-8 pt-3.5 flex gap-3" style="padding-bottom: max(0.875rem, env(safe-area-inset-bottom));">
+        <div class="shrink-0 border-t border-gray-100 bg-white px-5 md:px-8 pt-3.5 flex flex-wrap gap-3" style="padding-bottom: max(0.875rem, env(safe-area-inset-bottom));">
             <button type="button" id="bwBack" onclick="bwShow(bw.step - 1)" class="invisible shrink-0 min-h-[52px] px-5 rounded-2xl border border-gray-200 bg-white font-bold text-gray-600 hover:border-emerald-300 flex items-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
                 Back
             </button>
+            <!-- Last step only: download everyone the draft rule matches, before (or instead of) launching.
+                 Full-width row above Back/Launch on phones; sits between them from sm: up. -->
+            <div id="bwExportWrap" class="relative hidden w-full sm:w-auto order-first sm:order-none shrink-0">
+                <button type="button" id="bwExportBtn" onclick="bwExportMenu()" aria-haspopup="menu" aria-expanded="false" aria-controls="bwExportMenu" class="w-full min-h-[52px] px-4 rounded-2xl border border-blue-200 bg-white font-bold text-blue-900 hover:border-red-300 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 flex items-center justify-center gap-2 disabled:opacity-60 disabled:pointer-events-none">
+                    <svg class="w-4 h-4 text-blue-800" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3.5h5.5L19 9v10.5a1 1 0 01-1 1H6a1 1 0 01-1-1v-15a1 1 0 011-1H8zm5 0V9h6M8 13h8M8 16h8M8 10h1"/></svg>
+                    Download Excel
+                    <svg id="bwExportChevron" class="w-4 h-4 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+                </button>
+                <div id="bwExportMenu" role="menu" aria-labelledby="bwExportBtn" class="hidden absolute bottom-full left-0 z-20 mb-2 w-full sm:w-80 rounded-2xl border border-gray-100 bg-white p-2 shadow-2xl shadow-gray-900/20">
+                    <p class="px-3 pt-2 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Everyone this list matches</p>
+                    <button type="button" role="menuitem" onclick="bwExport('general')" class="group w-full rounded-xl p-3 text-left flex items-start gap-3 hover:bg-blue-50/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-700">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-900 group-hover:bg-blue-100" aria-hidden="true">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 4.75A1.75 1.75 0 016.75 3h7.5L19 7.75v11.5A1.75 1.75 0 0117.25 21h-10.5A1.75 1.75 0 015 19.25V4.75zM14 3v5h5M8 12h8M8 15.5h8"/></svg>
+                        </span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block text-sm font-bold text-gray-900">General Assimilation Register</span>
+                            <span class="mt-0.5 block text-xs leading-relaxed text-gray-500">Full name, +234 phone, gender and last service.</span>
+                        </span>
+                    </button>
+                    <button type="button" role="menuitem" onclick="bwExport('detailed')" class="group w-full rounded-xl p-3 text-left flex items-start gap-3 hover:bg-red-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-700 group-hover:bg-red-100" aria-hidden="true">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 5.75A1.75 1.75 0 015.75 4h12.5A1.75 1.75 0 0120 5.75v12.5A1.75 1.75 0 0118.25 20H5.75A1.75 1.75 0 014 18.25V5.75zM4 9h16M9 9v11m5-11v11M7 6.5h.01M10 6.5h.01"/></svg>
+                        </span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block text-sm font-bold text-gray-900">Full Assimilation Report</span>
+                            <span class="mt-0.5 block text-xs leading-relaxed text-gray-500">Everything above, plus status, departments, region, attendance, case and volunteer.</span>
+                        </span>
+                    </button>
+                </div>
+            </div>
             <button type="button" id="bwNext" onclick="bwForward()" class="flex-1 min-h-[52px] rounded-2xl bg-emerald-700 hover:bg-emerald-800 active:scale-[0.99] text-white font-bold text-base shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:pointer-events-none">
                 Let&rsquo;s go
             </button>
@@ -1113,13 +1143,19 @@ try {
     function openExportModal() {
         openModal('exportModal');
     }
+    // Find people's chooser: exports whatever the filters currently show.
     function exportExcel(reportType) {
-        if (!['general', 'detailed'].includes(reportType)) return;
         closeModal('exportModal');
+        postExcelExport(reportType, currentRule());
+    }
+    // Shared by the chooser above and the watchlist builder's Download Excel
+    // menu — same endpoint, same rule JSON the live count was taken from.
+    function postExcelExport(reportType, rule) {
+        if (!['general', 'detailed'].includes(reportType)) return;
         const form = $('<form method="post" target="_blank">').attr('action', API_URL);
         form.append($('<input type="hidden" name="action" value="export_excel">'));
         form.append($('<input type="hidden" name="report_type">').val(reportType));
-        form.append($('<input type="hidden" name="rule">').val(JSON.stringify(currentRule())));
+        form.append($('<input type="hidden" name="rule">').val(JSON.stringify(rule)));
         form.appendTo('body').trigger('submit').remove();
     }
 
@@ -1259,7 +1295,7 @@ try {
     function bwFresh() {
         return { step: 0, away: 'slip', custom: { max: 3, win: 2, unit: 'months' },
             who: new Set(), mode: 'open', digest: 1,
-            nameTouched: false, busy: false, countSig: null };
+            nameTouched: false, busy: false, countSig: null, count: null };
     }
 
     function openBuilder() {
@@ -1342,6 +1378,10 @@ try {
 
     function bwFooter() {
         $('#bwBack').toggleClass('invisible', bw.step === 0).prop('disabled', bw.busy);
+        const last = bw.step === BW_TOTAL - 1;
+        $('#bwExportWrap').toggleClass('hidden', !last);
+        $('#bwExportBtn').prop('disabled', bw.busy);
+        if (!last || bw.busy) bwExportMenu(false);
         const next = $('#bwNext').prop('disabled', bw.busy);
         const arrow = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>`;
         if (bw.step === BW_TOTAL - 1) {
@@ -1458,6 +1498,7 @@ try {
         const sig = JSON.stringify(bwRule());
         if (bw.countSig === sig) return;
         bw.countSig = sig;
+        bw.count = null;
         $('#bwCount').html('<span class="bw-count-dot">•</span><span class="bw-count-dot" style="animation-delay:.15s">•</span><span class="bw-count-dot" style="animation-delay:.3s">•</span>');
         $('#bwCountSub').text('Counting quietly…');
         $.post(API_URL, { action: 'count_rule', rule: sig }, function(res) {
@@ -1473,6 +1514,7 @@ try {
 
     function bwTweenCount(target) {
         target = +target || 0;
+        bw.count = target;
         const el = document.getElementById('bwCount');
         const t0 = performance.now(), dur = Math.min(900, 300 + target * 2);
         (function tick(t) {
@@ -1483,6 +1525,41 @@ try {
         })(performance.now());
         $('#bwCountSub').text(target === 1 ? 'person matches right now' : 'people match right now');
     }
+
+    /* ---- download (last step) ---- */
+    // Toggles the Download Excel menu; pass true/false to force a state.
+    function bwExportMenu(open) {
+        const menu = document.getElementById('bwExportMenu');
+        if (!menu) return;
+        const willOpen = open === undefined ? menu.classList.contains('hidden') : !!open;
+        if (willOpen === !menu.classList.contains('hidden')) return;
+        menu.classList.toggle('hidden', !willOpen);
+        $('#bwExportBtn').attr('aria-expanded', willOpen ? 'true' : 'false');
+        $('#bwExportChevron').toggleClass('rotate-180', willOpen);
+        if (willOpen) menu.querySelector('[role="menuitem"]').focus();
+    }
+    // Same workbooks as Find people's Download Excel, for the people this
+    // draft rule matches — exactly the set behind the live count above.
+    function bwExport(reportType) {
+        bwExportMenu(false);
+        if (!bw || bw.busy) return;
+        if (bw.count === 0) {
+            showToast('Nobody matches this list yet, so there is nothing to download', 'error');
+            return;
+        }
+        postExcelExport(reportType, bwRule());
+    }
+    $(document).on('click', function(ev) {
+        const wrap = document.getElementById('bwExportWrap');
+        if (wrap && !wrap.classList.contains('hidden') && !wrap.contains(ev.target)) bwExportMenu(false);
+    });
+    $(document).on('keydown', '#bwExportMenu', function(ev) {
+        if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+        ev.preventDefault();
+        const items = [...this.querySelectorAll('[role="menuitem"]')];
+        const at = items.indexOf(document.activeElement);
+        items[(at + (ev.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus();
+    });
 
     /* ---- launch ---- */
     function bwLaunch() {
@@ -1532,8 +1609,18 @@ try {
         setTimeout(() => host.remove(), 3300);
     }
     $(document).on('keydown', function(ev) {
+        if (ev.key !== 'Escape') return;
+        const menu = document.getElementById('bwExportMenu');
+        if (menu && !menu.classList.contains('hidden')) {
+            // Escape folds the Download Excel menu, not the builder. (On the live
+            // site modal-manager.js swallows Escape while any dialog is open, so
+            // the menu normally closes via the button, a tap elsewhere, or a pick.)
+            bwExportMenu(false);
+            $('#bwExportBtn').trigger('focus');
+            return;
+        }
         const m = document.getElementById('bwModal');
-        if (ev.key === 'Escape' && m && !m.classList.contains('hidden')) closeModal('bwModal');
+        if (m && !m.classList.contains('hidden')) closeModal('bwModal');
     });
 
     /* ============================ TAB 2 — FOLLOW-UP ============================ */
