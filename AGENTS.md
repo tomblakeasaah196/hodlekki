@@ -81,8 +81,16 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   php cron/sms_queue_worker.php
   ```
   It refuses to run under a web SAPI (`PHP_SAPI !== 'cli'` → 403).
-- **Tests:** there is no automated test suite. Do a manual smoke of the
-  module you touched before declaring done.
+- **Tests:** CI runs `php -l` over the whole tree and the Special Events suite
+  (`php tests/special_events/run.php`). The Assimilation Excel export has its
+  own suite — run `php tests/assimilation_export_test.php` whenever you touch
+  `includes/assimilation_export_excel.php`; its workbook half needs
+  `composer install` and reports itself as skipped without it. (It is not in
+  the workflow yet: the deploy app cannot push `.github/workflows/`, so the
+  owner adds that step.) On a machine with no PHP at all,
+  `python3 tests/php_structure_check.py <file>` still catches unbalanced
+  brackets and unterminated strings. There is no browser/UI test suite, so
+  always smoke the page you touched by hand.
 
 ## NEVER-TOUCH list
 

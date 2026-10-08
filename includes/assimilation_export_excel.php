@@ -133,6 +133,91 @@ function assim_export_cell_value(array $row, string $field): string|int
     };
 }
 
+/**
+ * Whether this PHP runtime can inspect a local image file at all.
+ *
+ * PhpSpreadsheet's `Worksheet\Drawing::setPath()` calls `mime_content_type()`
+ * (ext-fileinfo) for every local image, and getimagesize() to size it. The
+ * package declares `ext-fileinfo` as a hard Composer requirement, but the
+ * production cPanel/LiteSpeed **web** SAPI does not load it — `bin/deploy.sh`
+ * installs with `--ignore-platform-req=ext-fileinfo` for exactly that reason —
+ * while the CLI SAPI on the same host does. On the web SAPI the call is a
+ * fatal "Call to undefined function … mime_content_type()", which is what
+ * killed both Assimilation Excel exports in production on 2026-10-08.
+ */
+function assim_export_can_inspect_images(): bool
+{
+    return function_exists('mime_content_type') && function_exists('getimagesize');
+}
+
+/**
+ * Why the optional logo has to be skipped, or '' when it can be embedded.
+ *
+ * `$canInspectImages` exists so the regression test can pin the production
+ * (no ext-fileinfo) branch on a machine whose PHP does have the extension.
+ * Production callers leave it null and get the real runtime probe.
+ */
+function assim_export_logo_skip_reason(string $logoPath, ?bool $canInspectImages = null): string
+{
+    if (!is_file($logoPath) || !is_readable($logoPath)) {
+        return 'the logo file is not readable at ' . $logoPath;
+    }
+
+    if (!($canInspectImages ?? assim_export_can_inspect_images())) {
+        return 'this PHP runtime cannot inspect image types (ext-fileinfo is not loaded for the web SAPI)';
+    }
+
+    return '';
+}
+
+/**
+ * Embed the church logo in the white A1 block. The logo is decoration, so a
+ * runtime that cannot inspect the image (or a file PhpSpreadsheet rejects)
+ * only costs us the logo — never the workbook. Returns true when embedded.
+ */
+function assim_export_attach_logo(
+    \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet,
+    string $logoPath,
+    ?bool $canInspectImages = null
+): bool {
+    $reason = assim_export_logo_skip_reason($logoPath, $canInspectImages);
+    if ($reason !== '') {
+        // Skipped, not swallowed: the workbook still goes out, and this line
+        // is what tells an administrator why the logo is missing.
+        error_log('Assimilation Excel export: logo skipped — ' . $reason . '.');
+        return false;
+    }
+
+    try {
+        $logo = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+        $logo->setName('Household of David logo');
+        $logo->setDescription('Household of David Lekki Centre');
+        $logo->setPath($logoPath);
+
+        // setPath() leaves an empty path when it decides the file is not an
+        // image, and the writer only saves the types the package can convert.
+        // Attaching anything else would fail later, while the writer saves.
+        if ($logo->getPath() === ''
+            || !array_key_exists($logo->getType(), \PhpOffice\PhpSpreadsheet\Worksheet\Drawing::IMAGE_TYPES_CONVERTION_MAP)
+        ) {
+            error_log('Assimilation Excel export: logo skipped — PhpSpreadsheet could not read '
+                . $logoPath . ' as a supported image.');
+            return false;
+        }
+
+        $logo->setHeight(47);
+        $logo->setCoordinates('A1');
+        $logo->setOffsetX(5);
+        $logo->setOffsetY(3);
+        $logo->setWorksheet($sheet);
+    } catch (\Throwable $e) {
+        error_log('Assimilation Excel export: logo skipped — ' . $e->getMessage());
+        return false;
+    }
+
+    return true;
+}
+
 /** Build and stream a branded .xlsx workbook for the validated current rule. */
 function assim_export_stream_excel(PDO $pdo, array $rule, string $reportType): void
 {
@@ -216,18 +301,10 @@ function assim_export_stream_excel(PDO $pdo, array $rule, string $reportType): v
     $sheet->getRowDimension(4)->setRowHeight(36);
     $sheet->getRowDimension(5)->setRowHeight(9);
 
-    $logoPath = dirname(__DIR__) . '/assets/images/logo_hod.png';
-    if (is_file($logoPath)) {
-        $logo = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
-        $logo->setName('Household of David logo');
-        $logo->setDescription('Household of David Lekki Centre');
-        $logo->setPath($logoPath);
-        $logo->setHeight(47);
-        $logo->setCoordinates('A1');
-        $logo->setOffsetX(5);
-        $logo->setOffsetY(3);
-        $logo->setWorksheet($sheet);
-    }
+    // The logo is optional — it is skipped, with a log line, when this runtime
+    // cannot inspect images (see assim_export_can_inspect_images()). The
+    // branded heading block above is what carries the brand either way.
+    assim_export_attach_logo($sheet, dirname(__DIR__) . '/assets/images/logo_hod.png');
 
     foreach ($columns as $index => $column) {
         $cell = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1) . $headerRow;
