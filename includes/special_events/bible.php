@@ -157,7 +157,8 @@ function se_bible_title_case(string $book): string
 }
 
 /**
- * Look a reference up, cache-first (§15.9).
+ * Look a reference up: the cache, then the bundled verses, then the Bible
+ * service (§15.9).
  *
  * @return array{ref_display: string, ref_norm: string, text: string, source: string}|null
  */
@@ -188,6 +189,19 @@ function se_bible_lookup(PDO $pdo, string $ref, string $translation = 'KJV'): ?a
         } catch (Throwable $e) {
             error_log('SE bible/cache: ' . $e->getMessage());
         }
+    }
+
+    // The verses the ready-made content uses ship with the module, word for
+    // word from the same KJV the service serves, so they never need the
+    // network (kjv_bundle.php).
+    $bundled = $translation === 'KJV' ? (se_kjv_bundle()[$parsed['ref_norm']] ?? null) : null;
+    if ($bundled !== null) {
+        return [
+            'ref_display' => $parsed['display'],
+            'ref_norm'    => $parsed['ref_norm'],
+            'text'        => $bundled,
+            'source'      => 'bundle',
+        ];
     }
 
     $fetched = se_bible_fetch($parsed['ref_norm'], $translation);

@@ -570,3 +570,109 @@ function se_verses_accept(PDO $pdo, array $event, array $picks, ?int $jobId, int
         'rejected' => $rejected,
     ];
 }
+
+// --------------------------------------------------------------------------
+// Ready-made verses: the Chara joy set (Appendix G)
+// --------------------------------------------------------------------------
+
+/**
+ * The joy verses for the welcome cards, each with a prayer line. The words
+ * of every verse ship in kjv_bundle.php, so adding them never waits on the
+ * Bible service. The prayer lines are greetings, not Scripture.
+ *
+ * @return list<array{0: string, 1: string}> [reference, prayer line]
+ */
+function se_chara_verse_set(): array
+{
+    return [
+        ['Nehemiah 8:10',       '{name}, may the joy of the Lord be your strength tonight and always.'],
+        ['Psalm 16:11',         '{name}, may you find fulness of joy in God’s presence tonight.'],
+        ['Psalm 30:5',          '{name}, whatever the night has been, may joy meet you in the morning.'],
+        ['Psalm 95:1',          '{name}, come and sing with us — may your heart make a joyful noise tonight.'],
+        ['Psalm 98:4',          '{name}, may your voice be loud with praise and your heart full of song.'],
+        ['Psalm 100:1-2',       '{name}, welcome! May you serve the Lord with gladness and come before Him with singing.'],
+        ['Psalm 118:24',        '{name}, this is the day the Lord has made — may you rejoice and be glad in it.'],
+        ['Psalm 126:2',         '{name}, may your heart be full of songs and your home full of laughter.'],
+        ['Psalm 126:3',         '{name}, may you see the great things the Lord has done for you, and be glad.'],
+        ['Proverbs 17:22',      '{name}, may your heart be merry tonight — laughter is good medicine.'],
+        ['Ecclesiastes 3:4',    '{name}, tonight is a time to laugh and a time to dance. Enjoy every moment.'],
+        ['Isaiah 55:12',        '{name}, may you go out with joy and be led forth with peace.'],
+        ['Zephaniah 3:17',      '{name}, the Lord rejoices over you with singing — you are loved.'],
+        ['Luke 2:10',           '{name}, the good tidings of great joy are for you too. Welcome!'],
+        ['John 15:11',          '{name}, may the joy of Jesus remain in you, and may your joy be full.'],
+        ['John 16:24',          '{name}, ask and receive — may your joy be full tonight.'],
+        ['Romans 15:13',        '{name}, may God fill you with all joy and peace as you trust in Him.'],
+        ['Galatians 5:22-23',   '{name}, may love, joy and peace grow in you tonight and always.'],
+        ['Philippians 4:4',     '{name}, rejoice in the Lord always — and again we say, rejoice!'],
+        ['James 1:2',           '{name}, whatever comes your way, may you count it all joy.'],
+        ['1 Peter 1:8',         '{name}, may you rejoice with joy unspeakable and full of glory.'],
+        ['Psalm 5:11',          '{name}, may you shout for joy, knowing the Lord defends you.'],
+    ];
+}
+
+/** The ready-made verses for the Studio's picker, marking the ones this event already has. */
+function se_chara_verse_catalogue(PDO $pdo, array $event): array
+{
+    if (!se_verses_ready($pdo)) {
+        return [];
+    }
+
+    $have = [];
+    foreach (se_verses_list($pdo, (int) $event['id']) as $verse) {
+        $parsed = se_bible_ref_normalize((string) $verse['ref_display']);
+        if ($parsed !== null) {
+            $have[$parsed['ref_norm']] = true;
+        }
+    }
+
+    $out = [];
+    foreach (se_chara_verse_set() as [$ref, $prayer]) {
+        $parsed = se_bible_ref_normalize($ref);
+        $out[] = [
+            'key'    => $parsed['ref_norm'],
+            'ref'    => $parsed['display'],
+            'text'   => se_kjv_bundle()[$parsed['ref_norm']] ?? '',
+            'prayer' => $prayer,
+            'added'  => isset($have[$parsed['ref_norm']]),
+        ];
+    }
+
+    return $out;
+}
+
+/**
+ * Add ready-made verses (the keys in `$only`, or all of them) with their
+ * prayer lines. Pressing Add in the Studio, with the words on screen, is the
+ * crew's approval, so each one is approved as it is added. A verse the event
+ * already has is left alone.
+ *
+ * @return array{added: int}
+ */
+function se_chara_verses_add(PDO $pdo, array $event, int $actor, ?array $only = null): array
+{
+    if (!se_verses_ready($pdo)) {
+        throw new SeRuleException('FEATURE_NOT_READY', 'Welcome verses are not available yet.');
+    }
+
+    $wanted = [];
+    foreach (se_chara_verse_catalogue($pdo, $event) as $row) {
+        if ($only === null || in_array($row['key'], $only, true)) {
+            $wanted[] = $row;
+        }
+    }
+    if ($only !== null && !$wanted) {
+        throw new SeValidationException(['verses' => 'Choose at least one of the ready-made verses.']);
+    }
+
+    $added = 0;
+    foreach ($wanted as $row) {
+        if ($row['added']) {
+            continue;
+        }
+        $verse = se_verse_add($pdo, $event, $row['ref'], $row['prayer'], $actor);
+        se_verse_approve($pdo, $event, (int) $verse['id'], $actor);
+        $added++;
+    }
+
+    return ['added' => $added];
+}

@@ -65,6 +65,11 @@ require_once __DIR__ . '/../../includes/special_events/live.php';
 // functions, so the include stays database-free like the rest of this list.
 require_once __DIR__ . '/../../includes/special_events/verses.php';
 
+// The bundled KJV verses and the reference normaliser behind the ready-made
+// welcome verses and Finish-the-verse questions. Pure data and string work.
+require_once __DIR__ . '/../../includes/special_events/kjv_bundle.php';
+require_once __DIR__ . '/../../includes/special_events/bible.php';
+
 // PR4's pure layers: the programme clock (planning, ETA, drift, the public
 // rounding) and the song library's normaliser and import parsers. Both files
 // talk to a PDO elsewhere, but nothing runs at include time.

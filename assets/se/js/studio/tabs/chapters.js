@@ -23,7 +23,7 @@
 import { html } from '@se/core/html.js';
 import { useState, useEffect } from 'preact/hooks';
 import { studio, studioUpload } from '@se/core/api.js';
-import { current, toast, can } from '../state.js';
+import { current, toast, can, refreshEvent } from '../state.js';
 import { Card, Button, Spinner, EmptyState, Field, TextInput, TextArea, Switch, Select } from '../ui.js';
 
 const FEATURE_LABELS = {
@@ -403,7 +403,9 @@ export function ChaptersTab() {
     const toggleFeature = async (feature, enabled) => {
         setBusy(true);
         try {
-            setData(await studio('chapter_feature_toggle', { id: event.id, feature, enabled }));
+            const result = await studio('chapter_feature_toggle', { id: event.id, feature, enabled });
+            setData(result);
+            refreshEvent(result.event);
             toast(`${FEATURE_LABELS[feature]} ${enabled ? 'switched on' : 'switched off'} for this event.`, 'success');
         } catch (e) {
             toast(e.message, 'error', 6000);

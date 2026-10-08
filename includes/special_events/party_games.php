@@ -1074,18 +1074,19 @@ function se_finale_start(PDO $pdo, array $event, ?int $expected, int $actor): ar
 }
 
 // --------------------------------------------------------------------------
-// The Chara starter pack (Appendix G)
+// Ready-made games: the Chara starter pack (Appendix G)
 // --------------------------------------------------------------------------
 
 /**
- * Seed the decks and the suggested lineup of games, every item approved and
- * attached, so a rehearsal can run every game type straight away. Safe to
- * press again: a deck or game that already exists by title is reused, and an
- * item already in a deck is not added twice.
+ * The question banks behind the ready-made games. Every item is reviewed
+ * content: references are real, and the Feud questions carry an estimated
+ * board (what a hundred people would plausibly say) so the game can be
+ * played even before any guest has answered the survey. The crew can
+ * rebuild a board from the guests' own answers at any time.
  */
-function se_chara_starter_content(PDO $pdo, array $event, int $actor): array
+function se_chara_starter_sets(): array
 {
-    $sets = [
+    return [
         'quiz' => ['title' => 'Chara · Bible quiz', 'type' => 'mcq', 'items' => [
             [['prompt' => 'Who was swallowed by a great fish?', 'choices' => ['Jonah', 'Elijah', 'Peter', 'Noah'], 'answer_index' => 0,
               'explanation' => 'God prepared a great fish to swallow Jonah — three days and three nights.'], 'Jonah 1:17'],
@@ -1093,18 +1094,68 @@ function se_chara_starter_content(PDO $pdo, array $event, int $actor): array
             [['prompt' => 'Who was the mother of the prophet Samuel?', 'choices' => ['Hannah', 'Ruth', 'Sarah', 'Elizabeth'], 'answer_index' => 0], '1 Samuel 1:20'],
             [['prompt' => 'At the wedding in Cana, what did Jesus turn water into?', 'choices' => ['Milk', 'Wine', 'Oil', 'Honey'], 'answer_index' => 1], 'John 2:9'],
             [['prompt' => 'Which king asked God for an understanding heart?', 'choices' => ['David', 'Saul', 'Solomon', 'Hezekiah'], 'answer_index' => 2], '1 Kings 3:9'],
+            [['prompt' => 'Which disciple would not believe until he saw the wounds of Jesus?', 'choices' => ['Peter', 'Thomas', 'James', 'Andrew'], 'answer_index' => 1], 'John 20:27'],
+            [['prompt' => 'What did God create on the first day?', 'choices' => ['The sun', 'Animals', 'Light', 'Man'], 'answer_index' => 2], 'Genesis 1:3'],
+            [['prompt' => 'For how many pieces of silver did Judas betray Jesus?', 'choices' => ['30', '20', '10', '40'], 'answer_index' => 0], 'Matthew 26:15'],
+        ]],
+        // Finish the verse, with answer tiles for the phones. The words come
+        // from kjv_bundle.php, never typed here (§15.9).
+        'quiz_verses' => ['title' => 'Chara · Finish the verse (quiz)', 'type' => 'verse', 'items' => [
+            [se_chara_verse_payload('John 3:16', 'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but',
+                ['be saved from sin.', 'see the kingdom of God.', 'walk in the light.'], 2), 'John 3:16'],
+            [se_chara_verse_payload('Psalm 118:24', 'This is the day which the LORD hath made;',
+                ['we will sing and dance before him.', 'let the whole earth praise him.', 'his light shall shine upon us.'], 1), 'Psalm 118:24'],
+        ]],
+        // Trivia has its own questions, so a night with both games never
+        // asks the same one twice.
+        'trivia' => ['title' => 'Chara · Bible trivia', 'type' => 'mcq', 'items' => [
+            [['prompt' => 'Who led the Israelites out of Egypt?', 'choices' => ['Aaron', 'Moses', 'Joshua', 'Abraham'], 'answer_index' => 1], 'Exodus 3:10'],
+            [['prompt' => 'What did Esau sell to Jacob for a meal of bread and lentils?', 'choices' => ['His coat', 'His flock', 'His birthright', 'His bow'], 'answer_index' => 2], 'Genesis 25:34'],
+            [['prompt' => 'How many loaves did the boy bring when Jesus fed the five thousand?', 'choices' => ['2', '5', '7', '12'], 'answer_index' => 1], 'John 6:9'],
+            [['prompt' => 'Which disciple was a tax collector when Jesus called him to follow?', 'choices' => ['Andrew', 'Thomas', 'Luke', 'Matthew'], 'answer_index' => 3], 'Matthew 9:9'],
+            [['prompt' => 'Who lived longer than anyone else in the Bible?', 'choices' => ['Adam', 'Noah', 'Methuselah', 'Abraham'], 'answer_index' => 2], 'Genesis 5:27'],
+            [['prompt' => 'Who was the first king of Israel?', 'choices' => ['Saul', 'David', 'Solomon', 'Samuel'], 'answer_index' => 0], '1 Samuel 10:24'],
+            [['prompt' => 'On which mountain did God give Moses the Ten Commandments?', 'choices' => ['Mount Carmel', 'Mount of Olives', 'Mount Zion', 'Mount Sinai'], 'answer_index' => 3], 'Exodus 31:18'],
+            [['prompt' => 'How many tribes of Israel were there?', 'choices' => ['7', '10', '12', '14'], 'answer_index' => 2], 'Genesis 49:28'],
         ]],
         'buzz' => ['title' => 'Chara · Buzzer round', 'type' => 'open', 'items' => [
             [['prompt' => 'Which disciple denied Jesus three times?', 'answer' => 'Peter', 'accept' => ['peter', 'simon peter', 'simon']], 'Luke 22:61'],
             [['prompt' => 'Which city\'s walls fell after the people shouted?', 'answer' => 'Jericho', 'accept' => ['jericho']], 'Joshua 6:20'],
             [['prompt' => 'Who was thrown into a den of lions for praying?', 'answer' => 'Daniel', 'accept' => ['daniel']], 'Daniel 6:16'],
         ]],
+        // Finish the verse out loud: the host reads the start and judges the
+        // ending the team says.
+        'buzz_verses' => ['title' => 'Chara · Finish the verse (buzzer)', 'type' => 'verse', 'items' => [
+            [se_chara_verse_payload('Psalm 23:1', 'The LORD is my shepherd;'), 'Psalm 23:1'],
+            [se_chara_verse_payload('Philippians 4:4', 'Rejoice in the Lord alway:'), 'Philippians 4:4'],
+            [se_chara_verse_payload('Psalm 119:105', 'Thy word is a lamp unto my feet,'), 'Psalm 119:105'],
+            [se_chara_verse_payload('Matthew 6:33', 'But seek ye first the kingdom of God, and his righteousness;'), 'Matthew 6:33'],
+        ]],
+        'emoji' => ['title' => 'Chara · Emoji Bible', 'type' => 'emoji', 'items' => [
+            [['emojis' => '🌳 🐍 👫', 'answer' => 'Adam and Eve',
+              'accept' => ['adam and eve', 'the fall', 'garden of eden', 'the garden of eden', 'eden']], 'Genesis 3:6'],
+            [['emojis' => '⭐ 🐫🐫🐫 🎁', 'answer' => 'The wise men',
+              'accept' => ['wise men', 'the wise men', 'three wise men', 'magi', 'the magi']], 'Matthew 2:11'],
+            [['emojis' => '99 🐑 ➕ 1 🐑 ❓', 'answer' => 'The lost sheep',
+              'accept' => ['lost sheep', 'the lost sheep', 'parable of the lost sheep', 'the parable of the lost sheep']], 'Luke 15:4'],
+        ]],
         'clues' => ['title' => 'Chara · Who Am I?', 'type' => 'clues', 'items' => [
             [['clues' => ['My father gave me a special coat', 'My brothers sold me', 'I ended up in prison in Egypt', 'I interpreted Pharaoh\'s dreams', 'I became governor over Egypt'],
               'answer' => 'Joseph', 'accept' => ['joseph']], 'Genesis 37:3'],
             [['clues' => ['I was raised by my cousin', 'I became queen in Persia', 'I asked my people to fast for three days', 'I said, "if I perish, I perish"'],
               'answer' => 'Esther', 'accept' => ['esther', 'queen esther']], 'Esther 4:16'],
+            [['clues' => ['I was not an Israelite: I came from Moab', 'My great-grandson was King David', 'When my husband died, I would not leave my mother-in-law',
+                          'I gleaned in the field of Boaz', 'I said, "whither thou goest, I will go"'],
+              'answer' => 'Ruth', 'accept' => ['ruth']], 'Ruth 1:16'],
+            [['clues' => ['I hid in a cave after a queen threatened my life', 'Ravens brought me bread and meat by a brook',
+                          'A widow\'s flour and oil did not run out while I stayed with her', 'I called down fire from heaven on Mount Carmel',
+                          'I went up to heaven by a whirlwind'],
+              'answer' => 'Elijah', 'accept' => ['elijah', 'elias', 'prophet elijah']], '2 Kings 2:11'],
+            [['clues' => ['I was born in Tarsus', 'I made tents for a living', 'I was shipwrecked on the island of Malta',
+                          'I was blinded by a light on the road to Damascus', 'I was also called Saul'],
+              'answer' => 'Paul', 'accept' => ['paul', 'saul', 'apostle paul', 'paul the apostle', 'saint paul', 'st paul']], 'Acts 13:9'],
         ]],
+        // About four phrases a turn, two turns for each of four teams.
         'charades' => ['title' => 'Chara · Bible Charades', 'type' => 'charade', 'items' => [
             [['phrase' => 'David and Goliath', 'category' => 'story'], '1 Samuel 17:49'],
             [['phrase' => 'Zacchaeus climbing a tree', 'category' => 'story', 'hint' => 'A short man who wanted to see Jesus'], 'Luke 19:4'],
@@ -1114,27 +1165,147 @@ function se_chara_starter_content(PDO $pdo, array $event, int $actor): array
             [['phrase' => 'The parting of the Red Sea', 'category' => 'miracle'], 'Exodus 14:21'],
             [['phrase' => 'The prodigal son', 'category' => 'parable'], 'Luke 15:20'],
             [['phrase' => 'Feeding the five thousand', 'category' => 'miracle'], 'John 6:11'],
+            [['phrase' => 'Samson pushing down the pillars', 'category' => 'story'], 'Judges 16:30'],
+            [['phrase' => 'Moses and the burning bush', 'category' => 'story'], 'Exodus 3:2'],
+            [['phrase' => "Peter cutting off a servant's ear", 'category' => 'story'], 'John 18:10'],
+            [['phrase' => 'Jesus calming the storm', 'category' => 'miracle'], 'Mark 4:39'],
+            [['phrase' => "Jesus washing the disciples' feet", 'category' => 'story'], 'John 13:5'],
+            [['phrase' => 'Lazarus coming out of the tomb', 'category' => 'miracle'], 'John 11:44'],
+            [['phrase' => 'The Good Samaritan', 'category' => 'parable'], 'Luke 10:33'],
+            [['phrase' => 'The wise and foolish builders', 'category' => 'parable'], 'Matthew 7:24'],
+            [['phrase' => "Jacob's ladder", 'category' => 'story', 'hint' => 'A dream of angels going up and down'], 'Genesis 28:12'],
+            [['phrase' => 'The Last Supper', 'category' => 'story'], 'Luke 22:19'],
+            [['phrase' => 'The Tower of Babel', 'category' => 'story', 'hint' => 'Where the languages got mixed up'], 'Genesis 11:9'],
+            [['phrase' => "The widow's mite", 'category' => 'story', 'hint' => 'She gave all she had'], 'Mark 12:42'],
+            [['phrase' => 'The lost coin', 'category' => 'parable'], 'Luke 15:8'],
+            [['phrase' => 'The mustard seed', 'category' => 'parable'], 'Matthew 13:31'],
+            [['phrase' => 'Blind Bartimaeus', 'category' => 'person', 'hint' => 'A blind beggar who cried out to Jesus'], 'Mark 10:46'],
+            [['phrase' => 'Ten lepers healed', 'category' => 'miracle'], 'Luke 17:14'],
+            [['phrase' => 'Abraham counting the stars', 'category' => 'story'], 'Genesis 15:5'],
+            [['phrase' => "Balaam's talking donkey", 'category' => 'story', 'hint' => 'A prophet whose donkey spoke to him'], 'Numbers 22:28'],
+            [['phrase' => 'Jesus entering Jerusalem', 'category' => 'story', 'hint' => 'Palm branches and Hosanna'], 'John 12:13'],
+            [['phrase' => 'Fishers of men', 'category' => 'story'], 'Matthew 4:19'],
+            [['phrase' => 'The empty tomb', 'category' => 'story'], 'Luke 24:2'],
+            [['phrase' => 'John the Baptist', 'category' => 'person'], 'Matthew 3:1'],
+            [['phrase' => 'David dancing before the Lord', 'category' => 'story'], '2 Samuel 6:14'],
+            [['phrase' => 'Manna falling from heaven', 'category' => 'miracle'], 'Exodus 16:15'],
+            [['phrase' => 'The fiery furnace', 'category' => 'story'], 'Daniel 3:23'],
+            [['phrase' => 'Martha busy in the kitchen', 'category' => 'story'], 'Luke 10:40'],
         ]],
         'survey' => ['title' => 'Chara · Feud survey', 'type' => 'survey', 'items' => [
-            [['question' => "Name something you'd find on Noah's Ark."], null],
-            [['question' => 'Name a gospel song everyone in Lagos knows the words to.'], null],
-            [['question' => 'Name something people do at a Nigerian wedding reception.'], null],
-            [['question' => 'Name a Bible character known for being strong.'], null],
+            [['question' => "Name something you'd find on Noah's Ark."], null,
+             [['Animals', 38], ["Noah's family", 21], ['Food', 14], ['A dove', 9], ['Wood', 5]]],
+            [['question' => 'Name a gospel song everyone in Lagos knows the words to.'], null,
+             [['Way Maker', 29], ['Imela', 17], ['Excess Love', 13], ['Ekwueme', 11], ['Onise Iyanu', 8]]],
+            [['question' => 'Name something people do at a Nigerian wedding reception.'], null,
+             [['Dance', 32], ['Spray money', 24], ['Eat jollof rice', 15], ['Take photos', 9], ['Give gifts', 6]]],
+            [['question' => 'Name a Bible character known for being strong.'], null,
+             [['Samson', 52], ['David', 16], ['Goliath', 11], ['Joshua', 5], ['Gideon', 4]]],
+            [['question' => 'Name something you bring to a church picnic.'], null,
+             [['Food', 36], ['Drinks', 20], ['A mat or blanket', 14], ['Chairs', 9], ['A Bible', 6]]],
         ]],
     ];
+}
 
-    $games = [
-        ['title' => 'Live Quiz',      'type' => 'live_quiz', 'deck' => 'quiz'],
-        ['title' => 'Bible Trivia',   'type' => 'trivia',    'deck' => 'quiz'],
-        ['title' => 'Buzzer round',   'type' => 'buzzer',    'deck' => 'buzz'],
-        ['title' => 'Who Am I?',      'type' => 'who_am_i',  'deck' => 'clues'],
-        ['title' => 'Bible Charades', 'type' => 'charades',  'deck' => 'charades'],
-        ['title' => 'Family Feud',    'type' => 'feud',      'deck' => 'survey'],
+/**
+ * A Finish-the-verse payload cut from the bundled KJV text: `$lead` must be
+ * how the verse starts, and the rest of it is the answer. `$wrong` endings
+ * turn it into answer tiles, with the right one at position `$at`.
+ */
+function se_chara_verse_payload(string $ref, string $lead, array $wrong = [], int $at = 0): array
+{
+    $parsed = se_bible_ref_normalize($ref);
+    $text   = $parsed !== null ? (se_kjv_bundle()[$parsed['ref_norm']] ?? null) : null;
+    if ($text === null || !str_starts_with($text, $lead . ' ')) {
+        throw new LogicException('Ready-made verse ' . $ref . ' does not start "' . $lead . '".');
+    }
+
+    $payload = ['lead' => $lead, 'answer' => substr($text, strlen($lead) + 1)];
+    if ($wrong) {
+        $choices = array_values($wrong);
+        array_splice($choices, $at, 0, [$payload['answer']]);
+        $payload += ['choices' => $choices, 'answer_index' => $at];
+    }
+
+    return $payload;
+}
+
+/** The ready-made games the Studio offers, keyed, in their suggested running order. */
+function se_chara_starter_games(): array
+{
+    return [
+        'live_quiz' => ['title' => 'Live Quiz',      'type' => 'live_quiz', 'decks' => ['quiz', 'quiz_verses'],
+                        'blurb' => 'Everyone answers on their phone; right and fast scores most. Includes Finish the verse.'],
+        'trivia'    => ['title' => 'Bible Trivia',   'type' => 'trivia',    'decks' => ['trivia'],
+                        'blurb' => 'Captains lock in one answer per team while teammates suggest.'],
+        'buzzer'    => ['title' => 'Buzzer round',   'type' => 'buzzer',    'decks' => ['buzz', 'buzz_verses', 'emoji'],
+                        'blurb' => 'Questions, Finish the verse and emoji puzzles: first team to buzz answers out loud.'],
+        'who_am_i'  => ['title' => 'Who Am I?',      'type' => 'who_am_i',  'decks' => ['clues'],
+                        'blurb' => 'Clues one at a time — the earlier the right answer, the more it scores.'],
+        'charades'  => ['title' => 'Bible Charades', 'type' => 'charades',  'decks' => ['charades'],
+                        'blurb' => 'One player acts out phrases only their phone shows.'],
+        'feud'      => ['title' => 'Family Feud',    'type' => 'feud',      'decks' => ['survey'],
+                        'blurb' => 'Survey says! Boards are ready; rebuild them from your guests’ answers if you like.'],
     ];
+}
+
+/**
+ * The ready-made games for the Studio's picker: what each one is, how much
+ * it holds, and whether this event already has it (by title — a game the
+ * crew renamed counts as not added, and adding it again is harmless).
+ */
+function se_chara_catalogue(PDO $pdo, array $event): array
+{
+    $titles = [];
+    if (se_game_ready($pdo)) {
+        $stmt = $pdo->prepare("SELECT title FROM se_games WHERE event_id = ?");
+        $stmt->execute([(int) $event['id']]);
+        $titles = array_map(static fn($t): string => mb_strtolower((string) $t), $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    $sets  = se_chara_starter_sets();
+    $units = ['who_am_i' => 'person', 'charades' => 'phrase', 'feud' => 'board'];
+    $out   = [];
+    foreach (se_chara_starter_games() as $key => $game) {
+        $out[] = [
+            'key'        => $key,
+            'title'      => $game['title'],
+            'type'       => $game['type'],
+            'type_label' => SE_GAME_TYPE_LABELS[$game['type']] ?? $game['type'],
+            'blurb'      => $game['blurb'],
+            'count'      => array_sum(array_map(static fn(string $deck): int => count($sets[$deck]['items']), $game['decks'])),
+            'unit'       => $units[$key] ?? 'question',
+            'added'      => in_array(mb_strtolower($game['title']), $titles, true),
+        ];
+    }
+
+    return $out;
+}
+
+/**
+ * Add ready-made games to an event: the ones named in `$only` (keys of
+ * se_chara_starter_games()), or all six. Each brings its question bank,
+ * every item approved and attached, so a rehearsal can run it straight
+ * away. Safe to press again: a deck or game that already exists by title
+ * is reused, an item already in a deck is not added twice, and a Feud board
+ * the crew already built is never overwritten.
+ */
+function se_chara_starter_content(PDO $pdo, array $event, int $actor, ?array $only = null): array
+{
+    $sets  = se_chara_starter_sets();
+    $games = se_chara_starter_games();
+    if ($only !== null) {
+        $games = array_intersect_key($games, array_flip(array_map('strval', $only)));
+        if (!$games) {
+            throw new SeValidationException(['games' => 'Choose at least one of the ready-made games.']);
+        }
+    }
+    $sets = array_intersect_key($sets, array_flip(array_merge(...array_values(array_column($games, 'decks')))));
 
     $eventId = (int) $event['id'];
-    $created = ['items' => 0, 'games' => 0];
+    $created = ['items' => 0, 'games' => 0, 'boards' => 0];
     $itemIds = [];
+    $boards  = [];
 
     foreach ($sets as $key => $set) {
         $check = $pdo->prepare("SELECT id FROM se_decks WHERE event_id = ? AND title = ? LIMIT 1");
@@ -1148,7 +1319,8 @@ function se_chara_starter_content(PDO $pdo, array $event, int $actor): array
         }
 
         $itemIds[$key] = [];
-        foreach ($set['items'] as [$payload, $ref]) {
+        foreach ($set['items'] as $entry) {
+            [$payload, $ref] = $entry;
             [$clean] = se_deck_payload_clean($set['type'], $payload);
             $exists = $pdo->prepare("SELECT id FROM se_deck_items WHERE deck_id = ? AND payload_json = ? LIMIT 1");
             $exists->execute([$deckId, se_json_encode($clean)]);
@@ -1160,19 +1332,41 @@ function se_chara_starter_content(PDO $pdo, array $event, int $actor): array
                 $created['items']++;
             }
             $itemIds[$key][] = $id;
+            if (!empty($entry[2])) {
+                $boards[$id] = $entry[2];
+            }
         }
     }
 
     foreach ($games as $spec) {
         $check = $pdo->prepare("SELECT id FROM se_games WHERE event_id = ? AND title = ? LIMIT 1");
         $check->execute([$eventId, $spec['title']]);
-        $gameId = (int) ($check->fetchColumn() ?: 0);
-        if ($gameId) {
+        if ($check->fetchColumn()) {
             continue;
         }
         $gameId = se_game_save($pdo, $event, ['title' => $spec['title'], 'type' => $spec['type']], $actor)['id'];
-        se_game_items_save($pdo, $event, ['game_id' => $gameId, 'item_ids' => $itemIds[$spec['deck']]], $actor);
+        $items  = array_merge(...array_map(static fn(string $deck): array => $itemIds[$deck], $spec['decks']));
+        se_game_items_save($pdo, $event, ['game_id' => $gameId, 'item_ids' => $items], $actor);
         $created['games']++;
+    }
+
+    // The estimated Feud boards, once the questions are in a Feud game (a
+    // board belongs to a question that game plays), and never over a board
+    // the crew already built.
+    foreach ($boards as $itemId => $board) {
+        if (se_feud_board($pdo, $event, $itemId, false)) {
+            continue;
+        }
+        try {
+            se_feud_board_save($pdo, $event, $itemId, array_map(
+                static fn(array $row): array => ['label' => $row[0], 'points' => $row[1], 'source' => 'manual'],
+                $board
+            ), true, $actor);
+            $created['boards']++;
+        } catch (SeNotFoundException $e) {
+            // The question is not in a Feud game here (the crew renamed or
+            // removed it); the board can be built in Studio instead.
+        }
     }
 
     return $created + ['decks' => count($sets)];

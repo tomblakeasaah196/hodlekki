@@ -755,9 +755,20 @@ Verses you add are approved in the same moment and are marked
 **suggested by AI** in the list; ones you leave ticked-off are dropped.
 Nothing the AI offered is saved until you add it there.
 
+**Pick your verses** is the quickest start: twenty-two verses about joy (the
+Chara set), each with a short prayer line already written. Their KJV text
+ships with the module, word for word from the same KJV the Bible service
+serves, so they never wait on the internet. Read them, then press **Add** on
+the ones you want, or **Add all**. Adding is the approval: they go straight on
+the list as **approved**.
+
 Hand-added references still land as **needs review** and wait for the
-**Approve** button. If no verse is approved, guests simply do not get one —
-nothing breaks.
+**Approve** button. If the Bible service cannot be reached, a box opens for you
+to paste the verse from a KJV Bible. A pasted verse needs **two** approvals
+from two different people: the list says **typed in — a second person must
+approve it** until someone else checks it against their Bible and presses
+**Approve**. If no verse is approved, guests simply do not get one — nothing
+breaks.
 
 ---
 
@@ -1157,6 +1168,15 @@ there — it lives here, where the rights box is.
 
 **Karaoke** tab in the Studio.
 
+**Karaoke at this event — On / Off.** The switch at the top of the tab (the
+same switch as **Karaoke** under **Chapters → Features**; either one will do).
+It is on for a new event and saves the moment you press it. Off means no
+karaoke: the registration form stops asking "I'd love to sing" and nobody can
+pick a song. Your song list stays, so you can switch it back on later. The
+**The Mic** chapter on the event page is a separate choice — hide it in
+**Chapters** if you no longer want it there. Under the switch the tab tells you
+the next step: add songs, then publish the list.
+
 The song library is shared across every event: typing "Way Maker" tonight and
 "way maker " next year gives you one song, not two. Adding songs to tonight's
 list is what this tab does.
@@ -1171,10 +1191,11 @@ the Assets tab and choose it here. Long lists are fine: we read up to 400
 songs from one list, and anything past that is left out of the preview rather
 than guessed at.
 
-**Publishing.** Nobody can pick until you press **Publish the list**. Do it
-when the list is final; unpublishing hides it again.
+**Publishing.** Nobody can pick until you press **Publish the list**, under
+the on/off switch. Do it when the list is final; **Unpublish** hides it again.
+The button stays grey until the list has at least one song.
 
-**How it runs** (the settings at the bottom):
+**How karaoke runs** (the card at the bottom, with its own **Save**):
 
 - *Let people pre-pick* — guests choose on their phone before the night. A
   pick made before they arrive is a **hold**, not a place in the queue; it
@@ -1422,9 +1443,19 @@ console:
 ### Setting up (Studio → Games)
 
 **Lineup.** The games of the night in running order. The quickest start is
-**Add the Chara starter pack**: six ready games with questions you can edit
-or replace. Or **Build my own** / **+ Add a game** and choose a type. Move a
-game earlier or later with the arrows on its card. **Edit** opens it:
+**Pick your games**: six ready-made games, each with its questions already
+written and checked against the KJV, sized for the night in Appendix G of the
+engineering guide — *Live Quiz* (10 questions, two of them Finish the verse),
+*Bible Trivia* (8, none shared with the Live Quiz), *Buzzer round* (10: three
+questions, four Finish the verse and three emoji puzzles), *Who Am I?* (5
+people), *Bible Charades* (34 phrases — about four a turn, two turns for each
+of four teams) and *Family Feud* (5 survey questions, each with a board ready
+to play). Press **Add**
+on the ones you want tonight, or **Add all**; a game already in your lineup
+shows **✓ In your lineup**, and adding it twice does nothing. Their questions
+land in **Question banks**, where you can edit them or add your own. Or
+**Build my own** / **+ Build a game of my own** and choose a type. Move a game
+earlier or later with the arrows on its card. **Edit** opens it:
 
 - **Name on screen** and **Weight in the championship** (2 doubles that game's
   team points);
@@ -1446,12 +1477,15 @@ switched on, **✨ Draft with AI** suggests up to fifteen; tick the ones to keep
 and they arrive as drafts for you to read and approve. A question that is in
 a game cannot be deleted until you take it out of the game.
 
-**Family Feud boards.** Guests answer the survey questions on their phones
-before the night (**Play ahead**). When the answers are in, **Edit board** →
-**Build from N answers**: with enough answers AI groups spellings and synonyms
-("Lions", "the lion"); with few, the exact groups are offered. Tidy the
-labels and points, then **Save and approve**. The host cannot open a board
-that is not approved.
+**Family Feud boards.** The ready-made Feud questions come with an approved
+board (five answers with their points), so the Feud plays as it is. Guests
+still answer the survey questions on their phones before the night (**Play
+ahead**); to play their answers instead, press **Edit board** → **Build from
+N answers**: with enough answers AI groups spellings and synonyms ("Lions",
+"the lion"); with few, the exact groups are offered. Tidy the labels and
+points, then **Save and approve** — that replaces the ready-made board. A
+question you write yourself has no board until you build one, and the host
+cannot open a board that is not approved.
 
 ### Running the games (host console)
 

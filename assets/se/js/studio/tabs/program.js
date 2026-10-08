@@ -7,7 +7,7 @@
 import { html } from '@se/core/html.js';
 import { useState, useEffect, useMemo } from 'preact/hooks';
 import { studio, studioUpload } from '@se/core/api.js';
-import { current, toast, can, applyEvent } from '../state.js';
+import { current, toast, can, applyEvent, refreshEvent } from '../state.js';
 import { Card, Button, Spinner, EmptyState, Field, TextInput, TextArea, Select, Switch } from '../ui.js';
 import { ProgramPosterCard } from '../program_poster.js';
 
@@ -236,14 +236,14 @@ function ItemRow({ item, index, count, onChange, onRemove, onMove, readOnly }) {
 
                 <div class="w-24">
                     <input type="number" min="0" max="600" value=${item.duration_min} disabled=${readOnly}
-                        aria-label="Minutes" class="w-full rounded-xl border-gray-200 text-sm"
+                        aria-label="Minutes" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
                         onInput=${(event) => onChange({ ...item, duration_min: Number(event.currentTarget.value) || 0 })} />
                     <p class="text-[11px] text-gray-400 mt-1">minutes</p>
                 </div>
 
                 <div class="w-28">
                     <input type="time" value=${clockOf(item)} disabled=${readOnly}
-                        aria-label="Pinned start time" class="w-full rounded-xl border-gray-200 text-sm"
+                        aria-label="Pinned start time" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
                         onInput=${(event) => onChange({ ...item, start_local: event.currentTarget.value })} />
                     <p class="text-[11px] text-gray-400 mt-1">pin a time</p>
                 </div>
@@ -485,7 +485,7 @@ function ImportPanel({ event, days, defaultDayId, onApplied, onAddManual }) {
                                 ${review.items.map((row, index) => html`
                                     <tr key=${index}>
                                         <td class="p-2" style=${{ minWidth: '13rem' }}>
-                                            <input class="w-full rounded-lg border-gray-200 text-sm" value=${row.title}
+                                            <input class="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm" value=${row.title}
                                                 aria-label=${'Title of row ' + (index + 1)} maxLength=${120}
                                                 onInput=${(event) => updateRow(index, { title: event.currentTarget.value })} />
                                         </td>
@@ -506,14 +506,14 @@ function ImportPanel({ event, days, defaultDayId, onApplied, onAddManual }) {
                                                 }} />
                                         </td>
                                         <td class="p-2" style=${{ minWidth: '8rem' }}>
-                                            <input type="time" class="w-full rounded-lg border-gray-200 text-sm" value=${reviewClock(row)}
+                                            <input type="time" class="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm" value=${reviewClock(row)}
                                                 aria-label=${'Start time of row ' + (index + 1)}
                                                 onInput=${(event) => updateRow(index, {
                                                     start_time: reviewStartForDay(row, row.day_id, days, event.currentTarget.value),
                                                 })} />
                                         </td>
                                         <td class="p-2" style=${{ minWidth: '6rem' }}>
-                                            <input type="number" min="0" max="1440" class="w-full rounded-lg border-gray-200 text-sm"
+                                            <input type="number" min="0" max="1440" class="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm"
                                                 value=${row.duration_min} aria-label=${'Minutes for row ' + (index + 1)}
                                                 onInput=${(event) => updateRow(index, { duration_min: Number(event.currentTarget.value) || 0 })} />
                                         </td>
@@ -670,6 +670,7 @@ export function ProgramTab() {
         try {
             const result = await studio('program_publish', { id: event.id, on });
             setPublished(!!result.published);
+            refreshEvent(result.event);
             toast(on ? 'The programme is live on the event page.' : 'The programme is hidden again.', 'success');
         } catch (caught) {
             toast(caught.message, 'error');
@@ -700,6 +701,7 @@ export function ProgramTab() {
                 id: event.id, items: payload, public_time_mode: timeMode,
             });
             absorb(result.program, timeMode);
+            refreshEvent(result.event);
             toast('Programme saved.', 'success');
         } catch (caught) {
             toast(caught.message, 'error');

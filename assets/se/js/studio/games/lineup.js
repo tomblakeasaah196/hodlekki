@@ -11,6 +11,7 @@ import { html } from '@se/core/html.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Button, Spinner } from '../ui.js';
 import { act, Chip, In, Pick, Check, Link, TYPE_ICON, TYPE_HELP } from './common.js';
+import { toast } from '../state.js';
 
 /** The settings a producer may change, per game type, in plain words. */
 const SETTINGS = {
@@ -123,7 +124,7 @@ function QuestionPicker({ eventId, game, decks, labels, selected, setSelected })
     if (!banks.length) {
         return html`<p class="text-sm text-gray-600">
             This game plays ${game.content_types.map((t) => '“' + (labels[t] || t) + '”').join(' or ')} questions. Create a bank for them under
-            <strong>Question banks</strong>, or press <strong>Add the Chara starter pack</strong>.</p>`;
+            <strong>Question banks</strong>, or add one of the ready-made games in the Lineup.</p>`;
     }
 
     return html`
@@ -264,12 +265,67 @@ function AddGame({ eventId, types, onCreated, onClose }) {
         </div>`;
 }
 
+const UNIT = { question: ['question', 'questions'], person: ['person', 'people'], phrase: ['phrase', 'phrases'], board: ['board', 'boards'] };
+
+/**
+ * The ready-made games (the Chara starter pack), each with its own Add
+ * button: pick the ones tonight needs. Each arrives with its questions,
+ * approved and attached, and the Feud with boards it can play at once.
+ */
+function ReadyMade({ eventId, catalogue, empty, reload, onBuild }) {
+    const [busy, setBusy] = useState(null);
+    const missing = catalogue.filter((g) => !g.added);
+
+    const add = async (keys, label) => {
+        setBusy(label);
+        const res = await act('chara_starter_content', { id: eventId, games: keys });
+        setBusy(null);
+        if (res.ok) {
+            toast(res.data.games ? (keys.length === 1 ? 'Added to your lineup.' : res.data.games + ' games added to your lineup.') : 'Already in your lineup.', 'success');
+            reload();
+        }
+    };
+
+    if (!missing.length) return null;
+
+    return html`
+        <section class=${'rounded-3xl border p-5 sm:p-6 space-y-4 '
+            + (empty ? 'bg-gradient-to-br from-blue-50 to-amber-50 border-blue-100' : 'bg-white border-gray-100')}>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="max-w-2xl">
+                    <h3 class="font-display text-lg font-bold text-gray-900">${empty ? 'Pick your games' : 'More ready-made games'}</h3>
+                    <p class="text-sm text-gray-600">Ready to play: each one comes with its questions, which you can edit or add to
+                        in <strong>Question banks</strong>${'. '}Pick the ones you want tonight.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    ${missing.length > 1 ? html`
+                        <${Button} variant="secondary" loading=${busy === 'all'} disabled=${busy !== null}
+                            onClick=${() => add(missing.map((g) => g.key), 'all')}>Add all ${missing.length}</${Button}>` : null}
+                    ${empty ? html`<${Button} variant="ghost" onClick=${onBuild}>Build my own</${Button}>` : null}
+                </div>
+            </div>
+            <ul class="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                ${catalogue.map((g) => html`
+                    <li key=${g.key} class=${'rounded-2xl border p-4 flex flex-col gap-2 ' + (g.added ? 'bg-gray-50 border-gray-100' : 'bg-white border-gray-200')}>
+                        <div class="flex items-start justify-between gap-2">
+                            <p class="font-bold text-gray-900">${TYPE_ICON[g.type]} ${g.title}</p>
+                            <span class="text-xs text-gray-500 whitespace-nowrap">${g.count} ${UNIT[g.unit]?.[g.count === 1 ? 0 : 1] || g.unit}</span>
+                        </div>
+                        <p class="text-xs text-gray-600 flex-1">${g.blurb}</p>
+                        ${g.added
+                            ? html`<p class="text-sm font-semibold text-emerald-700">✓ In your lineup</p>`
+                            : html`<${Button} variant="primary" loading=${busy === g.key} disabled=${busy !== null}
+                                onClick=${() => add([g.key], g.key)}>Add ${g.title}</${Button}>`}
+                    </li>`)}
+            </ul>
+        </section>`;
+}
+
 /** The lineup: game cards, the editor, add and delete. */
 export function LineupSection({ eventId, overview, reload }) {
     const games = overview.games || [];
     const [editing, setEditing] = useState(null);
     const [adding, setAdding] = useState(false);
-    const [starting, setStarting] = useState(false);
 
     const remove = async (game) => {
         if (!confirm(`Delete “${game.title}”? Its questions stay in their banks.`)) return;
@@ -285,26 +341,14 @@ export function LineupSection({ eventId, overview, reload }) {
         if (res.ok) reload();
     };
 
-    const starter = async () => {
-        setStarting(true);
-        await act('chara_starter_content', { id: eventId }).then((res) => res.ok && reload());
-        setStarting(false);
-    };
-
     const editingGame = games.find((g) => g.id === editing) || null;
+    const catalogue = overview.catalogue || [];
+    const offered = catalogue.some((g) => !g.added);
 
     return html`
         <div class="space-y-5">
-            ${!games.length ? html`
-                <div class="rounded-3xl bg-gradient-to-br from-blue-50 to-amber-50 border border-blue-100 p-6 sm:p-8 space-y-3">
-                    <h3 class="font-display text-lg font-bold text-gray-900">No games yet</h3>
-                    <p class="text-sm text-gray-600 max-w-2xl">The quickest start is the <strong>Chara starter pack</strong>: six ready games —
-                        Live Quiz, Trivia, a buzzer round, Who Am I?, Charades and Family Feud — with questions you can edit or replace.</p>
-                    <div class="flex flex-wrap gap-2">
-                        <${Button} loading=${starting} onClick=${starter}>Add the Chara starter pack</${Button}>
-                        <${Button} variant="secondary" onClick=${() => setAdding(true)}>Build my own</${Button}>
-                    </div>
-                </div>` : null}
+            ${!games.length && offered ? html`<${ReadyMade} eventId=${eventId} catalogue=${catalogue} empty reload=${reload}
+                onBuild=${() => setAdding(true)} />` : null}
 
             ${games.length ? html`
                 <ol class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -334,10 +378,13 @@ export function LineupSection({ eventId, overview, reload }) {
                                 </span>
                             </div>
                         </li>`)}
-                </ol>
+                </ol>` : null}
+
+            ${games.length || !offered ? html`
                 <div class="flex flex-wrap gap-2">
-                    <${Button} variant="secondary" onClick=${() => { setEditing(null); setAdding(true); }}>+ Add a game</${Button}>
+                    <${Button} variant="secondary" onClick=${() => { setEditing(null); setAdding(true); }}>+ Build a game of my own</${Button}>
                 </div>` : null}
+            ${games.length ? html`<${ReadyMade} eventId=${eventId} catalogue=${catalogue} reload=${reload} />` : null}
 
             ${adding ? html`<${AddGame} eventId=${eventId} types=${overview.game_types} onClose=${() => setAdding(false)}
                 onCreated=${async (game) => { setAdding(false); await reload(); setEditing(game.id); }} />` : null}
