@@ -95,13 +95,15 @@ require_once '../../includes/header.php';
                         <th class="px-6 py-4">Date Joined</th>
                         <th class="px-6 py-4">Spiritual Markers</th>
                         <th class="px-6 py-4">Follow-up Status</th>
+                        <th class="px-6 py-4">Assigned To</th>
+                        <th class="px-6 py-4">Notes</th>
                         <th class="px-6 py-4">Contact</th>
                         <th class="px-6 py-4 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="visitorsTableBody" class="divide-y divide-gray-50">
                     <tr>
-                        <td colspan="6" class="px-6 py-20 text-center">
+                        <td colspan="8" class="px-6 py-20 text-center">
                             <svg class="animate-spin h-8 w-8 text-hodRed mx-auto mb-4" viewBox="0 0 24 24"><circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-100" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                             <p class="text-gray-500 font-medium animate-pulse">Syncing timer pipeline...</p>
                         </td>
@@ -326,6 +328,7 @@ require_once '../../includes/header.php';
         <input type="hidden" name="vis_director" value="">
         <input type="hidden" name="vis_worker" value="">
     </div>
+    <p class="text-[10px] text-gray-500 mt-3 leading-relaxed">Every note is visible to everyone with Embrace access, and in the Excel register. The tag records who you intended it for.</p>
 </div>
 
                 <div class="flex gap-3 pt-2">
@@ -865,6 +868,23 @@ require_once '../../includes/header.php';
         trendChart.render();
     }
 
+    // Which people have their notes panel open. Kept across re-renders (search, tabs, after saving a note).
+    const expandedNotes = new Set();
+    function toggleNotesRow(id) {
+        if (expandedNotes.has(id)) expandedNotes.delete(id); else expandedNotes.add(id);
+        $(`#notes-row-${id}`).toggleClass('hidden', !expandedNotes.has(id));
+        $(`#notes-caret-${id}`).text(expandedNotes.has(id) ? '▾' : '▸');
+    }
+    function openNotesFor(id) {
+        const v = globalVisitorsData.find(x => x.id == id);
+        if (!v) return;
+        prepManageNotes(v.secure_notes, v.followup_id, `${v.first_name} ${v.last_name}`);
+    }
+    function embEsc(value) {
+        const text = (value === null || value === undefined) ? '' : String(value);
+        return text.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
     function renderPipelineTable() {
         let html = '';
         let myCount = 0;
@@ -884,7 +904,7 @@ require_once '../../includes/header.php';
         }
 
         if(filteredData.length === 0) {
-            html = `<tr><td colspan="6" class="px-6 py-16 text-center text-gray-400 italic">No first timers found for this view.</td></tr>`;
+            html = `<tr><td colspan="8" class="px-6 py-16 text-center text-gray-400 italic">No first timers found for this view.</td></tr>`;
         } else {
             filteredData.forEach(v => {
                 const avatar = v.picture_path ? `<img src="${v.picture_path}" class="w-10 h-10 rounded-xl object-cover shadow-sm">` : `<div class="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center font-bold text-gray-400 border border-gray-200">${v.first_name[0]}</div>`;
@@ -893,12 +913,6 @@ require_once '../../includes/header.php';
                 if(v.is_born_again == 1) markers += `<span class="bg-green-50 text-green-700 px-2 py-0.5 rounded-md border border-green-100 text-[9px] font-bold">BA</span> `;
                 if(v.wants_to_join == 1) markers += `<span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md border border-blue-100 text-[9px] font-bold">JOIN</span> `;
                 if(v.visitation_preference === 'In-Person' || v.visitation_preference === 'Virtual') markers += `<span class="bg-red-50 text-red-700 px-2 py-0.5 rounded-md border border-red-100 text-[9px] font-bold">${v.visitation_preference.toUpperCase()}</span> `;
-
-                // Assignment Tracker
-                let assignedBadge = `<div class="mt-1 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-red-400 animate-pulse"></span><span class="text-[10px] text-gray-400 font-bold tracking-wide uppercase">Unassigned</span></div>`;
-                if(v.worker_fname) {
-                    assignedBadge = `<div class="mt-1 flex items-center gap-1.5"><svg class="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path></svg><span class="text-[10px] text-gray-600 font-bold uppercase tracking-wide">Assigned: ${v.worker_fname} ${v.worker_lname}</span></div>`;
-                }
 
                 // Smart Action Buttons
                 let actionBtn = '';
@@ -928,11 +942,52 @@ require_once '../../includes/header.php';
                 
                 const dateAdded = new Date(v.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                 
-                let notesHtml = `<button onclick='prepManageNotes(${JSON.stringify(v.secure_notes).replace(/'/g, "&#39;")}, ${v.followup_id}, "${v.first_name} ${v.last_name}")' class="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg> Manage Notes (${v.secure_notes ? v.secure_notes.length : 0})</button>`;
-                
-                if (!v.followup_id || v.followup_status === 'Unassigned') {
-                    notesHtml = `<span class="text-[10px] text-gray-400 italic">Assign to enable notes</span>`;
+                // Assigned To: current worker, plus anyone who held the follow-up before them.
+                const fullName = (f, l) => `${f || ''} ${l || ''}`.trim();
+                const currentWorker = fullName(v.worker_fname, v.worker_lname);
+                const earlierWorkers = (v.worker_history || []).filter(name => name !== currentWorker);
+                let assignedCell = `<span class="text-[10px] text-red-500 font-bold uppercase tracking-wide">Unassigned</span>`;
+                if (currentWorker) {
+                    assignedCell = `<div class="flex items-center gap-1.5"><svg class="w-3 h-3 text-blue-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path></svg><span class="text-xs font-bold text-gray-800">${embEsc(currentWorker)}</span></div>`;
+                    if (earlierWorkers.length) {
+                        assignedCell += `<p class="text-[10px] text-gray-400 mt-1">Earlier: ${embEsc(earlierWorkers.join(', '))}</p>`;
+                    }
                 }
+
+                // Notes: every note on this person (all follow-up cycles), shown inline on expand.
+                const notesArr = v.secure_notes || [];
+                const isOpen = expandedNotes.has(v.id);
+                const notesCell = v.followup_id
+                    ? `<button type="button" onclick="toggleNotesRow(${v.id})" class="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 inline-flex items-center gap-1.5 whitespace-nowrap"><span id="notes-caret-${v.id}" class="text-[10px]">${isOpen ? '▾' : '▸'}</span> Notes (${notesArr.length})</button>`
+                    : `<span class="text-[10px] text-gray-400 italic">Assign to enable notes</span>`;
+
+                const notesItems = notesArr.map(n => {
+                    let tags = '';
+                    try {
+                        tags = JSON.parse(n.visible_to || '[]')
+                            .filter(t => t !== 'All')
+                            .map(t => `<span class="bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded text-[9px] uppercase">${embEsc(String(t).replace('_', ' '))}</span>`)
+                            .join(' ');
+                    } catch (e) { tags = ''; }
+                    const when = n.created_at ? new Date(String(n.created_at).replace(' ', 'T')).toLocaleString() : '';
+                    const author = fullName(n.first_name, n.last_name) || 'Unknown author';
+                    const you = n.author_id == CURRENT_USER_ID ? ' <span class="text-[10px] text-blue-500 font-bold">(you)</span>' : '';
+                    return `<div class="bg-white p-3 rounded-xl border border-gray-100">
+                        <div class="flex justify-between items-start gap-3 mb-1.5">
+                            <div class="text-xs"><span class="font-bold text-gray-900">${embEsc(author)}</span>${you}<span class="text-[10px] text-gray-400 ml-2">${embEsc(when)}</span></div>
+                            <div class="flex gap-1 shrink-0 flex-wrap justify-end">${tags}</div>
+                        </div>
+                        <div class="text-sm text-gray-700 whitespace-pre-wrap">${embEsc(n.note_text || '')}</div>
+                    </div>`;
+                }).join('');
+
+                const notesRow = `
+                <tr id="notes-row-${v.id}" class="${isOpen ? '' : 'hidden'} bg-gray-50/60">
+                    <td colspan="8" class="px-6 py-4">
+                        <div class="space-y-2 max-h-96 overflow-y-auto custom-scrollbar pr-1">${notesItems || '<p class="text-xs text-gray-400 italic">No notes logged on this person yet.</p>'}</div>
+                        ${v.followup_id ? `<button type="button" onclick="openNotesFor(${v.id})" class="mt-3 text-xs font-bold text-white bg-gray-900 hover:bg-black px-4 py-2 rounded-lg shadow-sm">Add or edit notes</button>` : ''}
+                    </td>
+                </tr>`;
 
                 // Append the Notes column to your output string:
                 html += `
@@ -942,13 +997,14 @@ require_once '../../includes/header.php';
                         <div>
                             <p class="font-bold text-gray-900">${v.first_name} ${v.last_name}</p>
                             <p class="text-[10px] text-gray-400 uppercase tracking-wider">${v.spiritual_status ? v.spiritual_status.replace('_', ' ') : 'Member'}</p>
-                            ${assignedBadge}
                         </div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap"><span class="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-md border border-gray-200">${dateAdded}</span></td>
                     <td class="px-6 py-4">${markers || '<span class="text-[10px] text-gray-300">Pending Evaluation</span>'}</td>
                     <td class="px-6 py-4"><span class="text-[10px] uppercase tracking-wider font-bold ${statusColor}">${v.followup_status || 'Unassigned'}</span></td>
-                    <td class="px-6 py-4">${notesHtml}</td> <td class="px-6 py-4"><p class="text-xs font-bold text-gray-700">${v.phone || '-'}</p></td>
+                    <td class="px-6 py-4">${assignedCell}</td>
+                    <td class="px-6 py-4">${notesCell}</td>
+                    <td class="px-6 py-4"><p class="text-xs font-bold text-gray-700">${v.phone || '-'}</p></td>
                     <td class="px-6 py-4">
                         <div class="flex items-center justify-end gap-3">
                             <div class="flex border-r border-gray-200 pr-3 mr-1">${editLink}${callLink}${waLink}</div>
@@ -956,6 +1012,7 @@ require_once '../../includes/header.php';
                         </div>
                     </td>
                 </tr>`;
+                html += notesRow;
             });
         }
         $('#visitorsTableBody').html(html);
