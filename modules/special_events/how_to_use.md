@@ -481,8 +481,11 @@ filter, and the list. The status filter has a **Deleted** option of its own —
 deleted people keep the status they left with (Cancelled, or Removed if you
 also kept them out), so that is how you find them again.
 
-Tap anyone to open them. A 🎤 beside a name means they said they would like
-to sing; a 💛 means they would like a Sunday visit.
+Each person is a card showing their full name, phone number and gender, with
+their status chip on the right. Names wrap rather than shorten, so you always
+see the whole name. Tap a card to open the details, which include the
+registration code. A 🎤 on a card means they said they would like to sing; a
+💛 means they would like a Sunday visit.
 
 **What you can do with a person**
 

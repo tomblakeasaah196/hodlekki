@@ -203,31 +203,45 @@ function DangerMenu({ row, onDelete }) {
 // One person
 // --------------------------------------------------------------------------
 
+// The full name as typed at registration. Falls back to the short display name
+// ("Tom-Blake F.") only when the first/last fields are missing.
+function fullName(row) {
+    const full = [row.first_name, row.last_name].filter((p) => p && String(p).trim()).join(' ').trim();
+    return full || row.display_name || 'Guest';
+}
+
+// Mobile-first card: the full name wraps instead of truncating, and the
+// registration code moves into the expanded details to keep the card clean.
 function AttendeeRow({ row, onAct, onEdit, onDelete, onErase, expanded, onToggle }) {
     return html`
-        <li class="border-b border-gray-50 last:border-0">
-            <div class="py-3 flex flex-wrap items-center gap-3">
+        <li class="mb-3 last:mb-0 rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+            <div class="p-4 flex items-start gap-3">
                 <button type="button" onClick=${onToggle}
                     class="flex-1 min-w-0 text-left group"
                     aria-expanded=${expanded ? 'true' : 'false'}>
-                    <p class="font-semibold text-gray-900 group-hover:text-hodBlue truncate">
-                        ${row.display_name}
+                    <p class="font-semibold text-gray-900 group-hover:text-hodBlue break-words leading-snug">
+                        ${fullName(row)}
                         ${row.is_test ? html`<span class="ml-2 text-[10px] font-bold uppercase text-amber-600">test</span>` : null}
                     </p>
-                    <p class="text-xs text-gray-500 font-mono">${row.reg_code} · ${row.phone || 'no phone'}</p>
+                    <p class="mt-1 text-sm text-gray-600 font-mono break-all">${row.phone || 'no phone'}</p>
+                    ${row.gender ? html`<p class="mt-0.5 text-xs text-gray-500">${row.gender}</p>` : null}
                 </button>
 
-                <${StatusChip} status=${row.status} deleted=${row.deleted} />
+                <div class="flex flex-col items-end gap-1.5 shrink-0">
+                    <${StatusChip} status=${row.status} deleted=${row.deleted} />
 
-                ${row.is_member
-                    ? html`<span class="text-[11px] font-bold text-hodBlue bg-blue-50 px-2 py-0.5 rounded-full">Member</span>`
-                    : null}
-                ${row.karaoke_interest ? html`<span title="Wants to sing" aria-label="Wants to sing">🎤</span>` : null}
-                ${row.wants_visit ? html`<span title="Would like a Sunday visit" aria-label="Would like a Sunday visit">💛</span>` : null}
+                    <div class="flex items-center gap-1.5">
+                        ${row.is_member
+                            ? html`<span class="text-[11px] font-bold text-hodBlue bg-blue-50 px-2 py-0.5 rounded-full">Member</span>`
+                            : null}
+                        ${row.karaoke_interest ? html`<span title="Wants to sing" aria-label="Wants to sing">🎤</span>` : null}
+                        ${row.wants_visit ? html`<span title="Would like a Sunday visit" aria-label="Would like a Sunday visit">💛</span>` : null}
+                    </div>
+                </div>
             </div>
 
             ${expanded ? html`
-            <div class="pb-4 pl-1 pr-1 space-y-3">
+            <div class="px-4 pb-4 space-y-3">
                 <dl class="grid sm:grid-cols-3 gap-3 text-sm bg-gray-50 rounded-2xl p-4">
                     ${[
                         ['Registered', formatDateTime(row.created_at)],
@@ -238,6 +252,7 @@ function AttendeeRow({ row, onAct, onEdit, onDelete, onErase, expanded, onToggle
                         ['Gender', row.gender || '—'],
                         ['Consent', row.consent ? 'Given' : 'Not given'],
                         ['Opted out', row.opted_out ? 'Yes' : 'No'],
+                        ['Reg code', row.reg_code],
                         ['Invite code', row.ref_code],
                     ].concat(row.deleted_at ? [
                         ['Deleted', formatDateTime(row.deleted_at)],
