@@ -1,6 +1,7 @@
 <?php
 // /api/embrace_api.php
 require_once '../includes/db.php';
+require_once __DIR__ . '/../includes/embrace_helpers.php';
 header('Content-Type: application/json');
 
 // 1. Security Check & Session Start
@@ -88,49 +89,6 @@ function embrace_auto_checkin_today(PDO $pdo, int $visitorUserId, int $staffUser
         error_log('embrace_auto_checkin_today failed: ' . $e->getMessage());
         return 0;
     }
-}
-
-/**
- * Helper: Zero-Trust Notes Fetcher (Updated Patch)
- * Flat visibility architecture: Everyone sees everything, EXCEPT Pastor-only notes.
- */
-function getSecureNotes($pdo, $followup_id, $current_user_id, $assigned_worker_id) {
-    // 1. Determine if current user is a Pastor
-    $roleStmt = $pdo->prepare("SELECT roles.role_name FROM user_roles JOIN roles ON user_roles.role_id = roles.id WHERE user_roles.user_id = ?");
-    $roleStmt->execute([$current_user_id]);
-    $user_roles = $roleStmt->fetchAll(PDO::FETCH_COLUMN);
-    $is_pastor = in_array('Resident_Pastor', $user_roles) || in_array('Assoc_Pastor', $user_roles);
-
-    // 2. Fetch all notes for this followup
-    $notesStmt = $pdo->prepare("SELECT n.*, u.first_name, u.last_name FROM embrace_followup_notes n JOIN users u ON n.author_id = u.id WHERE n.followup_id = ? ORDER BY n.created_at ASC");
-    $notesStmt->execute([$followup_id]);
-    $all_notes = $notesStmt->fetchAll(PDO::FETCH_ASSOC);
-
-    $secure_notes = [];
-    foreach ($all_notes as $note) {
-        // Rule 1: Author always sees their own note
-        if ($note['author_id'] == $current_user_id) {
-            $secure_notes[] = $note;
-            continue;
-        }
-
-        $visibility = json_decode($note['visible_to'], true) ?? ['All'];
-        
-        // Rule 2: Determine if this note is strictly for Pastors only
-        // (i.e., it ONLY has 'Pastors' in the visibility array)
-        $is_pastor_only = (count($visibility) === 1 && in_array('Pastors', $visibility));
-
-        if ($is_pastor_only) {
-            // Only push if the current user is a pastor
-            if ($is_pastor) {
-                $secure_notes[] = $note;
-            }
-        } else {
-            // Rule 3: All other notes are public to the system
-            $secure_notes[] = $note;
-        }
-    }
-    return $secure_notes;
 }
 
 try {
@@ -311,10 +269,16 @@ try {
                 ORDER BY u.created_at DESC
             ");
             $visitors = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
+
+            // Every note logged on each person, across all their follow-up cycles.
+            $ids = array_column($visitors, 'id');
+            $notesByVisitor = embrace_notes_for_visitors($pdo, $ids);
+            $workersByVisitor = embrace_worker_history_for_visitors($pdo, $ids);
             foreach ($visitors as &$v) {
-                $v['secure_notes'] = $v['followup_id'] ? getSecureNotes($pdo, $v['followup_id'], $user_id, $v['assigned_worker_id']) : [];
+                $v['secure_notes'] = $notesByVisitor[(int) $v['id']] ?? [];
+                $v['worker_history'] = $workersByVisitor[(int) $v['id']] ?? [];
             }
+            unset($v);
 
             echo json_encode(['status' => 'success', 'data' => $visitors]);
             break;
@@ -336,9 +300,14 @@ try {
             ");
             $archived = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+            $ids = array_column($archived, 'id');
+            $notesByVisitor = embrace_notes_for_visitors($pdo, $ids);
+            $workersByVisitor = embrace_worker_history_for_visitors($pdo, $ids);
             foreach ($archived as &$a) {
-                $a['secure_notes'] = getSecureNotes($pdo, $a['followup_id'], $user_id, $a['assigned_worker_id']);
+                $a['secure_notes'] = $notesByVisitor[(int) $a['id']] ?? [];
+                $a['worker_history'] = $workersByVisitor[(int) $a['id']] ?? [];
             }
+            unset($a);
 
             echo json_encode(['status' => 'success', 'data' => $archived]);
             break;
@@ -519,100 +488,18 @@ try {
                 exit;
             }
 
-            require_once '../vendor/autoload.php';
-
-            $stmt = $pdo->prepare("
-                SELECT u.first_name, u.last_name, u.phone, u.email, u.gender, u.marital_status, 
-                       u.wedding_anniversary, u.physical_address, u.invitation_source, u.invited_by, 
-                       u.is_born_again, u.wants_to_join, u.visitation_preference, u.prayer_requests, u.created_at, u.comments,
-                       (SELECT status FROM embrace_followups WHERE visitor_id = u.id ORDER BY id DESC LIMIT 1) as followup_status
-                FROM users u
-                WHERE u.spiritual_status IN ('1st_Timer', '2nd_Timer', '3rd_Timer')
-                AND DATE(u.created_at) BETWEEN ? AND ?
-                ORDER BY u.created_at ASC
-            ");
-            $stmt->execute([$start_date, $end_date]);
-            $visitors = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-            $sheet = $spreadsheet->getActiveSheet();
-            $sheet->setTitle('First Timers Pipeline');
-
-            $headers = [
-                'S/N', 'First Name', 'Last Name', 'Phone', 'Email', 'Gender', 'Marital Status', 
-                'Anniversary', 'Physical Address', 'Source', 'Invited By Details', 'Born Again', 'Wants to Join', 
-                'Visitation Pref.', 'Prayer Requests', 'Comments', 'Follow-up Status', 'Date Added'
-            ];
-
-            $col = 'A';
-            foreach($headers as $header) {
-                $sheet->setCellValue($col . '1', $header);
-                $sheet->getStyle($col . '1')->getFont()->setBold(true)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color(\PhpOffice\PhpSpreadsheet\Style\Color::COLOR_WHITE));
-                $sheet->getStyle($col . '1')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('FF111827');
-                $sheet->getStyle($col . '1')->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
-                $col++;
+            try {
+                require_once __DIR__ . '/../includes/embrace_export_excel.php';
+                if (ob_get_length()) ob_end_clean();
+                embrace_export_stream_excel($pdo, $start_date, $end_date);
+            } catch (Throwable $e) {
+                error_log('Embrace Excel export error: ' . $e->getMessage());
+                http_response_code(500);
+                header('Content-Type: text/plain; charset=utf-8');
+                echo 'The Excel register could not be generated. Please try again or contact an administrator.';
             }
-
-            $row = 2;
-            $sn = 1;
-            foreach($visitors as $v) {
-                $sheet->setCellValue('A' . $row, $sn++);
-                $sheet->setCellValue('B' . $row, $v['first_name']);
-                $sheet->setCellValue('C' . $row, $v['last_name']);
-                $sheet->setCellValueExplicit('D' . $row, $v['phone'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet->setCellValue('E' . $row, $v['email']);
-                $sheet->setCellValue('F' . $row, $v['gender']);
-                $sheet->setCellValue('G' . $row, $v['marital_status']);
-                $sheet->setCellValue('H' . $row, $v['wedding_anniversary']);
-                $sheet->setCellValue('I' . $row, $v['physical_address']);
-                
-                $sheet->setCellValue('J' . $row, str_replace('_', ' ', $v['invitation_source']));
-                $sheet->setCellValue('K' . $row, $v['invited_by']);
-                $sheet->setCellValue('L' . $row, $v['is_born_again'] ? 'Yes' : 'No');
-                $sheet->setCellValue('M' . $row, $v['wants_to_join'] ? 'Yes' : 'No');
-                $sheet->setCellValue('N' . $row, $v['visitation_preference']);
-                
-                $sheet->setCellValue('O' . $row, $v['prayer_requests']);
-                $sheet->setCellValue('P' . $row, $v['comments']);
-                
-                $f_status = $v['followup_status'] ?? 'Unassigned';
-                $sheet->setCellValue('Q' . $row, $f_status);
-                
-                $date_added = date('Y-m-d', strtotime($v['created_at']));
-                $sheet->setCellValue('R' . $row, $date_added);
-                
-                $row++;
-            }
-
-            foreach(range('A', 'R') as $colID) {
-                $sheet->getColumnDimension($colID)->setAutoSize(true);
-            }
-
-            $lastCol = 'R';
-            $lastRow = $row - 1;
-            $styleArray = [
-                'borders' => [
-                    'allBorders' => [
-                        'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
-                        'color' => ['argb' => 'FFE5E7EB'],
-                    ],
-                ],
-            ];
-            $sheet->getStyle('A1:' . $lastCol . $lastRow)->applyFromArray($styleArray);
-            $sheet->freezePane('A2');
-
-            $filename = "Embrace_Pipeline_Report_{$start_date}_to_{$end_date}.xlsx";
-
-            if (ob_get_length()) ob_end_clean();
-
-            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            header('Content-Disposition: attachment;filename="' . $filename . '"');
-            header('Cache-Control: max-age=0');
-
-            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-            $writer->save('php://output');
             exit;
-            
+
         // =====================================================================================
         // ACTION 8: SAVE / EDIT NOTE (Zero-Trust Validation)
         // =====================================================================================
