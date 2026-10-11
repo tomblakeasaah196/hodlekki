@@ -95,7 +95,7 @@ require_once '../../includes/header.php';
             <h3 class="text-lg font-bold text-gray-800">Master Congregation Register</h3>
             <div class="flex items-center gap-3 w-full sm:w-auto">
                 <div class="relative w-full sm:w-72">
-                    <input type="text" id="searchRoster" placeholder="Search by name, phone..." class="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-hodBlue focus:border-transparent outline-none transition-all bg-white shadow-sm">
+                    <input type="text" id="searchRoster" placeholder="Search by name, phone, or who invited them..." class="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-hodBlue focus:border-transparent outline-none transition-all bg-white shadow-sm">
                     <svg class="w-5 h-5 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </div>
                 <button onclick="exportFilteredToExcel()" class="bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition flex items-center gap-2 shrink-0">
@@ -604,13 +604,20 @@ require_once '../../includes/header.php';
                             ? `<button onclick="pushToCharis(${u.id})" class="text-[10px] bg-red-100 hover:bg-red-600 hover:text-white text-red-700 px-2 py-1 rounded font-bold transition border border-red-200 whitespace-nowrap">Push to Charis</button>`
                             : '';
 
+                        // Inviter name, searchable but not shown on the row.
+                        // invited_by only holds a person's name when the source was
+                        // a church member (otherwise it's a platform/event name), so
+                        // we only index it for that case. Escaped for the attribute.
+                        const inviterName = (u.invitation_source === 'Church_Member') ? (u.invited_by || '') : '';
+                        const inviterAttr = inviterName.replace(/"/g, '&quot;');
+
                         // Avatar generation
-                        const avatarHtml = u.picture_path 
+                        const avatarHtml = u.picture_path
                             ? `<img src="${u.picture_path}" class="w-10 h-10 rounded-full object-cover border border-gray-200 shrink-0 shadow-sm" alt="Pic">` 
                             : `<div class="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">${u.first_name.charAt(0)}${u.last_name.charAt(0)}</div>`;
 
                         html += `
-                        <tr class="border-b border-gray-50 transition-colors ${rowClass}" data-tribe="${u.active_tribe || ''}" data-status="${u.attendance_status || ''}" data-growth="${u.spiritual_status || ''}" data-dept="${u.active_departments || ''}">
+                        <tr class="border-b border-gray-50 transition-colors ${rowClass}" data-tribe="${u.active_tribe || ''}" data-status="${u.attendance_status || ''}" data-growth="${u.spiritual_status || ''}" data-dept="${u.active_departments || ''}" data-invited-by="${inviterAttr}">
                             <td class="px-6 py-4 flex items-center gap-3">
                                 ${avatarHtml}
                                 <div>
@@ -932,7 +939,10 @@ require_once '../../includes/header.php';
 
         // 2. Filter raw data exactly like the UI
         const filteredData = masterRosterData.filter(u => {
-            const text = `${u.first_name} ${u.last_name} ${u.phone} ${u.email}`.toLowerCase();
+            // Mirror the on-screen search: include the inviter's name, but only
+            // when the source was a church member (same rule as the roster rows).
+            const inviter = (u.invitation_source === 'Church_Member') ? (u.invited_by || '') : '';
+            const text = `${u.first_name} ${u.last_name} ${u.phone} ${u.email} ${inviter}`.toLowerCase();
             const tribeData = (u.active_tribe || '').toLowerCase();
             const statusData = (u.attendance_status || '').toLowerCase();
             const growthData = (u.spiritual_status || '').toLowerCase();
@@ -1048,12 +1058,14 @@ require_once '../../includes/header.php';
                 if($(this).find('td').attr('colspan')) return; 
                 
                 const text = $(this).text().toLowerCase();
+                const invitedBy = ($(this).attr('data-invited-by') || '').toLowerCase();
                 const tribeData = ($(this).data('tribe') || '').toLowerCase();
                 const statusData = ($(this).data('status') || '').toLowerCase();
                 const growthData = ($(this).data('growth') || '').toLowerCase();
                 const deptData = ($(this).data('dept') || '').toLowerCase();
 
-                const mSearch = text.indexOf(searchVal) > -1;
+                // Combined search also matches the name of whoever invited them.
+                const mSearch = (text + ' ' + invitedBy).indexOf(searchVal) > -1;
                 const mTribe = tribeVal === '' || tribeData.indexOf(tribeVal) > -1;
                 const mStatus = statusVal === '' || statusData === statusVal;
                 const mGrowth = growthVal === '' || growthData.indexOf(growthVal) > -1;
