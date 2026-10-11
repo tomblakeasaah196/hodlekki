@@ -95,6 +95,7 @@ try {
             $rosterStmt = $pdo->query("
                 SELECT u.id, u.first_name, u.last_name, u.phone, u.gender, u.spiritual_status, u.attendance_status, u.picture_path, u.updated_at,
                        u.physical_address, u.marital_status, u.wedding_anniversary, u.comments, u.new_church_name, u.dob, u.email,
+                       u.invitation_source, u.invited_by,
                        (SELECT GROUP_CONCAT(d.name SEPARATOR ', ') 
                         FROM user_departments ud 
                         JOIN departments d ON ud.department_id = d.id 
