@@ -414,6 +414,50 @@ function charis_insert_welfare_note(
     return (int) $pdo->lastInsertId();
 }
 
+/**
+ * Tidies a welfare note a worker typed or dictated into a short record the
+ * next person on the case can pick up from. reach_gemini() is the shared
+ * Gemini caller (via assimilation_helpers.php); it returns null with no key,
+ * so this degrades to "not available" and the worker saves their own words.
+ *
+ * $kind 'resolve' is the closing summary, which leads with the outcome.
+ * Same guard rails as assim_clean_notes(): record only what was said, no
+ * judgement, nothing invented. Kept deliberately short — these notes are read
+ * on phones by whoever takes the case next.
+ */
+function charis_clean_welfare_notes(string $raw, string $kind = 'update'): ?string
+{
+    $raw = trim($raw);
+    if ($raw === '' || !function_exists('reach_gemini')) {
+        return null;
+    }
+    $purpose = $kind === 'resolve'
+        ? "This note CLOSES the case. Lead with the outcome (back in church, relocated, attends another church, cannot be reached), then why, in one line each.\n"
+        : "This note updates an open case. Cover, only where the notes mention them: how they were reached and how they are; the reason for their absence; any need or prayer point; what was agreed and the next step, with its date.\n";
+    $prompt = "You tidy up welfare notes written by a Charis (welfare) worker at Household of David Lekki Centre after contacting a church member who has been absent.\n"
+        . "The notes may be dictated by voice: fix obvious speech-to-text slips, drop filler words and repetition.\n"
+        . $purpose
+        . "Write it so another worker who has never met this person understands where the case stands at a glance.\n"
+        . "Rules you must follow:\n"
+        . "- Be concise: at most 4 short bullet points, each starting with \"- \", about 60 words in total. If the notes are a sentence or two, return one or two plain sentences instead of bullets.\n"
+        . "- Never make it longer than the original.\n"
+        . "- Keep a warm, respectful, pastoral tone. Never add judgement, blame, diagnosis or opinion about the person, their faith or their choices.\n"
+        . "- Keep every name, place, date, amount and phone number exactly as written.\n"
+        . "- Invent nothing. If something is not in the notes, leave it out — never guess a reason for their absence.\n"
+        . "- Plain text only: no headings, no bold, no preamble.\n\n"
+        . "Notes:\n" . $raw;
+
+    $out = reach_gemini($prompt, 0.2);
+    if ($out === null) {
+        return null;
+    }
+    $out = trim(str_replace(['**', '__'], '', strip_tags($out)));
+    if ($out === '') {
+        return null;
+    }
+    return function_exists('mb_substr') ? mb_substr($out, 0, 1500) : substr($out, 0, 1500);
+}
+
 function charis_parse_date(string $value): ?DateTimeImmutable
 {
     $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);

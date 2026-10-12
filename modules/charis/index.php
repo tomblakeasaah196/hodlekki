@@ -164,6 +164,11 @@ require_once '../../includes/header.php';
                     <button type="button" role="tab" aria-selected="false" data-welfare-tab="manual_flags" onclick="toggleWelfareTab('manual_flags')" id="tabWelManualFlags" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Manual Flags</button>
                     <button type="button" role="tab" aria-selected="false" data-welfare-tab="archive" onclick="toggleWelfareTab('archive')" id="tabWelArchive" class="welfare-tab-button px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Archive</button>
                 </div>
+                <div class="relative">
+                    <label for="welfareSearchDesktop" class="sr-only">Search AWOL Monitoring by name or phone</label>
+                    <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"></path></svg>
+                    <input type="search" id="welfareSearchDesktop" oninput="setWelfareSearch(this.value)" autocomplete="off" enterkeyhint="search" placeholder="Search by name or phone…" class="welfare-search w-full pl-9 pr-3 py-2.5 bg-white border border-orange-100 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all">
+                </div>
             </div>
             <div class="p-4 flex-1 overflow-y-auto custom-scrollbar bg-gray-50/30">
                 <div id="desktopAwolPillsContainer" class="awol-rule-card hidden mb-3.5 bg-white border border-orange-100 rounded-2xl shadow-sm">
@@ -465,19 +470,27 @@ require_once '../../includes/header.php';
                 <div class="px-5 pb-5 space-y-4 text-sm text-gray-700 leading-relaxed border-t border-orange-100">
                     <div class="bg-red-50 border border-red-200 rounded-xl p-4 mt-4">
                         <p class="font-black text-red-700 text-xs uppercase tracking-wider mb-2">⚠ How the AWOL List Works</p>
-                        <p>Members appear on the <strong>AWOL list</strong> automatically when they miss <em>N or more qualifying services</em> within the focus period (rolling calendar weeks) defined by leadership in the AWOL configuration rule. Simply contacting them or writing a note does not remove them from the rule calculation. To resolve a case, do one of the following:</p>
+                        <p>The list counts <strong>Sundays missed in a row</strong> since the member was last in church — not a total over a period. When the count reaches the number leadership set (3 by default), the member appears on the <strong>AWOL list</strong> automatically.</p>
                         <ul class="list-disc pl-5 mt-2 space-y-1">
-                            <li><strong>Click "Manage Case" → Choose a Status → Click "Resolve &amp; Close Case"</strong> — this marks the assignment Resolved and removes the case from active follow-up.</li>
-                            <li><strong>Update Attendance Status</strong> to <code class="bg-red-100 px-1 rounded">Relocated</code>, <code class="bg-red-100 px-1 rounded">Attends Another Church</code>, or <code class="bg-red-100 px-1 rounded">Unknown</code> — these exclude the person from future AWOL calculations.</li>
+                            <li><strong>Any attendance resets the count to zero</strong> — Sunday or midweek. Absences before their last visit never count.</li>
+                            <li><strong>Missing midweek never adds to the count.</strong> Many members travel far and miss midweek for work, so only Sunday absence flags anyone.</li>
+                            <li><strong>A Sunday nobody attended is skipped</strong> (it is treated as a service that did not hold), so it never counts against anyone.</li>
+                            <li><strong>New members</strong> are counted from their registration date, so they are not flagged for Sundays before they joined.</li>
+                            <li>Someone away longer than the &ldquo;Archive after&rdquo; weeks (12 by default) is marked <strong>Dormant</strong>, so recent cases stand out.</li>
+                        </ul>
+                        <p class="mt-3">Calling someone or writing a note does not take them off the list. A case closes in one of these ways:</p>
+                        <ul class="list-disc pl-5 mt-2 space-y-1">
+                            <li><strong>They come back to church.</strong> The case closes by itself and a system note is added to the record. Nothing for you to do.</li>
+                            <li><strong>Manage Case &rarr; choose a Final Status &rarr; &ldquo;Resolve &amp; Close Case&rdquo;.</strong> <code class="bg-red-100 px-1 rounded">Relocated</code> or <code class="bg-red-100 px-1 rounded">Attends Another Church</code> takes them off the AWOL list for good. <code class="bg-red-100 px-1 rounded">Active</code> and <code class="bg-red-100 px-1 rounded">Unknown</code> close this case but keep them monitored &mdash; &ldquo;Unknown&rdquo; means hard to reach, not gone.</li>
                         </ul>
                     </div>
 
                     <div class="space-y-3">
                         <p class="font-bold text-gray-900">Step-by-step: How to handle an AWOL case</p>
-                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">1</span><p><strong>Open AWOL Monitoring, then check "My Cases" or "AWOL List".</strong> Authorized leadership can click "Change AWOL List" to adjust missed services, focus period, service types, and spiritual statuses at any time.</p></div>
+                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">1</span><p><strong>Open AWOL Monitoring, then check "My Cases" or "AWOL List".</strong> Type a name (first, last or both, in any order) or part of a phone number into the search box to find someone quickly — it filters the view you are on and points you to any other view where they appear. Authorized leadership can click "Change AWOL List" to set how many Sundays in a row flag someone, when a case becomes Dormant, which services count, and which spiritual statuses are watched.</p></div>
                         <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">2</span><p><strong>Click "Manage Case"</strong>. Use the Call or WhatsApp buttons to contact the member directly from the modal.</p></div>
-                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">3</span><p><strong>Fill in your findings</strong> — record notes securely with optional Pastors-Only visibility.</p></div>
-                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">4</span><p><strong>Select the final Attendance Status</strong>: Active (re-engaged), Unknown, Relocated, or Attends Another Church.</p></div>
+                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">3</span><p><strong>Fill in your findings</strong> — record notes securely with optional Pastors-Only visibility. Tap the <strong>mic</strong> to speak instead of typing (tap it again to stop; works best in Chrome), then <strong>"Tidy with AI"</strong> to turn it into a short note the next worker can follow. Check the tidied version and choose "Use this" or "Keep mine" — nothing is saved until you press Save or Resolve.</p></div>
+                        <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">4</span><p><strong>Select the Final Status</strong>: Active (re-engaged), Unknown (cannot be reached — stays monitored), Relocated, or Attends Another Church (both leave the AWOL list for good).</p></div>
                         <div class="flex gap-3 items-start"><span class="bg-orange-100 text-orange-700 font-black text-xs rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">5</span><p><strong>Click "Resolve &amp; Close Case"</strong>. The resolved case is saved to the searchable Archive with a full timestamp and note trail.</p></div>
                     </div>
 
@@ -586,6 +599,8 @@ $.ajaxSetup({
 let globalWorkers = [], globalMembers = [], globalEvents = {};
 let barChartInstance = null, pieChartInstance = null;
 let currentWelfareTab = 'my_cases';
+let welfareSearchTerm = '';
+let welfareArchiveData = null;
 let currentLogisticsType = 'upcoming';
 let currentTaskEventId = null;
 
@@ -664,6 +679,7 @@ function openModal(id) {
 function closeModal(id) {
     const m = document.getElementById(id);
     if(!m) return;
+    stopDictation();
     m.classList.add('opacity-0');
     m.querySelector('.transform')?.classList.add('scale-95');
     setTimeout(() => {
@@ -1050,18 +1066,73 @@ function toggleWelfareTab(tab) {
     }
 }
 
-function renderWelfareList() {
-    let data = window.welfareData || [];
-    if (currentWelfareTab === 'my_cases') {
-        data = data.filter(w => w.worker_id == window.loggedInUserId && w.assignment_status === 'Assigned');
-    } else if (currentWelfareTab === 'awol_list') {
-        data = data.filter(w => w.alert_type === 'AWOL');
-    } else if (currentWelfareTab === 'manual_flags') {
-        data = data.filter(w => w.alert_type === 'Manual_Check');
+// ── Search ────────────────────────────────────────────────
+// Filters whichever view is open, by name (any order, accents ignored) or by
+// a run of phone digits. The two search boxes (side panel and modal) share
+// one term so switching between them never loses what was typed.
+const WELFARE_TAB_LABELS = { my_cases: 'My Cases', awol_list: 'AWOL List', manual_flags: 'Manual Flags', archive: 'Archive' };
+
+function welfareSearchKey(s) {
+    return String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+}
+function welfareMatchesSearch(row) {
+    const q = welfareSearchKey(welfareSearchTerm);
+    if (!q) return true;
+    if (!/[a-z]/.test(q)) {
+        const digits = q.replace(/\D/g, '');
+        if (digits.length >= 3) return String(row.phone || '').replace(/\D/g, '').includes(digits);
     }
+    const name = welfareSearchKey(`${row.first_name || ''} ${row.last_name || ''}`);
+    return q.split(' ').every(part => name.includes(part));
+}
+function welfareRowsForTab(tab) {
+    const data = window.welfareData || [];
+    if (tab === 'my_cases') return data.filter(w => w.worker_id == window.loggedInUserId && w.assignment_status === 'Assigned');
+    if (tab === 'awol_list') return data.filter(w => w.alert_type === 'AWOL');
+    if (tab === 'manual_flags') return data.filter(w => w.alert_type === 'Manual_Check');
+    return data;
+}
+function setWelfareSearch(value) {
+    welfareSearchTerm = String(value || '');
+    document.querySelectorAll('.welfare-search').forEach(el => { if (el.value !== welfareSearchTerm) el.value = welfareSearchTerm; });
+    if (currentWelfareTab === 'archive') {
+        if (welfareArchiveData) renderWelfareArchive();
+    } else {
+        renderWelfareList();
+    }
+}
+// Shown when a search finds nobody in the open view: points at the other
+// views where that name does appear, so nobody has to tab-hop to find them.
+function welfareNoMatchHtml() {
+    const elsewhere = ['my_cases', 'awol_list', 'manual_flags', 'archive']
+        .filter(tab => tab !== currentWelfareTab)
+        .map(tab => {
+            const rows = tab === 'archive' ? welfareArchiveData : welfareRowsForTab(tab);
+            return { tab, count: Array.isArray(rows) ? rows.filter(welfareMatchesSearch).length : 0 };
+        })
+        .filter(x => x.count > 0);
+    const links = elsewhere.map(x => `<button type="button" onclick="toggleWelfareTab('${x.tab}')" class="text-[11px] font-bold text-orange-700 bg-orange-50 border border-orange-200 hover:bg-orange-100 px-3 py-1.5 rounded-lg">${x.count} in ${WELFARE_TAB_LABELS[x.tab]}</button>`).join('');
+    return `<li class="text-center py-10 px-4">
+        <p class="text-sm text-gray-500">Nobody matching “${htmlEscape(welfareSearchTerm.trim())}” in ${WELFARE_TAB_LABELS[currentWelfareTab] || 'this view'}.</p>
+        ${links ? `<div class="mt-3 flex flex-wrap justify-center gap-2">${links}</div>` : ''}
+        <button type="button" onclick="setWelfareSearch('')" class="mt-3 text-[11px] font-bold text-gray-400 hover:text-hodBlue underline">Clear search</button>
+    </li>`;
+}
+
+function renderWelfareList() {
+    // A dashboard reload while the Archive is open must not paint the live
+    // alerts over it.
+    if (currentWelfareTab === 'archive') {
+        if (welfareArchiveData) renderWelfareArchive();
+        return;
+    }
+    const tabRows = welfareRowsForTab(currentWelfareTab);
+    const data = tabRows.filter(welfareMatchesSearch);
 
     let html = '';
-    if (!data.length) {
+    if (tabRows.length && !data.length) {
+        html = welfareNoMatchHtml();
+    } else if (!data.length) {
         if (currentWelfareTab === 'awol_list' && (window.qualifyingServicesCount || 0) === 0) {
             html = `<li class="text-center py-10 px-4 bg-white border border-gray-100 rounded-2xl shadow-sm">
                 <div class="w-10 h-10 mx-auto mb-2 text-gray-400 bg-gray-50 rounded-full flex items-center justify-center">
@@ -1241,6 +1312,7 @@ function resetCharisNoteForm() {
     $('#saveCharisNoteBtn').text('Save Note');
     $('#cancelEditCharisNoteBtn').addClass('hidden');
     $('#cb_charis_pastor_only').prop('checked', false);
+    resetDictationUi('charis_note_text_input');
 }
 
 // Finally, add this inside your $(document).ready() block:
@@ -1251,31 +1323,11 @@ function loadWelfareArchive() {
     
     $.getJSON(API_URL, { action: 'fetch_welfare_archive' }, res => {
         if(res.status === 'success') {
-            let html = '';
-            if (res.data.length === 0) {
-                html = '<li class="text-center py-12 text-gray-400 text-sm italic">No resolved archives found.</li>';
-            } else {
-                res.data.forEach(a => {
-                    let formattedNotes = (a.secure_notes || []).map(n => `<div class="mb-2 bg-white p-2.5 rounded-lg border border-gray-100 shadow-sm"><span class="font-bold text-gray-800 text-[10px] uppercase tracking-wider">${htmlEscape(n.author_display_name || `${n.first_name || ''} ${n.last_name || ''}`.trim() || 'Unknown author')}:</span> <span class="text-gray-600 text-[11px] whitespace-pre-wrap ml-1">${htmlEscape(n.note_text)}</span></div>`).join('');
-                    if(!formattedNotes) formattedNotes = '<span class="text-[10px] text-gray-400 italic">No accessible notes found.</span>';
-
-                    const archiveDate = parseServerDate(a.archive_date);
-                    const archiveDateDisplay = archiveDate ? archiveDate.toLocaleDateString() : 'Unknown Date';
-
-                    html += `<li class="flex flex-col p-4 bg-gray-50/50 border border-gray-200 rounded-2xl shadow-sm gap-2">
-                        <div class="flex justify-between items-start gap-2 border-b border-gray-200 pb-3">
-                            <div class="truncate"><p class="text-sm font-bold text-gray-900 truncate">${htmlEscape(a.first_name)} ${htmlEscape(a.last_name)}</p><p class="text-[10px] text-gray-500 mt-0.5 truncate">${htmlEscape(a.phone||'')} • Resolved: ${archiveDateDisplay}</p></div>
-                            <span class="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold border border-green-200 uppercase shrink-0">Resolved</span>
-                        </div>
-                        <div class="text-[10px] text-gray-500 mb-2">Worker Assigned: <span class="font-bold text-hodBlue">${htmlEscape(a.worker_fname||'Unassigned')}</span></div>
-                        <div class="mt-1">${formattedNotes}</div>
-                    </li>`;
-                });
-            }
-            $('.welfare-list').html(html);
+            welfareArchiveData = Array.isArray(res.data) ? res.data : [];
+            if (currentWelfareTab === 'archive') renderWelfareArchive();
         } else {
             // Failsafe: Shows the backend error message instead of hanging
-            $('.welfare-list').html(`<li class="text-center py-10 text-red-500 font-bold text-sm">Error: ${res.message}</li>`);
+            $('.welfare-list').html(`<li class="text-center py-10 text-red-500 font-bold text-sm">Error: ${htmlEscape(res.message)}</li>`);
         }
     }).fail(() => {
         // Failsafe: Catches 500 fatal server crashes
@@ -1283,9 +1335,40 @@ function loadWelfareArchive() {
     });
 }
 
+function renderWelfareArchive() {
+    const all = welfareArchiveData || [];
+    const rows = all.filter(welfareMatchesSearch);
+    let html = '';
+    if (all.length && !rows.length) {
+        html = welfareNoMatchHtml();
+    } else if (!rows.length) {
+        html = '<li class="text-center py-12 text-gray-400 text-sm italic">No resolved archives found.</li>';
+    } else {
+        rows.forEach(a => {
+            let formattedNotes = (a.secure_notes || []).map(n => `<div class="mb-2 bg-white p-2.5 rounded-lg border border-gray-100 shadow-sm"><span class="font-bold text-gray-800 text-[10px] uppercase tracking-wider">${htmlEscape(n.author_display_name || `${n.first_name || ''} ${n.last_name || ''}`.trim() || 'Unknown author')}:</span> <span class="text-gray-600 text-[11px] whitespace-pre-wrap ml-1">${htmlEscape(n.note_text)}</span></div>`).join('');
+            if(!formattedNotes) formattedNotes = '<span class="text-[10px] text-gray-400 italic">No accessible notes found.</span>';
+
+            const archiveDate = parseServerDate(a.archive_date);
+            const archiveDateDisplay = archiveDate ? archiveDate.toLocaleDateString() : 'Unknown Date';
+
+            html += `<li class="flex flex-col p-4 bg-gray-50/50 border border-gray-200 rounded-2xl shadow-sm gap-2">
+                <div class="flex justify-between items-start gap-2 border-b border-gray-200 pb-3">
+                    <div class="truncate"><p class="text-sm font-bold text-gray-900 truncate">${htmlEscape(a.first_name)} ${htmlEscape(a.last_name)}</p><p class="text-[10px] text-gray-500 mt-0.5 truncate">${htmlEscape(a.phone||'')} • Resolved: ${archiveDateDisplay}</p></div>
+                    <span class="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold border border-green-200 uppercase shrink-0">Resolved</span>
+                </div>
+                <div class="text-[10px] text-gray-500 mb-2">Worker Assigned: <span class="font-bold text-hodBlue">${htmlEscape(a.worker_fname||'Unassigned')}</span></div>
+                <div class="mt-1">${formattedNotes}</div>
+            </li>`;
+        });
+    }
+    $('.welfare-list').html(html);
+}
+
 function openManageWelfareModal(uid, fid, name, phone) {
     document.getElementById('manageWelfareForm').reset();
     document.getElementById('resolveWelfareForm').reset();
+    resetDictationUi('welfareComments');
+    resetDictationUi('resolveWelfareComments');
     $('#welfareMemberName').text(name);
     $('#welfareUserId').val(uid); $('#welfareFollowupId').val(fid);
     $('#resolveWelfareUserId').val(uid); $('#resolveWelfareFollowupId').val(fid);
@@ -1315,6 +1398,101 @@ function requestWelfareCase(tid, fid) {
 function approveWelfareCase(id) {
     lockScreenAction();
     $.post(API_URL,{action:'approve_welfare_case',assignment_id:id},function(res){unlockScreenAction();showToast(res.message,res.status);if(res.status==='success')loadDashboardData();},'json');
+}
+
+// ═══════════════════════════════════════════════════════════
+// DICTATION + AI TIDY-UP (welfare notes)
+// ═══════════════════════════════════════════════════════════
+// Same pattern as the Assimilation follow-up sheet: the browser's own speech
+// recognition fills the textarea, and "Tidy with AI" asks Gemini for a short
+// version the worker reviews before it replaces their words. Nothing is
+// saved until they press the form's own Save / Resolve button.
+let dictation = null, dictationTarget = null;
+
+function dictationUi(target, on) {
+    $(`[data-dictate-hint="${target}"]`).toggleClass('hidden', !on);
+    $(`[data-dictate-mic="${target}"]`)
+        .toggleClass('bg-hodRed text-white animate-pulse', on)
+        .toggleClass('bg-hodBlue/10 text-hodBlue', !on)
+        .attr('aria-pressed', on ? 'true' : 'false');
+}
+function stopDictation() {
+    if (dictation && dictationTarget) {
+        try { dictation.stop(); } catch (e) {}
+    }
+}
+function toggleDictation(target) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { showToast('Voice typing isn’t supported on this browser — try Chrome, or type instead.', 'warn'); return; }
+    if (dictationTarget === target) { stopDictation(); return; }
+    if (dictation) {
+        // Moving to another box: drop the old session at once so the new one can start.
+        const prevTarget = dictationTarget;
+        try { dictation.abort(); } catch (e) {}
+        dictation = null; dictationTarget = null;
+        dictationUi(prevTarget, false);
+    }
+
+    const r = new SR();
+    r.lang = 'en-NG';
+    r.interimResults = false;
+    r.continuous = true;
+    r.onresult = (evt) => {
+        let text = '';
+        for (let i = evt.resultIndex; i < evt.results.length; i++) {
+            if (evt.results[i].isFinal) text += evt.results[i][0].transcript;
+        }
+        text = text.trim();
+        if (!text) return;
+        const $f = $('#' + target);
+        const prev = String($f.val() || '').replace(/\s*$/, '');
+        $f.val(prev ? prev + ' ' + text : text);
+    };
+    r.onend = () => {
+        if (dictation === r) { dictation = null; dictationTarget = null; }
+        dictationUi(target, false);
+    };
+    r.onerror = (evt) => {
+        if (evt && evt.error === 'no-speech') return;
+        showToast(evt && evt.error === 'not-allowed'
+            ? 'Microphone is blocked — allow it in your browser settings, or type instead.'
+            : 'Microphone problem — type instead.', 'warn');
+    };
+    try {
+        r.start();
+        dictation = r; dictationTarget = target;
+        $(`[data-dictate-review="${target}"]`).addClass('hidden');
+        dictationUi(target, true);
+    } catch (e) {
+        showToast('Microphone is blocked — type instead.', 'error');
+    }
+}
+function resetDictationUi(target) {
+    if (dictationTarget === target) stopDictation();
+    dictationUi(target, false);
+    $(`[data-dictate-review="${target}"]`).addClass('hidden').removeData('clean');
+}
+function cleanWelfareNotes(target, kind) {
+    stopDictation();
+    const notes = String($('#' + target).val() || '').trim();
+    if (!notes) { showToast('Write or dictate the notes first.', 'warn'); $('#' + target).trigger('focus'); return; }
+    const $b = $(`[data-dictate-clean="${target}"]`).prop('disabled', true).text('Tidying…');
+    $.post(API_URL, { action: 'clean_welfare_notes', notes: notes, kind: kind || 'update' }, res => {
+        if (res.status !== 'success') { showToast(res.message, 'warn'); return; }
+        const $box = $(`[data-dictate-review="${target}"]`);
+        $box.find('[data-dictate-clean-text]').text(res.data.notes_clean);
+        $box.data('clean', res.data.notes_clean).removeClass('hidden');
+    }, 'json').fail(() => showToast('Network problem — your notes are safe.', 'error'))
+      .always(() => $b.prop('disabled', false).text('Tidy with AI'));
+}
+function keepCleanNotes(target) {
+    const $box = $(`[data-dictate-review="${target}"]`);
+    const clean = $box.data('clean');
+    if (clean) $('#' + target).val(clean);
+    $box.addClass('hidden').removeData('clean');
+}
+function discardCleanNotes(target) {
+    $(`[data-dictate-review="${target}"]`).addClass('hidden').removeData('clean');
 }
 
 // ═══════════════════════════════════════════════════════════
