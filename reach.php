@@ -136,8 +136,10 @@ if ($campaign) {
             *, *::before, *::after { animation: none !important; transition: none !important; }
         }
     </style>
+    <?php require_once __DIR__ . '/includes/pwa_head.php'; ?>
 </head>
 <body class="bg-hodInk font-sans antialiased text-gray-800 overflow-x-hidden">
+<?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
 
     <div class="fixed inset-0 z-0" aria-hidden="true">
         <img src="<?= $e($bg_image) ?>" alt="" class="w-full h-full object-cover object-[center_30%] opacity-60">

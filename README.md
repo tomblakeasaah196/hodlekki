@@ -79,6 +79,27 @@ The internal ERP is organised as one directory per module under
   `?campaign=<ids>`.
 - `contact_extractor` — bulk import of contacts from pasted text.
 
+**Installable app (PWA) & push notifications**
+- The site installs to a phone's home screen as **HOD Lekki**: Android
+  shows a one-tap install banner, iPhone gets a guided Add to Home Screen
+  sheet (Safari offers no install API), and both get a branded launch
+  screen, an offline page and safe-area layout.
+- **Every row written to `system_notifications` also arrives as a push
+  notification**, with no change to the ~60 places that write one. A cursor
+  in `push_config` is fanned out to `push_queue`, encrypted per device
+  (VAPID + RFC 8291, pure PHP on `ext-openssl` — no Composer package), and
+  posted in parallel. `includes/db.php` sends them after the response has
+  already gone to the browser, so delivery is immediate and no page is
+  slower; `cron/push_worker.php` is the every-minute safety net.
+- Members control it from the gear icon in the notification bell: alerts
+  on/off per device, a test alert, and quiet hours (security alerts always
+  come through).
+- `alerts` — **Alerts Centre** (Super Admin / Resident Pastor). Delivery
+  health, device counts, failures by reason, the two kill switches, and a
+  broadcast composer that reaches everyone, a department, a role or a region.
+  It always shows how many people a broadcast reaches before it will send.
+  Setup and troubleshooting: [`docs/pwa_push.md`](docs/pwa_push.md).
+
 ## Tech stack
 
 - **Runtime:** PHP 8.3 (cPanel `ea-php83`).
@@ -162,6 +183,7 @@ GitHub Secrets / Variables), and rollback instructions live in
 0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/reach_lost_souls.php >/dev/null 2>&1
 15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/assimilation_watchlists.php >/dev/null 2>&1
 */5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/special_events.php >/dev/null 2>&1
+* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php >/dev/null 2>&1
 ```
 
 `sms_queue_worker.php` sends queued SMS for ~55 s (about one per second),
@@ -223,6 +245,9 @@ the untracked `.env` file.
 | `SMS_VAULT_KEY`    | 64-hex AES-256-GCM key for the SMS Studio vault.     |
 | `SMS_WEBHOOK_SECRET` | Shared secret for BulkSMS delivery callbacks (`api/sms_webhook.php?token=…`). Optional; without it the worker polls for delivery reports. |
 | `GEOAPIFY_API_KEY` | Client-side address-autocomplete key (domain-lock in the Geoapify dashboard). |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push identity (`php bin/generate_vapid_keys.php`). Optional — a pair is generated into `push_config` on first use. **Rotating them invalidates every subscription.** |
+| `VAPID_SUBJECT`    | `mailto:` or `https:` contact a push service can reach (RFC 8292). |
+| `SITE_URL`         | Absolute origin, e.g. `https://hodlc.lpc.cm`. Optional; learned from the first web request. |
 
 
 ### Special Events (`se_*`)
@@ -249,14 +274,19 @@ api/            JSON endpoints, one file per module (auth_api.php, ...).
 assets/         Static CSS / JS / images shipped to the browser.
 auth/           Login, logout, first-time password setup.
 cron/           CLI jobs (sms_queue_worker.php, reach_lost_souls.php 07:00,
-                assimilation_watchlists.php 07:15, special_events.php */5).
+                assimilation_watchlists.php 07:15, special_events.php */5,
+                push_worker.php every minute).
 includes/       Shared PHP: db.php, header.php, functions.php, PDF helpers,
-                sms_functions.php, sms_vault_key.php.
+                sms_functions.php, sms_vault_key.php, push_*.php, pwa_*.php.
 modules/        One folder per ERP module; each has index.php as the view.
 uploads/        Runtime member/media uploads (git-ignored).
 assets/uploads/ Public event banners and minister photos (git-ignored).
+assets/pwa/     Generated home-screen icons and iOS launch images (committed).
 vendor/         Composer dependencies (git-ignored).
 ```
+
+`manifest.php`, `sw.js` and `offline.html` at the root are the installable
+app: the manifest, the service worker (root scope) and the offline fallback.
 
 Top-level PHP files (`index.php`, `connect.php`, `register.php`,
 `sermons.php`, `testimonies.php`, `verify.php`, `parent_portal.php`,
@@ -284,8 +314,24 @@ before a PR:
 
 ```bash
 php tests/security_helpers_test.php      # password policy, device/IP parsing
+php tests/pwa/run.php                    # Web Push crypto (RFC 8291 vectors), PWA wiring
 python3 tests/modal_contract_test.py     # shared modal contract
 python3 tests/php_structure_check.py .   # brace/quote sanity when php is absent
+```
+
+The push fan-out has its own suite that needs a real database (run it on
+both engines — the production one is unconfirmed):
+
+```bash
+php tests/pwa/integration/run.php --host=127.0.0.1 --user=root --pass=root --db=push_it
+```
+
+The PWA's JavaScript is not bundled, so a syntax error ships as a blank
+surface. Parse it before pushing:
+
+```bash
+node --experimental-default-type=module --check assets/js/pwa.js
+node --experimental-default-type=module --check sw.js
 ```
 
 CI additionally runs `php -l` over the whole tree plus a secret sweep.

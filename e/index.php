@@ -295,8 +295,20 @@ function se_render_shell(
 <script type="importmap" nonce="<?= se_h($nonce) ?>">
 <?= se_json_for_html(se_import_map()) ?>
 </script>
+<?php
+// The installable app. $pwaQuiet keeps the manifest, the icons, the service
+// worker and push delivery but drops every interruption: no install banner
+// over a registration form, no opt-in sheet over a host console, and no
+// pull-to-refresh, which would otherwise turn a swipe during a game into a
+// page reload. $pwaNonce is required — §19.7's CSP has no 'unsafe-inline',
+// so an unnonced <style> or <script> is dropped without a word.
+$pwaNonce = $nonce;
+$pwaQuiet = true;
+require_once __DIR__ . '/../includes/pwa_head.php';
+?>
 </head>
 <body>
+<?php require_once __DIR__ . '/../includes/pwa_boot.php'; ?>
 <a class="se-skip" href="#se-main">Skip to content</a>
 
 <?php if ($isPreview): ?>
@@ -886,8 +898,20 @@ function se_render_hub(PDO $pdo): void
 <link rel="stylesheet" href="/assets/se/css/se.css">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <style nonce="<?= se_h($nonce) ?>"><?= se_theme_css_vars($theme) ?></style>
+<?php
+// The installable app. $pwaQuiet keeps the manifest, the icons, the service
+// worker and push delivery but drops every interruption: no install banner
+// over a registration form, no opt-in sheet over a host console, and no
+// pull-to-refresh, which would otherwise turn a swipe during a game into a
+// page reload. $pwaNonce is required — §19.7's CSP has no 'unsafe-inline',
+// so an unnonced <style> or <script> is dropped without a word.
+$pwaNonce = $nonce;
+$pwaQuiet = true;
+require_once __DIR__ . '/../includes/pwa_head.php';
+?>
 </head>
 <body>
+<?php require_once __DIR__ . '/../includes/pwa_boot.php'; ?>
 <main id="se-main" class="se-section">
   <div class="se-container">
     <p class="se-label">Household of David Lekki Centre</p>

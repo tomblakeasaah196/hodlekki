@@ -24,6 +24,23 @@ is_same('names show as a first initial', 'first_initial', $defaults['display']['
 is_same('test mode is off', false, $defaults['test_mode']);
 is_same('six FAQ entries ship by default', 6, count($defaults['portal']['faq']));
 is_same('capacity has not been reviewed on a new event', false, $defaults['registration']['capacity_reviewed']);
+is_same('crew get a digest of new registrations', 'digest', $defaults['registration']['notify_crew']);
+
+echo "    registration alerts to the crew\n";
+// A 300-seat night must not be able to send 300 notifications by accident,
+// so the mode is an enum and anything unrecognised falls back to the digest.
+foreach (['off', 'digest', 'every'] as $mode) {
+    is_same("notify_crew accepts '{$mode}'", $mode,
+        se_settings_normalize(['registration' => ['notify_crew' => $mode]])['registration']['notify_crew']);
+}
+is_same('an unknown mode falls back to the digest', 'digest',
+    se_settings_normalize(['registration' => ['notify_crew' => 'all_of_them']])['registration']['notify_crew']);
+is_same('a non-string mode falls back to the digest', 'digest',
+    se_settings_normalize(['registration' => ['notify_crew' => ['every']]])['registration']['notify_crew']);
+ok('the notice gap is a sane floor',
+    SE_REG_NOTICE_MIN_GAP_MINUTES >= 1 && SE_REG_NOTICE_MIN_GAP_MINUTES <= 120,
+    SE_REG_NOTICE_MIN_GAP_MINUTES . ' minutes');
+ok('the audit ledger knows the action', in_array('reg_notice', SE_AUDIT_ACTIONS, true));
 
 echo "    the whole Appendix E document round-trips\n";
 is_same('normalising the defaults changes nothing', $defaults, se_settings_normalize($defaults));

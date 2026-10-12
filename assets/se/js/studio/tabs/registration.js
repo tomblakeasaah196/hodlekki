@@ -338,6 +338,21 @@ export function RegistrationTab() {
                 </div>
             <//>
 
+            <${Card} title="Crew alerts"
+                     subtitle="Who-just-registered notifications for producers and module managers. They reach the bell, and the phone of anyone who has turned alerts on.">
+                <${Field} label="Tell the crew when someone registers" name="notify_crew"
+                          hint="A busy night takes hundreds of registrations. The digest sends the first one straight away, then a summary at most every 15 minutes — so a quiet event still pings per person, and a full one does not buzz three hundred times.">
+                    <${Select} name="notify_crew" disabled=${readOnly}
+                        value=${settingsValue(event, 'registration.notify_crew', 'digest')}
+                        onChange=${(v) => setSetting('registration.notify_crew', v)}
+                        options=${[
+                            { value: 'digest', label: 'Digest — the first, then a summary (recommended)' },
+                            { value: 'every', label: 'Every single registration' },
+                            { value: 'off', label: 'Off — capacity notices only' },
+                        ]} />
+                <//>
+            <//>
+
             <${Card} title="Consent"
                      subtitle="Leadership must approve this wording before registration opens (§19.8).">
                 <${Field} label="Consent mode" name="consent_mode">

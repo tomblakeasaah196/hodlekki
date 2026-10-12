@@ -81,8 +81,10 @@ if (session_status() === PHP_SESSION_NONE) session_start();
         .field-invalid { border-color: #D11920 !important; background-color: #FEF2F2 !important; box-shadow: 0 0 0 3px rgba(209, 25, 32, 0.15) !important; }
         .field-error-msg { margin-top: 0.375rem; font-size: 0.75rem; font-weight: 700; color: #D11920; line-height: 1.35; }
     </style>
+    <?php require_once __DIR__ . '/includes/pwa_head.php'; ?>
 </head>
 <body class="bg-gray-50 antialiased min-h-screen relative overflow-x-hidden selection:bg-hodRed selection:text-white">
+<?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
 
     <!-- Strictly Branded Welcoming Background -->
     <div class="fixed inset-0 z-[-1] overflow-hidden bg-white">

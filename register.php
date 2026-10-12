@@ -305,8 +305,10 @@ if (!empty($token)) {
         }
         @keyframes pulseOpacity { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
     </style>
+    <?php require_once __DIR__ . '/includes/pwa_head.php'; ?>
 </head>
 <body class="relative min-h-screen flex flex-col">
+<?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
 
     <div id="bannerBg"></div>
     <div class="mesh-bg"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span></div>

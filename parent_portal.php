@@ -120,8 +120,10 @@ $isAuthenticated = isset($_SESSION['user_id']) || isset($_SESSION['parent_portal
         .res-btn { transition: all 0.15s; }
         .res-btn:hover { transform: translateY(-1px); }
     </style>
+    <?php require_once __DIR__ . '/includes/pwa_head.php'; ?>
 </head>
 <body class="bg-gray-50 antialiased min-h-screen relative overflow-x-hidden selection:bg-hodRed selection:text-white">
+<?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
 
     <!-- ===================== AMBIENT BACKGROUND ===================== -->
     <div class="fixed inset-0 z-[-1] overflow-hidden bg-white">

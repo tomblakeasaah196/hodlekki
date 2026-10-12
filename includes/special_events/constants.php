@@ -833,4 +833,14 @@ const SE_AUDIT_ACTIONS = [
     'crew_revoke', 'keys_rotate', 'export', 'handoff_run', 'erase', 'optout',
     'ai_job_apply', 'messages_run', 'adhoc_message', 'test_mode', 'notice_sent',
     'client_error', 'asset_upload', 'asset_delete', 'settings_save', 'verse_save',
+    'reg_notice',
 ];
+
+/**
+ * Shortest gap between two "someone registered" notices to the crew
+ * (§10.4.3). It is a floor, not a schedule: a quiet event where one person
+ * signs up a day still gets a notice each time, while a 300-seat night
+ * collapses into one summary every quarter of an hour instead of 300
+ * buzzes that make everyone turn notifications off.
+ */
+const SE_REG_NOTICE_MIN_GAP_MINUTES = 15;

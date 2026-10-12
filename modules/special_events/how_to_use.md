@@ -257,6 +257,29 @@ clear it) → **Save** → Overview → **Publish**. Open `/e/your-link` on your
 phone and register yourself once, as a test, before you send the link out. You
 can delete your test registration from Attendees afterwards.
 
+### Knowing when someone registers
+
+**Registration → Crew alerts.** Producers on this event, and anyone with a
+module manager role, get told when people sign up. The notification lands in
+the bell at the top of every screen, and on the phone of anyone who has turned
+on alerts (bell → the gear icon → *Alerts on this device*).
+
+| Setting | What it does |
+| ------- | ------------ |
+| **Digest** (the default) | The very first registration comes through straight away — that is the moment you want to know the link is working. After that you get a summary at most every 15 minutes: *"12 new registrations — Chara. Latest: Ada O. 143 going, 4 on the waitlist."* |
+| **Every single registration** | One notification per person. Fine for a 30-seat evening; on a 300-seat night it is 300 buzzes, and the people who need to see the important one will have switched notifications off by then. |
+| **Off** | Nothing per registration. You still get the capacity notices below. |
+
+The digest scales itself: on a quiet event where somebody signs up once a day,
+fifteen minutes has always passed, so you hear about each person individually.
+It is only a burst that gets collapsed.
+
+**Separately, and always on**, three one-off notices go to the same people:
+registration passing **90% of capacity**, registration going **full**, and the
+**waitlist starting**. Each is sent once per event.
+
+Test-mode registrations never notify anybody.
+
 ---
 
 ## 7. Assets

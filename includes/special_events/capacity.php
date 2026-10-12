@@ -403,6 +403,118 @@ function se_after_capacity_change(PDO $pdo, array $event): void
 }
 
 /**
+ * "Someone just registered" for the crew (§10.4.3).
+ *
+ * Called from se_register() on every channel — the public portal, the desk,
+ * the Studio's manual add — so there is one place that decides whether a
+ * registration is worth a buzz.
+ *
+ * Why it is a digest by default: a Chara night takes 300 registrations in an
+ * evening. Three hundred notifications is not information, it is the reason
+ * people turn notifications off and then miss the one that mattered. So the
+ * first registration of an event always goes out immediately (that is the
+ * "we are live" moment nobody wants to miss), and after that a summary is
+ * sent at most every SE_REG_NOTICE_MIN_GAP_MINUTES. The floor scales the
+ * right way on its own: a quiet event where somebody signs up once a day
+ * still gets a notice per person, because a quarter of an hour has always
+ * passed. An organiser who genuinely wants one per head can set
+ * registration.notify_crew to 'every'.
+ *
+ * The audit log is the ledger, exactly as it is for the capacity notices
+ * below: a `reg_notice` row is written in the same breath as the
+ * notification, and its timestamp is what the next registration measures
+ * itself against.
+ */
+function se_registration_notify(PDO $pdo, array $event, array $registration, array $settings): void
+{
+    try {
+        $mode = (string) ($settings['registration']['notify_crew'] ?? 'digest');
+        if ($mode === 'off') {
+            return;
+        }
+
+        // A test-mode registration must never page a real person.
+        if (se_bool($registration['is_test'] ?? 0) || se_bool($event['is_test'] ?? 0)) {
+            return;
+        }
+        if (!se_table_exists($pdo, 'se_audit_log') || !se_table_exists($pdo, 'se_registrations')) {
+            return;
+        }
+
+        $eventId = (int) $event['id'];
+
+        $stmt = $pdo->prepare(
+            "SELECT created_at FROM se_audit_log
+              WHERE event_id = ? AND action = 'reg_notice'
+              ORDER BY id DESC LIMIT 1"
+        );
+        $stmt->execute([$eventId]);
+        $lastNotice = $stmt->fetchColumn();
+
+        $newCount = 1;
+
+        if ($mode === 'digest' && $lastNotice !== false && $lastNotice !== null) {
+            $elapsed = (time() - strtotime((string) $lastNotice)) / 60;
+            if ($elapsed < SE_REG_NOTICE_MIN_GAP_MINUTES) {
+                return;                                   // still inside the quiet gap
+            }
+
+            // Everyone who arrived while we were quiet, this one included.
+            $stmt = $pdo->prepare(
+                "SELECT COUNT(*) FROM se_registrations
+                  WHERE event_id = ? AND created_at > ?
+                    AND status IN ('confirmed', 'waitlisted')
+                    AND COALESCE(is_test, 0) = 0"
+            );
+            $stmt->execute([$eventId, $lastNotice]);
+            $newCount = max(1, (int) $stmt->fetchColumn());
+        }
+
+        $recipients = se_capacity_notice_recipients($pdo, $eventId);
+        if (!$recipients) {
+            return;
+        }
+
+        $counts  = se_capacity_counts($pdo, $eventId);
+        $who     = se_line((string) ($registration['display_name'] ?? ''), 40) ?: 'Someone';
+        $title   = (string) $event['title'];
+        $waiting = (int) $counts['waitlisted'];
+
+        $heading = $newCount > 1
+            ? $newCount . ' new registrations — ' . $title
+            : $who . ' just registered for ' . $title;
+
+        $body = ($newCount > 1 ? 'Latest: ' . $who . '. ' : '')
+            . (int) $counts['confirmed'] . ' going'
+            . ($waiting > 0 ? ', ' . $waiting . ' on the waitlist' : '')
+            . '.';
+
+        $insert = $pdo->prepare(
+            "INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, ?, ?, ?)"
+        );
+        foreach ($recipients as $recipientId) {
+            try {
+                $insert->execute([
+                    $recipientId,
+                    se_line($heading, 180),
+                    $body,
+                    se_studio_url($eventId, 'attendees'),
+                ]);
+            } catch (Throwable $e) {
+                error_log('SE registration/notify insert: ' . $e->getMessage());
+            }
+        }
+
+        se_audit($pdo, $eventId, 'reg_notice',
+            ['new' => $newCount, 'confirmed' => (int) $counts['confirmed'], 'mode' => $mode],
+            'event', $eventId);
+    } catch (Throwable $e) {
+        // A notification must never cost somebody their seat.
+        error_log('SE registration/notify: ' . $e->getMessage());
+    }
+}
+
+/**
  * capacity_90, capacity_full and waitlist_started, once each per event.
  *
  * The audit log is the ledger: `notice_sent:<kind>` is written in the same

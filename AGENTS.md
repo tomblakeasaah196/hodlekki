@@ -85,7 +85,10 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   (`php tests/special_events/run.php`). The Assimilation Excel export has its
   own suite — run `php tests/assimilation_export_test.php` whenever you touch
   `includes/assimilation_export_excel.php`; its workbook half needs
-  `composer install` and reports itself as skipped without it. (It is not in
+  `composer install` and reports itself as skipped without it. The PWA/push
+  suite is `php tests/pwa/run.php` (no database, no network) — run it after
+  touching `includes/push_*.php`, `includes/pwa_*.php`, `manifest.php` or
+  `sw.js`. (It is not in
   the workflow yet: the deploy app cannot push `.github/workflows/`, so the
   owner adds that step.) On a machine with no PHP at all,
   `python3 tests/php_structure_check.py <file>` still catches unbalanced
@@ -444,6 +447,96 @@ does for Reach and Assimilation.
   then `SE_TEST_DB_HOST=… SE_TEST_DB_NAME=se_it php tests/special_events/integration/run.php`.
   MariaDB rejects `GROUP BY t.id` when other `t` columns are selected — list
   them in the `GROUP BY`.
+
+## Installable app (PWA) + Web Push (added 2026-10-12)
+
+Full guide: `docs/pwa_push.md`. Schema:
+`db/migrations/20261012090000_pwa_push.sql` (tables `push_subscriptions`,
+`push_queue`, `push_config`, `push_user_prefs`).
+
+**Every `INSERT INTO system_notifications` is already a push notification.**
+Do not add a push call next to one. `push_fanout()` reads rows newer than
+`push_config.fanout_cursor_id`, expands the audience and queues them; adding
+a second path would double-send. If you need a push that is NOT a
+notification, call `push_send_to_user()` or `push_enqueue()` directly.
+
+- **`includes/db.php` arms a shutdown hook** (`push_register_dispatcher()`)
+  on POST/PUT/PATCH/DELETE and `/api/` requests. It runs NO query during the
+  request; the sending happens after `fastcgi_finish_request()`. Do not move
+  it, and do not make it do work before the response is released.
+- **Everything degrades to `FEATURE_NOT_READY`.** The tree reaches production
+  before `db/migrate.php` runs, so every entry point asks `push_ready()` or
+  `push_table_exists()` first. Nothing in `includes/push_*.php` may throw out
+  of a page request — that hook runs on every POST the platform handles.
+- **`includes/push_crypto.php` is verified against RFC 8291 §5.** Run
+  `php tests/pwa/run.php` after ANY edit to it. A silent break there means
+  every browser discards every notification and nothing says why.
+  Deliberately no Composer package: `minishlink/web-push` needs ext-gmp or
+  ext-bcmath, neither guaranteed on this host, and `vendor/` is rebuilt on
+  every deploy.
+- **A notification's `link_url` can never leave this site.**
+  `push_message_from_notification()` rejects absolute URLs, `//host`,
+  backslashes and `javascript:`, falling back to `/index.php`. Keep that
+  guard — 60 call sites write that column.
+- **`sw.js` must never cache HTML.** Every page is rendered against a session
+  and full of member data; Cache Storage outlives sign-out. Navigations are
+  network-only with a static `/offline.html` fallback, and `/api/`, `/auth/`,
+  `/live/`, `/e/`, `/webhook/` and `/uploads/` are passed straight through.
+  `/live/` and `/e/` in particular belong to Special Events, which polls for
+  real-time state under its own CSP.
+- **Rotating `VAPID_PUBLIC_KEY` invalidates every subscription** and nobody is
+  told to opt in again. Treat it like `SE_HASH_PEPPER`.
+- **A row that names `user_id` is addressed to that member alone**; its
+  `department_id` / `role_id` / `region_id` are context. `regions_api.php`
+  writes one row per member of a region carrying both, and expanding both
+  turns a 200-member broadcast into 40,000 queue writes.
+- **`assets/pwa/` is a committed build artifact** (no Node on the host, same
+  as `assets/se/css/se.css`). Regenerate with `php bin/build_pwa_icons.php`
+  after changing `assets/images/logo_hod.png`, and commit the output. There
+  is no CI freshness check for it.
+- **New page wants the app?** Two includes: `includes/pwa_head.php` inside
+  `<head>`, `includes/pwa_boot.php` as the first element in `<body>`. Both
+  idempotent. Two optional variables set immediately before the require:
+  `$pwaNonce` on any page whose CSP has no `'unsafe-inline'` (without it the
+  preloader styles and boot script are dropped SILENTLY — `/e/` sets it from
+  `se_csp_nonce()`), and `$pwaQuiet` on a live/critical surface, which keeps
+  push delivery but drops the install banner, the opt-in sheet and
+  pull-to-refresh. `e/index.php` sets both on its portal and hub; its 404 is
+  left alone. An element can opt its subtree out of the pull gesture with
+  `data-no-pull`.
+- **The Alerts Centre** (`modules/alerts/`, `api/push_admin_api.php`) is gated
+  by `security_is_admin()` against the live roles table, like the Security
+  Centre. Never gate it on `$_SESSION['active_role']` — the member switches
+  that themselves. Its broadcast writes `system_notifications` rows rather
+  than pushing directly, so quiet hours and opt-outs are honoured by the
+  normal fan-out; keep it that way. Every broadcast and switch flip goes to
+  `security_audit_log`. Member guide: `modules/alerts/how_to_use.md`.
+- **Special Events registration alerts** live in `se_registration_notify()`
+  (`includes/special_events/capacity.php`), called from `se_register()` so
+  every channel is covered. `registration.notify_crew` defaults to `digest`:
+  the first registration goes immediately, then a summary at most every
+  `SE_REG_NOTICE_MIN_GAP_MINUTES`. Do not make `every` the default — a Chara
+  night is 300 registrations, and that is how a congregation learns to ignore
+  notifications. State is `reg_notice` rows in `se_audit_log`.
+- **Checks CI does not run yet** (the deploy app cannot push
+  `.github/workflows/`, so the owner adds them — same as the Assimilation
+  Excel suite):
+  - `php tests/pwa/run.php` — 176 checks, no database, no network.
+  - `node --experimental-default-type=module --check assets/js/pwa.js`
+  - `node --experimental-default-type=module --check sw.js`
+  - `php tests/pwa/integration/run.php --host=… --db=push_it` — 51 checks
+    against a REAL database, on **both** MySQL 8 and MariaDB 10.11. This is
+    the only thing that covers the fan-out SQL, the audience expansion, the
+    unique key that stops a double send and the cursor. It found a live bug
+    the unit suite could not: push_config_set() did not write through the
+    cache push_config_get() reads, so a second fan-out in one process read a
+    stale null cursor, concluded it was the first run ever, and would have
+    silently dropped everything queued in between.
+- **Operations:** cron every minute,
+  `php /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php`.
+  `php cron/push_worker.php --status` prints readiness, queue depth, device
+  count and the cursor. Kill switches live in `push_config` (`enabled`,
+  `inline_dispatch`).
 
 ## Departments module (ministry years)
 

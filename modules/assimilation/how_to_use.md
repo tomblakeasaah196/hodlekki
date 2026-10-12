@@ -281,6 +281,25 @@ returned-home trend, who came home (first names only) and the volunteer who
 called them, the breakdowns, volunteer activity, the watchlist summary,
 prayer points from the calls, and a short pastoral summary of the month.
 
+## 10b. Getting told on your phone
+
+Assimilation already writes to your notification bell when a watchlist lands,
+when a follow-up is assigned to you, and when one goes overdue. Install
+HOD Lekki on your phone and turn on alerts, and all of that reaches you with
+the app closed — which is the difference between a follow-up happening on
+Monday and happening next month.
+
+- **Android:** a banner offers to install it. One tap.
+- **iPhone:** Safari has no install button, so the app walks you through
+  *Share → Add to Home Screen → Add*. Notifications on iPhone only work once it
+  is on your Home Screen; that is Apple's rule, not ours.
+- Then: the bell at the top of any screen → the gear icon → **Alerts on this
+  device**, and **Send me a test alert** to prove it works.
+
+The volunteer page (`/assimilation`) is part of the app too, so a volunteer who
+only ever opens that link can install it from there and get their own call list
+assignments on their phone. Quiet hours are under the same gear icon.
+
 ## 11. For developers
 
 - Module: `modules/assimilation/index.php` · APIs: `api/assimilation_api.php`
@@ -294,6 +313,9 @@ prayer points from the calls, and a short pastoral summary of the month.
 - Nightly job: `cron/assimilation_watchlists.php` (crontab line in the README).
 - Any change under `modules/assimilation/`, `api/assimilation_*` or
   `assimilation.php` must update this file in the same PR — CI enforces it.
+- `assimilation.php` carries the PWA partials (`includes/pwa_head.php` in the
+  `<head>`, `includes/pwa_boot.php` first inside `<body>`). See
+  `docs/pwa_push.md`.
 
 ## Context pills on the volunteer page
 
