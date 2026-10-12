@@ -121,6 +121,22 @@ No — the profile now belongs to Embrace. Ask an Embrace leader to update it.
 **Who can see this module?**
 Super Admins, pastors, and members of the Reach / Evangelism and IDI departments.
 
+**Can I be told about a new lead without sitting on this page?**
+Yes. Install HOD Lekki on your phone and turn on alerts, and every assignment,
+reassignment and overdue nudge Reach already writes to your notification bell
+also buzzes your phone — including when the app is closed.
+
+- **Android:** a banner offers to install it. One tap.
+- **iPhone:** Safari has no install button, so the app walks you through
+  *Share → Add to Home Screen → Add*. Notifications on iPhone only work once
+  it is on your Home Screen; that is Apple's rule, not ours.
+- Then: the bell at the top of any screen → the gear icon → **Alerts on this
+  device**, and **Send me a test alert** to prove it works.
+
+The public capture page (`/reach`) is part of the app too, so a volunteer who
+installs it from there gets the same thing. Quiet hours live under the same
+gear icon if you would rather not be woken at 2am.
+
 > Changing anything in Reach? Update this guide in the same pull request — CI checks for it.
 
 ## Special Event campaigns

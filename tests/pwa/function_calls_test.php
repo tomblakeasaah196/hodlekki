@@ -42,13 +42,15 @@ $pwaFiles = array_filter([
     $repoRoot . '/includes/pwa_head.php',
     $repoRoot . '/includes/pwa_boot.php',
     $repoRoot . '/api/push_api.php',
+    $repoRoot . '/api/push_admin_api.php',
+    $repoRoot . '/modules/alerts/index.php',
     $repoRoot . '/cron/push_worker.php',
     $repoRoot . '/bin/build_pwa_icons.php',
     $repoRoot . '/bin/generate_vapid_keys.php',
     $repoRoot . '/manifest.php',
 ], 'is_file');
 
-check('every PWA source file is on disk', 10, count($pwaFiles));
+check('every PWA source file is on disk', 12, count($pwaFiles));
 
 $problems = [];
 foreach ($pwaFiles as $file) {
@@ -119,6 +121,94 @@ check('no referenced artwork is missing', [], $absent);
 ok('the manifest is linked', str_contains($head, 'rel="manifest"'));
 ok('iOS is told it is a web app', str_contains($head, 'apple-mobile-web-app-capable'));
 ok('the client runtime is loaded', str_contains($head, '/assets/js/pwa.js'));
+
+suite('every surface that should carry the app does');
+// A page is only part of the installable app if it has BOTH partials: the
+// head one alone leaves a launch screen that never renders, and the boot one
+// alone leaves markup with no stylesheet.
+foreach ([
+    'includes/header.php'  => 'every ERP screen',
+    'auth/login.php'       => 'the sign-in page',
+    'connect.php'          => 'Connect',
+    'sermons.php'          => 'Sermons',
+    'testimonies.php'      => 'Testimonies',
+    'register.php'         => 'Event registration',
+    'checkin.php'          => 'Check-in',
+    'parent_portal.php'    => 'Parent portal',
+    'live_radio.php'       => 'Live radio',
+    'verify.php'           => 'Verify',
+    'idi_mobilization.php' => 'IDI mobilisation',
+    'reach.php'            => 'Reach capture',
+    'assimilation.php'     => 'Assimilation volunteers',
+    'e/index.php'          => 'Special Events public pages',
+] as $file => $label) {
+    $source = (string) @file_get_contents($repoRoot . '/' . $file);
+    ok($label . ' has the head partial', str_contains($source, 'pwa_head.php'), $file);
+    ok($label . ' has the launch screen', str_contains($source, 'pwa_boot.php'), $file);
+}
+
+suite('the Special Events pages stay inside their CSP');
+$eRouter = (string) file_get_contents($repoRoot . '/e/index.php');
+// §19.7 sets script-src/style-src to 'self' plus a nonce. An unnonced inline
+// block is dropped silently — the page still renders, so nothing fails until
+// somebody notices the preloader never appears.
+ok('the router passes its CSP nonce to the partial', str_contains($eRouter, '$pwaNonce = $nonce;'));
+ok('and marks those pages quiet', str_contains($eRouter, '$pwaQuiet = true;'));
+
+// pwa_head.php renders once per process (PWA_HEAD_RENDERED), and this suite
+// already rendered the plain variant above — so the nonced one is rendered in
+// a fresh process rather than silently coming back empty.
+$noncedHead = (string) shell_exec(
+    escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg(
+        '$_SESSION = ["user_id" => 1, "first_name" => "Test"];'
+        . ' $pwaNonce = "test-nonce-value";'
+        . ' $pwaQuiet = true;'
+        . ' require ' . var_export($repoRoot . '/includes/pwa_head.php', true) . ';'
+    ) . ' 2>&1'
+);
+ok('the nonced render produced a page head', str_contains($noncedHead, 'rel="manifest"'));
+
+check('the inline style carries the nonce', 1, substr_count($noncedHead, '<style nonce="test-nonce-value">'));
+ok('the inline boot script carries the nonce', str_contains($noncedHead, '<script nonce="test-nonce-value">'));
+ok('the runtime script carries the nonce', str_contains($noncedHead, '<script nonce="test-nonce-value" src="/assets/js/pwa.js'));
+ok('no inline block is left unnonced', !preg_match('/<(script|style)(?![^>]*\bnonce=)[^>]*>/', $noncedHead));
+ok('quiet mode reaches the client', str_contains($noncedHead, 'quiet: true'));
+
+suite('quiet pages never interrupt');
+$runtime = (string) file_get_contents($repoRoot . '/assets/js/pwa.js');
+ok('quiet is read from the config', str_contains($runtime, 'CFG.quiet === true'));
+foreach ([
+    'the install banner'  => 'if (!QUIET && !store.snoozed(\'install-dismissed\'',
+    'the push opt-in'     => 'if (QUIET || !CFG.signedIn',
+    'pull to refresh'     => 'if (QUIET || !env.standalone',
+    'the iOS nudge'       => 'if (!QUIET && env.iOS',
+] as $what => $guard) {
+    ok($what . ' is suppressed', str_contains($runtime, $guard));
+}
+ok('a subtree can opt out of the pull gesture', str_contains($runtime, "closest('[data-no-pull]')"));
+
+suite('the Alerts Centre is gated like the Security Centre');
+$alerts = (string) file_get_contents($repoRoot . '/modules/alerts/index.php');
+$adminApi = (string) file_get_contents($repoRoot . '/api/push_admin_api.php');
+// Both check the live roles table, never $_SESSION['active_role'], which the
+// member can switch from their own profile screen.
+ok('the page checks the live roles table', str_contains($alerts, 'security_is_admin($pdo)'));
+ok('the endpoint checks it too', str_contains($adminApi, 'security_is_admin($pdo)'));
+// The naive substring check fails on the comments in those files, which say
+// in words what the code must never do. php_strip_whitespace() drops comments,
+// so what is left is only what actually runs.
+foreach (['modules/alerts/index.php', 'api/push_admin_api.php'] as $gated) {
+    ok($gated . ' never reads the switchable session role',
+        !str_contains(php_strip_whitespace($repoRoot . '/' . $gated), 'active_role'));
+}
+ok('broadcasts are written to the audit log', str_contains($adminApi, "security_log(\$pdo, 'push_broadcast'"));
+ok('switch changes are audited too', str_contains($adminApi, "security_log(\$pdo, 'push_switch'"));
+// The composer writes notifications rather than pushing directly, so quiet
+// hours and opt-outs are honoured by the normal fan-out.
+ok('a broadcast goes through system_notifications',
+    str_contains($adminApi, 'INSERT INTO system_notifications'));
+ok('and its link cannot leave this site',
+    str_contains($adminApi, "str_starts_with(\$link, '//')"));
 
 suite('the service worker keeps member data out of the cache');
 $sw = (string) file_get_contents($repoRoot . '/sw.js');

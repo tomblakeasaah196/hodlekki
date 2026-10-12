@@ -456,9 +456,28 @@ notification, call `push_send_to_user()` or `push_enqueue()` directly.
   is no CI freshness check for it.
 - **New page wants the app?** Two includes: `includes/pwa_head.php` inside
   `<head>`, `includes/pwa_boot.php` as the first element in `<body>`. Both
-  idempotent. `reach.php` and `assimilation.php` are deliberately skipped
-  (their CI how-to-use gate), and so is `/e/`, whose CSP drops the inline
-  styles the preloader needs.
+  idempotent. Two optional variables set immediately before the require:
+  `$pwaNonce` on any page whose CSP has no `'unsafe-inline'` (without it the
+  preloader styles and boot script are dropped SILENTLY — `/e/` sets it from
+  `se_csp_nonce()`), and `$pwaQuiet` on a live/critical surface, which keeps
+  push delivery but drops the install banner, the opt-in sheet and
+  pull-to-refresh. `e/index.php` sets both on its portal and hub; its 404 is
+  left alone. An element can opt its subtree out of the pull gesture with
+  `data-no-pull`.
+- **The Alerts Centre** (`modules/alerts/`, `api/push_admin_api.php`) is gated
+  by `security_is_admin()` against the live roles table, like the Security
+  Centre. Never gate it on `$_SESSION['active_role']` — the member switches
+  that themselves. Its broadcast writes `system_notifications` rows rather
+  than pushing directly, so quiet hours and opt-outs are honoured by the
+  normal fan-out; keep it that way. Every broadcast and switch flip goes to
+  `security_audit_log`. Member guide: `modules/alerts/how_to_use.md`.
+- **Special Events registration alerts** live in `se_registration_notify()`
+  (`includes/special_events/capacity.php`), called from `se_register()` so
+  every channel is covered. `registration.notify_crew` defaults to `digest`:
+  the first registration goes immediately, then a summary at most every
+  `SE_REG_NOTICE_MIN_GAP_MINUTES`. Do not make `every` the default — a Chara
+  night is 300 registrations, and that is how a congregation learns to ignore
+  notifications. State is `reg_notice` rows in `se_audit_log`.
 - **Checks CI does not run yet** (the deploy app cannot push
   `.github/workflows/`, so the owner adds them — same as the Assimilation
   Excel suite):

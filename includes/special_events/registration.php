@@ -547,6 +547,11 @@ function se_register(PDO $pdo, array $event, array $settings, array $days, array
 
     if (in_array($result['outcome'], ['confirmed', 'waitlisted'], true)) {
         se_after_capacity_change($pdo, $result['event']);
+
+        // Tell the crew. Here rather than inside se_after_capacity_change()
+        // because that one also runs on cancels and desk edits, and only a
+        // genuinely new registration is news.
+        se_registration_notify($pdo, $result['event'], $result['registration'], $settings);
     }
 
     return $result;

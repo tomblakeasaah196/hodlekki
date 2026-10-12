@@ -32,6 +32,17 @@
     var CFG = window.HOD_PWA || {};
     var API_PUSH = CFG.pushApi || '/api/push_api.php';
 
+    /*
+     * "Quiet" pages are the ones doing something time-critical — a live event
+     * console under /e/, a check-in desk. They still install, still register
+     * the service worker, still RECEIVE push. What they do not do is
+     * interrupt: no install banner, no opt-in sheet, and no pull-to-refresh,
+     * because a downward swipe mid-game must not reload the page out from
+     * under a crew member. Set from includes/pwa_head.php ($pwaQuiet).
+     */
+    var QUIET = CFG.quiet === true ||
+        document.documentElement.getAttribute('data-hod-quiet') === '1';
+
     /* ================================================================== *
      * Environment
      * ================================================================== */
@@ -460,7 +471,7 @@
         event.preventDefault();
         deferredPrompt = event;
 
-        if (!store.snoozed('install-dismissed', 14)) {
+        if (!QUIET && !store.snoozed('install-dismissed', 14)) {
             setTimeout(showInstallBanner, 2600);
         }
     });
@@ -817,7 +828,7 @@
      * answered for them.
      */
     function maybeAskForPush() {
-        if (!CFG.signedIn || store.snoozed('push-dismissed', 12)) return;
+        if (QUIET || !CFG.signedIn || store.snoozed('push-dismissed', 12)) return;
 
         // iOS in a browser tab cannot subscribe at all — the install guide is
         // the useful prompt there, and that has its own pacing.
@@ -981,7 +992,7 @@
      * ================================================================== */
 
     function initPullToRefresh() {
-        if (!env.standalone || !('ontouchstart' in window)) return;
+        if (QUIET || !env.standalone || !('ontouchstart' in window)) return;
 
         var indicator = el('div', { id: 'hodPull' }, ICON.spin);
         document.body.appendChild(indicator);
@@ -1007,6 +1018,9 @@
             // Never fight a sheet, a modal or an open keyboard.
             if (openSheet || document.querySelector('.app-modal-overlay:not(.hidden):not([hidden])')) return;
             if (event.touches.length !== 1) return;
+            // Any surface can opt out of the gesture for its own subtree —
+            // a canvas, a signature pad, a horizontal carousel.
+            if (event.target.closest && event.target.closest('[data-no-pull]')) return;
 
             scroller = scrollerFor(event.target);
             if (!atTop(scroller)) return;
@@ -1106,7 +1120,7 @@
         // iOS gets the install nudge instead of the push card, paced slowly:
         // once a month is plenty for something they can also reach from the
         // notification bell whenever they want it.
-        if (env.iOS && !env.standalone && !env.inAppBrowser && CFG.signedIn &&
+        if (!QUIET && env.iOS && !env.standalone && !env.inAppBrowser && CFG.signedIn &&
             !store.snoozed('ios-guide-shown', 30)) {
             var views = parseInt(store.get('views') || '0', 10);
             if (views >= 3) setTimeout(showIosGuide, 9000);

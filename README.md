@@ -93,8 +93,12 @@ The internal ERP is organised as one directory per module under
   slower; `cron/push_worker.php` is the every-minute safety net.
 - Members control it from the gear icon in the notification bell: alerts
   on/off per device, a test alert, and quiet hours (security alerts always
-  come through). Setup and troubleshooting:
-  [`docs/pwa_push.md`](docs/pwa_push.md).
+  come through).
+- `alerts` — **Alerts Centre** (Super Admin / Resident Pastor). Delivery
+  health, device counts, failures by reason, the two kill switches, and a
+  broadcast composer that reaches everyone, a department, a role or a region.
+  It always shows how many people a broadcast reaches before it will send.
+  Setup and troubleshooting: [`docs/pwa_push.md`](docs/pwa_push.md).
 
 ## Tech stack
 

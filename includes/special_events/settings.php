@@ -198,6 +198,13 @@ function se_settings_spec(): array
             'optin_text' => ['type' => 'text', 'max' => 600, 'default' =>
                 'Keep me posted about future HOD Lekki events.'],
             'ask_wants_visit_after_submit' => ['type' => 'bool', 'default' => true],
+            // Who-just-registered alerts to producers and module managers.
+            // 'digest' summarises bursts (SE_REG_NOTICE_MIN_GAP_MINUTES);
+            // 'every' is one notice per person, which is only sane for a
+            // small event. They reach the bell and, where the member has
+            // turned them on, the phone — see docs/pwa_push.md.
+            'notify_crew' => ['type' => 'enum', 'default' => 'digest',
+                              'values' => ['off', 'digest', 'every']],
             'play_ahead_enabled'           => ['type' => 'bool', 'default' => true],
             'link_on_demand_enabled'       => ['type' => 'bool', 'default' => true],
             'companions_max'               => ['type' => 'int', 'default' => 0, 'min' => 0, 'max' => 10],

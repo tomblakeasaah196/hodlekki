@@ -221,6 +221,54 @@ as high urgency, and those ignore a member's quiet window.
 
 ---
 
+## 4b. The Alerts Centre
+
+`modules/alerts/index.php`, in the sidebar under Security & Stewardship. Super
+Admins and the Resident Pastor only, gated by `security_is_admin()` against the
+live roles table — never `$_SESSION['active_role']`, which the member can
+switch themselves from their profile.
+
+It shows device counts, members reached, delivered and waiting, where the
+signing keys live, how far behind the fan-out is, a breakdown by platform, and
+the last seven days of failures grouped by reason. The two kill switches
+(`enabled`, `inline_dispatch`) are toggles, and every flip is written to
+`security_audit_log`.
+
+The **broadcast composer** writes `system_notifications` rows rather than
+pushing directly. That is the whole design: the message lands in everyone's
+bell whether or not they have a device, the normal fan-out delivers it, and a
+member's quiet hours and opt-out are honoured without this endpoint knowing
+they exist. Audiences are everyone, everyone with alerts on, a department, a
+role, or a region.
+
+It always asks twice. The button first reads **Check who this reaches** and
+answers with the real number of people and how many of them have a phone
+registered; only then does it become **Send it**. Any edit afterwards — a word,
+the audience, the link — resets it, so nothing can be sent to an audience that
+was not shown first. Member-facing guide: `modules/alerts/how_to_use.md`.
+
+## 4c. Special Events registrations
+
+`se_registration_notify()` in `includes/special_events/capacity.php`, called
+from `se_register()` so it covers every channel — the public portal, the desk,
+the Studio's manual add.
+
+A Chara night takes 300 registrations in an evening, and 300 notifications is
+not information; it is why people turn notifications off and then miss the one
+that mattered. So `registration.notify_crew` defaults to **digest**: the first
+registration of an event goes out immediately (the "we are live" moment), and
+after that a summary at most every `SE_REG_NOTICE_MIN_GAP_MINUTES` (15). That
+floor scales itself — an event where somebody signs up once a day still gets a
+notice per person, because a quarter of an hour has always passed. `every` and
+`off` are the other two settings, in Studio → Registration → Crew alerts.
+
+Recipients are the event's producers plus module managers, through the existing
+`se_capacity_notice_recipients()`. State lives in `se_audit_log` as
+`reg_notice` rows, the same ledger idiom the capacity notices use. Test-mode
+registrations never notify anyone.
+
+---
+
 ## 5. Files
 
 | Path | What |
@@ -230,7 +278,9 @@ as high urgency, and those ignore a member's quiet window.
 | `includes/push_dispatch.php` | The after-response shutdown hook. |
 | `includes/pwa_head.php` | `<head>` partial: manifest, Apple metadata, launch images, runtime. |
 | `includes/pwa_boot.php` | The launch screen. First element inside `<body>`. |
-| `api/push_api.php` | Subscribe, unsubscribe, devices, preferences, test, badge. |
+| `api/push_api.php` | Subscribe, unsubscribe, devices, preferences, test, badge. Member-facing; every action scoped to the caller. |
+| `api/push_admin_api.php` | Delivery health, kill switches, broadcast. Separate file because it can reach everyone. |
+| `modules/alerts/index.php` | The Alerts Centre screen. |
 | `cron/push_worker.php` | The every-minute safety net. |
 | `manifest.php` | Web App Manifest. PHP so the MIME type is certain. |
 | `sw.js` | Service worker. Root scope. |
@@ -256,14 +306,22 @@ Two lines:
 <?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
 ```
 
-Both are idempotent. `includes/header.php` already does it, so every ERP
-screen is covered. `reach.php` and `assimilation.php` are deliberately left
-out: CI fails any diff touching them that does not also update their
-`how_to_use.md`, and a PWA include is not module documentation.
+Both are idempotent, and `includes/header.php` already does it, so every ERP
+screen is covered. The public pages carry them individually: `connect.php`,
+`sermons.php`, `testimonies.php`, `register.php`, `checkin.php`,
+`parent_portal.php`, `live_radio.php`, `verify.php`, `idi_mobilization.php`,
+`reach.php`, `assimilation.php`, `auth/login.php` and `e/index.php`.
 
-`/e/` is deliberately left out too — the Special Events module sets a CSP with
-`style-src 'self'` plus a nonce, and the preloader's inline styles would be
-dropped silently.
+Two variables may be set immediately before the `require`:
+
+| Variable | When |
+| -------- | ---- |
+| `$pwaNonce` | The page sends a CSP without `'unsafe-inline'`. The Special Events pages do (§19.7), and without this the preloader styles and the early boot script are dropped **silently** — the page still renders, so nobody notices for weeks. |
+| `$pwaQuiet` | The page is doing something time-critical: a live event console, a check-in desk. Keeps the manifest, icons, service worker and push delivery; drops the install banner, the opt-in sheet and pull-to-refresh, which would otherwise turn a swipe mid-game into a reload. The alerts sheet and install guide stay reachable from any `data-hod-alerts` / `data-hod-install` control. |
+
+`e/index.php` sets both, on its event portal and its `/e/` hub. Its 404 page is
+left alone. Any individual element can also opt a subtree out of the pull
+gesture with `data-no-pull`.
 
 ### Rebuilding the artwork
 
@@ -301,7 +359,7 @@ RFC says a browser will decrypt.
 php tests/pwa/run.php
 ```
 
-126 checks, no database and no network. Run it after any change to
+176 checks, no database and no network. Run it after any change to
 `includes/push_*.php`, `manifest.php`, `sw.js` or `includes/pwa_head.php`.
 
 JavaScript (there is no bundler, so a syntax error ships as a blank surface):

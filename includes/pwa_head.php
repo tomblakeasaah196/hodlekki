@@ -19,6 +19,28 @@
  * images, the critical CSS for the preloader, and the client runtime. It
  * touches no database and assumes no session has been started — the manifest
  * is deliberately identical for every visitor, so it can be cached.
+ *
+ * Two variables may be set by the including page, immediately before the
+ * require:
+ *
+ *   $pwaNonce   A CSP nonce for the two inline blocks below. Required on any
+ *               page that sends a Content-Security-Policy without
+ *               'unsafe-inline' — the Special Events pages under /e/ do, and
+ *               without this the browser drops the preloader styles and the
+ *               early boot script silently.
+ *
+ *   $pwaQuiet   true on a page that is doing something time-critical: a live
+ *               event console, a check-in desk. It keeps the manifest, the
+ *               icons, the service worker and push DELIVERY, and drops
+ *               everything that interrupts — the install banner, the push
+ *               opt-in sheet, and pull-to-refresh, which would otherwise take
+ *               over a downward swipe mid-game. The alerts sheet and the
+ *               install guide are still reachable from any data-hod-alerts or
+ *               data-hod-install control.
+ *
+ * A page that sets its own <meta name="theme-color"> before the require keeps
+ * it: the browser uses the first matching one, and the Special Events pages
+ * colour their status bar per event theme.
  * ============================================================================
  */
 
@@ -30,6 +52,12 @@ if (!defined('PWA_HEAD_RENDERED')) {
 
     $pwaSignedIn = isset($_SESSION['user_id']);
     $pwaName     = $pwaSignedIn ? (string) ($_SESSION['first_name'] ?? '') : '';
+
+    // Set by the including page; see the block comment above.
+    $pwaNonceAttr = (isset($pwaNonce) && $pwaNonce !== '')
+        ? ' nonce="' . htmlspecialchars((string) $pwaNonce, ENT_QUOTES, 'UTF-8') . '"'
+        : '';
+    $pwaIsQuiet = !empty($pwaQuiet);
 
     /**
      * iOS launch images. Safari picks by exact device metrics, so each entry
@@ -86,7 +114,7 @@ if (!defined('PWA_HEAD_RENDERED')) {
         frame. Everything else about the app can wait; this cannot, because
         the gap it covers is exactly the gap Tailwind's CDN leaves behind.
     -->
-    <style>
+    <style<?= $pwaNonceAttr ?>>
         #hodSplash {
             position: fixed;
             inset: 0;
@@ -149,7 +177,7 @@ if (!defined('PWA_HEAD_RENDERED')) {
         }
     </style>
 
-    <script>
+    <script<?= $pwaNonceAttr ?>>
         /*
          * Runs before <body> is parsed, which is the whole point:
          *
@@ -174,6 +202,10 @@ if (!defined('PWA_HEAD_RENDERED')) {
 
             root.classList.add('hod-app');
             if (standalone) root.classList.add('hod-standalone');
+<?php if ($pwaIsQuiet): ?>
+            // A live event screen: no banners, no sheets, no gesture grabs.
+            root.setAttribute('data-hod-quiet', '1');
+<?php endif; ?>
 
             try {
                 if (!sessionStorage.getItem('hodLaunched')) {
@@ -188,12 +220,13 @@ if (!defined('PWA_HEAD_RENDERED')) {
         window.HOD_PWA = {
             version: '<?= PWA_VERSION ?>',
             signedIn: <?= $pwaSignedIn ? 'true' : 'false' ?>,
+            quiet: <?= $pwaIsQuiet ? 'true' : 'false' ?>,
             firstName: <?= json_encode($pwaName, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>,
             pushApi: '/api/push_api.php',
             notificationsApi: '/api/notifications_api.php'
         };
     </script>
 
-    <script src="/assets/js/pwa.js?v=<?= PWA_VERSION ?>" defer></script>
+    <script<?= $pwaNonceAttr ?> src="/assets/js/pwa.js?v=<?= PWA_VERSION ?>" defer></script>
     <!-- =============================================================== -->
 <?php } ?>
