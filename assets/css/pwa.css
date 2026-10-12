@@ -76,11 +76,24 @@ html.hod-standalone main {
     padding-bottom: calc(var(--hod-safe-bottom) + 4px);
 }
 
-/* Momentum scrolling that stops at the edges instead of bouncing the page. */
+/* Momentum scrolling everywhere; only the page scroller stops at its edges. */
 html.hod-standalone main,
 html.hod-standalone .custom-scrollbar,
 html.hod-standalone .overflow-y-auto {
     -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * <main> only. This used to cover .custom-scrollbar and .overflow-y-auto as
+ * well, and .custom-scrollbar also sits on the overflow-x wrapper of every
+ * data table. A wrapper that overflows sideways is a scroll container, so
+ * "contain" stopped vertical wheel and swipe gestures from passing through it
+ * to the page: once a table was wider than the window (Security Centre's Live
+ * Sessions first), nothing over it scrolled. Inner lists should hand off to
+ * the page at their edges like they do in a browser tab; modals keep their
+ * own containment in includes/header.php.
+ */
+html.hod-standalone main {
     overscroll-behavior-y: contain;
 }
 
