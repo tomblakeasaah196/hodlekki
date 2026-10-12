@@ -90,12 +90,20 @@ $charisCanConfigureAwol = !empty($charisPageAccess['can_configure_awol']);
             </div>
         </div>
         <div class="p-4 sm:p-5 flex-1 overflow-y-auto custom-scrollbar bg-gray-50/40">
-            <div id="awolModalPillsContainer" class="hidden mb-3.5 p-3 sm:p-4 bg-white border border-orange-100 rounded-2xl shadow-sm">
-                <div class="flex items-center justify-between gap-2 mb-2">
-                    <span class="text-[10px] font-black uppercase tracking-wider text-orange-600">Active Church-wide Rule</span>
-                    <span id="awolModalMatchingCount" class="text-[10px] font-bold text-gray-500">0 matching</span>
+            <div id="awolModalPillsContainer" class="awol-rule-card hidden mb-3.5 bg-white border border-orange-100 rounded-2xl shadow-sm">
+                <button type="button" onclick="toggleAwolRuleCard()" aria-expanded="false" aria-controls="awolModalPillsBody" class="awol-rule-toggle w-full flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-left rounded-2xl hover:bg-orange-50/40 transition-colors">
+                    <span class="flex items-center gap-2 min-w-0">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-orange-600 shrink-0">Active Church-wide Rule</span>
+                        <span class="awol-rule-summary text-[10px] font-bold text-gray-600 truncate"></span>
+                    </span>
+                    <span class="flex items-center gap-2 shrink-0">
+                        <span id="awolModalMatchingCount" class="text-[10px] font-bold text-gray-500">0 matching</span>
+                        <svg class="awol-rule-chevron w-3.5 h-3.5 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                    </span>
+                </button>
+                <div id="awolModalPillsBody" class="awol-rule-body hidden px-3 sm:px-4 pb-3 sm:pb-4">
+                    <div id="awolModalPillsList" class="flex flex-wrap gap-1.5"></div>
                 </div>
-                <div id="awolModalPillsList" class="flex flex-wrap gap-1.5"></div>
             </div>
             <ul id="welfareModalList" class="welfare-list space-y-3"></ul>
             <div id="awolModalEditorFooter" class="<?= $charisCanConfigureAwol ? '' : 'hidden ' ?>pt-4 mt-4 border-t border-gray-200/80">

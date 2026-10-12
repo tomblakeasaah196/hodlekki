@@ -166,12 +166,20 @@ require_once '../../includes/header.php';
                 </div>
             </div>
             <div class="p-4 flex-1 overflow-y-auto custom-scrollbar bg-gray-50/30">
-                <div id="desktopAwolPillsContainer" class="hidden mb-3.5 p-4 bg-white border border-orange-100 rounded-2xl shadow-sm">
-                    <div class="flex items-center justify-between gap-2 mb-2">
-                        <span class="text-[10px] font-black uppercase tracking-wider text-orange-600">Active Church-wide Rule</span>
-                        <span id="desktopAwolMatchingCount" class="text-[10px] font-bold text-gray-500">0 matching</span>
+                <div id="desktopAwolPillsContainer" class="awol-rule-card hidden mb-3.5 bg-white border border-orange-100 rounded-2xl shadow-sm">
+                    <button type="button" onclick="toggleAwolRuleCard()" aria-expanded="false" aria-controls="desktopAwolPillsBody" class="awol-rule-toggle w-full flex items-center justify-between gap-2 px-4 py-3 text-left rounded-2xl hover:bg-orange-50/40 transition-colors">
+                        <span class="flex items-center gap-2 min-w-0">
+                            <span class="text-[10px] font-black uppercase tracking-wider text-orange-600 shrink-0">Active Church-wide Rule</span>
+                            <span class="awol-rule-summary text-[10px] font-bold text-gray-600 truncate"></span>
+                        </span>
+                        <span class="flex items-center gap-2 shrink-0">
+                            <span id="desktopAwolMatchingCount" class="text-[10px] font-bold text-gray-500">0 matching</span>
+                            <svg class="awol-rule-chevron w-3.5 h-3.5 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                        </span>
+                    </button>
+                    <div id="desktopAwolPillsBody" class="awol-rule-body hidden px-4 pb-4">
+                        <div id="desktopAwolPillsList" class="flex flex-wrap gap-1.5"></div>
                     </div>
-                    <div id="desktopAwolPillsList" class="flex flex-wrap gap-1.5"></div>
                 </div>
                 <ul id="welfareList" class="welfare-list space-y-3"></ul>
             </div>
@@ -760,6 +768,30 @@ function handleOpenAwolMonitoring() {
     }
 }
 
+// The rule card starts folded to one line so the case list gets the room; the
+// choice is remembered per browser. Storage can throw (private mode, blocked
+// site data), which simply means it opens folded every time.
+const AWOL_RULE_CARD_KEY = 'charis.awolRuleCardOpen';
+let awolRuleCardOpen = (() => {
+    try { return localStorage.getItem(AWOL_RULE_CARD_KEY) === '1'; } catch (e) { return false; }
+})();
+
+function applyAwolRuleCardState() {
+    document.querySelectorAll('.awol-rule-card').forEach(card => {
+        const toggle = card.querySelector('.awol-rule-toggle');
+        if (toggle) toggle.setAttribute('aria-expanded', awolRuleCardOpen ? 'true' : 'false');
+        card.querySelector('.awol-rule-body')?.classList.toggle('hidden', !awolRuleCardOpen);
+        card.querySelector('.awol-rule-summary')?.classList.toggle('hidden', awolRuleCardOpen);
+        card.querySelector('.awol-rule-chevron')?.classList.toggle('rotate-180', awolRuleCardOpen);
+    });
+}
+
+function toggleAwolRuleCard() {
+    awolRuleCardOpen = !awolRuleCardOpen;
+    try { localStorage.setItem(AWOL_RULE_CARD_KEY, awolRuleCardOpen ? '1' : '0'); } catch (e) {}
+    applyAwolRuleCardState();
+}
+
 function renderAwolPills() {
     const cfg = window.awolConfig;
     // Super Admins and Charis/IDI/Welfare HODs always keep the editor entry
@@ -783,6 +815,8 @@ function renderAwolPills() {
         const defaultPill = '<span class="text-xs text-orange-600 font-bold bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200">Default Rule: '
             + <?= (int) CHARIS_AWOL_DEFAULT_CONSECUTIVE ?> + ' Sundays missed in a row</span>';
         $('#awolModalPillsList, #desktopAwolPillsList').html(defaultPill);
+        $('.awol-rule-summary').text(<?= (int) CHARIS_AWOL_DEFAULT_CONSECUTIVE ?> + ' Sundays in a row (default)');
+        applyAwolRuleCardState();
         return;
     }
 
@@ -811,6 +845,8 @@ function renderAwolPills() {
     `;
 
     $('#awolModalPillsList, #desktopAwolPillsList').html(pillsHtml);
+    $('.awol-rule-summary').text((cfg.consecutive_threshold ?? cfg.services_missed) + ' Sundays in a row');
+    applyAwolRuleCardState();
 }
 
 function openAwolConfigModal(isFirstTime = false) {

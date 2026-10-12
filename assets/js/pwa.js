@@ -997,48 +997,66 @@
         var indicator = el('div', { id: 'hodPull' }, ICON.spin);
         document.body.appendChild(indicator);
 
+        var startX = 0;
         var startY = 0;
         var pulling = false;
-        var scroller = null;
+        var decided = false;
 
-        function scrollerFor(node) {
+        // True only when the page and EVERY scroll container between the
+        // finger and <body> is already at its top. Checking just the nearest
+        // one let a table's overflow-x wrapper (whose overflow-y computes to
+        // `auto`, and whose scrollHeight can sit a rounding pixel above its
+        // clientHeight) report "at top" while <main> was scrolled halfway
+        // down — so dragging back up a long list was swallowed as a pull,
+        // and a long drag reloaded the page.
+        function everythingAtTop(node) {
             while (node && node !== document.body && node.nodeType === 1) {
                 var style = getComputedStyle(node);
-                if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight) return node;
+                if (/(auto|scroll)/.test(style.overflowY) && node.scrollTop > 0) return false;
                 node = node.parentNode;
             }
-            return null;
+            return (window.scrollY || document.documentElement.scrollTop) <= 0;
         }
 
-        function atTop(node) {
-            return node ? node.scrollTop <= 0 : (window.scrollY || document.documentElement.scrollTop) <= 0;
+        function reset() {
+            pulling = false;
+            indicator.style.opacity = '0';
+            indicator.style.transform = 'translateY(-60px)';
         }
 
         document.addEventListener('touchstart', function (event) {
+            pulling = false;
             // Never fight a sheet, a modal or an open keyboard.
             if (openSheet || document.querySelector('.app-modal-overlay:not(.hidden):not([hidden])')) return;
             if (event.touches.length !== 1) return;
             // Any surface can opt out of the gesture for its own subtree —
             // a canvas, a signature pad, a horizontal carousel.
             if (event.target.closest && event.target.closest('[data-no-pull]')) return;
+            if (!everythingAtTop(event.target)) return;
 
-            scroller = scrollerFor(event.target);
-            if (!atTop(scroller)) return;
-
+            startX = event.touches[0].clientX;
             startY = event.touches[0].clientY;
             pulling = true;
+            decided = false;
         }, { passive: true });
 
         document.addEventListener('touchmove', function (event) {
             if (!pulling) return;
 
+            var dx = event.touches[0].clientX - startX;
             var dy = event.touches[0].clientY - startY;
-            if (dy <= 0) {
-                pulling = false;
-                indicator.style.opacity = '0';
-                indicator.style.transform = 'translateY(-60px)';
-                return;
+
+            // Decide once, on the first clear movement, whether this is a
+            // pull at all. A sideways swipe across a wide table drifts a few
+            // pixels down and used to be cancelled as a pull, which froze
+            // horizontal scrolling whenever the page sat at the top.
+            if (!decided) {
+                if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+                decided = true;
+                if (dy <= 0 || Math.abs(dx) > dy) { reset(); return; }
             }
+
+            if (dy <= 0) { reset(); return; }
 
             var pulled = Math.min(dy, 140);
             indicator.style.opacity = String(Math.min(pulled / 80, 1));

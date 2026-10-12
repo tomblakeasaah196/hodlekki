@@ -48,7 +48,7 @@ if (!defined('PWA_HEAD_RENDERED')) {
     define('PWA_HEAD_RENDERED', true);
 
     /** Bump to bust the cached CSS/JS on every phone. Keep in step with manifest.php. */
-    define('PWA_VERSION', '1.0.0');
+    define('PWA_VERSION', '1.0.1');
 
     $pwaSignedIn = isset($_SESSION['user_id']);
     $pwaName     = $pwaSignedIn ? (string) ($_SESSION['first_name'] ?? '') : '';
