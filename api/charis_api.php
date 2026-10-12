@@ -263,7 +263,7 @@ try {
 
             // F. Fetch Urgent Welfare Checks (Manual pushes)
             $manualStmt = $pdo->query("
-                SELECT ef.id as followup_id, 'Manual' as alert_type, ef.followup_date, u.id as target_user_id, u.first_name, u.last_name, u.phone, u.physical_address,
+                SELECT ef.id as followup_id, 'Manual_Check' as alert_type, ef.followup_date, u.id as target_user_id, u.first_name, u.last_name, u.phone, u.physical_address,
                        cwa.id as assignment_id, cwa.worker_id, cwa.status as assignment_status, w.first_name as worker_fname, w.last_name as worker_lname
                 FROM embrace_followups ef
                 JOIN users u ON ef.visitor_id = u.id
@@ -292,7 +292,13 @@ try {
             $qualifying_services_count = 0;
 
             if ($is_awol_configured) {
+                // Anyone IDI has marked present since their case opened is
+                // closed out before the list is built, so a member who came
+                // back never appears for a moment longer than they should.
+                charis_awol_auto_resolve_returned($pdo, $awol_config);
+
                 $computedAwol = charis_compute_awol_list($pdo, $awol_config);
+                charis_awol_record_skipped_services($pdo, $computedAwol['skipped_services']);
                 $qualifying_services_count = (int) $computedAwol['total_qualifying_services'];
                 foreach ($computedAwol['awol_checks'] as $ac) {
                     $ac['secure_notes'] = charis_secure_welfare_notes(
@@ -306,13 +312,17 @@ try {
                 $awol_summary = [
                     'services_missed'           => $awol_config['services_missed'],
                     'missed_threshold'          => $awol_config['missed_threshold'],
+                    'consecutive_threshold'     => $awol_config['consecutive_threshold'] ?? $awol_config['missed_threshold'],
                     'period_weeks'              => $awol_config['period_weeks'],
+                    'archive_weeks'             => $awol_config['archive_weeks'] ?? CHARIS_AWOL_DEFAULT_ARCHIVE_WEEKS,
                     'service_types'             => $awol_config['service_types'],
+                    'service_rules'             => $awol_config['service_rules'] ?? charis_awol_service_rules($awol_config),
                     'spiritual_statuses'        => $awol_config['spiritual_statuses'],
                     'total_qualifying_services' => $computedAwol['total_qualifying_services'],
                     'has_services'              => $computedAwol['has_services'],
                     'matching_count'            => count($awol_checks),
                     'manual_count'              => count($manual_checks),
+                    'skipped_services'          => $computedAwol['skipped_services'],
                 ];
             }
 
@@ -1939,8 +1949,31 @@ try {
                 exit;
             }
 
-            $servicesMissed = filter_var($_POST['services_missed'] ?? $_POST['missed_threshold'] ?? null, FILTER_VALIDATE_INT);
+            $servicesMissed = filter_var(
+                $_POST['consecutive_threshold'] ?? $_POST['services_missed'] ?? $_POST['missed_threshold'] ?? null,
+                FILTER_VALIDATE_INT
+            );
+            $archiveWeeks = filter_var($_POST['archive_weeks'] ?? null, FILTER_VALIDATE_INT);
+
+            // period_weeks is the legacy rolling-window column. The editor no
+            // longer offers it, so preserve whatever is stored rather than
+            // letting a NOT NULL column take a surprise value.
+            $existingConfig = charis_get_awol_config($pdo);
             $periodWeeks = filter_var($_POST['period_weeks'] ?? null, FILTER_VALIDATE_INT);
+            if ($periodWeeks === false || $periodWeeks === null || $periodWeeks <= 0) {
+                $periodWeeks = (int) ($existingConfig['period_weeks'] ?? CHARIS_AWOL_DEFAULT_PERIOD_WEEKS);
+            }
+            if ($archiveWeeks === false || $archiveWeeks === null || $archiveWeeks <= 0) {
+                $archiveWeeks = (int) ($existingConfig['archive_weeks'] ?? CHARIS_AWOL_DEFAULT_ARCHIVE_WEEKS);
+            }
+
+            // Per-service grid: each service independently decides whether its
+            // absence advances the streak and whether its presence clears it.
+            $rawServiceRules = $_POST['service_rules'] ?? null;
+            if (is_string($rawServiceRules)) {
+                $rawServiceRules = json_decode($rawServiceRules, true);
+            }
+            $serviceRules = is_array($rawServiceRules) ? $rawServiceRules : null;
 
             $rawServiceTypes = $_POST['service_types'] ?? [];
             if (is_string($rawServiceTypes)) {
@@ -1965,13 +1998,25 @@ try {
                 exit(json_encode(['status' => 'error', 'message' => 'Period of focus must be a positive number of weeks.']));
             }
             if ($servicesMissed > 52) {
-                exit(json_encode(['status' => 'error', 'message' => 'Services missed cannot exceed 52.']));
+                exit(json_encode(['status' => 'error', 'message' => 'Consecutive absences cannot exceed 52.']));
             }
             if ($periodWeeks > 104) {
                 exit(json_encode(['status' => 'error', 'message' => 'Period of focus cannot exceed 104 weeks.']));
             }
-            if (empty($rawServiceTypes)) {
+            if ($archiveWeeks > 260) {
+                exit(json_encode(['status' => 'error', 'message' => 'Archive horizon cannot exceed 260 weeks.']));
+            }
+            // The grid is authoritative; service_types is derived for the
+            // legacy column, so only insist on one when no grid was sent.
+            if ($serviceRules === null && empty($rawServiceTypes)) {
                 exit(json_encode(['status' => 'error', 'message' => 'Please select at least one service type.']));
+            }
+            if ($serviceRules !== null) {
+                $derived = charis_awol_absence_services(charis_awol_service_rules(['service_rules' => $serviceRules]));
+                if (empty($derived)) {
+                    exit(json_encode(['status' => 'error', 'message' => 'At least one service must count towards absence.']));
+                }
+                $rawServiceTypes = $derived;
             }
             if (empty($rawSpiritualStatuses)) {
                 exit(json_encode(['status' => 'error', 'message' => 'Please select at least one spiritual status.']));
@@ -1984,7 +2029,9 @@ try {
                 $rawServiceTypes,
                 $rawSpiritualStatuses,
                 $user_id,
-                isset($_POST['change_reason']) ? (string) $_POST['change_reason'] : null
+                isset($_POST['change_reason']) ? (string) $_POST['change_reason'] : null,
+                $serviceRules,
+                $archiveWeeks
             );
 
             echo json_encode([

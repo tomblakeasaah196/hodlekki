@@ -132,32 +132,49 @@ $charisCanConfigureAwol = !empty($charisPageAccess['can_configure_awol']);
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                    <label for="awolCfgServicesMissed" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Services Missed (N) *</label>
-                    <input type="number" name="services_missed" id="awolCfgServicesMissed" min="1" max="52" required value="<?= (int) CHARIS_AWOL_DEFAULT_SERVICES_MISSED ?>" class="w-full px-4 py-3 border border-gray-200 rounded-xl text-lg font-black text-gray-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all">
-                    <p class="text-[11px] text-gray-400 font-medium mt-1">Minimum total services missed</p>
+                    <label for="awolCfgServicesMissed" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Consecutive Absences (N) *</label>
+                    <input type="number" name="consecutive_threshold" id="awolCfgServicesMissed" min="1" max="52" required value="<?= (int) CHARIS_AWOL_DEFAULT_CONSECUTIVE ?>" class="w-full px-4 py-3 border border-gray-200 rounded-xl text-lg font-black text-gray-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all">
+                    <p class="text-[11px] text-gray-400 font-medium mt-1">In a row, since they were last present</p>
                 </div>
                 <div>
-                    <label for="awolCfgPeriodWeeks" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Period of Focus (W weeks) *</label>
+                    <label for="awolCfgArchiveWeeks" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Archive After (W weeks) *</label>
                     <div class="relative">
-                        <input type="number" name="period_weeks" id="awolCfgPeriodWeeks" min="1" max="104" required value="<?= (int) CHARIS_AWOL_DEFAULT_PERIOD_WEEKS ?>" class="w-full px-4 py-3 pr-16 border border-gray-200 rounded-xl text-lg font-black text-gray-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all">
+                        <input type="number" name="archive_weeks" id="awolCfgArchiveWeeks" min="1" max="260" required value="<?= (int) CHARIS_AWOL_DEFAULT_ARCHIVE_WEEKS ?>" class="w-full px-4 py-3 pr-16 border border-gray-200 rounded-xl text-lg font-black text-gray-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all">
                         <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 uppercase pointer-events-none">weeks</span>
                     </div>
-                    <p class="text-[11px] text-gray-400 font-medium mt-1">Rolling calendar weeks in Lagos time</p>
+                    <p class="text-[11px] text-gray-400 font-medium mt-1">Unbroken weeks away before Dormant</p>
                 </div>
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Qualifying Service Types *</label>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5" id="awolServiceTypesGroup">
-                    <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50/50 hover:border-orange-200 transition-all has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50/40">
-                        <input type="checkbox" name="service_types[]" value="Sunday_Service" checked class="cfg-awol-service-type w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500">
-                        <span class="text-xs font-bold text-gray-800">Sunday Service</span>
-                    </label>
-                    <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50/50 hover:border-orange-200 transition-all has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50/40">
-                        <input type="checkbox" name="service_types[]" value="Midweek_Service" checked class="cfg-awol-service-type w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500">
-                        <span class="text-xs font-bold text-gray-800">Thursday Midweek Service</span>
-                    </label>
+                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Service Rules *</label>
+                <div class="border border-gray-200 rounded-xl overflow-hidden" id="awolServiceRulesGrid">
+                    <div class="grid grid-cols-[1fr_auto_auto] gap-2 items-end px-3 py-2 bg-gray-50">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-gray-500">Service</span>
+                        <span class="text-[10px] font-black uppercase tracking-wider text-gray-500 text-center w-20 leading-tight">Counts as<br>absence</span>
+                        <span class="text-[10px] font-black uppercase tracking-wider text-gray-500 text-center w-20 leading-tight">Resets the<br>clock</span>
+                    </div>
+                        <div class="grid grid-cols-[1fr_auto_auto] gap-2 items-center px-3 py-2.5 border-t border-gray-100">
+                            <span class="text-xs font-bold text-gray-800">Sunday Service</span>
+                            <label class="flex justify-center w-20" title="Missing this service advances the counter">
+                                <input type="checkbox" class="cfg-awol-counts w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500" data-service="Sunday_Service" checked>
+                            </label>
+                            <label class="flex justify-center w-20" title="Attending this service sets the counter back to zero">
+                                <input type="checkbox" class="cfg-awol-resets w-4 h-4 text-green-600 rounded border-gray-300 focus:ring-green-500" data-service="Sunday_Service" checked>
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-[1fr_auto_auto] gap-2 items-center px-3 py-2.5 border-t border-gray-100">
+                            <span class="text-xs font-bold text-gray-800">Thursday Midweek Service</span>
+                            <label class="flex justify-center w-20" title="Missing this service advances the counter">
+                                <input type="checkbox" class="cfg-awol-counts w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500" data-service="Midweek_Service">
+                            </label>
+                            <label class="flex justify-center w-20" title="Attending this service sets the counter back to zero">
+                                <input type="checkbox" class="cfg-awol-resets w-4 h-4 text-green-600 rounded border-gray-300 focus:ring-green-500" data-service="Midweek_Service" checked>
+                            </label>
+                        </div>
                 </div>
+                <p class="text-[11px] text-gray-400 font-medium mt-1.5">Members travel far and miss midweek for work, so midweek absence does not flag anyone &mdash; but midweek presence still clears them.</p>
+                <input type="hidden" name="service_rules" id="awolCfgServiceRules" value="">
             </div>
 
             <div>
@@ -207,7 +224,7 @@ $charisCanConfigureAwol = !empty($charisPageAccess['can_configure_awol']);
             <div class="p-3.5 bg-orange-50 border border-orange-200 rounded-2xl">
                 <p class="text-[10px] font-black uppercase tracking-wider text-orange-600 mb-1">Live Rule Preview</p>
                 <p id="awolConfigSentencePreview" class="text-xs font-bold text-gray-800 leading-relaxed">
-                    Flag members with spiritual status (Member, Worker, Pastor) who missed <?= (int) CHARIS_AWOL_DEFAULT_SERVICES_MISSED ?> or more qualifying Sunday Service or Midweek Service in the last <?= (int) CHARIS_AWOL_DEFAULT_PERIOD_WEEKS ?> rolling calendar weeks.
+                    Flag members with spiritual status (Member, Worker, Pastor) who have missed <?= (int) CHARIS_AWOL_DEFAULT_CONSECUTIVE ?> Sunday Services in a row. Attending any service resets the counter to zero. Archive to Dormant after <?= (int) CHARIS_AWOL_DEFAULT_ARCHIVE_WEEKS ?> unbroken weeks away.
                 </p>
             </div>
 

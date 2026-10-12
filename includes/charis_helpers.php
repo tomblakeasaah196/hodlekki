@@ -41,6 +41,25 @@ const CHARIS_EXCLUDED_ATTENDANCE_STATUSES = [
 const CHARIS_AWOL_DEFAULT_SERVICES_MISSED = 2;
 const CHARIS_AWOL_DEFAULT_PERIOD_WEEKS = 5;
 
+// Consecutive qualifying absences before a member is flagged.
+const CHARIS_AWOL_DEFAULT_CONSECUTIVE = 3;
+
+// Unbroken weeks away before a flagged member drops out of the active list
+// into Dormant. Deliberately separate from the legacy rolling-window weeks:
+// reusing that value (live setting: 3) would archive people almost at once.
+const CHARIS_AWOL_DEFAULT_ARCHIVE_WEEKS = 12;
+
+// How many recent services the card's attendance strip shows. Capping it is
+// what keeps a thirty-week absence rendering as compactly as a three-week one.
+const CHARIS_AWOL_STRIP_LENGTH = 8;
+
+// Sunday absence flags; midweek absence never does, but midweek presence still
+// clears the counter. See charis_awol_service_rules().
+const CHARIS_AWOL_DEFAULT_SERVICE_RULES = [
+    'Sunday_Service'  => ['counts_absence' => true,  'resets_clock' => true],
+    'Midweek_Service' => ['counts_absence' => false, 'resets_clock' => true],
+];
+
 const CHARIS_AWOL_CANONICAL_SERVICES = [
     'Sunday_Service'  => 'Sunday Service',
     'Midweek_Service' => 'Thursday Midweek Service',
@@ -270,10 +289,12 @@ function charis_secure_welfare_notes(
         $noteParams = [$targetUserId];
         if ($createdOnOrBefore !== null) $noteParams[] = $createdOnOrBefore;
 
+        // LEFT JOIN: system-generated notes (auto-resolution on attendance)
+        // carry no author_id, and an inner join would hide them entirely.
         $stmt = $pdo->prepare("
             SELECT n.*, u.first_name, u.last_name
               FROM charis_welfare_notes n
-              JOIN users u ON u.id = n.author_id
+              LEFT JOIN users u ON u.id = n.author_id
              WHERE n.target_user_id = ? {$noteDateWhere}
              ORDER BY n.created_at ASC, n.id ASC
         ");
@@ -301,6 +322,9 @@ function charis_secure_welfare_notes(
         $access,
         $isAssignedWorker
     ): bool {
+        // System notes are part of the shared record: everyone who can see the
+        // case can see why it closed itself.
+        if (!empty($note['is_system']) || $note['author_id'] === null) return true;
         if ((int) $note['author_id'] === $currentUserId) return true;
 
         $visibility = json_decode((string) ($note['visible_to'] ?? ''), true);
@@ -368,15 +392,28 @@ function charis_get_awol_config(PDO $pdo): ?array
             $spiritualStatuses = CHARIS_AWOL_DEFAULT_STATUSES;
         }
 
+        // The streak columns arrive with the rebuild migration. Until it runs,
+        // fall back so a half-deployed tree keeps serving a sane rule.
+        $consecutive = isset($row['consecutive_threshold'])
+            ? (int) $row['consecutive_threshold']
+            : (int) $row['missed_threshold'];
+        $archiveWeeks = isset($row['archive_weeks'])
+            ? (int) $row['archive_weeks']
+            : CHARIS_AWOL_DEFAULT_ARCHIVE_WEEKS;
+        $serviceRules = charis_awol_service_rules(['service_rules' => $row['service_rules'] ?? null]);
+
         return [
-            'id'                 => (int) $row['id'],
-            'services_missed'    => (int) $row['missed_threshold'],
-            'missed_threshold'   => (int) $row['missed_threshold'],
-            'period_weeks'       => (int) $row['period_weeks'],
-            'service_types'      => array_values($serviceTypes),
-            'spiritual_statuses' => array_values($spiritualStatuses),
-            'updated_by'         => $row['updated_by'] !== null ? (int) $row['updated_by'] : null,
-            'updated_at'         => $row['updated_at'],
+            'id'                    => (int) $row['id'],
+            'services_missed'       => $consecutive,
+            'missed_threshold'      => $consecutive,
+            'consecutive_threshold' => $consecutive,
+            'period_weeks'          => (int) $row['period_weeks'],
+            'archive_weeks'         => $archiveWeeks,
+            'service_types'         => array_values($serviceTypes),
+            'service_rules'         => $serviceRules,
+            'spiritual_statuses'    => array_values($spiritualStatuses),
+            'updated_by'            => $row['updated_by'] !== null ? (int) $row['updated_by'] : null,
+            'updated_at'            => $row['updated_at'],
         ];
     } catch (PDOException $e) {
         error_log('Charis AWOL config unavailable: ' . $e->getMessage());
@@ -402,14 +439,22 @@ function charis_get_historical_awol_config(PDO $pdo, string $asOfDateTime): ?arr
         if ($row) {
             $serviceTypes = json_decode((string) $row['service_types'], true);
             $spiritualStatuses = json_decode((string) $row['spiritual_statuses'], true);
+            $consecutive = isset($row['consecutive_threshold'])
+                ? (int) $row['consecutive_threshold']
+                : (int) $row['missed_threshold'];
             return [
-                'services_missed'    => (int) $row['missed_threshold'],
-                'missed_threshold'   => (int) $row['missed_threshold'],
-                'period_weeks'       => (int) $row['period_weeks'],
-                'service_types'      => is_array($serviceTypes) ? array_values($serviceTypes) : array_keys(CHARIS_AWOL_CANONICAL_SERVICES),
-                'spiritual_statuses' => is_array($spiritualStatuses) ? array_values($spiritualStatuses) : CHARIS_AWOL_DEFAULT_STATUSES,
-                'updated_by'         => $row['updated_by'] !== null ? (int) $row['updated_by'] : null,
-                'updated_at'         => $row['created_at'],
+                'services_missed'       => $consecutive,
+                'missed_threshold'      => $consecutive,
+                'consecutive_threshold' => $consecutive,
+                'period_weeks'          => (int) $row['period_weeks'],
+                'archive_weeks'         => isset($row['archive_weeks'])
+                    ? (int) $row['archive_weeks']
+                    : CHARIS_AWOL_DEFAULT_ARCHIVE_WEEKS,
+                'service_types'         => is_array($serviceTypes) ? array_values($serviceTypes) : array_keys(CHARIS_AWOL_CANONICAL_SERVICES),
+                'service_rules'         => charis_awol_service_rules(['service_rules' => $row['service_rules'] ?? null]),
+                'spiritual_statuses'    => is_array($spiritualStatuses) ? array_values($spiritualStatuses) : CHARIS_AWOL_DEFAULT_STATUSES,
+                'updated_by'            => $row['updated_by'] !== null ? (int) $row['updated_by'] : null,
+                'updated_at'            => $row['created_at'],
             ];
         }
     } catch (Throwable $e) {
@@ -420,6 +465,11 @@ function charis_get_historical_awol_config(PDO $pdo, string $asOfDateTime): ?arr
 
 /**
  * Persist the shared AWOL configuration and append an auditable history record.
+ *
+ * $serviceRules carries the per-service grid the editor now renders:
+ * each canonical service independently decides whether its absence advances
+ * the streak and whether its attendance clears it. $serviceTypes is still
+ * written so an older tree reading the legacy column keeps working.
  */
 function charis_save_awol_config(
     PDO $pdo,
@@ -428,19 +478,32 @@ function charis_save_awol_config(
     array $serviceTypes,
     array $spiritualStatuses,
     int $updatedBy,
-    ?string $changeReason = null
+    ?string $changeReason = null,
+    ?array $serviceRules = null,
+    ?int $archiveWeeks = null
 ): array {
     if ($servicesMissed <= 0 || $servicesMissed > 52) {
-        throw new InvalidArgumentException('Services missed must be a positive integer between 1 and 52.');
+        throw new InvalidArgumentException('Consecutive absences must be a positive integer between 1 and 52.');
     }
     if ($periodWeeks <= 0 || $periodWeeks > 104) {
         throw new InvalidArgumentException('Period of focus must be a positive integer between 1 and 104 weeks.');
     }
+    $archiveWeeks = $archiveWeeks ?? CHARIS_AWOL_DEFAULT_ARCHIVE_WEEKS;
+    if ($archiveWeeks <= 0 || $archiveWeeks > 260) {
+        throw new InvalidArgumentException('Archive horizon must be a positive integer between 1 and 260 weeks.');
+    }
 
+    $rules = charis_awol_service_rules(['service_rules' => $serviceRules]);
+    if (!charis_awol_absence_services($rules)) {
+        throw new InvalidArgumentException('At least one service type must count towards absence.');
+    }
+
+    // Keep the legacy list consistent with the grid so an older tree reading
+    // service_types still sees the services that actually drive the rule.
     $validServiceKeys = array_keys(CHARIS_AWOL_CANONICAL_SERVICES);
     $filteredServices = array_values(array_intersect($validServiceKeys, $serviceTypes));
-    if (empty($filteredServices)) {
-        throw new InvalidArgumentException('At least one valid service type must be selected.');
+    if (!$filteredServices) {
+        $filteredServices = charis_awol_absence_services($rules);
     }
 
     $validStatusKeys = array_keys(CHARIS_AWOL_CANONICAL_STATUSES);
@@ -451,6 +514,7 @@ function charis_save_awol_config(
 
     $servicesJson = json_encode($filteredServices);
     $statusesJson = json_encode($filteredStatuses);
+    $rulesJson    = json_encode($rules);
 
     $changeReason = $changeReason !== null ? trim($changeReason) : null;
     if ($changeReason === '') $changeReason = null;
@@ -460,40 +524,73 @@ function charis_save_awol_config(
             : substr($changeReason, 0, 255);
     }
 
-    $stmt = $pdo->prepare("
-        INSERT INTO charis_awol_config (id, services_missed, missed_threshold, period_weeks, service_types, spiritual_statuses, updated_by, updated_at)
-        VALUES (1, ?, ?, ?, ?, ?, ?, NOW())
-        ON DUPLICATE KEY UPDATE
-            services_missed    = VALUES(services_missed),
-            missed_threshold   = VALUES(missed_threshold),
-            period_weeks       = VALUES(period_weeks),
-            service_types      = VALUES(service_types),
-            spiritual_statuses = VALUES(spiritual_statuses),
-            updated_by         = VALUES(updated_by),
-            updated_at         = NOW()
-    ");
-    $stmt->execute([$servicesMissed, $servicesMissed, $periodWeeks, $servicesJson, $statusesJson, $updatedBy]);
+    // The streak columns arrive with the rebuild migration. If the deploy has
+    // copied PHP but not yet run migrations, fall back to the legacy shape so
+    // saving a rule never hard-fails mid-deploy.
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO charis_awol_config
+                (id, services_missed, missed_threshold, consecutive_threshold, period_weeks,
+                 archive_weeks, service_types, service_rules, spiritual_statuses, updated_by, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ON DUPLICATE KEY UPDATE
+                services_missed       = VALUES(services_missed),
+                missed_threshold      = VALUES(missed_threshold),
+                consecutive_threshold = VALUES(consecutive_threshold),
+                period_weeks          = VALUES(period_weeks),
+                archive_weeks         = VALUES(archive_weeks),
+                service_types         = VALUES(service_types),
+                service_rules         = VALUES(service_rules),
+                spiritual_statuses    = VALUES(spiritual_statuses),
+                updated_by            = VALUES(updated_by),
+                updated_at            = NOW()
+        ");
+        $stmt->execute([$servicesMissed, $servicesMissed, $servicesMissed, $periodWeeks,
+                        $archiveWeeks, $servicesJson, $rulesJson, $statusesJson, $updatedBy]);
+    } catch (PDOException $e) {
+        error_log('Charis AWOL config streak columns unavailable, saving legacy shape: ' . $e->getMessage());
+        $stmt = $pdo->prepare("
+            INSERT INTO charis_awol_config
+                (id, services_missed, missed_threshold, period_weeks, service_types, spiritual_statuses, updated_by, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, NOW())
+            ON DUPLICATE KEY UPDATE
+                services_missed    = VALUES(services_missed),
+                missed_threshold   = VALUES(missed_threshold),
+                period_weeks       = VALUES(period_weeks),
+                service_types      = VALUES(service_types),
+                spiritual_statuses = VALUES(spiritual_statuses),
+                updated_by         = VALUES(updated_by),
+                updated_at         = NOW()
+        ");
+        $stmt->execute([$servicesMissed, $servicesMissed, $periodWeeks, $servicesJson, $statusesJson, $updatedBy]);
+    }
 
     try {
         $histStmt = $pdo->prepare("
-            INSERT INTO charis_awol_config_history (config_id, services_missed, missed_threshold, period_weeks, service_types, spiritual_statuses, updated_by, change_reason, created_at)
-            VALUES (1, ?, ?, ?, ?, ?, ?, ?, NOW())
+            INSERT INTO charis_awol_config_history
+                (config_id, services_missed, missed_threshold, consecutive_threshold, period_weeks,
+                 archive_weeks, service_types, service_rules, spiritual_statuses, updated_by, change_reason, created_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ");
-        $histStmt->execute([$servicesMissed, $servicesMissed, $periodWeeks, $servicesJson, $statusesJson, $updatedBy, $changeReason]);
+        $histStmt->execute([$servicesMissed, $servicesMissed, $servicesMissed, $periodWeeks,
+                            $archiveWeeks, $servicesJson, $rulesJson, $statusesJson, $updatedBy, $changeReason]);
     } catch (Throwable $e) {
         error_log('Charis AWOL config history write failed: ' . $e->getMessage());
     }
 
     return [
-        'id'                 => 1,
-        'services_missed'    => $servicesMissed,
-        'missed_threshold'   => $servicesMissed,
-        'period_weeks'       => $periodWeeks,
-        'service_types'      => $filteredServices,
-        'spiritual_statuses' => $filteredStatuses,
-        'updated_by'         => $updatedBy,
-        'change_reason'      => $changeReason,
-        'updated_at'         => date('Y-m-d H:i:s'),
+        'id'                    => 1,
+        'services_missed'       => $servicesMissed,
+        'missed_threshold'      => $servicesMissed,
+        'consecutive_threshold' => $servicesMissed,
+        'period_weeks'          => $periodWeeks,
+        'archive_weeks'         => $archiveWeeks,
+        'service_types'         => $filteredServices,
+        'service_rules'         => $rules,
+        'spiritual_statuses'    => $filteredStatuses,
+        'updated_by'            => $updatedBy,
+        'change_reason'         => $changeReason,
+        'updated_at'            => date('Y-m-d H:i:s'),
     ];
 }
 
@@ -543,45 +640,149 @@ function charis_get_awol_config_history(PDO $pdo, int $limit = 5): array
 }
 
 /**
- * Compute the active AWOL list based on the shared configuration and Lagos timezone.
+ * Normalise the per-service behaviour grid into a complete map.
+ *
+ * Each canonical service carries two independent switches:
+ *   counts_absence - missing it advances the streak
+ *   resets_clock   - attending it sets the streak back to zero
+ *
+ * The two are deliberately asymmetric for the midweek service. Members
+ * travel a long way to Lekki and miss Mercy Experience for work, so a
+ * midweek absence must never flag anyone; but a midweek attendance still
+ * proves they are engaged, so it clears them.
+ *
+ * @return array<string,array{counts_absence:bool,resets_clock:bool}>
+ */
+function charis_awol_service_rules(array $config): array
+{
+    $raw = $config['service_rules'] ?? null;
+    if (is_string($raw)) {
+        $raw = json_decode($raw, true);
+    }
+
+    $rules = [];
+    foreach (array_keys(CHARIS_AWOL_CANONICAL_SERVICES) as $key) {
+        if (is_array($raw) && isset($raw[$key]) && is_array($raw[$key])) {
+            $rules[$key] = [
+                'counts_absence' => !empty($raw[$key]['counts_absence']),
+                'resets_clock'   => !empty($raw[$key]['resets_clock']),
+            ];
+            continue;
+        }
+        // No grid stored yet (half-deployed tree): fall back to the agreed
+        // asymmetry rather than the legacy service_types list. Reading the
+        // legacy list here would make midweek attendance invisible, which is
+        // the exact failure the rebuild exists to remove.
+        $rules[$key] = [
+            'counts_absence' => $key === 'Sunday_Service',
+            'resets_clock'   => true,
+        ];
+    }
+    return $rules;
+}
+
+/** @return string[] canonical keys whose absence advances the streak */
+function charis_awol_absence_services(array $rules): array
+{
+    return array_keys(array_filter($rules, static fn(array $r): bool => $r['counts_absence']));
+}
+
+/** @return string[] canonical keys whose attendance resets the streak */
+function charis_awol_reset_services(array $rules): array
+{
+    return array_keys(array_filter($rules, static fn(array $r): bool => $r['resets_clock']));
+}
+
+/**
+ * Persist Sundays the engine treated as "did not hold" so a broken check-in
+ * scanner stays visible. A skipped service never advances a streak and never
+ * resets one, so an undetected outage silently PAUSES the whole church's
+ * counters -- these rows are how that becomes noticeable.
+ */
+function charis_awol_record_skipped_services(PDO $pdo, array $skipped): void
+{
+    if (!$skipped) return;
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO charis_awol_skipped_services (service_date, event_category, reason)
+            VALUES (?, ?, 'zero_attendance')
+            ON DUPLICATE KEY UPDATE detected_at = detected_at
+        ");
+        foreach ($skipped as $row) {
+            $stmt->execute([$row['service_date'], $row['event_category']]);
+        }
+    } catch (PDOException $e) {
+        error_log('Charis AWOL skipped-service log failed: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Compute the active AWOL list as a CONSECUTIVE-ABSENCE STREAK.
+ *
+ * The previous engine subtracted attended days from the total services in a
+ * rolling window, which ignored ORDER: a member present on 4 October still
+ * read "3 MISSED" because absences from before that visit kept counting.
+ * This engine anchors on the last time the member was actually in the house
+ * and counts only the unbroken run of qualifying absences after it, so any
+ * single attendance clears them until they miss again.
+ *
+ * Anchor resolution:
+ *   - last attendance at a service whose rule resets the clock; failing that
+ *   - the member's registration date, which gives brand-new members their
+ *     grace for free: they can only reach the threshold by missing N
+ *     consecutive Sundays, which takes N weeks by definition.
  */
 function charis_compute_awol_list(
     PDO $pdo,
     array $config,
     ?DateTimeImmutable $asOf = null
 ): array {
-    $now = $asOf ?? new DateTimeImmutable('now', new DateTimeZone('Africa/Lagos'));
-    $periodWeeks = (int) ($config['period_weeks'] ?? CHARIS_AWOL_DEFAULT_PERIOD_WEEKS);
-    $missedThreshold = (int) ($config['missed_threshold'] ?? $config['services_missed'] ?? CHARIS_AWOL_DEFAULT_SERVICES_MISSED);
-    $serviceTypes = (array) ($config['service_types'] ?? array_keys(CHARIS_AWOL_CANONICAL_SERVICES));
+    $now   = $asOf ?? new DateTimeImmutable('now', new DateTimeZone('Africa/Lagos'));
+    $rules = charis_awol_service_rules($config);
+
+    $threshold = (int) ($config['consecutive_threshold']
+        ?? $config['missed_threshold']
+        ?? $config['services_missed']
+        ?? CHARIS_AWOL_DEFAULT_SERVICES_MISSED);
+    $archiveWeeks = (int) ($config['archive_weeks'] ?? CHARIS_AWOL_DEFAULT_ARCHIVE_WEEKS);
     $spiritualStatuses = (array) ($config['spiritual_statuses'] ?? CHARIS_AWOL_DEFAULT_STATUSES);
 
-    if (empty($serviceTypes) || empty($spiritualStatuses) || $missedThreshold <= 0 || $periodWeeks <= 0) {
-        return [
-            'qualifying_services'       => [],
-            'total_qualifying_services' => 0,
-            'period_weeks'              => $periodWeeks,
-            'missed_threshold'          => $missedThreshold,
-            'service_types'             => $serviceTypes,
-            'spiritual_statuses'        => $spiritualStatuses,
-            'awol_checks'               => [],
-            'has_services'              => false,
-        ];
+    $absenceServices = charis_awol_absence_services($rules);
+    $resetServices   = charis_awol_reset_services($rules);
+
+    $empty = [
+        'qualifying_services'       => [],
+        'total_qualifying_services' => 0,
+        'consecutive_threshold'     => $threshold,
+        'missed_threshold'          => $threshold,
+        'archive_weeks'             => $archiveWeeks,
+        'service_rules'             => $rules,
+        'service_types'             => $absenceServices,
+        'spiritual_statuses'        => $spiritualStatuses,
+        'awol_checks'               => [],
+        'skipped_services'          => [],
+        'has_services'              => false,
+    ];
+
+    if (!$absenceServices || !$spiritualStatuses || $threshold <= 0) {
+        return $empty;
     }
 
-    $nowStr = $now->format('Y-m-d H:i:s');
-    $windowStart = $now->modify("-{$periodWeeks} weeks");
-    $windowStartStr = $windowStart->format('Y-m-d H:i:s');
-    $todayDate = $now->format('Y-m-d');
+    // Look back far enough to resolve the longest streak we still display,
+    // plus headroom so a member sitting just under the archive horizon is
+    // measured against real history rather than a truncated window.
+    $lookbackWeeks = min(260, max(8, $archiveWeeks + $threshold + 4));
+    $windowStart   = $now->modify("-{$lookbackWeeks} weeks");
+    $nowStr        = $now->format('Y-m-d H:i:s');
+    $todayDate     = $now->format('Y-m-d');
 
-    // 1. Find completed qualifying service occurrences for selected types in rolling window
-    $categoryAliases = charis_awol_event_category_aliases($serviceTypes);
+    // 1. Every service occurrence that either counts or clears, newest last.
+    $allServiceKeys  = array_values(array_unique(array_merge($absenceServices, $resetServices)));
+    $categoryAliases = charis_awol_event_category_aliases($allServiceKeys);
     $typePlaceholders = implode(',', array_fill(0, count($categoryAliases), '?'));
-    $eventParams = array_merge($categoryAliases, [$windowStartStr, $nowStr]);
-
     $eventStmt = $pdo->prepare("
         SELECT REPLACE(event_category, ' ', '_') AS event_category,
-               DATE(event_date) AS service_date, MIN(event_date) AS event_date
+               DATE(event_date) AS service_date
           FROM events
          WHERE event_category IN ({$typePlaceholders})
            AND event_date >= ?
@@ -589,31 +790,67 @@ function charis_compute_awol_list(
          GROUP BY REPLACE(event_category, ' ', '_'), DATE(event_date)
          ORDER BY service_date ASC
     ");
-    $eventStmt->execute($eventParams);
-    $qualifyingServices = $eventStmt->fetchAll(PDO::FETCH_ASSOC);
+    $eventStmt->execute(array_merge($categoryAliases, [$windowStart->format('Y-m-d H:i:s'), $nowStr]));
+    $services = $eventStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $totalQualifyingCount = count($qualifyingServices);
-    if ($totalQualifyingCount === 0) {
-        return [
-            'qualifying_services'       => [],
-            'total_qualifying_services' => 0,
-            'period_weeks'              => $periodWeeks,
-            'missed_threshold'          => $missedThreshold,
-            'service_types'             => $serviceTypes,
-            'spiritual_statuses'        => $spiritualStatuses,
-            'awol_checks'               => [],
-            'has_services'              => false,
-        ];
+    if (!$services) {
+        return $empty;
     }
 
-    $qualifyingDates = array_values(array_unique(array_column($qualifyingServices, 'service_date')));
-    $datePlaceholders = implode(',', array_fill(0, count($qualifyingDates), '?'));
+    $serviceDates = array_values(array_unique(array_column($services, 'service_date')));
+    $datePlaceholders = implode(',', array_fill(0, count($serviceDates), '?'));
+    $attendanceUnion = assim_attendance_union_sql();
 
-    // 2. Fetch eligible people matching spiritual statuses and attendance status exclusions
+    // 2. Who was present on each service date. One row per person per day:
+    //    multiple check-ins on the same day are a single presence.
+    $attStmt = $pdo->prepare("
+        SELECT DISTINCT attended.user_id, attended.attended_on
+          FROM {$attendanceUnion} attended
+         WHERE attended.attended_on IN ({$datePlaceholders})
+    ");
+    $attStmt->execute($serviceDates);
+    $presenceByUser = [];
+    $attendedDates  = [];
+    while ($row = $attStmt->fetch(PDO::FETCH_ASSOC)) {
+        $presenceByUser[(int) $row['user_id']][$row['attended_on']] = true;
+        $attendedDates[$row['attended_on']] = true;
+    }
+
+    // 3. A service nobody at all attended did not hold. Skip it: it must not
+    //    advance a streak (the church was not gathered) and must not reset one.
+    $heldAbsenceServices = [];
+    $skippedServices     = [];
+    foreach ($services as $service) {
+        $counts = !empty($rules[$service['event_category']]['counts_absence']);
+        if (!$counts) continue;
+        if (isset($attendedDates[$service['service_date']])) {
+            $heldAbsenceServices[] = $service;
+        } else {
+            $skippedServices[] = $service;
+        }
+    }
+
+    // Dates whose service clears the counter, for anchor resolution.
+    $resetDates = [];
+    foreach ($services as $service) {
+        if (!empty($rules[$service['event_category']]['resets_clock'])) {
+            $resetDates[$service['service_date']] = true;
+        }
+    }
+
+    if (!$heldAbsenceServices) {
+        $empty['skipped_services'] = $skippedServices;
+        $empty['has_services']     = true;
+        return $empty;
+    }
+
+    // 4. Eligible people. Registration date doubles as the streak anchor for
+    //    anyone never recorded present, so a member registered last week is
+    //    not flagged before they have had N Sundays to appear.
     $statusPlaceholders = implode(',', array_fill(0, count($spiritualStatuses), '?'));
     $userStmt = $pdo->prepare("
         SELECT u.id, u.first_name, u.last_name, u.phone, u.physical_address, u.email,
-               u.spiritual_status, u.attendance_status, u.picture_path,
+               u.spiritual_status, u.attendance_status, u.picture_path, u.created_at,
                r.name AS region_name
           FROM users u
           LEFT JOIN regions r ON u.region_id = r.id
@@ -624,155 +861,350 @@ function charis_compute_awol_list(
     $userStmt->execute($spiritualStatuses);
     $eligibleUsers = $userStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    if (empty($eligibleUsers)) {
-        return [
-            'qualifying_services'       => $qualifyingServices,
-            'total_qualifying_services' => $totalQualifyingCount,
-            'period_weeks'              => $periodWeeks,
-            'missed_threshold'          => $missedThreshold,
-            'service_types'             => $serviceTypes,
-            'spiritual_statuses'        => $spiritualStatuses,
-            'awol_checks'               => [],
-            'has_services'              => true,
-        ];
+    if (!$eligibleUsers) {
+        $empty['has_services']     = true;
+        $empty['skipped_services'] = $skippedServices;
+        return $empty;
     }
 
-    $attendanceUnion = assim_attendance_union_sql();
-
-    // 3. User attendance on qualifying dates - deduplicating same-day multiple attendance records
-    $attStmt = $pdo->prepare("
-        SELECT attended.user_id, attended.attended_on, COUNT(DISTINCT attended.attended_on) AS distinct_days
-          FROM {$attendanceUnion} attended
-         WHERE attended.attended_on IN ({$datePlaceholders})
-         GROUP BY attended.user_id, attended.attended_on
-    ");
-    $attStmt->execute($qualifyingDates);
-    $userAttendedMap = [];
-    while ($row = $attStmt->fetch(PDO::FETCH_ASSOC)) {
-        $uid = (int) $row['user_id'];
-        $userAttendedMap[$uid][$row['attended_on']] = true;
-    }
-
-    // 4. Latest attended service date overall (up to now)
-    $latestAttStmt = $pdo->prepare("
+    // 5. Last presence overall, for the "Away since" line on the card.
+    $latestStmt = $pdo->prepare("
         SELECT attended.user_id, MAX(attended.attended_on) AS last_attended
           FROM {$attendanceUnion} attended
          WHERE attended.attended_on <= ?
          GROUP BY attended.user_id
     ");
-    $latestAttStmt->execute([$todayDate]);
+    $latestStmt->execute([$todayDate]);
     $latestAttendedMap = [];
-    while ($row = $latestAttStmt->fetch(PDO::FETCH_ASSOC)) {
+    while ($row = $latestStmt->fetch(PDO::FETCH_ASSOC)) {
         $latestAttendedMap[(int) $row['user_id']] = $row['last_attended'];
     }
 
-    // 5. Active & resolved assignments in charis_welfare_assignments (followup_id = 0)
-    $hasResolvedAt = charis_column_exists($pdo, 'charis_welfare_assignments', 'resolved_at');
-    $resolvedCol = $hasResolvedAt ? 'cwa.resolved_at' : 'NULL';
-    $asgStmt = $pdo->query("
-        SELECT cwa.id AS assignment_id, cwa.target_user_id, cwa.worker_id, cwa.status AS assignment_status,
-               {$resolvedCol} AS resolved_at, cwa.created_at,
-               w.first_name AS worker_fname, w.last_name AS worker_lname, w.phone AS worker_phone
-          FROM charis_welfare_assignments cwa
-          LEFT JOIN users w ON cwa.worker_id = w.id
-         WHERE cwa.followup_id = 0
-         ORDER BY cwa.id DESC
-    ");
+    // 6. Open assignments, so a flagged member keeps their assigned worker.
     $assignmentsByUser = [];
-    while ($row = $asgStmt->fetch(PDO::FETCH_ASSOC)) {
-        $uid = (int) $row['target_user_id'];
-        if (!isset($assignmentsByUser[$uid])) {
-            $assignmentsByUser[$uid] = [];
+    try {
+        $asgStmt = $pdo->query("
+            SELECT cwa.id AS assignment_id, cwa.target_user_id, cwa.worker_id,
+                   cwa.status AS assignment_status, cwa.created_at,
+                   w.first_name AS worker_fname, w.last_name AS worker_lname, w.phone AS worker_phone
+              FROM charis_welfare_assignments cwa
+              LEFT JOIN users w ON cwa.worker_id = w.id
+             WHERE cwa.followup_id = 0 AND cwa.status = 'Assigned'
+             ORDER BY cwa.id DESC
+        ");
+        while ($row = $asgStmt->fetch(PDO::FETCH_ASSOC)) {
+            $uid = (int) $row['target_user_id'];
+            if (!isset($assignmentsByUser[$uid])) $assignmentsByUser[$uid] = $row;
         }
-        $assignmentsByUser[$uid][] = $row;
+    } catch (PDOException $e) {
+        error_log('Charis AWOL assignments unavailable: ' . $e->getMessage());
     }
 
-    // 6. Evaluate each eligible user
+    // The last few counting services, for the fixed-width dot strip. Capped so
+    // a member away thirty weeks renders exactly as compactly as one away three.
+    $stripServices = array_slice($heldAbsenceServices, -CHARIS_AWOL_STRIP_LENGTH);
+
     $awolResults = [];
-
     foreach ($eligibleUsers as $user) {
-        $uid = (int) $user['id'];
-        $attendedDates = $userAttendedMap[$uid] ?? [];
-        $attendedCount = count($attendedDates);
-        $missedTotal = $totalQualifyingCount - $attendedCount;
+        $uid      = (int) $user['id'];
+        $presence = $presenceByUser[$uid] ?? [];
 
-        $userAssignments = $assignmentsByUser[$uid] ?? [];
-        $activeAssignment = null;
-        $resolvedAssignment = null;
-
-        foreach ($userAssignments as $asg) {
-            if ($asg['assignment_status'] === 'Resolved') {
-                if ($resolvedAssignment === null) {
-                    $resolvedAssignment = $asg;
-                }
-            } elseif ($activeAssignment === null) {
-                $activeAssignment = $asg;
+        // Anchor: the last day they were in the house for a clearing service.
+        $anchor = null;
+        foreach ($presence as $date => $_) {
+            if (isset($resetDates[$date]) && ($anchor === null || $date > $anchor)) {
+                $anchor = $date;
             }
         }
-
-        // Resolution suppression / reappearance:
-        if ($resolvedAssignment !== null && $activeAssignment === null) {
-            $resolvedTimestamp = $resolvedAssignment['resolved_at'] ?? $resolvedAssignment['created_at'];
-            if ($resolvedTimestamp) {
-                $resolvedDate = substr($resolvedTimestamp, 0, 10);
-                $qualifyingAfter = 0;
-                $attendedAfter = 0;
-                foreach ($qualifyingServices as $qs) {
-                    if ($qs['service_date'] > $resolvedDate || $qs['event_date'] > $resolvedTimestamp) {
-                        $qualifyingAfter++;
-                        if (isset($attendedDates[$qs['service_date']])) {
-                            $attendedAfter++;
-                        }
-                    }
-                }
-                $missedAfter = $qualifyingAfter - $attendedAfter;
-                if ($missedAfter < $missedThreshold) {
-                    continue; // Suppress: member has not missed >= threshold services since resolution
-                }
-            }
+        $anchoredOnRegistration = false;
+        if ($anchor === null) {
+            $registered = !empty($user['created_at']) ? substr((string) $user['created_at'], 0, 10) : null;
+            $anchor = $registered ?: $windowStart->format('Y-m-d');
+            $anchoredOnRegistration = true;
         }
 
-        if ($missedTotal >= $missedThreshold) {
-            $lastAttended = $latestAttendedMap[$uid] ?? null;
+        // Streak: the unbroken run of counting services after the anchor.
+        $streak      = 0;
+        $missedDates = [];
+        foreach ($heldAbsenceServices as $service) {
+            if ($service['service_date'] <= $anchor) continue;
+            if (isset($presence[$service['service_date']])) {
+                // Defensive: a presence on a counting day that is not itself a
+                // reset service still proves they were here, so never count it.
+                $streak = 0;
+                $missedDates = [];
+                continue;
+            }
+            $streak++;
+            $missedDates[] = $service['service_date'];
+        }
 
-            $entry = [
-                'followup_id'               => 0,
-                'alert_type'                => 'AWOL',
-                'target_user_id'            => $uid,
-                'first_name'                => $user['first_name'],
-                'last_name'                 => $user['last_name'],
-                'phone'                     => $user['phone'],
-                'physical_address'          => $user['physical_address'],
-                'email'                     => $user['email'],
-                'spiritual_status'          => $user['spiritual_status'],
-                'attendance_status'         => $user['attendance_status'],
-                'picture_path'              => $user['picture_path'],
-                'region_name'               => $user['region_name'],
-                'services_missed'           => $missedTotal,
-                'missed_count'              => $missedTotal,
-                'total_qualifying_services' => $totalQualifyingCount,
-                'attended_count'            => $attendedCount,
-                'period_weeks'              => $periodWeeks,
-                'last_attended_date'        => $lastAttended,
-                'assignment_id'             => $activeAssignment ? (int) $activeAssignment['assignment_id'] : null,
-                'worker_id'                 => $activeAssignment ? ($activeAssignment['worker_id'] ? (int) $activeAssignment['worker_id'] : null) : null,
-                'assignment_status'         => $activeAssignment ? $activeAssignment['assignment_status'] : null,
-                'worker_fname'              => $activeAssignment ? $activeAssignment['worker_fname'] : null,
-                'worker_lname'              => $activeAssignment ? $activeAssignment['worker_lname'] : null,
-                'worker_phone'              => $activeAssignment ? $activeAssignment['worker_phone'] : null,
+        if ($streak < $threshold) continue;
+
+        $lastAttended = $latestAttendedMap[$uid] ?? null;
+        $awayFrom     = $lastAttended ?: ($anchoredOnRegistration ? $anchor : null);
+        $weeksAway    = null;
+        if ($awayFrom) {
+            $awayDate  = charis_parse_date($awayFrom);
+            $weeksAway = $awayDate ? (int) floor(($now->getTimestamp() - $awayDate->getTimestamp()) / 604800) : null;
+        }
+
+        $strip = [];
+        foreach ($stripServices as $service) {
+            $strip[] = [
+                'date'    => $service['service_date'],
+                'present' => isset($presence[$service['service_date']]),
             ];
-            $awolResults[] = $entry;
         }
+
+        $assignment = $assignmentsByUser[$uid] ?? null;
+        $awolResults[] = [
+            'followup_id'            => 0,
+            'alert_type'             => 'AWOL',
+            'target_user_id'         => $uid,
+            'first_name'             => $user['first_name'],
+            'last_name'              => $user['last_name'],
+            'phone'                  => $user['phone'],
+            'physical_address'       => $user['physical_address'],
+            'email'                  => $user['email'],
+            'spiritual_status'       => $user['spiritual_status'],
+            'attendance_status'      => $user['attendance_status'],
+            'picture_path'           => $user['picture_path'],
+            'region_name'            => $user['region_name'],
+            'consecutive_missed'     => $streak,
+            'services_missed'        => $streak,
+            'missed_count'           => $streak,
+            'missed_service_dates'   => $missedDates,
+            'attendance_strip'       => $strip,
+            'last_attended_date'     => $lastAttended,
+            'never_attended'         => $lastAttended === null,
+            'weeks_away'             => $weeksAway,
+            'tier'                   => ($weeksAway !== null && $weeksAway >= $archiveWeeks) ? 'Dormant' : 'Follow_Up',
+            'consecutive_threshold'  => $threshold,
+            'assignment_id'          => $assignment ? (int) $assignment['assignment_id'] : null,
+            'worker_id'              => $assignment && $assignment['worker_id'] ? (int) $assignment['worker_id'] : null,
+            'assignment_status'      => $assignment ? $assignment['assignment_status'] : null,
+            'worker_fname'           => $assignment ? $assignment['worker_fname'] : null,
+            'worker_lname'           => $assignment ? $assignment['worker_lname'] : null,
+            'worker_phone'           => $assignment ? $assignment['worker_phone'] : null,
+        ];
     }
+
+    // Longest absence first: the people who need a pastor, not a reminder.
+    usort($awolResults, static fn(array $a, array $b): int => $b['consecutive_missed'] <=> $a['consecutive_missed']);
 
     return [
-        'qualifying_services'       => $qualifyingServices,
-        'total_qualifying_services' => $totalQualifyingCount,
-        'period_weeks'              => $periodWeeks,
-        'missed_threshold'          => $missedThreshold,
-        'service_types'             => $serviceTypes,
+        'qualifying_services'       => $heldAbsenceServices,
+        'total_qualifying_services' => count($heldAbsenceServices),
+        'consecutive_threshold'     => $threshold,
+        'missed_threshold'          => $threshold,
+        'archive_weeks'             => $archiveWeeks,
+        'service_rules'             => $rules,
+        'service_types'             => $absenceServices,
         'spiritual_statuses'        => $spiritualStatuses,
         'awol_checks'               => $awolResults,
+        'skipped_services'          => $skippedServices,
         'has_services'              => true,
     ];
+}
+
+/**
+ * Close cases for members who have come back, and write the archive note.
+ *
+ * The Minister's ask: "once IDI has marked an individual present for a
+ * service, that automatically knocks out their AWOL status, at least until
+ * they miss service again." Workers should not have to file paperwork for
+ * someone who simply returned -- but the trace has to survive, so every
+ * automatic closure writes a system-authored note and an audit row.
+ *
+ * Idempotent: a case already resolved, or already auto-resolved for that
+ * same attendance date, is skipped.
+ *
+ * @return array<int,array<string,mixed>> the closures performed this run
+ */
+function charis_awol_auto_resolve_returned(
+    PDO $pdo,
+    array $config,
+    ?DateTimeImmutable $asOf = null
+): array {
+    $now    = $asOf ?? new DateTimeImmutable('now', new DateTimeZone('Africa/Lagos'));
+    $nowStr = $now->format('Y-m-d H:i:s');
+    $today  = $now->format('Y-m-d');
+
+    $rules         = charis_awol_service_rules($config);
+    $resetServices = charis_awol_reset_services($rules);
+    if (!$resetServices) return [];
+
+    // Dates on which attending clears a case.
+    $aliases = charis_awol_event_category_aliases($resetServices);
+    $ph = implode(',', array_fill(0, count($aliases), '?'));
+    try {
+        $svcStmt = $pdo->prepare("
+            SELECT DATE(event_date) AS service_date,
+                   REPLACE(event_category, ' ', '_') AS event_category
+              FROM events
+             WHERE event_category IN ({$ph}) AND event_date <= ?
+             GROUP BY DATE(event_date), REPLACE(event_category, ' ', '_')
+        ");
+        $svcStmt->execute(array_merge($aliases, [$nowStr]));
+    } catch (PDOException $e) {
+        error_log('Charis auto-resolution service lookup failed: ' . $e->getMessage());
+        return [];
+    }
+    $resetDates = [];
+    foreach ($svcStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $resetDates[$row['service_date']] = $row['event_category'];
+    }
+    if (!$resetDates) return [];
+
+    // Open cases: AWOL assignments and manual flags pushed from Congregation.
+    $openCases = [];
+    try {
+        $asgStmt = $pdo->query("
+            SELECT id AS assignment_id, target_user_id, followup_id, created_at
+              FROM charis_welfare_assignments
+             WHERE status = 'Assigned'
+        ");
+        foreach ($asgStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $openCases[] = [
+                'assignment_id' => (int) $row['assignment_id'],
+                'user_id'       => (int) $row['target_user_id'],
+                'followup_id'   => (int) $row['followup_id'],
+                'opened_at'     => $row['created_at'],
+                'case_type'     => ((int) $row['followup_id'] === 0) ? 'AWOL' : 'Manual_Check',
+            ];
+        }
+    } catch (PDOException $e) {
+        error_log('Charis auto-resolution assignment scan failed: ' . $e->getMessage());
+    }
+
+    try {
+        $flagStmt = $pdo->query("
+            SELECT ef.id AS followup_id, ef.visitor_id AS user_id, ef.followup_date
+              FROM embrace_followups ef
+             WHERE ef.status = 'Pending' AND ef.followup_notes LIKE '%SYSTEM FLAG%'
+        ");
+        foreach ($flagStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $openCases[] = [
+                'assignment_id' => null,
+                'user_id'       => (int) $row['user_id'],
+                'followup_id'   => (int) $row['followup_id'],
+                'opened_at'     => $row['followup_date'],
+                'case_type'     => 'Manual_Check',
+            ];
+        }
+    } catch (PDOException $e) {
+        error_log('Charis auto-resolution manual-flag scan failed: ' . $e->getMessage());
+    }
+
+    if (!$openCases) return [];
+
+    $attendanceUnion = assim_attendance_union_sql();
+
+    // One query for every case's attendance rather than one per case: the list
+    // can carry a hundred open cases and this runs on every dashboard load.
+    $caseUserIds = array_values(array_unique(array_map(
+        static fn(array $c): int => $c['user_id'],
+        $openCases
+    )));
+    $idPlaceholders = implode(',', array_fill(0, count($caseUserIds), '?'));
+    $presenceByUser = [];
+    try {
+        $attStmt = $pdo->prepare("
+            SELECT DISTINCT attended.user_id, attended.attended_on
+              FROM {$attendanceUnion} attended
+             WHERE attended.user_id IN ({$idPlaceholders})
+               AND attended.attended_on <= ?
+        ");
+        $attStmt->execute(array_merge($caseUserIds, [$today]));
+        while ($row = $attStmt->fetch(PDO::FETCH_ASSOC)) {
+            $presenceByUser[(int) $row['user_id']][] = $row['attended_on'];
+        }
+    } catch (PDOException $e) {
+        error_log('Charis auto-resolution attendance scan failed: ' . $e->getMessage());
+        return [];
+    }
+
+    $resolved = [];
+
+    foreach ($openCases as $case) {
+        $openedDate = $case['opened_at'] ? substr((string) $case['opened_at'], 0, 10) : null;
+
+        // Latest clearing attendance on or after the day the case was opened.
+        $attendedOn = null;
+        foreach ($presenceByUser[$case['user_id']] ?? [] as $date) {
+            if ($openedDate !== null && $date < $openedDate) continue;
+            if (!isset($resetDates[$date])) continue;
+            if ($attendedOn === null || $date > $attendedOn) $attendedOn = $date;
+        }
+        if ($attendedOn === null) continue;
+
+        $category = $resetDates[$attendedOn];
+        $label    = CHARIS_AWOL_CANONICAL_SERVICES[$category] ?? str_replace('_', ' ', $category);
+        $human    = date('j M Y', strtotime($attendedOn));
+        $noteText = $case['case_type'] === 'AWOL'
+            ? "Case closed automatically: attended {$label} on {$human}. The absence counter has been reset and will restart only if they miss again."
+            : "Manual welfare flag cleared automatically: attended {$label} on {$human}. Reopen if the original concern still stands.";
+
+        // Skip if this exact return was already filed.
+        try {
+            $dupe = $pdo->prepare("
+                SELECT 1 FROM charis_awol_auto_resolutions
+                 WHERE target_user_id = ? AND followup_id = ? AND attended_on = ? LIMIT 1
+            ");
+            $dupe->execute([$case['user_id'], $case['followup_id'], $attendedOn]);
+            if ($dupe->fetchColumn()) continue;
+        } catch (PDOException $e) {
+            error_log('Charis auto-resolution dedupe check failed: ' . $e->getMessage());
+        }
+
+        try {
+            $pdo->beginTransaction();
+
+            if ($case['assignment_id'] !== null) {
+                $pdo->prepare("
+                    UPDATE charis_welfare_assignments
+                       SET status = 'Resolved', resolved_at = ?
+                     WHERE id = ? AND status = 'Assigned'
+                ")->execute([$nowStr, $case['assignment_id']]);
+            }
+
+            if ($case['followup_id'] > 0) {
+                $pdo->prepare("
+                    UPDATE embrace_followups
+                       SET status = 'Completed'
+                     WHERE id = ? AND status = 'Pending'
+                ")->execute([$case['followup_id']]);
+            }
+
+            $noteStmt = $pdo->prepare("
+                INSERT INTO charis_welfare_notes (target_user_id, author_id, note_text, visible_to, is_system, created_at)
+                VALUES (?, NULL, ?, ?, 1, ?)
+            ");
+            $noteStmt->execute([$case['user_id'], $noteText, json_encode(['All']), $nowStr]);
+            $noteId = (int) $pdo->lastInsertId();
+
+            $pdo->prepare("
+                INSERT INTO charis_awol_auto_resolutions
+                    (target_user_id, assignment_id, followup_id, case_type, attended_on, event_category, note_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ")->execute([
+                $case['user_id'], $case['assignment_id'], $case['followup_id'],
+                $case['case_type'], $attendedOn, $category, $noteId, $nowStr,
+            ]);
+
+            $pdo->commit();
+            $resolved[] = [
+                'user_id'     => $case['user_id'],
+                'case_type'   => $case['case_type'],
+                'attended_on' => $attendedOn,
+                'note'        => $noteText,
+            ];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            error_log('Charis auto-resolution failed for user ' . $case['user_id'] . ': ' . $e->getMessage());
+        }
+    }
+
+    return $resolved;
 }
