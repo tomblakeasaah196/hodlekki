@@ -355,7 +355,35 @@ ok('the anchor is the duplicated day itself',
    $row && $row['last_attended_date'] === '2026-09-20');
 
 // -------------------------------------------------------------------------
-echo "\n10. Service rule normalisation\n";
+echo "\n10. System-note visibility\n";
+// -------------------------------------------------------------------------
+$pdo = awol_test_db();
+awol_add_member($pdo, 20, 'Subject');
+awol_add_member($pdo, 21, 'Worker');
+$ins = $pdo->prepare("INSERT INTO charis_welfare_notes
+    (target_user_id, author_id, note_text, visible_to, is_system, created_at)
+    VALUES (?, ?, ?, ?, ?, '2026-10-11 10:00:00')");
+// A pastors-only note whose author was deleted, so the foreign key nulled it.
+// It must stay pastors-only: a null author is not a system note.
+$ins->execute([20, null, 'Confidential pastoral matter.', json_encode(['Pastors']), 0]);
+// A note the engine wrote itself when the member returned.
+$ins->execute([20, null, 'Case closed automatically: attended Sunday Service.', json_encode(['All']), 1]);
+
+$worker = ['is_pastor' => false, 'is_super_admin' => false, 'is_manager' => false];
+$pastor = ['is_pastor' => true,  'is_super_admin' => false, 'is_manager' => true];
+
+$seenByWorker = charis_secure_welfare_notes($pdo, 20, 21, $worker);
+$seenByPastor = charis_secure_welfare_notes($pdo, 20, 21, $pastor);
+
+ok('a worker sees the system note', count(array_filter($seenByWorker,
+   static fn(array $n): bool => (int) $n['is_system'] === 1)) === 1);
+ok('a worker does NOT see an authorless pastors-only note', count(array_filter($seenByWorker,
+   static fn(array $n): bool => (int) $n['is_system'] === 0)) === 0,
+   'worker saw ' . count($seenByWorker) . ' notes');
+ok('a pastor sees both', count($seenByPastor) === 2, 'pastor saw ' . count($seenByPastor));
+
+// -------------------------------------------------------------------------
+echo "\n11. Service rule normalisation\n";
 // -------------------------------------------------------------------------
 $rules = charis_awol_service_rules([]);
 ok('with no grid stored, Sunday absence counts', $rules['Sunday_Service']['counts_absence'] === true);

@@ -195,11 +195,79 @@ CREATE TABLE IF NOT EXISTS `charis_awol_auto_resolutions` (
 -- worker would be a lie in the audit trail, so author_id becomes nullable and
 -- is_system marks the rows the engine wrote itself.
 
+-- Production carries a foreign key on author_id (charis_welfare_notes_ibfk_2)
+-- that no migration in this repo creates -- the table predates the baseline.
+-- MySQL refuses to make a column nullable while an FK uses it (error 1832),
+-- so the key has to come off, the column change, and the key go back on.
+--
+-- It is rebuilt with the referenced table, column and rules read back from
+-- information_schema rather than assumed, so whatever production actually has
+-- survives this migration unchanged. On an installation with no such FK (the
+-- integration test database) every FK step is skipped and only the column
+-- change runs.
+
+SET @needs_null := (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
+       AND COLUMN_NAME = 'author_id' AND IS_NULLABLE = 'NO'
+);
+
+SET @fk_name := (
+    SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE
+     WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
+       AND COLUMN_NAME = 'author_id' AND REFERENCED_TABLE_NAME IS NOT NULL
+     LIMIT 1
+);
+SET @fk_ref_table := (
+    SELECT REFERENCED_TABLE_NAME FROM information_schema.KEY_COLUMN_USAGE
+     WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
+       AND COLUMN_NAME = 'author_id' AND REFERENCED_TABLE_NAME IS NOT NULL
+     LIMIT 1
+);
+SET @fk_ref_col := (
+    SELECT REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE
+     WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
+       AND COLUMN_NAME = 'author_id' AND REFERENCED_TABLE_NAME IS NOT NULL
+     LIMIT 1
+);
+SET @fk_del := (
+    SELECT DELETE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS
+     WHERE CONSTRAINT_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
+       AND CONSTRAINT_NAME = @fk_name
+);
+SET @fk_upd := (
+    SELECT UPDATE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS
+     WHERE CONSTRAINT_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
+       AND CONSTRAINT_NAME = @fk_name
+);
+
+-- 1. Drop the key, only while the column still needs changing.
 SET @sql := IF(
-    (SELECT COUNT(*) FROM information_schema.columns
-      WHERE table_schema = @db AND table_name = 'charis_welfare_notes'
-        AND column_name = 'author_id' AND IS_NULLABLE = 'NO') = 1,
+    @needs_null = 1 AND @fk_name IS NOT NULL,
+    CONCAT('ALTER TABLE charis_welfare_notes DROP FOREIGN KEY `', @fk_name, '`'),
+    'DO 0'
+);
+PREPARE charis_schema FROM @sql;
+EXECUTE charis_schema;
+DEALLOCATE PREPARE charis_schema;
+
+-- 2. Make author_id nullable: a system-written note has no human author.
+SET @sql := IF(
+    @needs_null = 1,
     'ALTER TABLE charis_welfare_notes MODIFY COLUMN author_id BIGINT UNSIGNED NULL',
+    'DO 0'
+);
+PREPARE charis_schema FROM @sql;
+EXECUTE charis_schema;
+DEALLOCATE PREPARE charis_schema;
+
+-- 3. Put the key back exactly as it was found.
+SET @sql := IF(
+    @needs_null = 1 AND @fk_name IS NOT NULL AND @fk_ref_table IS NOT NULL,
+    CONCAT('ALTER TABLE charis_welfare_notes ADD CONSTRAINT `', @fk_name,
+           '` FOREIGN KEY (author_id) REFERENCES `', @fk_ref_table, '`(`', @fk_ref_col, '`)',
+           ' ON DELETE ', COALESCE(@fk_del, 'CASCADE'),
+           ' ON UPDATE ', COALESCE(@fk_upd, 'NO ACTION')),
     'DO 0'
 );
 PREPARE charis_schema FROM @sql;
