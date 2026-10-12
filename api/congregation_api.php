@@ -323,6 +323,13 @@ try {
             ");
             $stmt->execute($params);
 
+            // This editor is the deliberate place to record that someone has
+            // relocated or now worships elsewhere, so keep the AWOL exemption
+            // in step with the status chosen here -- both setting it and
+            // clearing it if they are marked active again.
+            require_once __DIR__ . '/../includes/charis_helpers.php';
+            charis_set_awol_exemption($pdo, (int) $target_id, (string) $attendance_status, (int) ($_SESSION['user_id'] ?? 0));
+
             echo json_encode(['status' => 'success', 'message' => 'Profile updated successfully.']);
             break;
 

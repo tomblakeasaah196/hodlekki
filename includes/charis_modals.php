@@ -343,12 +343,14 @@ $charisCanConfigureAwol = !empty($charisPageAccess['can_configure_awol']);
                     <p class="text-xs text-green-700 mb-3">This permanently closes the case for this cycle. The member's name will leave the AWOL list.</p>
                     <div class="mb-3">
                         <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Final Status</label>
-                        <select name="attendance_status" class="w-full px-3 py-2.5 border border-green-200 rounded-lg text-sm font-bold bg-white outline-none cursor-pointer">
+                        <select name="attendance_status" required class="w-full px-3 py-2.5 border border-green-200 rounded-lg text-sm font-bold bg-white outline-none cursor-pointer">
+                            <option value="" disabled selected>Choose the outcome…</option>
                             <option value="Active">Active (Re-engaged &amp; attending)</option>
-                            <option value="Relocated">Relocated</option>
-                            <option value="Attends_Another_Church">Attends Another Church</option>
+                            <option value="Relocated">Relocated — removed from AWOL permanently</option>
+                            <option value="Attends_Another_Church">Attends Another Church — removed from AWOL permanently</option>
                             <option value="Unknown">Unknown — cannot be reached</option>
                         </select>
+                        <p class="text-[11px] text-green-700 mt-1">Relocated and Attends Another Church take the member off the AWOL list for good. Active resumes normal monitoring.</p>
                     </div>
                     <div class="mb-3">
                         <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Summary Note *</label>

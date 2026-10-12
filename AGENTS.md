@@ -117,6 +117,16 @@ a rolling window. The distinction is the whole point of the feature:
   note (`charis_welfare_notes.is_system = 1`, `author_id` NULL). Workers file
   no paperwork; the trace lives in the archive.
 
+- Leaving the list permanently is the `users.awol_exempt` flag, not a status.
+  Exclusion used to be inferred from `attendance_status`, which the Events
+  profile editor, the Congregation editor and Embrace all overwrite, so a
+  member marked "Attends Another Church" silently returned to the list the
+  next time anyone saved their profile. `charis_set_awol_exemption()` is the
+  only place the flag is written; `charis_should_keep_attendance_status()`
+  stops the other screens clobbering a departed member's status. Do not
+  reintroduce an exclusion that depends only on `attendance_status`.
+- `Unknown` means hard to reach, not departed: it never grants an exemption.
+
 `tests/charis_awol_engine_test.php` executes the engine against in-memory
 SQLite and pins every one of these. `tests/charis_awol_test.py` is static
 string-matching only — it passed happily while the window bug was live, so
