@@ -73,8 +73,30 @@ require("assim_attendance_union_sql()" in helpers,
         "charis_compute_awol_list must query assimilation attendance union")
 require("SELECT user_id FROM attendance WHERE event_id" not in helpers,
         "charis_compute_awol_list must not query incomplete attendance table")
-require("COUNT(DISTINCT" in helpers,
+# The streak engine reads one row per person per day (SELECT DISTINCT) and
+# folds it into a date-keyed map, so two check-ins on the same Sunday are a
+# single presence. tests/charis_awol_engine_test.php proves the behaviour;
+# this only guards the query shape.
+require("SELECT DISTINCT attended.user_id" in helpers,
         "charis_compute_awol_list must deduplicate same-day multiple attendance records")
+
+# --- Streak engine contract (the window counter must not come back) -------
+require("charis_awol_service_rules" in helpers,
+        "helpers must expose the per-service counts_absence / resets_clock grid")
+require("charis_awol_auto_resolve_returned" in helpers,
+        "helpers must auto-close cases when a member is marked present again")
+require("consecutive_missed" in helpers,
+        "the engine must report a consecutive streak, not a window total")
+require("$missedTotal = $totalQualifyingCount - $attendedCount" not in helpers,
+        "the window-subtraction counter must not be reintroduced")
+require("'Manual_Check' as alert_type" in api,
+        "manual flags must emit the alert_type the Manual Flags tab filters on")
+require("alert_type === 'Manual_Check'" in page,
+        "the Manual Flags tab must filter on the alert_type the API emits")
+require("missed_service_dates" in helpers and "missed_service_dates" in page,
+        "missed service dates must be produced by the API, not just rendered")
+require("attendance_strip" in helpers and "attendance_strip" in page,
+        "the card's attendance strip must be produced by the API")
 
 # 5. UI / UX REBRANDING & MARKUP
 require("AWOL Monitoring" in page,
@@ -105,10 +127,14 @@ require("data-welfare-tab=\"archive\"" in modals or "data-welfare-tab=\"archive\
 # 7. PDF TRUTHFULNESS & SNAPSHOT
 require("charis_get_historical_awol_config" in report or "charis_get_awol_config" in report,
         "AWOL PDF must dynamically fetch active or historical AWOL rule configuration")
-require("Missed at least" in report or "missed at least" in report.lower(),
-        "AWOL PDF narrative must truthfully reflect configured services_missed count")
-require("weeks" in report.lower(),
-        "AWOL PDF narrative must reflect rolling weeks focus period")
+require("consecutive" in report.lower() and "$servicesMissedRule" in report,
+        "AWOL PDF narrative must truthfully state the configured consecutive threshold")
+require("resetting the count to zero" in report.lower(),
+        "AWOL PDF narrative must state that attendance resets the counter")
+require("$archiveWeeksRule" in report,
+        "AWOL PDF narrative must reflect the archive horizon")
+require("charis_awol_absence_services" in report,
+        "AWOL PDF must name only the services whose absence actually counts")
 
 # 8. API ACTIONS
 for required_action in ("fetch_dashboard", "get_awol_config", "save_awol_config"):

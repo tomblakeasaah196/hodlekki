@@ -90,7 +90,37 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   owner adds that step.) On a machine with no PHP at all,
   `python3 tests/php_structure_check.py <file>` still catches unbalanced
   brackets and unterminated strings. There is no browser/UI test suite, so
-  always smoke the page you touched by hand.
+  always smoke the page you touched by hand. Touching Charis AWOL Monitoring
+  means running `php tests/charis_awol_engine_test.php` (see the contract
+  below) as well as `python3 tests/charis_awol_test.py`.
+
+## Charis AWOL Monitoring contract
+
+AWOL detection counts a **consecutive-absence streak**, never a total inside
+a rolling window. The distinction is the whole point of the feature:
+
+- A member's counter is anchored on the last day they were actually present.
+  **Any attendance resets it to zero.** An absence that happened *before* the
+  last visit must never count — that bug had a member standing in church on
+  4 October still reading "3 MISSED".
+- Service types are **asymmetric**, configured per service in
+  `charis_awol_service_rules()`: Sunday absence advances the counter, midweek
+  absence never does, and midweek *presence* still clears it. Members travel
+  far and miss midweek for work; flagging them for it buried the real cases.
+  Do not "simplify" this into one list of qualifying services.
+- A member who has never attended is anchored on their registration date, so
+  new members get their grace period for free. No config field exists for it
+  and none should be added.
+- A service nobody attended did not hold: it is **skipped**, advancing and
+  resetting nothing, and logged to `charis_awol_skipped_services`.
+- Returning closes any open case automatically and writes a system-authored
+  note (`charis_welfare_notes.is_system = 1`, `author_id` NULL). Workers file
+  no paperwork; the trace lives in the archive.
+
+`tests/charis_awol_engine_test.php` executes the engine against in-memory
+SQLite and pins every one of these. `tests/charis_awol_test.py` is static
+string-matching only — it passed happily while the window bug was live, so
+never treat it as proof the engine behaves.
 
 ## NEVER-TOUCH list
 

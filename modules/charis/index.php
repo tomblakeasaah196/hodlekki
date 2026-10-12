@@ -582,6 +582,17 @@ let currentLogisticsType = 'upcoming';
 let currentTaskEventId = null;
 
 // ── Helpers ───────────────────────────────────────────────
+// "2026-10-04" -> "Sun 4 Oct 2026". Keeps the card readable without pulling
+// in a date library; falls back to the raw value if parsing ever fails.
+function awolPrettyDate(iso) {
+    if (!iso) return '';
+    const d = new Date(String(iso) + 'T00:00:00');
+    if (isNaN(d.getTime())) return String(iso);
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 function htmlEscape(s) {
     if (s === null || s === undefined) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
@@ -769,8 +780,8 @@ function renderAwolPills() {
     $('#awolModalMatchingCount, #desktopAwolMatchingCount').text(awolMatchingCount + ' matching');
 
     if (!cfg) {
-        const defaultPill = '<span class="text-xs text-orange-600 font-bold bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200">Default Rule: Missed '
-            + <?= (int) CHARIS_AWOL_DEFAULT_SERVICES_MISSED ?> + '+ services in ' + <?= (int) CHARIS_AWOL_DEFAULT_PERIOD_WEEKS ?> + ' weeks</span>';
+        const defaultPill = '<span class="text-xs text-orange-600 font-bold bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200">Default Rule: '
+            + <?= (int) CHARIS_AWOL_DEFAULT_CONSECUTIVE ?> + ' Sundays missed in a row</span>';
         $('#awolModalPillsList, #desktopAwolPillsList').html(defaultPill);
         return;
     }
@@ -782,11 +793,11 @@ function renderAwolPills() {
     const pillsHtml = `
         <span class="inline-flex items-center gap-1 text-[10px] font-bold bg-orange-50 text-orange-700 px-2.5 py-1 rounded-lg border border-orange-200 shadow-2xs">
             <svg class="w-3 h-3 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            Missed: <strong class="font-black">${htmlEscape(cfg.services_missed)}+ services</strong>
+            Missed: <strong class="font-black">${htmlEscape(cfg.consecutive_threshold ?? cfg.services_missed)} Sundays in a row</strong>
         </span>
         <span class="inline-flex items-center gap-1 text-[10px] font-bold bg-orange-50 text-orange-700 px-2.5 py-1 rounded-lg border border-orange-200 shadow-2xs">
             <svg class="w-3 h-3 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-            Period: <strong class="font-black">Last ${htmlEscape(cfg.period_weeks)} weeks</strong>
+            Archive after: <strong class="font-black">${htmlEscape(cfg.archive_weeks ?? <?= (int) CHARIS_AWOL_DEFAULT_ARCHIVE_WEEKS ?>)} weeks away</strong>
         </span>
         <span class="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs">
             Types: <strong class="font-black">${htmlEscape(typesStr)}</strong>
@@ -804,18 +815,28 @@ function renderAwolPills() {
 
 function openAwolConfigModal(isFirstTime = false) {
     const defaults = {
-        services_missed: <?= (int) CHARIS_AWOL_DEFAULT_SERVICES_MISSED ?>,
-        period_weeks: <?= (int) CHARIS_AWOL_DEFAULT_PERIOD_WEEKS ?>,
-        service_types: ['Sunday_Service', 'Midweek_Service'],
+        consecutive_threshold: <?= (int) CHARIS_AWOL_DEFAULT_CONSECUTIVE ?>,
+        archive_weeks: <?= (int) CHARIS_AWOL_DEFAULT_ARCHIVE_WEEKS ?>,
+        service_rules: {
+            Sunday_Service:  { counts_absence: true,  resets_clock: true },
+            Midweek_Service: { counts_absence: false, resets_clock: true }
+        },
         spiritual_statuses: ['Member', 'Worker', 'Pastor']
     };
     const cfg = window.awolConfig || defaults;
-    $('#awolCfgServicesMissed').val(cfg.services_missed || defaults.services_missed);
-    $('#awolCfgPeriodWeeks').val(cfg.period_weeks || defaults.period_weeks);
+    $('#awolCfgServicesMissed').val(cfg.consecutive_threshold || cfg.services_missed || defaults.consecutive_threshold);
+    $('#awolCfgArchiveWeeks').val(cfg.archive_weeks || defaults.archive_weeks);
 
-    const types = Array.isArray(cfg.service_types) && cfg.service_types.length ? cfg.service_types : defaults.service_types;
-    $('input[name="service_types[]"]').each(function() {
-        $(this).prop('checked', types.includes($(this).val()));
+    const rules = (cfg.service_rules && typeof cfg.service_rules === 'object')
+        ? cfg.service_rules
+        : defaults.service_rules;
+    $('.cfg-awol-counts').each(function() {
+        const rule = rules[$(this).data('service')] || {};
+        $(this).prop('checked', !!rule.counts_absence);
+    });
+    $('.cfg-awol-resets').each(function() {
+        const rule = rules[$(this).data('service')] || {};
+        $(this).prop('checked', !!rule.resets_clock);
     });
 
     const statuses = Array.isArray(cfg.spiritual_statuses) && cfg.spiritual_statuses.length ? cfg.spiritual_statuses : defaults.spiritual_statuses;
@@ -832,22 +853,44 @@ function openAwolConfigModal(isFirstTime = false) {
     openModal('awolConfigModal');
 }
 
+// Serialise the per-service grid into the hidden field the API reads, and keep
+// the plain-English preview honest about what the switches actually do.
+function collectAwolServiceRules() {
+    const rules = {};
+    $('.cfg-awol-counts').each(function() {
+        const key = $(this).data('service');
+        rules[key] = rules[key] || {};
+        rules[key].counts_absence = $(this).is(':checked');
+    });
+    $('.cfg-awol-resets').each(function() {
+        const key = $(this).data('service');
+        rules[key] = rules[key] || {};
+        rules[key].resets_clock = $(this).is(':checked');
+    });
+    return rules;
+}
+
 function updateAwolConfigSentencePreview() {
     const missed = parseInt($('#awolCfgServicesMissed').val(), 10) || 1;
-    const weeks = parseInt($('#awolCfgPeriodWeeks').val(), 10) || 1;
-    const selectedTypes = [];
-    $('input[name="service_types[]"]:checked').each(function() {
-        selectedTypes.push($(this).val().replace(/_/g, ' '));
-    });
+    const archiveWeeks = parseInt($('#awolCfgArchiveWeeks').val(), 10) || 1;
+    const rules = collectAwolServiceRules();
+    $('#awolCfgServiceRules').val(JSON.stringify(rules));
+
+    const label = k => k.replace(/_/g, ' ');
+    const counting = Object.keys(rules).filter(k => rules[k].counts_absence).map(label);
+    const resetting = Object.keys(rules).filter(k => rules[k].resets_clock).map(label);
+
     const selectedStatuses = [];
     $('input[name="spiritual_statuses[]"]:checked').each(function() {
         selectedStatuses.push($(this).val().replace(/_/g, ' '));
     });
-
-    const typesStr = selectedTypes.length > 0 ? selectedTypes.join(' or ') : 'selected services';
     const statusesStr = selectedStatuses.length > 0 ? selectedStatuses.join(', ') : 'selected statuses';
+    const countingStr = counting.length ? counting.join(' or ') : 'no service (rule inactive)';
+    const resettingStr = resetting.length ? resetting.join(' or ') : 'no service';
 
-    const sentence = `Flag members with spiritual status (${statusesStr}) who missed ${missed} or more qualifying ${typesStr} in the last ${weeks} rolling calendar weeks.`;
+    const sentence = `Flag members with spiritual status (${statusesStr}) who have missed ${missed} ${countingStr} `
+        + `${missed === 1 ? 'service' : 'services'} in a row. Attending ${resettingStr} resets the counter to zero. `
+        + `Archive to Dormant after ${archiveWeeks} unbroken ${archiveWeeks === 1 ? 'week' : 'weeks'} away.`;
     $('#awolConfigSentencePreview').text(sentence);
 }
 
@@ -869,7 +912,7 @@ function renderAwolConfigHistory() {
                 <span class="font-bold text-gray-700">${htmlEscape(h.created_by_name || 'Admin')}</span>
                 <span>${htmlEscape(dateStr)}</span>
             </div>
-            <p class="text-gray-800 font-medium">Missed ${h.services_missed}+ across ${htmlEscape(types)} in ${h.period_weeks} weeks</p>
+            <p class="text-gray-800 font-medium">${h.consecutive_threshold ?? h.services_missed} consecutive across ${htmlEscape(types)}${h.archive_weeks ? `, archive after ${h.archive_weeks} weeks` : ''}</p>
             <p class="text-gray-500 text-[10px]">Statuses: ${htmlEscape(statuses)}</p>
             ${h.change_reason ? `<p class="text-gray-400 text-[10px] italic">"${htmlEscape(h.change_reason)}"</p>` : ''}
         </div>`;
@@ -1003,9 +1046,15 @@ function renderWelfareList() {
     } else {
         data.forEach(w => {
             const isAwol = w.alert_type === 'AWOL';
+            const streak = Number(w.consecutive_missed ?? w.missed_count ?? 0);
+            const isDormant = w.tier === 'Dormant';
             const badge = isAwol
-                ? `<span class="text-[9px] bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold border border-red-200 uppercase">${htmlEscape(w.missed_services_count || w.missed_count || 0)} Missed</span>`
+                ? `<span class="text-[9px] ${isDormant ? 'bg-gray-800 text-white border-gray-900' : 'bg-red-100 text-red-700 border-red-200'} px-2 py-0.5 rounded font-bold border uppercase">${streak} ${streak === 1 ? 'Sunday' : 'Sundays'} Missed</span>`
                 : '<span class="text-[9px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold border border-amber-200 uppercase">Manual Flag</span>';
+
+            const tierBadge = (isAwol && isDormant)
+                ? '<span class="text-[9px] bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-semibold border border-gray-300 uppercase">Dormant</span>'
+                : '';
 
             const statusBadge = w.spiritual_status
                 ? `<span class="text-[9px] bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-semibold border border-gray-200">${htmlEscape(w.spiritual_status.replace(/_/g, ' '))}</span>`
@@ -1013,13 +1062,35 @@ function renderWelfareList() {
 
             let detailsRow = '';
             if (isAwol) {
-                const lastAtt = w.last_attended_date ? `Last Attended: <strong>${htmlEscape(w.last_attended_date)}</strong>` : 'No qualifying attendance on record';
-                const missedDates = Array.isArray(w.missed_service_dates) && w.missed_service_dates.length > 0
-                    ? `Missed: ${htmlEscape(w.missed_service_dates.slice(0, 3).join(', '))}${w.missed_service_dates.length > 3 ? '...' : ''}`
+                // One fixed-height block whatever the length of the absence:
+                // a headline, and a capped strip of recent Sundays. The full
+                // list of missed dates stays behind the toggle below, so a
+                // member away thirty weeks reads as cleanly as one away three.
+                const weeks = Number(w.weeks_away ?? 0);
+                const headline = w.never_attended
+                    ? 'No attendance on record since registration'
+                    : `Away since <strong>${htmlEscape(awolPrettyDate(w.last_attended_date))}</strong>` +
+                      (weeks > 0 ? ` &middot; ${weeks} ${weeks === 1 ? 'week' : 'weeks'}` : '');
+
+                const strip = Array.isArray(w.attendance_strip) && w.attendance_strip.length
+                    ? `<p class="flex items-center gap-1 pt-0.5" title="Most recent qualifying services, oldest first">
+                        ${w.attendance_strip.map(s => `<span class="inline-block w-2 h-2 rounded-full ${s.present ? 'bg-green-500' : 'bg-gray-300'}" title="${htmlEscape(s.date)}: ${s.present ? 'present' : 'missed'}"></span>`).join('')}
+                        <span class="text-[9px] text-gray-400 ml-1">recent Sundays</span>
+                       </p>`
                     : '';
+
+                const dates = Array.isArray(w.missed_service_dates) ? w.missed_service_dates : [];
+                const datesToggle = dates.length
+                    ? `<details class="pt-0.5">
+                        <summary class="text-[9px] text-orange-700 cursor-pointer select-none hover:underline">View ${dates.length} missed ${dates.length === 1 ? 'date' : 'dates'}</summary>
+                        <p class="text-[9px] text-gray-500 pt-1 leading-relaxed">${dates.map(d => htmlEscape(awolPrettyDate(d))).join(' &middot; ')}</p>
+                       </details>`
+                    : '';
+
                 detailsRow = `<div class="text-[10px] text-gray-500 bg-orange-50/50 p-2 rounded-xl border border-orange-100/60 space-y-0.5">
-                    <p class="text-orange-950">${lastAtt}</p>
-                    ${missedDates ? `<p class="text-gray-500 text-[9px]">${missedDates}</p>` : ''}
+                    <p class="text-orange-950">${headline}</p>
+                    ${strip}
+                    ${datesToggle}
                 </div>`;
             } else {
                 const reason = w.flag_reason || w.notes || 'Manual welfare check flag';
@@ -1055,7 +1126,7 @@ function renderWelfareList() {
                         </div>
                         <p class="text-[10px] font-bold text-orange-500 mt-0.5 truncate">${htmlEscape(w.phone||'No phone')} <span class="text-gray-400 font-medium">• ${htmlEscape(w.physical_address||'Unknown')}</span></p>
                     </div>
-                    <div class="shrink-0">${badge}</div>
+                    <div class="shrink-0 flex flex-col items-end gap-1">${badge}${tierBadge}</div>
                 </div>
                 ${detailsRow}
                 <div class="pt-1">${action} ${notesHtml}</div>
@@ -1730,6 +1801,12 @@ $(document).ready(function() {
     // Save AWOL Monitoring Configuration
     // The AWOL rule editor posts save_awol_config, then the dashboard is
     // reloaded so the recomputed AWOL list and summary pills appear at once.
+    // The per-service grid lives in unnamed checkboxes, so flush it into the
+    // hidden service_rules field before the form serialises itself.
+    $(document).on('submit', '#awolConfigForm', function() {
+        $('#awolCfgServiceRules').val(JSON.stringify(collectAwolServiceRules()));
+    });
+
     handleAjaxForm('awolConfigForm', (res)=>{
         closeModal('awolConfigModal');
         if (res && res.config) window.awolConfig = res.config;
