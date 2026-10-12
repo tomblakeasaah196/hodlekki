@@ -1134,9 +1134,13 @@ try {
                      WHERE target_user_id = ? AND followup_id = ? AND status = 'Assigned'
                 ");
                 $resolveStmt->execute([$targetId, $followupId]);
-                if ($resolveStmt->rowCount() < 1) {
+                if ($resolveStmt->rowCount() < 1 && !$is_charis_admin) {
                     throw new RuntimeException('The welfare assignment is no longer active.');
                 }
+
+                // Relocated or Attends Another Church takes them off AWOL for
+                // good; any other outcome resumes normal monitoring.
+                charis_set_awol_exemption($pdo, $targetId, $attendanceStatus, $user_id);
                 $pdo->commit();
             } catch (Throwable $e) {
                 if ($pdo->inTransaction()) $pdo->rollBack();
@@ -1173,6 +1177,7 @@ try {
                 if ($status !== '') {
                     $pdo->prepare('UPDATE users SET attendance_status = ? WHERE id = ?')
                         ->execute([$status, $targetId]);
+                    charis_set_awol_exemption($pdo, $targetId, $status, $user_id);
                 }
                 charis_insert_welfare_note($pdo, $targetId, $user_id, $comments, ['All']);
                 $pdo->commit();
@@ -1575,10 +1580,20 @@ try {
             $comments = trim(strip_tags((string) ($_POST['comments'] ?? '')));
 
             $finalStatuses = ['Active', 'Relocated', 'Attends_Another_Church', 'Unknown'];
-            if (!$targetId || $followupId === false || !in_array($attendanceStatus, $finalStatuses, true) || $comments === '') {
-                exit(json_encode(['status' => 'error', 'message' => 'A valid final status and summary note are required.']));
+            if (!$targetId || $followupId === false || $comments === '') {
+                exit(json_encode(['status' => 'error', 'message' => 'A final status and summary note are required.']));
             }
-            if (!charis_welfare_assignment_access($pdo, $user_id, $targetId, (int) $followupId, $is_charis_admin)) {
+            if (!in_array($attendanceStatus, $finalStatuses, true)) {
+                exit(json_encode(['status' => 'error', 'message' => 'Please choose a final status before closing the case.']));
+            }
+
+            // A Charis manager can close a case nobody claimed. Requiring an
+            // assignment first meant a member who had plainly left the church
+            // could not be taken off the list at all unless a worker had
+            // formally picked them up -- which is how Bro Seun Musediku stayed
+            // on it with a note saying he worships elsewhere.
+            $hasAssignment = charis_welfare_assignment_access($pdo, $user_id, $targetId, (int) $followupId, $is_charis_admin);
+            if (!$hasAssignment && !$is_charis_admin) {
                 exit(json_encode(['status' => 'error', 'message' => 'You are not assigned to this welfare case.']));
             }
 
@@ -1597,9 +1612,13 @@ try {
                      WHERE target_user_id = ? AND followup_id = ? AND status = 'Assigned'
                 ");
                 $resolveStmt->execute([$targetId, $followupId]);
-                if ($resolveStmt->rowCount() < 1) {
+                if ($resolveStmt->rowCount() < 1 && !$is_charis_admin) {
                     throw new RuntimeException('The welfare assignment is no longer active.');
                 }
+
+                // Relocated or Attends Another Church takes them off AWOL for
+                // good; any other outcome resumes normal monitoring.
+                charis_set_awol_exemption($pdo, $targetId, $attendanceStatus, $user_id);
 
                 if ($followupId > 0) {
                     $pdo->prepare("

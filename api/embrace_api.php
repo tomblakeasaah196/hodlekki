@@ -453,8 +453,17 @@ try {
                 exit;
             }
 
-            $stmt = $pdo->prepare("UPDATE users SET spiritual_status = ?, attendance_status = ? WHERE id = ?");
-            $stmt->execute([$spiritual_status, $attendance_status, $visitor_id]);
+            // Do not overwrite a member already recorded as having left; an
+            // empty attendance status here used to undo that.
+            require_once __DIR__ . '/../includes/charis_helpers.php';
+            if (charis_should_keep_attendance_status($pdo, (int) $visitor_id, (string) $attendance_status)) {
+                $stmt = $pdo->prepare("UPDATE users SET spiritual_status = ? WHERE id = ?");
+                $stmt->execute([$spiritual_status, $visitor_id]);
+            } else {
+                $stmt = $pdo->prepare("UPDATE users SET spiritual_status = ?, attendance_status = ? WHERE id = ?");
+                $stmt->execute([$spiritual_status, $attendance_status, $visitor_id]);
+                charis_set_awol_exemption($pdo, (int) $visitor_id, (string) $attendance_status, (int) ($_SESSION['user_id'] ?? 0));
+            }
 
             $idiStmt = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 1 AND is_active = 1");
             $idi_users = $idiStmt->fetchAll(PDO::FETCH_COLUMN);

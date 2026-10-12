@@ -721,7 +721,22 @@ try {
                 }
             }
 
-            if ($phone !== '') {
+            // A member recorded as Relocated, Attends Another Church or Unknown
+            // must not be quietly reset to 'New' because this form posted no
+            // attendance status. That silently put people who had left back
+            // onto the Charis AWOL list.
+            require_once __DIR__ . '/../includes/charis_helpers.php';
+            $keepAttendance = charis_should_keep_attendance_status($pdo, (int) $target_user_id, (string) $attendance_status);
+
+            if ($keepAttendance) {
+                if ($phone !== '') {
+                    $upd = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, phone = ?, gender = ?, spiritual_status = ? WHERE id = ?");
+                    $upd->execute([$first_name, $last_name, $phone, $gender !== '' ? $gender : null, $spiritual_status ?: 'Visitor', $target_user_id]);
+                } else {
+                    $upd = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, gender = ?, spiritual_status = ? WHERE id = ?");
+                    $upd->execute([$first_name, $last_name, $gender !== '' ? $gender : null, $spiritual_status ?: 'Visitor', $target_user_id]);
+                }
+            } elseif ($phone !== '') {
                 $upd = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, phone = ?, gender = ?, spiritual_status = ?, attendance_status = ? WHERE id = ?");
                 $upd->execute([$first_name, $last_name, $phone, $gender !== '' ? $gender : null, $spiritual_status ?: 'Visitor', $attendance_status ?: 'New', $target_user_id]);
             } else {

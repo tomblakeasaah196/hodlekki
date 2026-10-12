@@ -59,7 +59,9 @@ function awol_test_db(): PDO
     $pdo->exec("CREATE TABLE users (
         id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, phone TEXT,
         physical_address TEXT, email TEXT, spiritual_status TEXT,
-        attendance_status TEXT, picture_path TEXT, region_id INTEGER, created_at TEXT)");
+        attendance_status TEXT, picture_path TEXT, region_id INTEGER, created_at TEXT,
+        awol_exempt INTEGER NOT NULL DEFAULT 0, awol_exempt_reason TEXT NULL,
+        awol_exempt_at TEXT NULL, awol_exempt_by INTEGER NULL)");
     $pdo->exec("CREATE TABLE events (id INTEGER PRIMARY KEY, title TEXT, event_category TEXT, event_date TEXT)");
     $pdo->exec("CREATE TABLE checkins (id INTEGER PRIMARY KEY, user_id INTEGER, checkin_date TEXT)");
     $pdo->exec("CREATE TABLE attendance (id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT,
@@ -415,7 +417,62 @@ ok('a live author is named from their user row, not the snapshot',
    'got ' . var_export($live['author_display_name'] ?? null, true));
 
 // -------------------------------------------------------------------------
-echo "\n11. Service rule normalisation\n";
+echo "\n11. Permanent removal from AWOL\n";
+// -------------------------------------------------------------------------
+// Bro Seun Musediku: worships elsewhere, was resolved, kept reappearing.
+$pdo = awol_test_db();
+awol_seed_services($pdo);
+awol_seed_attendance_floor($pdo);
+awol_add_member($pdo, 30, 'Seun');
+$r = charis_compute_awol_list($pdo, awol_config(3), $NOW);
+ok('a long-absent member is flagged to begin with', awol_find($r, 30) !== null);
+
+ok('marking them as attending another church is recorded',
+   charis_set_awol_exemption($pdo, 30, 'Attends_Another_Church', 99) === true);
+$r = charis_compute_awol_list($pdo, awol_config(3), $NOW);
+ok('they leave the AWOL list', awol_find($r, 30) === null);
+
+// The whole point: another screen overwriting attendance_status must not
+// undo it. This is exactly how Bro Seun came back.
+$pdo->exec("UPDATE users SET attendance_status = 'New' WHERE id = 30");
+$r = charis_compute_awol_list($pdo, awol_config(3), $NOW);
+ok('a later profile edit resetting attendance_status does NOT bring them back',
+   awol_find($r, 30) === null);
+
+$row = $pdo->query("SELECT awol_exempt, awol_exempt_reason, awol_exempt_by FROM users WHERE id = 30")
+           ->fetch(PDO::FETCH_ASSOC);
+ok('the reason is recorded for the audit trail', $row['awol_exempt_reason'] === 'Attends_Another_Church');
+ok('who removed them is recorded', (int) $row['awol_exempt_by'] === 99);
+
+// And if they come back, monitoring resumes.
+ok('marking them active again clears the exemption',
+   charis_set_awol_exemption($pdo, 30, 'Active', 99) === true);
+$pdo->exec("UPDATE users SET attendance_status = 'Active' WHERE id = 30");
+$r = charis_compute_awol_list($pdo, awol_config(3), $NOW);
+ok('they are monitored again once they return', awol_find($r, 30) !== null);
+
+// 'Unknown' means hard to reach, not departed: it must not exempt anyone.
+$pdo2 = awol_test_db();
+awol_seed_services($pdo2);
+awol_seed_attendance_floor($pdo2);
+awol_add_member($pdo2, 31, 'Unreached');
+charis_set_awol_exemption($pdo2, 31, 'Unknown', 99);
+$exempt = (int) $pdo2->query("SELECT awol_exempt FROM users WHERE id = 31")->fetchColumn();
+ok('Unknown does not grant a permanent exemption', $exempt === 0);
+
+// The guard that stops other screens clobbering a departed status.
+$pdo3 = awol_test_db();
+awol_add_member($pdo3, 32, 'Gone', '2020-01-01', 'Worker', 'Attends_Another_Church');
+awol_add_member($pdo3, 33, 'Here', '2020-01-01', 'Worker', 'Active');
+ok('an empty status is not allowed to overwrite a departed member',
+   charis_should_keep_attendance_status($pdo3, 32, '') === true);
+ok('an explicit status is still allowed through',
+   charis_should_keep_attendance_status($pdo3, 32, 'Active') === false);
+ok('an ordinary member is unaffected by the guard',
+   charis_should_keep_attendance_status($pdo3, 33, '') === false);
+
+// -------------------------------------------------------------------------
+echo "\n12. Service rule normalisation\n";
 // -------------------------------------------------------------------------
 $rules = charis_awol_service_rules([]);
 ok('with no grid stored, Sunday absence counts', $rules['Sunday_Service']['counts_absence'] === true);

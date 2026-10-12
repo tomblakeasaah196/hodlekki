@@ -690,6 +690,32 @@ function charis_get_awol_config_history(PDO $pdo, int $limit = 5): array
 }
 
 /**
+ * True once the AWOL exemption column exists.
+ *
+ * The deploy copies PHP before it runs migrations, so for a few seconds the
+ * new code runs against the old schema. Selecting a column that is not there
+ * yet would take the whole Charis dashboard down, so the engine asks first and
+ * simply falls back to the status-based exclusion until the column lands.
+ */
+function charis_has_awol_exemption(PDO $pdo): bool
+{
+    // Probed with a real query rather than information_schema: that view is
+    // MySQL-only, and this has to answer the same way under the SQLite the
+    // engine tests run on. Cached per connection, not globally, so a process
+    // holding two databases does not answer for the wrong one.
+    static $cache = [];
+    $key = spl_object_id($pdo);
+    if (array_key_exists($key, $cache)) return $cache[$key];
+    try {
+        $pdo->query("SELECT awol_exempt FROM users LIMIT 1");
+        $cache[$key] = true;
+    } catch (Throwable $e) {
+        $cache[$key] = false;
+    }
+    return $cache[$key];
+}
+
+/**
  * Normalise the per-service behaviour grid into a complete map.
  *
  * Each canonical service carries two independent switches:
@@ -898,6 +924,13 @@ function charis_compute_awol_list(
     //    anyone never recorded present, so a member registered last week is
     //    not flagged before they have had N Sundays to appear.
     $statusPlaceholders = implode(',', array_fill(0, count($spiritualStatuses), '?'));
+
+    // Someone deliberately taken off the list stays off, whatever any other
+    // screen later writes to attendance_status. The status check remains for
+    // records that predate the flag and for 'Unknown'.
+    $exemptWhere = charis_has_awol_exemption($pdo)
+        ? ' AND COALESCE(u.awol_exempt, 0) = 0'
+        : '';
     $userStmt = $pdo->prepare("
         SELECT u.id, u.first_name, u.last_name, u.phone, u.physical_address, u.email,
                u.spiritual_status, u.attendance_status, u.picture_path, u.created_at,
@@ -906,6 +939,7 @@ function charis_compute_awol_list(
           LEFT JOIN regions r ON u.region_id = r.id
          WHERE u.spiritual_status IN ({$statusPlaceholders})
            AND COALESCE(u.attendance_status, '') NOT IN ('Relocated', 'Attends_Another_Church', 'Attends Another Church', 'Unknown')
+           {$exemptWhere}
          ORDER BY u.first_name ASC, u.last_name ASC
     ");
     $userStmt->execute($spiritualStatuses);
@@ -1257,4 +1291,89 @@ function charis_awol_auto_resolve_returned(
     }
 
     return $resolved;
+}
+
+/**
+ * Statuses that mean a person has left the congregation, as opposed to simply
+ * being hard to reach. Choosing one of these takes them off AWOL for good.
+ */
+const CHARIS_AWOL_DEPARTED_STATUSES = ['Relocated', 'Attends_Another_Church'];
+
+/**
+ * Set or clear a member's AWOL exemption, and keep attendance_status in step.
+ *
+ * This is the only place the flag is written. Marking someone Relocated or
+ * Attends Another Church exempts them permanently; choosing any other final
+ * status (they were reached, they are back) clears the exemption so normal
+ * monitoring resumes.
+ */
+function charis_set_awol_exemption(
+    PDO $pdo,
+    int $targetUserId,
+    string $attendanceStatus,
+    int $actorUserId
+): bool {
+    if ($targetUserId <= 0) return false;
+    if (!charis_has_awol_exemption($pdo)) return false;
+
+    $departed = in_array(
+        str_replace(' ', '_', trim($attendanceStatus)),
+        CHARIS_AWOL_DEPARTED_STATUSES,
+        true
+    );
+
+    try {
+        if ($departed) {
+            $pdo->prepare("
+                UPDATE users
+                   SET awol_exempt = 1,
+                       awol_exempt_reason = ?,
+                       awol_exempt_at = ?,
+                       awol_exempt_by = ?
+                 WHERE id = ?
+            ")->execute([
+                str_replace(' ', '_', trim($attendanceStatus)),
+                (new DateTimeImmutable('now', new DateTimeZone('Africa/Lagos')))->format('Y-m-d H:i:s'),
+                $actorUserId ?: null,
+                $targetUserId,
+            ]);
+        } else {
+            // Back in the congregation: resume monitoring from today.
+            $pdo->prepare("
+                UPDATE users
+                   SET awol_exempt = 0,
+                       awol_exempt_reason = NULL,
+                       awol_exempt_at = NULL,
+                       awol_exempt_by = NULL
+                 WHERE id = ?
+            ")->execute([$targetUserId]);
+        }
+        return true;
+    } catch (PDOException $e) {
+        error_log('Charis AWOL exemption write failed: ' . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Preserve a departed member's attendance_status when another screen saves a
+ * profile without explicitly changing it.
+ *
+ * The Events profile editor writes `$attendance_status ?: 'New'`, so an absent
+ * field silently resets someone who had left back to a monitored member. Call
+ * this to find out whether the incoming value should be written at all.
+ */
+function charis_should_keep_attendance_status(PDO $pdo, int $targetUserId, string $incoming): bool
+{
+    if ($targetUserId <= 0) return false;
+    if (trim($incoming) !== '') return false;
+    try {
+        $stmt = $pdo->prepare("SELECT attendance_status FROM users WHERE id = ? LIMIT 1");
+        $stmt->execute([$targetUserId]);
+        $current = (string) ($stmt->fetchColumn() ?: '');
+    } catch (PDOException $e) {
+        return false;
+    }
+    return in_array(str_replace(' ', '_', $current), CHARIS_AWOL_DEPARTED_STATUSES, true)
+        || $current === 'Unknown';
 }
