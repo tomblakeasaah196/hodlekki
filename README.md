@@ -319,6 +319,13 @@ python3 tests/modal_contract_test.py     # shared modal contract
 python3 tests/php_structure_check.py .   # brace/quote sanity when php is absent
 ```
 
+The push fan-out has its own suite that needs a real database (run it on
+both engines — the production one is unconfirmed):
+
+```bash
+php tests/pwa/integration/run.php --host=127.0.0.1 --user=root --pass=root --db=push_it
+```
+
 The PWA's JavaScript is not bundled, so a syntax error ships as a blank
 surface. Parse it before pushing:
 

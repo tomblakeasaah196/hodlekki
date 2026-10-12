@@ -126,9 +126,29 @@ if (!defined('PUSH_HELPERS_LOADED')) {
      * Config
      * ================================================================== */
 
-    function push_config_get(PDO $pdo, string $key, ?string $default = null): ?string
+    /**
+     * The per-request config cache, shared by the getter and the setter.
+     *
+     * It lives here rather than as a `static` inside push_config_get() so
+     * that push_config_set() can write through to it. It could not before,
+     * and the consequence was not theoretical: push_fanout() reads
+     * `fanout_cursor_id`, and a second fan-out in the same process would
+     * read back the stale value the first one cached — for a brand-new
+     * install that value is null, which means "first run ever", which means
+     * re-parking the cursor at MAX(id) and silently dropping every
+     * notification queued in between.
+     *
+     * @return array<string, string|null>
+     */
+    function &push_config_cache(): array
     {
         static $cache = [];
+        return $cache;
+    }
+
+    function push_config_get(PDO $pdo, string $key, ?string $default = null): ?string
+    {
+        $cache = &push_config_cache();
         if (array_key_exists($key, $cache)) {
             return $cache[$key] ?? $default;
         }
@@ -164,6 +184,9 @@ if (!defined('PUSH_HELPERS_LOADED')) {
             push_log('config write failed for ' . $key . ': ' . $e->getMessage());
             return false;
         }
+
+        $cache = &push_config_cache();
+        $cache[$key] = $value;
 
         return true;
     }
@@ -731,12 +754,13 @@ if (!defined('PUSH_HELPERS_LOADED')) {
         }
 
         try {
-            $pdo->prepare(
+            $stmt = $pdo->prepare(
                 "INSERT INTO push_queue
                     (user_id, notification_id, source, title, body, url, tag, urgency)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE id = id"
-            )->execute([
+            );
+            $stmt->execute([
                 $userId,
                 $notificationId,
                 substr($source, 0, 40),
@@ -751,7 +775,12 @@ if (!defined('PUSH_HELPERS_LOADED')) {
             return false;
         }
 
-        return true;
+        // 1 when a row was inserted, 0 when the unique key on
+        // (notification_id, user_id) turned it into a no-op. Returning true
+        // either way would make a re-run of the fan-out report work it did
+        // not do, which is exactly the number the worker log and the Alerts
+        // Centre put in front of somebody.
+        return $stmt->rowCount() > 0;
     }
 
     /**

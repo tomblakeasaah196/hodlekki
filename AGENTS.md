@@ -481,9 +481,17 @@ notification, call `push_send_to_user()` or `push_enqueue()` directly.
 - **Checks CI does not run yet** (the deploy app cannot push
   `.github/workflows/`, so the owner adds them — same as the Assimilation
   Excel suite):
-  - `php tests/pwa/run.php`
+  - `php tests/pwa/run.php` — 176 checks, no database, no network.
   - `node --experimental-default-type=module --check assets/js/pwa.js`
   - `node --experimental-default-type=module --check sw.js`
+  - `php tests/pwa/integration/run.php --host=… --db=push_it` — 51 checks
+    against a REAL database, on **both** MySQL 8 and MariaDB 10.11. This is
+    the only thing that covers the fan-out SQL, the audience expansion, the
+    unique key that stops a double send and the cursor. It found a live bug
+    the unit suite could not: push_config_set() did not write through the
+    cache push_config_get() reads, so a second fan-out in one process read a
+    stale null cursor, concluded it was the first run ever, and would have
+    silently dropped everything queued in between.
 - **Operations:** cron every minute,
   `php /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php`.
   `php cron/push_worker.php --status` prints readiness, queue depth, device

@@ -362,6 +362,26 @@ php tests/pwa/run.php
 176 checks, no database and no network. Run it after any change to
 `includes/push_*.php`, `manifest.php`, `sw.js` or `includes/pwa_head.php`.
 
+### The integration suite (needs a real database)
+
+The unit suite covers the crypto and the string handling. The fan-out SQL, the
+audience expansion, the unique key that stops a double send, the cursor and the
+recovery of an interrupted run can only be answered by a database:
+
+```bash
+php tests/pwa/integration/run.php --socket=/tmp/mdb.sock --db=push_it
+php tests/pwa/integration/run.php --host=127.0.0.1 --user=root --pass=root --db=push_it
+```
+
+51 checks. It builds its own stand-in tables, applies the real migration, and
+attempts no network — every subscription in it is fictional, so what is proved
+is that the right rows reach the queue.
+
+**Run it on both engines.** The production one is unconfirmed, and they
+disagree on real things. Both are verified for this feature:
+MySQL 8.0.46 and MariaDB 10.11 — migration applied twice (idempotent) and
+51/51 on each.
+
 JavaScript (there is no bundler, so a syntax error ships as a blank surface):
 
 ```bash
