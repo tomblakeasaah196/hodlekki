@@ -67,7 +67,8 @@ function awol_test_db(): PDO
     $pdo->exec("CREATE TABLE charis_welfare_assignments (id INTEGER PRIMARY KEY, target_user_id INTEGER,
         worker_id INTEGER, status TEXT, followup_id INTEGER, created_at TEXT, resolved_at TEXT)");
     $pdo->exec("CREATE TABLE charis_welfare_notes (id INTEGER PRIMARY KEY, target_user_id INTEGER,
-        author_id INTEGER NULL, note_text TEXT, visible_to TEXT, is_system INTEGER DEFAULT 0, created_at TEXT)");
+        author_id INTEGER NULL, author_name TEXT NULL, note_text TEXT, visible_to TEXT,
+        is_system INTEGER DEFAULT 0, created_at TEXT)");
     $pdo->exec("CREATE TABLE charis_awol_auto_resolutions (id INTEGER PRIMARY KEY, target_user_id INTEGER,
         assignment_id INTEGER, followup_id INTEGER, case_type TEXT, attended_on TEXT,
         event_category TEXT, streak_at_resolution INTEGER DEFAULT 0, note_id INTEGER, created_at TEXT)");
@@ -361,13 +362,14 @@ $pdo = awol_test_db();
 awol_add_member($pdo, 20, 'Subject');
 awol_add_member($pdo, 21, 'Worker');
 $ins = $pdo->prepare("INSERT INTO charis_welfare_notes
-    (target_user_id, author_id, note_text, visible_to, is_system, created_at)
-    VALUES (?, ?, ?, ?, ?, '2026-10-11 10:00:00')");
-// A pastors-only note whose author was deleted, so the foreign key nulled it.
-// It must stay pastors-only: a null author is not a system note.
-$ins->execute([20, null, 'Confidential pastoral matter.', json_encode(['Pastors']), 0]);
+    (target_user_id, author_id, author_name, note_text, visible_to, is_system, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, '2026-10-11 10:00:00')");
+// A pastors-only note whose author has left: the foreign key nulled author_id,
+// but the name snapshot remains. It must stay pastors-only -- a null author is
+// not a system note.
+$ins->execute([20, null, 'Minister Addeda', 'Confidential pastoral matter.', json_encode(['Pastors']), 0]);
 // A note the engine wrote itself when the member returned.
-$ins->execute([20, null, 'Case closed automatically: attended Sunday Service.', json_encode(['All']), 1]);
+$ins->execute([20, null, 'System', 'Case closed automatically: attended Sunday Service.', json_encode(['All']), 1]);
 
 $worker = ['is_pastor' => false, 'is_super_admin' => false, 'is_manager' => false];
 $pastor = ['is_pastor' => true,  'is_super_admin' => false, 'is_manager' => true];
@@ -381,6 +383,36 @@ ok('a worker does NOT see an authorless pastors-only note', count(array_filter($
    static fn(array $n): bool => (int) $n['is_system'] === 0)) === 0,
    'worker saw ' . count($seenByWorker) . ' notes');
 ok('a pastor sees both', count($seenByPastor) === 2, 'pastor saw ' . count($seenByPastor));
+
+$departed = null;
+foreach ($seenByPastor as $n) {
+    if ((int) $n['is_system'] === 0) $departed = $n;
+}
+ok('a departed author is still named on their note',
+   $departed !== null && str_contains((string) $departed['author_display_name'], 'Minister Addeda'),
+   'got ' . var_export($departed['author_display_name'] ?? null, true));
+ok('the note says the author has left the roll',
+   $departed !== null && str_contains((string) $departed['author_display_name'], 'no longer on the roll'));
+$systemNote = null;
+foreach ($seenByWorker as $n) {
+    if ((int) $n['is_system'] === 1) $systemNote = $n;
+}
+ok('a system note is attributed to System',
+   $systemNote !== null && $systemNote['author_display_name'] === 'System',
+   'got ' . var_export($systemNote['author_display_name'] ?? null, true));
+
+// And a live author is named from their user row, not the snapshot.
+$pdo->prepare("INSERT INTO charis_welfare_notes
+    (target_user_id, author_id, author_name, note_text, visible_to, is_system, created_at)
+    VALUES (20, 21, 'Stale Snapshot', 'Live author note.', ?, 0, '2026-10-11 11:00:00')")
+    ->execute([json_encode(['All'])]);
+$live = null;
+foreach (charis_secure_welfare_notes($pdo, 20, 21, $pastor) as $n) {
+    if ((int) $n['id'] === (int) $pdo->lastInsertId()) $live = $n;
+}
+ok('a live author is named from their user row, not the snapshot',
+   $live !== null && $live['author_display_name'] === 'Worker Test',
+   'got ' . var_export($live['author_display_name'] ?? null, true));
 
 // -------------------------------------------------------------------------
 echo "\n11. Service rule normalisation\n";

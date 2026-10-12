@@ -317,7 +317,7 @@ function charis_secure_welfare_notes(
     $assignedStmt->execute([$targetUserId, $currentUserId]);
     $isAssignedWorker = (bool) $assignedStmt->fetchColumn();
 
-    return array_values(array_filter($notes, static function (array $note) use (
+    $visible = array_values(array_filter($notes, static function (array $note) use (
         $currentUserId,
         $access,
         $isAssignedWorker
@@ -341,6 +341,27 @@ function charis_secure_welfare_notes(
         if (in_array('Assigned_Worker', $visibility, true) && $isAssignedWorker) return true;
         return false;
     }));
+
+    // Who wrote it, in a form that survives the author leaving. The live user
+    // row is preferred; author_name is the snapshot taken when the note was
+    // written, and it is all that remains once the account is deleted and the
+    // foreign key nulls author_id. A welfare record must still say who wrote
+    // it years later -- that is the whole point of the archive.
+    foreach ($visible as &$note) {
+        $liveName = trim((string) ($note['first_name'] ?? '') . ' ' . (string) ($note['last_name'] ?? ''));
+        if (!empty($note['is_system'])) {
+            $note['author_display_name'] = 'System';
+        } elseif ($liveName !== '') {
+            $note['author_display_name'] = $liveName;
+        } elseif (!empty($note['author_name'])) {
+            $note['author_display_name'] = (string) $note['author_name'] . ' (no longer on the roll)';
+        } else {
+            $note['author_display_name'] = 'Unknown author';
+        }
+    }
+    unset($note);
+
+    return $visible;
 }
 
 function charis_insert_welfare_note(
@@ -360,11 +381,36 @@ function charis_insert_welfare_note(
     $visibleTo = array_values(array_intersect($allowed, $visibleTo));
     if (!$visibleTo) $visibleTo = ['All'];
 
-    $stmt = $pdo->prepare("
-        INSERT INTO charis_welfare_notes (target_user_id, author_id, note_text, visible_to)
-        VALUES (?, ?, ?, ?)
-    ");
-    $stmt->execute([$targetUserId, $authorId, $noteText, json_encode($visibleTo)]);
+    // Snapshot the author's name now. The foreign key nulls author_id if the
+    // account is ever removed, and without this the note would lose its author.
+    $authorName = null;
+    try {
+        $nameStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ? LIMIT 1");
+        $nameStmt->execute([$authorId]);
+        if ($row = $nameStmt->fetch(PDO::FETCH_ASSOC)) {
+            $authorName = trim((string) ($row['first_name'] ?? '') . ' ' . (string) ($row['last_name'] ?? ''));
+            if ($authorName === '') $authorName = null;
+        }
+    } catch (PDOException $e) {
+        error_log('Charis welfare note author lookup failed: ' . $e->getMessage());
+    }
+
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO charis_welfare_notes (target_user_id, author_id, author_name, note_text, visible_to)
+            VALUES (?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([$targetUserId, $authorId, $authorName, $noteText, json_encode($visibleTo)]);
+    } catch (PDOException $e) {
+        // author_name arrives with the streak migration; a tree deployed ahead
+        // of it still has to be able to save a note.
+        error_log('Charis welfare note author_name unavailable: ' . $e->getMessage());
+        $stmt = $pdo->prepare("
+            INSERT INTO charis_welfare_notes (target_user_id, author_id, note_text, visible_to)
+            VALUES (?, ?, ?, ?)
+        ");
+        $stmt->execute([$targetUserId, $authorId, $noteText, json_encode($visibleTo)]);
+    }
     return (int) $pdo->lastInsertId();
 }
 
@@ -1182,8 +1228,8 @@ function charis_awol_auto_resolve_returned(
             }
 
             $noteStmt = $pdo->prepare("
-                INSERT INTO charis_welfare_notes (target_user_id, author_id, note_text, visible_to, is_system, created_at)
-                VALUES (?, NULL, ?, ?, 1, ?)
+                INSERT INTO charis_welfare_notes (target_user_id, author_id, author_name, note_text, visible_to, is_system, created_at)
+                VALUES (?, NULL, 'System', ?, ?, 1, ?)
             ");
             $noteStmt->execute([$case['user_id'], $noteText, json_encode(['All']), $nowStr]);
             $noteId = (int) $pdo->lastInsertId();
