@@ -1190,6 +1190,38 @@ try {
             break;
 
         // ==========================================
+        // ACTION: TIDY A WELFARE NOTE WITH AI (DICTATION CLEAN-UP)
+        // Returns a suggestion only; nothing is saved here. The worker reviews
+        // it in the Manage Case / Notes sheet and saves through the usual form.
+        // ==========================================
+        case 'clean_welfare_notes':
+            $notes = trim(strip_tags((string) ($_POST['notes'] ?? '')));
+            $notes = function_exists('mb_substr') ? mb_substr($notes, 0, 3000) : substr($notes, 0, 3000);
+            $kind = ($_POST['kind'] ?? '') === 'resolve' ? 'resolve' : 'update';
+            if ($notes === '') {
+                exit(json_encode(['status' => 'error', 'message' => 'Write or dictate the notes first.']));
+            }
+
+            // Each call spends Gemini credit: 20 tidy-ups per 10 minutes per session.
+            $now = time();
+            $recent = array_values(array_filter(
+                (array) ($_SESSION['charis_ai_tidy'] ?? []),
+                static fn($t) => is_int($t) && $t > $now - 600
+            ));
+            if (count($recent) >= 20) {
+                exit(json_encode(['status' => 'error', 'message' => 'That is a lot of tidy-ups in a short time. Wait a few minutes, or save your notes as they are.']));
+            }
+            $recent[] = $now;
+            $_SESSION['charis_ai_tidy'] = $recent;
+
+            $clean = charis_clean_welfare_notes($notes, $kind);
+            if ($clean === null) {
+                exit(json_encode(['status' => 'error', 'message' => 'The AI helper is unavailable right now — save your notes as they are.']));
+            }
+            echo json_encode(['status' => 'success', 'data' => ['notes_clean' => $clean]]);
+            break;
+
+        // ==========================================
         // ACTION: REQUEST WELFARE CASE (WORKER INITIATED)
         // ==========================================
         case 'request_welfare_case':

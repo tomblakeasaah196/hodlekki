@@ -88,6 +88,11 @@ $charisCanConfigureAwol = !empty($charisPageAccess['can_configure_awol']);
                 <button type="button" role="tab" aria-selected="false" data-welfare-tab="manual_flags" onclick="toggleWelfareTab('manual_flags')" class="welfare-tab-button px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Manual Flags</button>
                 <button type="button" role="tab" aria-selected="false" data-welfare-tab="archive" onclick="toggleWelfareTab('archive')" class="welfare-tab-button px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold text-gray-500 hover:text-gray-900 transition-all whitespace-nowrap flex-1">Archive</button>
             </div>
+            <div class="relative mt-3">
+                <label for="welfareSearchModal" class="sr-only">Search AWOL Monitoring by name or phone</label>
+                <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"></path></svg>
+                <input type="search" id="welfareSearchModal" oninput="setWelfareSearch(this.value)" autocomplete="off" enterkeyhint="search" placeholder="Search by name or phone…" class="welfare-search w-full pl-9 pr-3 py-2.5 bg-white border border-orange-100 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all">
+            </div>
         </div>
         <div class="p-4 sm:p-5 flex-1 overflow-y-auto custom-scrollbar bg-gray-50/40">
             <div id="awolModalPillsContainer" class="awol-rule-card hidden mb-3.5 bg-white border border-orange-100 rounded-2xl shadow-sm">
@@ -324,7 +329,7 @@ $charisCanConfigureAwol = !empty($charisPageAccess['can_configure_awol']);
         <div class="p-6 space-y-5">
             <div class="flex gap-3">
                 <a id="btnWelfareCall" href="#" class="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 py-3 rounded-xl flex justify-center items-center gap-2 font-bold transition-colors">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg Call
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg> Call
                 </a>
                 <a id="btnWelfareWhatsApp" href="#" target="_blank" class="flex-1 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] border border-[#25D366]/30 py-3 rounded-xl flex justify-center items-center gap-2 font-bold transition-colors">
                     <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 0C5.385 0 .002 5.385.002 12.032c0 2.128.555 4.2 1.613 6.027L0 24l6.104-1.603c1.764.957 3.738 1.464 5.925 1.464 6.645 0 12.028-5.385 12.028-12.032C24.057 5.385 18.676 0 12.031 0zm5.426 16.436c-.297-.15-1.764-.87-2.037-.97-.27-.1-.47-.15-.668.15-.2.298-.77 1-.944 1.203-.175.204-.35.23-.648.08-.297-.15-1.258-.464-2.395-1.485-.886-.795-1.484-1.776-1.66-2.075-.174-.298-.018-.46.13-.61.134-.135.297-.348.446-.522.15-.175.2-.298.3-.497.1-.2.05-.376-.025-.522-.075-.15-.668-1.613-.916-2.208-.242-.58-.488-.503-.668-.513-.174-.01-.375-.01-.574-.01-.2 0-.524.075-.798.375s-1.047 1.17-1.047 2.855c0 1.685 1.07 3.315 1.22 3.515.15.2 2.4 3.664 5.816 5.14.814.35 1.45.56 1.946.717.818.26 1.56.223 2.146.135.654-.1 2.037-.833 2.324-1.637.288-.804.288-1.493.2-1.637-.088-.144-.336-.23-.634-.38z"/></svg> WhatsApp
@@ -336,8 +341,23 @@ $charisCanConfigureAwol = !empty($charisPageAccess['can_configure_awol']);
                 <input type="hidden" name="user_id" id="welfareUserId">
                 <input type="hidden" name="followup_id" id="welfareFollowupId">
                 <div>
-                    <label class="block text-xs font-bold text-gray-600 uppercase mb-2">Welfare Findings / Comments *</label>
-                    <textarea name="comments" rows="3" required placeholder="E.g., Spoke to them — traveling for work but will return next week..." class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-orange-500 outline-none text-sm resize-none"></textarea>
+                    <div class="flex items-end justify-between gap-2 mb-2">
+                        <label for="welfareComments" class="block text-xs font-bold text-gray-600 uppercase">Welfare Findings / Comments *</label>
+                        <div class="flex gap-1.5 shrink-0">
+                            <button type="button" data-dictate-mic="welfareComments" onclick="toggleDictation('welfareComments')" aria-label="Dictate with your voice" title="Dictate with your voice" class="dictate-mic h-9 w-9 rounded-lg bg-hodBlue/10 hover:bg-hodBlue/15 text-hodBlue flex items-center justify-center transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-14 0m7 7v3m0 0h-4m4 0h4m-4-7a3 3 0 01-3-3V6a3 3 0 116 0v5a3 3 0 01-3 3z"></path></svg></button>
+                            <button type="button" data-dictate-clean="welfareComments" onclick="cleanWelfareNotes('welfareComments', 'update')" class="h-9 px-2.5 rounded-lg bg-hodBlue/10 hover:bg-hodBlue/15 text-hodBlue text-[11px] font-bold whitespace-nowrap transition-all">Tidy with AI</button>
+                        </div>
+                    </div>
+                    <textarea name="comments" id="welfareComments" rows="3" required placeholder="E.g., Spoke to them — traveling for work but will return next week..." class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-orange-500 outline-none text-sm resize-none"></textarea>
+                    <p data-dictate-hint="welfareComments" class="hidden text-[11px] font-semibold text-hodRed mt-1.5">Listening… tap the mic again to stop.</p>
+                    <div data-dictate-review="welfareComments" class="hidden mt-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 space-y-2">
+                        <p class="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Tidied up — check it, then keep or discard</p>
+                        <p data-dictate-clean-text class="text-sm text-gray-800 whitespace-pre-line leading-relaxed"></p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button type="button" onclick="keepCleanNotes('welfareComments')" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs">Use this</button>
+                            <button type="button" onclick="discardCleanNotes('welfareComments')" class="py-2.5 bg-white border border-gray-200 text-gray-600 rounded-lg font-bold text-xs">Keep mine</button>
+                        </div>
+                    </div>
                 </div>
                 <button type="submit" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-3 rounded-xl font-bold transition-all">Save Note Only</button>
             </form>
@@ -361,8 +381,23 @@ $charisCanConfigureAwol = !empty($charisPageAccess['can_configure_awol']);
                         <p class="text-[11px] text-green-700 mt-1">Relocated and Attends Another Church take the member off the AWOL list for good. Active resumes normal monitoring.</p>
                     </div>
                     <div class="mb-3">
-                        <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Summary Note *</label>
-                        <textarea name="comments" rows="2" required placeholder="Brief summary for the record..." class="w-full px-3 py-2.5 border border-green-200 rounded-lg text-sm outline-none focus:border-green-400 resize-none"></textarea>
+                        <div class="flex items-end justify-between gap-2 mb-1">
+                            <label for="resolveWelfareComments" class="block text-xs font-bold text-gray-600 uppercase">Summary Note *</label>
+                            <div class="flex gap-1.5 shrink-0">
+                                <button type="button" data-dictate-mic="resolveWelfareComments" onclick="toggleDictation('resolveWelfareComments')" aria-label="Dictate with your voice" title="Dictate with your voice" class="dictate-mic h-9 w-9 rounded-lg bg-hodBlue/10 hover:bg-hodBlue/15 text-hodBlue flex items-center justify-center transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-14 0m7 7v3m0 0h-4m4 0h4m-4-7a3 3 0 01-3-3V6a3 3 0 116 0v5a3 3 0 01-3 3z"></path></svg></button>
+                                <button type="button" data-dictate-clean="resolveWelfareComments" onclick="cleanWelfareNotes('resolveWelfareComments', 'resolve')" class="h-9 px-2.5 rounded-lg bg-hodBlue/10 hover:bg-hodBlue/15 text-hodBlue text-[11px] font-bold whitespace-nowrap transition-all">Tidy with AI</button>
+                            </div>
+                        </div>
+                        <textarea name="comments" id="resolveWelfareComments" rows="2" required placeholder="Brief summary for the record..." class="w-full px-3 py-2.5 border border-green-200 rounded-lg text-sm outline-none focus:border-green-400 resize-none"></textarea>
+                        <p data-dictate-hint="resolveWelfareComments" class="hidden text-[11px] font-semibold text-hodRed mt-1.5">Listening… tap the mic again to stop.</p>
+                        <div data-dictate-review="resolveWelfareComments" class="hidden mt-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 space-y-2">
+                            <p class="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Tidied up — check it, then keep or discard</p>
+                            <p data-dictate-clean-text class="text-sm text-gray-800 whitespace-pre-line leading-relaxed"></p>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button type="button" onclick="keepCleanNotes('resolveWelfareComments')" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs">Use this</button>
+                                <button type="button" onclick="discardCleanNotes('resolveWelfareComments')" class="py-2.5 bg-white border border-gray-200 text-gray-600 rounded-lg font-bold text-xs">Keep mine</button>
+                            </div>
+                        </div>
                     </div>
                     <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-md">✓ Resolve &amp; Close Case</button>
                 </div>
@@ -439,8 +474,23 @@ $charisCanConfigureAwol = !empty($charisPageAccess['can_configure_awol']);
                 <input type="hidden" name="note_id" id="edit_charis_note_id" value="">
 
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1" id="charisNoteInputLabel">Add New Note</label>
-                    <textarea name="note_text" id="charis_note_text_input" required placeholder="Type welfare updates or findings here..." class="w-full px-4 py-3 border border-gray-200 rounded-xl min-h-[100px] text-sm outline-none focus:border-hodBlue resize-none whitespace-pre-wrap"></textarea>
+                    <div class="flex items-end justify-between gap-2 mb-1">
+                        <label for="charis_note_text_input" class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest" id="charisNoteInputLabel">Add New Note</label>
+                        <div class="flex gap-1.5 shrink-0">
+                            <button type="button" data-dictate-mic="charis_note_text_input" onclick="toggleDictation('charis_note_text_input')" aria-label="Dictate with your voice" title="Dictate with your voice" class="dictate-mic h-9 w-9 rounded-lg bg-hodBlue/10 hover:bg-hodBlue/15 text-hodBlue flex items-center justify-center transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-14 0m7 7v3m0 0h-4m4 0h4m-4-7a3 3 0 01-3-3V6a3 3 0 116 0v5a3 3 0 01-3 3z"></path></svg></button>
+                            <button type="button" data-dictate-clean="charis_note_text_input" onclick="cleanWelfareNotes('charis_note_text_input', 'update')" class="h-9 px-2.5 rounded-lg bg-hodBlue/10 hover:bg-hodBlue/15 text-hodBlue text-[11px] font-bold whitespace-nowrap transition-all">Tidy with AI</button>
+                        </div>
+                    </div>
+                    <textarea name="note_text" id="charis_note_text_input" required placeholder="Type or dictate welfare updates or findings here..." class="w-full px-4 py-3 border border-gray-200 rounded-xl min-h-[100px] text-sm outline-none focus:border-hodBlue resize-none whitespace-pre-wrap"></textarea>
+                    <p data-dictate-hint="charis_note_text_input" class="hidden text-[11px] font-semibold text-hodRed mt-1.5">Listening… tap the mic again to stop.</p>
+                    <div data-dictate-review="charis_note_text_input" class="hidden mt-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 space-y-2">
+                        <p class="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Tidied up — check it, then keep or discard</p>
+                        <p data-dictate-clean-text class="text-sm text-gray-800 whitespace-pre-line leading-relaxed"></p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button type="button" onclick="keepCleanNotes('charis_note_text_input')" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs">Use this</button>
+                            <button type="button" onclick="discardCleanNotes('charis_note_text_input')" class="py-2.5 bg-white border border-gray-200 text-gray-600 rounded-lg font-bold text-xs">Keep mine</button>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="charisPastorOnlyWrap" class="bg-purple-50/50 p-4 rounded-xl border border-purple-100 hidden">
