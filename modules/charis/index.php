@@ -1174,7 +1174,7 @@ function prepManageCharisNotes(secureNotes, targetUserId, memberName, canEdit = 
                 <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
                     <div class="flex justify-between items-start mb-2 border-b border-gray-50 pb-2">
                         <div>
-                            <span class="font-bold text-gray-900 text-sm">${htmlEscape(n.first_name)} ${htmlEscape(n.last_name)}</span>
+                            <span class="font-bold text-gray-900 text-sm">${htmlEscape(n.author_display_name || `${n.first_name || ''} ${n.last_name || ''}`.trim() || 'Unknown author')}</span>
                             <span class="text-[10px] text-gray-400 ml-2">${parseServerDate(n.created_at)?.toLocaleString() || htmlEscape(n.created_at || '')}</span>
                         </div>
                         <div class="flex gap-1">${visBadge}</div>
@@ -1220,7 +1220,7 @@ function loadWelfareArchive() {
                 html = '<li class="text-center py-12 text-gray-400 text-sm italic">No resolved archives found.</li>';
             } else {
                 res.data.forEach(a => {
-                    let formattedNotes = (a.secure_notes || []).map(n => `<div class="mb-2 bg-white p-2.5 rounded-lg border border-gray-100 shadow-sm"><span class="font-bold text-gray-800 text-[10px] uppercase tracking-wider">${htmlEscape(n.first_name)} ${htmlEscape(n.last_name)}:</span> <span class="text-gray-600 text-[11px] whitespace-pre-wrap ml-1">${htmlEscape(n.note_text)}</span></div>`).join('');
+                    let formattedNotes = (a.secure_notes || []).map(n => `<div class="mb-2 bg-white p-2.5 rounded-lg border border-gray-100 shadow-sm"><span class="font-bold text-gray-800 text-[10px] uppercase tracking-wider">${htmlEscape(n.author_display_name || `${n.first_name || ''} ${n.last_name || ''}`.trim() || 'Unknown author')}:</span> <span class="text-gray-600 text-[11px] whitespace-pre-wrap ml-1">${htmlEscape(n.note_text)}</span></div>`).join('');
                     if(!formattedNotes) formattedNotes = '<span class="text-[10px] text-gray-400 italic">No accessible notes found.</span>';
 
                     const archiveDate = parseServerDate(a.archive_date);

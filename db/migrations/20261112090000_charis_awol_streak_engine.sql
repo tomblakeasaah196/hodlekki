@@ -188,62 +188,79 @@ CREATE TABLE IF NOT EXISTS `charis_awol_auto_resolutions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------------------------
--- System-generated welfare notes
+-- System-generated welfare notes, and an author name that outlives the account
 -- --------------------------------------------------------------------------
 --
--- An automatic closure has no human author. Attributing one to the assigned
--- worker would be a lie in the audit trail, so author_id becomes nullable and
+-- An automatic closure has no human author, so author_id becomes nullable and
 -- is_system marks the rows the engine wrote itself.
-
--- Production carries a foreign key on author_id (charis_welfare_notes_ibfk_2)
--- that no migration in this repo creates -- the table predates the baseline.
--- MySQL refuses to make a column nullable while an FK uses it (error 1832),
--- so the key has to come off, the column change, and the key go back on.
 --
--- It is rebuilt with the referenced table, column and rules read back from
--- information_schema rather than assumed, so whatever production actually has
--- survives this migration unchanged. On an installation with no such FK (the
--- integration test database) every FK step is skipped and only the column
--- change runs.
+-- The key on author_id is restored as ON DELETE SET NULL so a welfare note
+-- survives the author's account being removed -- a pastoral record must not
+-- disappear because someone left. On its own that would lose WHO wrote it, so
+-- author_name keeps a snapshot of the name at the time of writing and the
+-- read path falls back to it. Existing rows are back-filled from users.
+--
+-- Nothing here hardcodes a column type. author_id is matched to whatever
+-- users.id actually is, read out of information_schema: this table predates
+-- the baseline and its real type (INT UNSIGNED) is not the one the
+-- CREATE TABLE above declares, which is what broke the first attempt.
 
-SET @needs_null := (
-    SELECT COUNT(*) FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
-       AND COLUMN_NAME = 'author_id' AND IS_NULLABLE = 'NO'
+SET @ref_type := (
+    SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'users' AND COLUMN_NAME = 'id'
 );
-
+SET @cur_type := (
+    SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes' AND COLUMN_NAME = 'author_id'
+);
+SET @cur_nullable := (
+    SELECT IS_NULLABLE FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes' AND COLUMN_NAME = 'author_id'
+);
 SET @fk_name := (
     SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE
      WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
        AND COLUMN_NAME = 'author_id' AND REFERENCED_TABLE_NAME IS NOT NULL
      LIMIT 1
 );
-SET @fk_ref_table := (
-    SELECT REFERENCED_TABLE_NAME FROM information_schema.KEY_COLUMN_USAGE
-     WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
-       AND COLUMN_NAME = 'author_id' AND REFERENCED_TABLE_NAME IS NOT NULL
-     LIMIT 1
-);
-SET @fk_ref_col := (
-    SELECT REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE
-     WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
-       AND COLUMN_NAME = 'author_id' AND REFERENCED_TABLE_NAME IS NOT NULL
-     LIMIT 1
-);
-SET @fk_del := (
-    SELECT DELETE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS
-     WHERE CONSTRAINT_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
-       AND CONSTRAINT_NAME = @fk_name
-);
-SET @fk_upd := (
-    SELECT UPDATE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS
-     WHERE CONSTRAINT_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
-       AND CONSTRAINT_NAME = @fk_name
-);
+-- True while author_id is the wrong type for users.id, or still NOT NULL.
+SET @needs_change := IF(@ref_type IS NOT NULL
+    AND (@cur_type <> @ref_type OR @cur_nullable = 'NO'), 1, 0);
 
--- 1. Drop the key, only while the column still needs changing.
+-- 1. The author-name snapshot, added first so the audit trail is in place
+--    regardless of what happens to the key below.
 SET @sql := IF(
-    @needs_null = 1 AND @fk_name IS NOT NULL,
+    (SELECT COUNT(*) FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes') = 1
+    AND (SELECT COUNT(*) FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
+            AND COLUMN_NAME = 'author_name') = 0,
+    'ALTER TABLE charis_welfare_notes ADD COLUMN author_name VARCHAR(161) NULL AFTER author_id',
+    'DO 0'
+);
+PREPARE charis_schema FROM @sql;
+EXECUTE charis_schema;
+DEALLOCATE PREPARE charis_schema;
+
+-- 2. Back-fill it for every note written before the column existed.
+SET @sql := IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
+        AND COLUMN_NAME = 'author_name') = 1
+    AND (SELECT COUNT(*) FROM information_schema.TABLES
+          WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'users') = 1,
+    'UPDATE charis_welfare_notes n JOIN users u ON u.id = n.author_id
+        SET n.author_name = NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''''), '' '', COALESCE(u.last_name, ''''))), '''')
+      WHERE n.author_name IS NULL',
+    'DO 0'
+);
+PREPARE charis_schema FROM @sql;
+EXECUTE charis_schema;
+DEALLOCATE PREPARE charis_schema;
+
+-- 3. Take the key off, only while the column still has to change.
+SET @sql := IF(
+    @fk_name IS NOT NULL AND @needs_change = 1,
     CONCAT('ALTER TABLE charis_welfare_notes DROP FOREIGN KEY `', @fk_name, '`'),
     'DO 0'
 );
@@ -251,35 +268,36 @@ PREPARE charis_schema FROM @sql;
 EXECUTE charis_schema;
 DEALLOCATE PREPARE charis_schema;
 
--- 2. Make author_id nullable: a system-written note has no human author.
+-- 4. Match author_id to users.id exactly, and make it nullable.
 SET @sql := IF(
-    @needs_null = 1,
-    'ALTER TABLE charis_welfare_notes MODIFY COLUMN author_id BIGINT UNSIGNED NULL',
+    @needs_change = 1,
+    CONCAT('ALTER TABLE charis_welfare_notes MODIFY COLUMN author_id ', @ref_type, ' NULL'),
     'DO 0'
 );
 PREPARE charis_schema FROM @sql;
 EXECUTE charis_schema;
 DEALLOCATE PREPARE charis_schema;
 
--- 3. Put the key back exactly as it was found.
+-- 5. Put the key back, keeping the original name where there was one.
+--    Skipped once the key is present and the column already matches.
 SET @sql := IF(
-    @needs_null = 1 AND @fk_name IS NOT NULL AND @fk_ref_table IS NOT NULL,
-    CONCAT('ALTER TABLE charis_welfare_notes ADD CONSTRAINT `', @fk_name,
-           '` FOREIGN KEY (author_id) REFERENCES `', @fk_ref_table, '`(`', @fk_ref_col, '`)',
-           ' ON DELETE ', COALESCE(@fk_del, 'CASCADE'),
-           ' ON UPDATE ', COALESCE(@fk_upd, 'NO ACTION')),
+    @ref_type IS NOT NULL AND (@fk_name IS NULL OR @needs_change = 1),
+    CONCAT('ALTER TABLE charis_welfare_notes ADD CONSTRAINT `',
+           COALESCE(@fk_name, 'fk_charis_welfare_notes_author'),
+           '` FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE'),
     'DO 0'
 );
 PREPARE charis_schema FROM @sql;
 EXECUTE charis_schema;
 DEALLOCATE PREPARE charis_schema;
 
+-- 6. The flag that marks a note the engine wrote itself.
 SET @sql := IF(
-    (SELECT COUNT(*) FROM information_schema.tables
-      WHERE table_schema = @db AND table_name = 'charis_welfare_notes') = 1
-    AND (SELECT COUNT(*) FROM information_schema.columns
-          WHERE table_schema = @db AND table_name = 'charis_welfare_notes'
-            AND column_name = 'is_system') = 0,
+    (SELECT COUNT(*) FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes') = 1
+    AND (SELECT COUNT(*) FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'charis_welfare_notes'
+            AND COLUMN_NAME = 'is_system') = 0,
     'ALTER TABLE charis_welfare_notes ADD COLUMN is_system TINYINT(1) NOT NULL DEFAULT 0 AFTER visible_to',
     'DO 0'
 );
