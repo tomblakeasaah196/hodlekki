@@ -323,9 +323,13 @@ function charis_secure_welfare_notes(
         $isAssignedWorker
     ): bool {
         // System notes are part of the shared record: everyone who can see the
-        // case can see why it closed itself.
-        if (!empty($note['is_system']) || $note['author_id'] === null) return true;
-        if ((int) $note['author_id'] === $currentUserId) return true;
+        // case can see why it closed itself. The explicit flag is what marks
+        // one -- a null author_id is NOT enough, because production's foreign
+        // key may null the author when a user is deleted, and that must never
+        // quietly widen a private note's audience. Such a note falls through
+        // to the visible_to rules below, exactly as it did before.
+        if (!empty($note['is_system'])) return true;
+        if ($note['author_id'] !== null && (int) $note['author_id'] === $currentUserId) return true;
 
         $visibility = json_decode((string) ($note['visible_to'] ?? ''), true);
         if (!is_array($visibility) || !$visibility) $visibility = ['All'];
