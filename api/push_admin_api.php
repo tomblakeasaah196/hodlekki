@@ -69,6 +69,7 @@ try {
                 'inline'      => push_config_get($pdo, 'inline_dispatch', '1') === '1',
                 'enabled'     => push_config_get($pdo, 'enabled', '1') === '1',
                 'key_source'  => trim((string) ($_ENV['VAPID_PUBLIC_KEY'] ?? '')) !== '' ? 'env' : 'database',
+                'key_mismatch'=> false,
                 'devices'     => 0,
                 'members'     => 0,
                 'retired'     => 0,
@@ -128,6 +129,21 @@ try {
             if (push_table_exists($pdo, 'system_notifications')) {
                 $data['cursor'] = push_config_get($pdo, 'fanout_cursor_id');
                 $data['latest'] = push_admin_count($pdo, "SELECT COALESCE(MAX(id), 0) FROM system_notifications");
+            }
+
+            // The one way to break push completely and silently.
+            //
+            // With nothing in .env the module generates a VAPID pair and keeps
+            // it in push_config, so push works out of the box. Every member who
+            // then turns alerts on is subscribed AGAINST THAT KEY — a push
+            // service ties a subscription to the key it was created with.
+            // Adding keys to .env afterwards makes .env win, and every one of
+            // those subscriptions starts answering 401. Nothing in the app
+            // looks wrong; people simply stop receiving anything.
+            $envKey = trim((string) ($_ENV['VAPID_PUBLIC_KEY'] ?? ''));
+            if ($envKey !== '' && $data['devices'] > 0) {
+                $storedKey = trim((string) push_config_get($pdo, 'vapid_public', ''));
+                $data['key_mismatch'] = $storedKey !== '' && $storedKey !== $envKey;
             }
 
             echo json_encode(['status' => 'success', 'data' => $data]);

@@ -196,7 +196,19 @@ if (!isset($_SESSION['user_id']) || !security_is_admin($pdo)) {
         });
 
         var banner = document.getElementById('readyBanner');
-        if (d.ready) {
+        if (d.ready && d.key_mismatch) {
+            // Push "works", but every already-registered device is now signed
+            // with a key its push service will reject. Worth shouting about:
+            // nothing else on this page would look wrong.
+            banner.className = 'rounded-3xl p-5 border bg-red-50 border-red-200 text-red-900';
+            banner.innerHTML = '<p class="font-bold text-sm">The signing keys changed after people subscribed</p>' +
+                '<p class="text-xs mt-1.5 leading-relaxed">VAPID keys in <code>.env</code> do not match the pair ' +
+                'that was generated before them, and ' + Number(d.devices).toLocaleString() + ' device(s) are still ' +
+                'registered against the old one. Those devices will silently receive nothing. Either remove the ' +
+                '<code>.env</code> keys to go back to the generated pair, or clear the old one ' +
+                '(<code>DELETE FROM push_config WHERE config_key IN (\'vapid_public\',\'vapid_private\')</code>) ' +
+                'and ask everyone to turn alerts on again. See docs/pwa_push.md.</p>';
+        } else if (d.ready) {
             banner.className = 'hidden';
         } else {
             var reasons = {

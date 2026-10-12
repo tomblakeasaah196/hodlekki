@@ -24,6 +24,14 @@ Until it has run, every entry point answers `FEATURE_NOT_READY` and the rest of
 the site behaves exactly as before. That gap is real: the tree is copied to the
 docroot *before* migrations run.
 
+> **Do this BEFORE anyone turns alerts on.** With nothing in `.env`, the module
+> generates a VAPID pair and keeps it in `push_config`, and every member who
+> turns alerts on is subscribed *against that key*. Adding `.env` keys later
+> makes `.env` win, and all of those subscriptions start answering 401 —
+> silently. The Alerts Centre shows a red banner if it detects this, but the
+> cheap fix is to decide once, up front. Either is fine; changing your mind is
+> what costs.
+
 ### 1.2 Put the VAPID keys in `.env`
 
 VAPID is how a push service (Google's FCM, Mozilla's, Apple's) knows a message
@@ -31,11 +39,26 @@ really came from us. It is a P-256 keypair: the public half is handed to the
 browser when it subscribes, the private half signs a short-lived JWT on every
 send.
 
+On the production host (cPanel → Terminal). Use `ea-php83` explicitly — the
+bare `php` on that box is not necessarily 8.3:
+
 ```bash
-php bin/generate_vapid_keys.php "mailto:asah.tomf@gmail.com"
+/usr/local/bin/ea-php83 \
+  /home/smartqaq/public_html/hodlc.lpc.cm/bin/generate_vapid_keys.php \
+  "mailto:asah.tomf@gmail.com"
 ```
 
-Paste the three lines it prints into `.env`.
+It prints three lines. Paste them into `.env` (cPanel → File Manager, Settings
+→ *Show hidden files*, then edit `.env` in the site root):
+
+```
+VAPID_PUBLIC_KEY="BJ…"
+VAPID_PRIVATE_KEY="xK…"
+VAPID_SUBJECT="mailto:asah.tomf@gmail.com"
+```
+
+Nothing else is needed. `SITE_URL` is optional and only worth setting if
+notification links come out pointing at the wrong host.
 
 **This step is optional.** With nothing in `.env`, `push_vapid()` generates a
 keypair on first use and stores it in `push_config`, so push works the moment
@@ -49,10 +72,10 @@ of nightly SQL dumps.
 
 ### 1.3 Add the cron job
 
-cPanel → Cron Jobs, every minute:
+cPanel → Cron Jobs, every minute (this is the one genuinely required step):
 
 ```
-* * * * * php /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php >/dev/null 2>&1
+* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php >/dev/null 2>&1
 ```
 
 In normal operation this worker finds nothing to do — see §3. It exists for
@@ -62,7 +85,7 @@ answered 429 or 5xx, for a run that died half way, and for pruning the queue.
 ### 1.4 Check it
 
 ```bash
-php cron/push_worker.php --status
+/usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php --status
 ```
 
 ```
@@ -426,6 +449,7 @@ minute.
 | iPhone shows no prompt | Expected in a Safari tab. iOS only delivers Web Push to an installed app. |
 | Install banner never appears | Already installed, dismissed within 14 days, or an in-app browser (Facebook, Instagram) which cannot install anything. |
 | Everything works but the icon is stale | Bump `PWA_ASSET_VERSION` in `manifest.php` and `PWA_VERSION` in `includes/pwa_head.php`. |
+| It worked, then everyone stopped receiving | The signing keys changed after people subscribed. The Alerts Centre shows a red banner for exactly this. Either remove the `.env` keys to go back to the generated pair, or clear the generated one and have everyone turn alerts on again. |
 
 All server-side logging goes to `error_log` with a `[push]` prefix.
 
