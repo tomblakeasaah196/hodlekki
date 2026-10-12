@@ -49,8 +49,10 @@ $is_authenticated = isset($_SESSION['idi_mobilization_auth']) && $_SESSION['idi_
             text-security: disc; /* For future standard compatibility */
         }
     </style>
+    <?php require_once __DIR__ . '/includes/pwa_head.php'; ?>
 </head>
 <body class="text-gray-800">
+<?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
 
     <!-- ==================== AUTHENTICATION SCREEN ==================== -->
     <div id="authScreen" class="auth-bg <?php echo $is_authenticated ? 'hidden' : ''; ?>">

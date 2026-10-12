@@ -67,4 +67,17 @@ try {
 //    through to their own "Unauthorized" JSON. CLI (cron) is skipped.
 require_once __DIR__ . '/security_helpers.php';
 security_enforce_session($pdo);
+
+// 10. Web Push dispatcher.
+//     Same reasoning as the gate above: one hook here covers every page and
+//     every api/*.php endpoint, so the ~60 places that INSERT into
+//     system_notifications deliver a phone notification without knowing push
+//     exists. It runs NO query during the request — it only registers a
+//     shutdown function, and only on the request methods that write
+//     notifications at all. The actual sending happens after
+//     fastcgi_finish_request(), so nothing is added to any page's load time,
+//     and cron/push_worker.php picks up anything this misses.
+require_once __DIR__ . '/push_helpers.php';
+require_once __DIR__ . '/push_dispatch.php';
+push_register_dispatcher($pdo);
 ?>

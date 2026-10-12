@@ -1,0 +1,518 @@
+/* /assets/css/pwa.css
+ * ===========================================================================
+ * HOD Lekki — app shell styling
+ * ---------------------------------------------------------------------------
+ * Everything here is namespaced `hod-` and either scoped to one of the app's
+ * own overlays or to `html.hod-standalone` (the installed app). Nothing
+ * restyles an existing element on a normal browser page, so adding this
+ * stylesheet to a module cannot change how that module looks.
+ *
+ * Sections
+ *   1. Native-feel base          6. Push permission card
+ *   2. Route progress bar        7. Alert settings sheet
+ *   3. Pull to refresh           8. Toast
+ *   4. Install banner (Android)  9. Shared primitives
+ *   5. Add to Home Screen (iOS)
+ * ===========================================================================
+ */
+
+:root {
+    --hod-navy: #1D356A;
+    --hod-deep: #0B1733;
+    --hod-red: #D11920;
+    --hod-ink: #0F172A;
+    --hod-muted: #64748B;
+    --hod-line: #E6EBF3;
+    --hod-safe-top: env(safe-area-inset-top, 0px);
+    --hod-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --hod-safe-left: env(safe-area-inset-left, 0px);
+    --hod-safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* ======================================================================
+ * 1. Native-feel base
+ * ====================================================================== */
+
+/* The grey flash on tap is the single clearest "this is a web page" tell. */
+html.hod-app,
+html.hod-app body {
+    -webkit-tap-highlight-color: transparent;
+}
+
+html.hod-app button,
+html.hod-app a,
+html.hod-app [role="button"],
+html.hod-app label,
+html.hod-app summary {
+    -webkit-touch-callout: none;
+    touch-action: manipulation;   /* also kills the 300ms double-tap delay */
+}
+
+/* Text in the chrome should not be selectable; content still is. */
+html.hod-standalone aside,
+html.hod-standalone header nav,
+html.hod-standalone .hod-no-select {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/*
+ * Installed-app safe areas. The status bar is translucent on iOS, so without
+ * this the top bar slides under the clock and the sidebar under the home
+ * indicator. Applied only in standalone mode: in a browser tab the chrome
+ * already handles it and this padding would just waste space.
+ */
+html.hod-standalone body > aside,
+html.hod-standalone #sidebar {
+    padding-top: var(--hod-safe-top);
+    padding-bottom: var(--hod-safe-bottom);
+}
+
+html.hod-standalone header {
+    padding-top: var(--hod-safe-top);
+}
+
+html.hod-standalone main {
+    padding-bottom: calc(var(--hod-safe-bottom) + 4px);
+}
+
+/* Momentum scrolling that stops at the edges instead of bouncing the page. */
+html.hod-standalone main,
+html.hod-standalone .custom-scrollbar,
+html.hod-standalone .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+}
+
+/*
+ * A soft fade on arrival makes multi-page navigation read as one app.
+ *
+ * Opacity ONLY. A transform on <body> — even for 260ms, even one that ends
+ * at `none` — makes body the containing block for every position:fixed
+ * descendant while it runs, which is exactly the bug the comment above
+ * <main> in includes/header.php warns about: a modal opened during the
+ * animation would be positioned against the page instead of the viewport.
+ */
+@media (prefers-reduced-motion: no-preference) {
+    html.hod-app body {
+        animation: hodPageIn 240ms ease-out both;
+    }
+}
+@keyframes hodPageIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* Cross-document view transitions where the browser supports them. */
+@view-transition { navigation: auto; }
+
+/* ======================================================================
+ * 2. Route progress bar
+ * ====================================================================== */
+
+#hodProgress {
+    position: fixed;
+    top: var(--hod-safe-top);
+    left: 0;
+    height: 3px;
+    width: 0;
+    z-index: 2147482000;
+    background: linear-gradient(90deg, var(--hod-red), #ff5a63);
+    box-shadow: 0 0 12px rgba(209, 25, 32, .75);
+    opacity: 0;
+    transition: width .22s ease-out, opacity .3s ease;
+    pointer-events: none;
+    border-radius: 0 99px 99px 0;
+}
+#hodProgress.hod-on { opacity: 1; }
+
+/* ======================================================================
+ * 3. Pull to refresh (installed app only — browsers do their own)
+ * ====================================================================== */
+
+#hodPull {
+    position: fixed;
+    top: calc(var(--hod-safe-top) + 6px);
+    left: 50%;
+    z-index: 2147482000;
+    width: 38px;
+    height: 38px;
+    margin-left: -19px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 10px 28px -8px rgba(15, 23, 42, .4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(-60px);
+    pointer-events: none;
+}
+#hodPull svg { width: 19px; height: 19px; color: var(--hod-navy); }
+#hodPull.hod-spin svg { animation: hodSpin .85s linear infinite; }
+@keyframes hodSpin { to { transform: rotate(360deg); } }
+
+/* ======================================================================
+ * 9. Shared primitives (declared early so later sections can use them)
+ * ====================================================================== */
+
+.hod-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2147482500;
+    background: rgba(8, 15, 32, .62);
+    -webkit-backdrop-filter: blur(6px) saturate(80%);
+    backdrop-filter: blur(6px) saturate(80%);
+    opacity: 0;
+    transition: opacity .28s ease;
+}
+.hod-sheet-backdrop.hod-open { opacity: 1; }
+
+.hod-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2147482600;
+    background: #fff;
+    border-radius: 26px 26px 0 0;
+    padding: 22px 22px calc(22px + var(--hod-safe-bottom));
+    box-shadow: 0 -24px 70px -22px rgba(8, 15, 32, .55);
+    transform: translateY(102%);
+    transition: transform .4s cubic-bezier(.22, .9, .25, 1);
+    max-height: 88dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--hod-ink);
+}
+.hod-sheet.hod-open { transform: translateY(0); }
+
+@media (min-width: 640px) {
+    .hod-sheet {
+        left: 50%;
+        right: auto;
+        bottom: 24px;
+        width: 420px;
+        margin-left: -210px;
+        border-radius: 26px;
+    }
+}
+
+.hod-grip {
+    width: 42px;
+    height: 4px;
+    border-radius: 99px;
+    background: #DDE3EE;
+    margin: -6px auto 18px;
+}
+
+.hod-sheet h2 {
+    margin: 0 0 6px;
+    font-family: Montserrat, Inter, sans-serif;
+    font-size: 1.16rem;
+    font-weight: 800;
+    letter-spacing: -.02em;
+    line-height: 1.3;
+}
+.hod-sheet p { margin: 0 0 16px; font-size: .875rem; line-height: 1.6; color: var(--hod-muted); }
+
+.hod-btn {
+    -webkit-appearance: none;
+    appearance: none;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    font-size: .9rem;
+    letter-spacing: .01em;
+    padding: 14px 20px;
+    border-radius: 14px;
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    transition: transform .14s ease, box-shadow .14s ease, background-color .14s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.hod-btn:active { transform: scale(.975); }
+.hod-btn[disabled] { opacity: .55; cursor: default; transform: none; }
+
+.hod-btn-primary {
+    background: var(--hod-red);
+    color: #fff;
+    box-shadow: 0 14px 30px -12px rgba(209, 25, 32, .8);
+}
+.hod-btn-navy {
+    background: var(--hod-navy);
+    color: #fff;
+    box-shadow: 0 14px 30px -12px rgba(29, 53, 106, .8);
+}
+.hod-btn-ghost { background: #F1F5F9; color: #475569; }
+
+.hod-row {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 13px 0;
+    border-top: 1px solid var(--hod-line);
+}
+.hod-row:first-of-type { border-top: 0; }
+.hod-row .hod-row-main { flex: 1; min-width: 0; }
+.hod-row strong { display: block; font-size: .87rem; font-weight: 700; }
+.hod-row small { display: block; font-size: .73rem; color: var(--hod-muted); margin-top: 2px; }
+
+.hod-mark {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    background: #fff;
+    border: 1px solid var(--hod-line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    overflow: hidden;
+}
+.hod-mark img { width: 36px; height: 36px; }
+
+/* iOS-style switch */
+.hod-switch {
+    position: relative;
+    width: 50px;
+    height: 30px;
+    border-radius: 99px;
+    background: #CBD5E1;
+    border: 0;
+    cursor: pointer;
+    flex: 0 0 auto;
+    transition: background-color .22s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.hod-switch::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 5px rgba(15, 23, 42, .3);
+    transition: transform .22s cubic-bezier(.3, 1.4, .5, 1);
+}
+.hod-switch[aria-checked="true"] { background: #16A34A; }
+.hod-switch[aria-checked="true"]::after { transform: translateX(20px); }
+
+.hod-select {
+    font: inherit;
+    font-size: .82rem;
+    padding: 9px 11px;
+    border-radius: 10px;
+    border: 1px solid var(--hod-line);
+    background: #fff;
+    color: var(--hod-ink);
+}
+
+/* ======================================================================
+ * 4. Install banner (Android / desktop Chromium)
+ * ====================================================================== */
+
+#hodInstall {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + var(--hod-safe-bottom));
+    z-index: 2147482400;
+    background: linear-gradient(135deg, #16284C 0%, #0B1733 100%);
+    color: #fff;
+    border-radius: 20px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    box-shadow: 0 26px 60px -20px rgba(0, 0, 0, .75);
+    border: 1px solid rgba(255, 255, 255, .09);
+    transform: translateY(calc(100% + 28px));
+    transition: transform .46s cubic-bezier(.22, .9, .25, 1), opacity .3s ease;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+#hodInstall.hod-open { transform: translateY(0); }
+#hodInstall .hod-mark { border-color: transparent; }
+#hodInstall .hod-install-copy { flex: 1; min-width: 0; }
+#hodInstall strong {
+    display: block;
+    font-family: Montserrat, Inter, sans-serif;
+    font-size: .95rem;
+    font-weight: 800;
+    letter-spacing: -.01em;
+}
+#hodInstall span { display: block; font-size: .74rem; color: #9FB0CE; margin-top: 2px; line-height: 1.45; }
+#hodInstall .hod-btn { width: auto; padding: 11px 17px; font-size: .82rem; border-radius: 12px; }
+#hodInstall .hod-x {
+    position: absolute;
+    top: -9px;
+    right: -3px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 0;
+    background: #334867;
+    color: #CBD5E1;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .4);
+}
+#hodInstall { position: fixed; }
+#hodInstall .hod-install-actions { position: relative; flex: 0 0 auto; }
+
+@media (min-width: 640px) {
+    #hodInstall { left: auto; right: 20px; bottom: 20px; width: 400px; }
+}
+
+/* ======================================================================
+ * 5. Add to Home Screen (iOS)
+ * ====================================================================== */
+
+.hod-steps { margin: 4px 0 18px; padding: 0; list-style: none; counter-reset: hodstep; }
+.hod-steps li {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--hod-line);
+    font-size: .875rem;
+    line-height: 1.5;
+}
+.hod-steps li:first-child { border-top: 0; }
+.hod-steps li .hod-step-n {
+    counter-increment: hodstep;
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--hod-navy);
+    color: #fff;
+    font-size: .72rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.hod-steps li .hod-step-n::before { content: counter(hodstep); }
+.hod-steps svg { width: 19px; height: 19px; flex: 0 0 auto; color: var(--hod-navy); }
+.hod-steps .hod-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 8px;
+    background: #EEF2F9;
+    font-weight: 700;
+    font-size: .8rem;
+    white-space: nowrap;
+}
+
+/* The little arrow pointing at Safari's share button, which sits in the
+ * bottom bar on iPhone and the top bar on iPad. */
+.hod-ios-arrow {
+    position: fixed;
+    z-index: 2147482700;
+    color: #fff;
+    animation: hodBob 1.3s ease-in-out infinite;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .5));
+}
+.hod-ios-arrow svg { width: 34px; height: 34px; }
+@keyframes hodBob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(7px); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .hod-ios-arrow { animation: none; }
+}
+
+/* ======================================================================
+ * 6. Push permission card
+ * ====================================================================== */
+
+#hodPushCard .hod-bell {
+    width: 62px;
+    height: 62px;
+    border-radius: 20px;
+    margin: 0 auto 16px;
+    background: linear-gradient(140deg, var(--hod-navy), #2E4F96);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 18px 38px -14px rgba(29, 53, 106, .85);
+}
+#hodPushCard .hod-bell svg { width: 30px; height: 30px; color: #fff; }
+#hodPushCard .hod-centered { text-align: center; }
+#hodPushCard .hod-benefits { margin: 0 0 20px; padding: 0; list-style: none; }
+#hodPushCard .hod-benefits li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: .84rem;
+    line-height: 1.5;
+    padding: 7px 0;
+    color: #334155;
+}
+#hodPushCard .hod-benefits svg { width: 17px; height: 17px; color: #16A34A; flex: 0 0 auto; margin-top: 2px; }
+
+/* ======================================================================
+ * 8. Toast
+ * ====================================================================== */
+
+#hodToasts {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: calc(var(--hod-safe-top) + 12px);
+    z-index: 2147483000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+}
+@media (min-width: 640px) {
+    #hodToasts { left: auto; right: 20px; width: 360px; }
+}
+.hod-toast {
+    pointer-events: auto;
+    background: #0F1E3C;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: 14px;
+    padding: 12px 15px;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: .83rem;
+    line-height: 1.5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 20px 44px -18px rgba(0, 0, 0, .8);
+    transform: translateY(-14px);
+    opacity: 0;
+    transition: transform .3s cubic-bezier(.22, .9, .25, 1), opacity .3s ease;
+}
+.hod-toast.hod-open { transform: none; opacity: 1; }
+.hod-toast svg { width: 17px; height: 17px; flex: 0 0 auto; }
+.hod-toast.hod-ok svg { color: #4ADE80; }
+.hod-toast.hod-bad svg { color: #F87171; }
+.hod-toast button {
+    margin-left: auto;
+    background: rgba(255, 255, 255, .12);
+    border: 0;
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    font-size: .75rem;
+    padding: 6px 11px;
+    border-radius: 9px;
+    cursor: pointer;
+    flex: 0 0 auto;
+}

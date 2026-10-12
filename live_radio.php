@@ -39,8 +39,10 @@
         .bar:nth-child(5) { animation-delay: -0.3s; height: 12px; }
         .paused .bar { animation-play-state: paused; height: 4px !important; transition: height 0.3s; }
     </style>
+    <?php require_once __DIR__ . '/includes/pwa_head.php'; ?>
 </head>
 <body class="flex flex-col items-center justify-center min-h-screen p-6 relative">
+<?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
     
     <!-- Background Blur Effect -->
     <div class="absolute inset-0 z-0">

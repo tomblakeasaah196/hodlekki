@@ -219,8 +219,17 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
             .app-modal-overlay > .app-modal-panel { transition-duration: 0.01ms !important; }
         }
     </style>
+
+    <?php
+    // Installable app: manifest, home-screen icons, iOS launch images and the
+    // client runtime that handles install prompts, push opt-in and the
+    // launch screen. See docs/pwa_push.md.
+    require_once __DIR__ . '/pwa_head.php';
+    ?>
 </head>
 <body class="bg-[#F8FAFC] font-sans text-gray-800 antialiased flex h-[100dvh] overflow-hidden selection:bg-hodRed selection:text-white">
+
+    <?php require_once __DIR__ . '/pwa_boot.php'; ?>
 
     <div id="mobileOverlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 hidden transition-opacity duration-300 opacity-0 md:hidden"></div>
 
@@ -730,7 +739,15 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
                                     Notifications 
                                     <span id="notifCountText" class="bg-white/20 text-white border border-white/20 py-0.5 px-2.5 rounded-full text-[10px] font-bold hidden backdrop-blur-md shadow-sm">0 New</span>
                                 </h3>
-                                <button onclick="markAllNotificationsRead()" class="text-[10px] font-bold text-blue-100 hover:text-white uppercase tracking-wider relative z-10 transition-colors drop-shadow-sm">Mark all read</button>
+                                <div class="flex items-center gap-3 relative z-10">
+                                    <!-- Push notification settings: on/off for this device, a
+                                         test alert and quiet hours. assets/js/pwa.js opens the
+                                         sheet; the attribute is the whole wiring. -->
+                                    <button type="button" data-hod-alerts title="Push alert settings" aria-label="Push alert settings" class="text-blue-100 hover:text-white transition-colors drop-shadow-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                    </button>
+                                    <button onclick="markAllNotificationsRead()" class="text-[10px] font-bold text-blue-100 hover:text-white uppercase tracking-wider transition-colors drop-shadow-sm">Mark all read</button>
+                                </div>
                             </div>
                             
                             <div id="notificationList" class="flex-1 overflow-y-auto custom-scrollbar divide-y divide-gray-50 bg-white overscroll-contain">
@@ -830,6 +847,10 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
                             $('#notifBadge').addClass('hidden');
                             $('#notifCountText').addClass('hidden');
                         }
+
+                        // Mirror the same number onto the installed app's icon,
+                        // so an unopened badge is visible from the home screen.
+                        if (window.hodApp) window.hodApp.setBadge(count);
 
                         let html = '';
                         if (count === 0) {

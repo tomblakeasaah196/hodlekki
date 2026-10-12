@@ -68,8 +68,10 @@ $user_email = $is_logged_in ? $_SESSION['email'] : '';
             100% { transform: scale(0.98); box-shadow: 0 0 0 0 rgba(209, 25, 32, 0); }
         }
     </style>
+    <?php require_once __DIR__ . '/includes/pwa_head.php'; ?>
 </head>
 <body class="bg-gray-50 antialiased min-h-screen flex flex-col selection:bg-hodRed selection:text-white">
+<?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
 
     <div class="fixed inset-0 z-[-1] overflow-hidden bg-white">
         

@@ -87,8 +87,10 @@ if (!empty($_COOKIE[SECURITY_SIGNOUT_COOKIE])) {
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
+    <?php require_once __DIR__ . '/../includes/pwa_head.php'; ?>
 </head>
 <body class="bg-black font-sans relative antialiased overflow-x-hidden no-scrollbar">
+<?php require_once __DIR__ . '/../includes/pwa_boot.php'; ?>
 
     <!-- Fixed Backgrounds so they don't move when scrolling -->
     <div class="fixed inset-0 z-0">

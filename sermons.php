@@ -178,8 +178,10 @@ if (isset($_GET['sermon'])) {
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script src="https://www.youtube.com/iframe_api"></script>
+    <?php require_once __DIR__ . '/includes/pwa_head.php'; ?>
 </head>
 <body class="bg-hodBlue text-gray-200 antialiased overflow-x-hidden selection:bg-hodRed selection:text-white min-h-screen flex flex-col font-sans">
+<?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
 
     <div class="fixed inset-0 z-[-1] overflow-hidden bg-black">
         <img src="https://images.unsplash.com/photo-1510590337019-5ef8d3d32116?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80" 

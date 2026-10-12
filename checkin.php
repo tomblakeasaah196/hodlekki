@@ -177,9 +177,11 @@
             margin: 0 auto 6px;
         }
     </style>
+    <?php require_once __DIR__ . '/includes/pwa_head.php'; ?>
 </head>
 
 <body>
+<?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
     <div class="shell" id="shell">
         <div class="bg" id="bgImg"></div>
         <div class="overlay"></div>

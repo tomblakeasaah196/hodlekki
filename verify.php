@@ -66,8 +66,10 @@ session_start();
             letter-spacing: normal;
         }
     </style>
+    <?php require_once __DIR__ . '/includes/pwa_head.php'; ?>
 </head>
 <body class="bg-gray-50 antialiased min-h-screen relative overflow-x-hidden selection:bg-hodBlue selection:text-white flex flex-col">
+<?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
 
     <!-- Ambient Background -->
     <div class="fixed inset-0 z-[-1] overflow-hidden bg-white">
