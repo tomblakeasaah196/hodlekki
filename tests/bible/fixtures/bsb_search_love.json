@@ -1,0 +1,39 @@
+{
+ "data": {
+  "query": "love",
+  "limit": 3,
+  "offset": 0,
+  "total": 712,
+  "verseCount": 3,
+  "verses": [
+   {
+    "id": "JHN.12.25",
+    "orgId": "JHN.12.25",
+    "bookId": "JHN",
+    "bibleId": "bba9f40183526463-01",
+    "chapterId": "JHN.12",
+    "reference": "John 12:25",
+    "text": "Whoever loves his life will lose it, but whoever hates his life in this world will keep it for eternal life."
+   },
+   {
+    "id": "LUK.6.32",
+    "orgId": "LUK.6.32",
+    "bookId": "LUK",
+    "bibleId": "bba9f40183526463-01",
+    "chapterId": "LUK.6",
+    "reference": "Luke 6:32",
+    "text": "If you love those who love you, what credit is that to you? Even sinners love those who love them."
+   },
+   {
+    "id": "1JN.4.19",
+    "orgId": "1JN.4.19",
+    "bookId": "1JN",
+    "bibleId": "bba9f40183526463-01",
+    "chapterId": "1JN.4",
+    "reference": "1 John 4:19",
+    "text": "We love  because He first loved us."
+   }
+  ]
+ },
+ "meta": {}
+}

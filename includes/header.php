@@ -36,7 +36,7 @@ $profilePicPath = !empty($_SESSION['picture_path']) ? htmlspecialchars($_SESSION
 
 $currentModule = basename(dirname($_SERVER['PHP_SELF']));
 $isDashboard = ($_SERVER['PHP_SELF'] == '/index.php' || $currentModule == 'dashboard');
-$moduleTitles = ['sms_studio' => 'SMS Studio', 'special_events' => 'Special Events', 'alerts' => 'Alerts Centre'];
+$moduleTitles = ['sms_studio' => 'SMS Studio', 'special_events' => 'Special Events', 'alerts' => 'Alerts Centre', 'bible' => 'The Bible'];
 $moduleTitle = $moduleTitles[$currentModule] ?? ucfirst(str_replace('_', ' ', $currentModule));
 
 // Helper function for active link styling
@@ -261,6 +261,12 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
     <a href="/modules/profile/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'profile') ?>">
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
         <span class="font-medium text-sm">My Profile</span>
+    </a>
+
+    <!-- The Bible: open to every signed-in member (modules/bible/). -->
+    <a href="/modules/bible/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'bible') ?>">
+        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5V5a2 2 0 012-2h14v18H6.5A2.5 2.5 0 014 19.5zM12 7v6M9 10h6"></path></svg>
+        <span class="font-medium text-sm">The Bible</span>
     </a>
 
     <!-- NEW REGIONS HUB LINK -->
@@ -543,6 +549,10 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
     $gsAdd('profile', 'My Profile', '/modules/profile/index.php', 'Command Center',
         'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
         ['account', 'settings', 'picture', 'password', 'details']);
+    $gsAdd('bible', 'The Bible', '/modules/bible/index.php', 'Command Center',
+        'M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5V5a2 2 0 012-2h14v18H6.5A2.5 2.5 0 014 19.5zM12 7v6M9 10h6',
+        ['bible', 'scripture', 'kjv', 'nkjv', 'niv', 'amp', 'amplified', 'verse', 'read', 'devotion', 'study', 'journal', 'notes', 'highlights', 'reading plan'],
+        ['read' => 'Read', 'search' => 'Search', 'notes' => 'My Study', 'plans' => 'Reading Plans']);
     $gsAdd('regions', 'Regional Hubs', '/modules/regions/index.php', 'Command Center',
         'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z',
         ['regions', 'hubs', 'locations', 'broadcast'],

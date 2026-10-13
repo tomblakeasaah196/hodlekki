@@ -1,0 +1,248 @@
+[
+ {
+  "id": "bba9f40183526463-01",
+  "abbreviation": "BSB",
+  "abbreviationLocal": "BSB",
+  "name": "Berean Standard Bible"
+ },
+ {
+  "id": "317e03834065a236-01",
+  "abbreviation": "BSB",
+  "abbreviationLocal": "BSB",
+  "name": "Berean Standard Bible"
+ },
+ {
+  "id": "6bab4d6c61b31b80-01",
+  "abbreviation": "engLXXup",
+  "abbreviationLocal": "LXXup",
+  "name": "Brenton English Septuagint (Updated Spelling and Formatting)"
+ },
+ {
+  "id": "65bfdebd704a8324-01",
+  "abbreviation": "engbrent",
+  "abbreviationLocal": "Brenton",
+  "name": "Brenton English translation of the Septuagint"
+ },
+ {
+  "id": "55212e3cf5d04d49-01",
+  "abbreviation": "engKJVCPB",
+  "abbreviationLocal": "KJVCPB",
+  "name": "Cambridge Paragraph Bible of the KJV"
+ },
+ {
+  "id": "a556c5305ee15c3f-01",
+  "abbreviation": "CSB",
+  "abbreviationLocal": "CSB",
+  "name": "Christian Standard Bible"
+ },
+ {
+  "id": "179568874c45066f-01",
+  "abbreviation": "engDRA",
+  "abbreviationLocal": "DRA",
+  "name": "Douay-Rheims American 1899"
+ },
+ {
+  "id": "65eec8e0b60e656b-01",
+  "abbreviation": "FBV",
+  "abbreviationLocal": "FBV",
+  "name": "Free Bible Version"
+ },
+ {
+  "id": "c315fa9f71d4af3a-01",
+  "abbreviation": "enggnv",
+  "abbreviationLocal": "GNV",
+  "name": "Geneva Bible"
+ },
+ {
+  "id": "bf8f1c7f3f9045a5-01",
+  "abbreviation": "engojps",
+  "abbreviationLocal": "OJPS",
+  "name": "JPS TaNaKH 1917"
+ },
+ {
+  "id": "de4e12af7f28f599-01",
+  "abbreviation": "engKJV",
+  "abbreviationLocal": "KJV",
+  "name": "King James (Authorised) Version"
+ },
+ {
+  "id": "de4e12af7f28f599-02",
+  "abbreviation": "engKJV",
+  "abbreviationLocal": "KJV",
+  "name": "King James (Authorised) Version"
+ },
+ {
+  "id": "a6aee10bb058511c-01",
+  "abbreviation": "KJVAIC",
+  "abbreviationLocal": "KJVAIC",
+  "name": "King James Version with Apocrypha, American Edition"
+ },
+ {
+  "id": "a6aee10bb058511c-02",
+  "abbreviation": "KJVA",
+  "abbreviationLocal": "KJVA",
+  "name": "King James Version, American Edition"
+ },
+ {
+  "id": "01b29f4b342acc35-01",
+  "abbreviation": "LSV",
+  "abbreviationLocal": "LSV",
+  "name": "Literal Standard Version"
+ },
+ {
+  "id": "b8ee27bcd1cae43a-01",
+  "abbreviation": "NASB1995",
+  "abbreviationLocal": "NASB 1995",
+  "name": "New American Standard Bible 1995"
+ },
+ {
+  "id": "78a9f6124f344018-01",
+  "abbreviation": "NIV11",
+  "abbreviationLocal": "NIV",
+  "name": "New International Version 2011"
+ },
+ {
+  "id": "63097d2a0a2f7db3-01",
+  "abbreviation": "NKJV",
+  "abbreviationLocal": "NKJV",
+  "name": "New King James Version"
+ },
+ {
+  "id": "40072c4a5aba4022-01",
+  "abbreviation": "engRV",
+  "abbreviationLocal": "RV",
+  "name": "Revised Version 1885"
+ },
+ {
+  "id": "ec290b5045ff54a5-01",
+  "abbreviation": "engOKE",
+  "abbreviationLocal": "OKE",
+  "name": "Targum Onkelos Etheridge"
+ },
+ {
+  "id": "2f0fd81d7b85b923-01",
+  "abbreviation": "engF35",
+  "abbreviationLocal": "F35",
+  "name": "The English New Testament According to Family 35"
+ },
+ {
+  "id": "06125adad2d5898a-01",
+  "abbreviation": "ASV",
+  "abbreviationLocal": "ASV",
+  "name": "The Holy Bible, American Standard Version"
+ },
+ {
+  "id": "c89622d31b60c444-02",
+  "abbreviation": "TOJB2011",
+  "abbreviationLocal": "TOJB2011",
+  "name": "The Orthodox Jewish Bible"
+ },
+ {
+  "id": "32339cf2f720ff8e-01",
+  "abbreviation": "TCENT",
+  "abbreviationLocal": "TCENT",
+  "name": "The Text-Critical English New Testament"
+ },
+ {
+  "id": "66c22495370cdfc0-01",
+  "abbreviation": "T4T",
+  "abbreviationLocal": "T4T",
+  "name": "Translation for Translators"
+ },
+ {
+  "id": "9879dbb7cfe39e4d-01",
+  "abbreviation": "WEB",
+  "abbreviationLocal": "WEB",
+  "name": "World English Bible"
+ },
+ {
+  "id": "9879dbb7cfe39e4d-02",
+  "abbreviation": "WEB",
+  "abbreviationLocal": "WEB",
+  "name": "World English Bible"
+ },
+ {
+  "id": "9879dbb7cfe39e4d-03",
+  "abbreviation": "WEB",
+  "abbreviationLocal": "WEB",
+  "name": "World English Bible"
+ },
+ {
+  "id": "9879dbb7cfe39e4d-04",
+  "abbreviation": "WEB",
+  "abbreviationLocal": "WEB",
+  "name": "World English Bible"
+ },
+ {
+  "id": "7142879509583d59-01",
+  "abbreviation": "WEBBE",
+  "abbreviationLocal": "WEBBE",
+  "name": "World English Bible British Edition"
+ },
+ {
+  "id": "7142879509583d59-02",
+  "abbreviation": "WEBBE",
+  "abbreviationLocal": "WEBBE",
+  "name": "World English Bible British Edition"
+ },
+ {
+  "id": "7142879509583d59-03",
+  "abbreviation": "WEBBE",
+  "abbreviationLocal": "WEBBE",
+  "name": "World English Bible British Edition"
+ },
+ {
+  "id": "7142879509583d59-04",
+  "abbreviation": "WEBBE",
+  "abbreviationLocal": "WEBBE",
+  "name": "World English Bible British Edition"
+ },
+ {
+  "id": "72f4e6dc683324df-01",
+  "abbreviation": "engWEBU",
+  "abbreviationLocal": "WEBU",
+  "name": "World English Bible Updated"
+ },
+ {
+  "id": "72f4e6dc683324df-02",
+  "abbreviation": "engWEBU",
+  "abbreviationLocal": "WEBU",
+  "name": "World English Bible Updated"
+ },
+ {
+  "id": "72f4e6dc683324df-03",
+  "abbreviation": "engWEBU",
+  "abbreviationLocal": "WEBU",
+  "name": "World English Bible Updated"
+ },
+ {
+  "id": "32664dc3288a28df-03",
+  "abbreviation": "engWEBUS",
+  "abbreviationLocal": "WEBUS",
+  "name": "World English Bible, American English Edition, without Strong's Numbers"
+ },
+ {
+  "id": "32664dc3288a28df-01",
+  "abbreviation": "engWEBUS",
+  "abbreviationLocal": "WEBUS",
+  "name": "World English Bible, American English Edition, without Strong's Numbers"
+ },
+ {
+  "id": "32664dc3288a28df-02",
+  "abbreviation": "engWEBUS",
+  "abbreviationLocal": "WEBUS",
+  "name": "World English Bible, American English Edition, without Strong's Numbers"
+ },
+ {
+  "id": "f72b840c855f362c-04",
+  "abbreviation": "WMB",
+  "abbreviationLocal": "WMB",
+  "name": "World Messianic Bible"
+ },
+ {
+  "id": "04da588535d2f823-04",
+  "abbreviation": "WMBBE",
+  "abbreviationLocal": "WMBBE",
+  "name": "World Messianic Bible British Edition"
+ }
+]
