@@ -602,8 +602,7 @@ signed-in member. Member and setup guide: `modules/bible/how_to_use.md`.
 - SQL in the module stays portable to SQLite (the test DB): no
   `ON DUPLICATE KEY`, no `INSERT IGNORE`; LIKE escapes with `ESCAPE '!'`.
 
-**Checks** (not in the workflow yet — the deploy app cannot push
-`.github/workflows/`, so the owner adds the step):
+**Checks** (CI runs both in the lint job, step "The Bible tests"):
 
 - `php tests/bible/run.php` — 1,100+ checks, no MySQL, no network: the
   reference parser, the KJV data and its manifest, highlight arithmetic, the
