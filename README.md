@@ -39,6 +39,12 @@ The internal ERP is organised as one directory per module under
   testimony wall.
 
 **Ministries & content**
+- `bible` — **The Bible**, open to every signed-in member: KJV built in
+  (public domain), NKJV / NIV / AMP through API.Bible; exact-word highlights
+  in five colours, private notes and a study journal with tags, search,
+  reading plans with streaks, a voice reader (follow-along, sleep timer,
+  repeat-to-memorise) and verse images for WhatsApp. Member and setup guide:
+  [`modules/bible/how_to_use.md`](modules/bible/how_to_use.md).
 - `academy` — Learning Management System (courses, curricula, PDF ebooks).
 - `library` — public sermon audio / video / ebook catalogue.
 - `media` — sermon and radio media management.
@@ -248,6 +254,7 @@ the untracked `.env` file.
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push identity (`php bin/generate_vapid_keys.php`). Optional — a pair is generated into `push_config` on first use. **Rotating them invalidates every subscription.** |
 | `VAPID_SUBJECT`    | `mailto:` or `https:` contact a push service can reach (RFC 8292). |
 | `SITE_URL`         | Absolute origin, e.g. `https://hodlc.lpc.cm`. Optional; learned from the first web request. |
+| `BIBLE_API_KEY`    | API.Bible key for NKJV / NIV / AMP in The Bible. Optional — without it only the built-in KJV is offered. Related optional keys: `BIBLE_API_BASE`, `BIBLE_API_MONTHLY_CAP`, `BIBLE_API_ID_NKJV/NIV/AMP`, `BIBLE_FUMS_URL` (see `.env.example`). |
 
 
 ### Special Events (`se_*`)
@@ -315,6 +322,7 @@ before a PR:
 ```bash
 php tests/security_helpers_test.php      # password policy, device/IP parsing
 php tests/pwa/run.php                    # Web Push crypto (RFC 8291 vectors), PWA wiring
+php tests/bible/run.php                  # The Bible: references, KJV data, highlights, notes, plans, API.Bible cache (SQLite)
 python3 tests/modal_contract_test.py     # shared modal contract
 python3 tests/php_structure_check.py .   # brace/quote sanity when php is absent
 ```
