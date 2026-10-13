@@ -80,7 +80,7 @@ for an exact phrase: `"peace be still"`. Typing a reference such as
   reading. After a search, the chips under the box show how many verses each
   book has; tap one to search only that book.
 - Searching the KJV is instant and unlimited. Searching NKJV, NIV or AMP uses
-  the church's API.Bible allowance, so each member can do up to 40 such
+  the church's API.Bible allowance, so each member can do up to 100 such
   searches a day.
 
 ---

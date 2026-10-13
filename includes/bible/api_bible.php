@@ -25,7 +25,7 @@
 const BIBLE_CACHE_DAYS = 29;
 const BIBLE_CATALOG_DAYS = 7;
 /** Searches of NKJV/NIV/AMP per member per day (each is an API.Bible call). */
-const BIBLE_LICENSED_SEARCHES_PER_DAY = 40;
+const BIBLE_LICENSED_SEARCHES_PER_DAY = 100;
 
 /**
  * Which API.Bible entry is which of our translations. abbreviationLocal is
