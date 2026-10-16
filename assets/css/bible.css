@@ -100,7 +100,8 @@ main { padding: 0 !important; background: var(--bb-desk); transition: background
 .bb-topbar {
     position: sticky;
     top: 0;
-    z-index: 30;
+    /* Below the site header (z-30): its notification panel opens over this bar. */
+    z-index: 20;
     background: var(--bb-chrome);
     -webkit-backdrop-filter: blur(14px) saturate(140%);
     backdrop-filter: blur(14px) saturate(140%);
