@@ -125,7 +125,9 @@
         $('#bbTestament').hidden = false;
         $('#bbChapterPane').hidden = true;
         BB.openModal('bibleBookModal');
-        if (cur) showChapters(cur.id);
+        // One-chapter books have no chapter grid (showChapters would close the
+        // picker again), so they leave the book list showing.
+        if (cur && cur.chapters > 1) showChapters(cur.id);
     }
 
     async function goTo(text) {
