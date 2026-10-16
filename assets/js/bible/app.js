@@ -94,6 +94,17 @@
         $$('#bbTestament button').forEach((x) => x.classList.toggle('is-on', x.dataset.t === picker.testament));
     }
 
+    // Centre the current book in the picker's scroll area (or go to the top
+    // when it is not in the listed testament).
+    function scrollToCurrentBook() {
+        const body = $('#bbBookGrid').closest('.bb-sheet-body');
+        if (!body) return;
+        const cur = $('#bbBookGrid .is-current');
+        if (!cur) { body.scrollTop = 0; return; }
+        const offset = cur.getBoundingClientRect().top - body.getBoundingClientRect().top;
+        body.scrollTop += offset - (body.clientHeight - cur.offsetHeight) / 2;
+    }
+
     function showChapters(bookId) {
         const b = BB.book(bookId);
         if (!b) return;
@@ -128,6 +139,7 @@
         // One-chapter books have no chapter grid (showChapters would close the
         // picker again), so they leave the book list showing.
         if (cur && cur.chapters > 1) showChapters(cur.id);
+        else scrollToCurrentBook();
     }
 
     async function goTo(text) {
@@ -160,6 +172,7 @@
             if (!b) return;
             picker.testament = b.dataset.t;
             renderBooks();
+            scrollToCurrentBook();
         });
         $('#bbBookGrid').addEventListener('click', (e) => {
             const b = e.target.closest('[data-book]');
@@ -170,6 +183,7 @@
             $('#bbBookGrid').hidden = false;
             $('#bbTestament').hidden = false;
             renderBooks();
+            scrollToCurrentBook();
         });
         $('#bbChapterGrid').addEventListener('click', (e) => {
             const b = e.target.closest('[data-chapter]');
