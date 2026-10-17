@@ -180,7 +180,8 @@ const HY_I_TRASH  = 'M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2M19 6l-1 14a1 1 0 
             </div>
             <div class="hy-lib-search">
                 <?= $icon(HY_I_SEARCH, 'w-4 h-4') ?>
-                <input type="search" id="hyQuery" placeholder="Number, title, or a line you remember" autocomplete="off">
+                <input type="search" id="hyQuery" placeholder="Number, title, or a line you remember"
+                       autocomplete="off" data-modal-initial-focus>
                 <button type="button" class="hy-chip" id="hyScoreOnly" aria-pressed="false">With music</button>
             </div>
             <div class="hy-lib-shelves" id="hyShelves"></div>

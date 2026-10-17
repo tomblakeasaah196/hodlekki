@@ -159,6 +159,10 @@
         var p = HY.prefs();
         root.setAttribute('data-page', p.page || 'paper');
         root.setAttribute('data-size', String(p.text_size || 3));
+        /* Also on <html>, because the colour tokens are defined there: an open
+         * dialog is portaled out of #hyRoot by modal-manager.js and would
+         * otherwise lose every token and render transparent. */
+        document.documentElement.setAttribute('data-hy-page', p.page || 'paper');
     };
 
     HY.setMode = function (mode) {

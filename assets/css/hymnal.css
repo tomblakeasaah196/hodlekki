@@ -9,7 +9,17 @@
  * the sol-fa recolour with the words.
  */
 
-.hy {
+/* The colour tokens live on :root, not on .hy, and the page theme is mirrored
+ * onto <html> as data-hy-page.
+ *
+ * This is not a style preference. modal-manager.js PORTALS an open dialog to
+ * document.body (a transformed or filtered ancestor would otherwise break
+ * position:fixed), which lifts it clean out of #hyRoot. Tokens defined on .hy
+ * then resolve to nothing inside the dialog: `background: var(--hy-paper)`
+ * becomes transparent and the sheet shows the page straight through it, which
+ * is exactly what it did. Defining them at the root keeps a portaled dialog
+ * looking like the page it came from. */
+:root {
     --hy-ink: #15130f;
     --hy-ink-soft: #5c5448;
     --hy-paper: #faf6ef;
@@ -20,14 +30,9 @@
     --hy-sol: #7a5c12;
     --hy-text: 1.125rem;
     --hy-lead: 1.75;
-
-    background: var(--hy-paper);
-    color: var(--hy-ink);
-    min-height: 100vh;
-    font-family: 'Literata', Georgia, 'Times New Roman', serif;
 }
 
-.hy[data-page='white'] {
+:root[data-hy-page='white'] {
     --hy-ink: #111827;
     --hy-ink-soft: #6b7280;
     --hy-paper: #ffffff;
@@ -36,13 +41,38 @@
     --hy-sol: #92400e;
 }
 
-.hy[data-page='night'] {
+:root[data-hy-page='night'] {
     --hy-ink: #e8e2d6;
     --hy-ink-soft: #9b948a;
     --hy-paper: #0A0E17;
     --hy-rule: #272e3d;
     --hy-chip: #171d2b;
     --hy-sol: #e0b24a;
+}
+
+.hy {
+    background: var(--hy-paper);
+    color: var(--hy-ink);
+    min-height: 100vh;
+    font-family: 'Literata', Georgia, 'Times New Roman', serif;
+}
+
+/* The hidden attribute must always win.
+ *
+ * The user agent's `[hidden] { display: none }` lives in the UA origin, so ANY
+ * author rule that sets display beats it regardless of specificity. Several
+ * elements here are flex, grid or inline-flex, which left the choir transport
+ * on screen in congregation mode, the Studio's "Reading the song…" line always
+ * showing, and the whole song form open before anyone had chosen anything.
+ *
+ * Listed for the portaled case too: a dialog moved to document.body is no
+ * longer inside .hy, so `.hy [hidden]` alone would not reach into it. */
+.hy [hidden],
+.hy[hidden],
+.hy-modal [hidden],
+.hy-modal[hidden],
+.hy-transport[hidden] {
+    display: none !important;
 }
 
 .hy[data-size='1'] { --hy-text: 0.95rem; }
@@ -218,10 +248,10 @@
 
 /* abcjs draws in black; recolour it with the page rather than restyling every
  * glyph, so a dark auditorium gets a dark score. */
-.hy[data-page='night'] .hy-score svg path,
-.hy[data-page='night'] .hy-score svg text,
-.hy[data-page='night'] .hy-score svg tspan { fill: var(--hy-ink); }
-.hy[data-page='night'] .hy-score svg path[stroke] { stroke: var(--hy-ink); }
+:root[data-hy-page='night'] .hy-score svg path,
+:root[data-hy-page='night'] .hy-score svg text,
+:root[data-hy-page='night'] .hy-score svg tspan { fill: var(--hy-ink); }
+:root[data-hy-page='night'] .hy-score svg path[stroke] { stroke: var(--hy-ink); }
 
 .hy-score .abcjs-note_selected path { fill: var(--hy-accent); }
 
@@ -393,6 +423,10 @@
     max-width: 42rem;
     max-height: 92vh;
     background: var(--hy-paper);
+    /* Set explicitly, not inherited: modal-manager.js portals an open dialog to
+     * document.body, so it no longer inherits anything from .hy — without this
+     * night mode put black text on a near-black sheet. */
+    color: var(--hy-ink);
     border-radius: 1rem 1rem 0 0;
     border: 1px solid var(--hy-rule);
     font-family: 'Inter', system-ui, sans-serif;
