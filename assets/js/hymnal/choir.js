@@ -83,13 +83,39 @@
 
     /* ------------------------------------------------------------ the staff */
 
+    /* Strip the printed header block from the ABC before abcjs draws it.
+     *
+     * Two reasons, and the second is the one that bit us. The page already
+     * prints the title, the writer and the key in its own header, so abcjs
+     * printing T:/C:/S: again just repeats them inside the picture. And abcjs
+     * sizes the drawing from text it measures in the page's font: when that
+     * font is a webfont that has not arrived — a slow connection, a phone that
+     * blocks Google Fonts — the fallback is wider than what was measured, the
+     * header text spills past the viewBox, and the browser clips it at both
+     * edges. That is what "the notes are cut off" turned out to be: the music
+     * was fine, the title above it was overflowing.
+     *
+     * X:, M:, L:, K:, Q:, V: and the music are all untouched, so nothing about
+     * what is played or sung changes. W: (printed words after the tune) goes
+     * too, because the verses are already below in the member's own type. */
+    var HEADER_FIELDS = /^[TCSOAZNGHRBDFW]:/;
+
+    function scoreAbc(abc) {
+        return String(abc || '')
+            .split(/\r?\n/)
+            .filter(function (line) {
+                return !HEADER_FIELDS.test(line);
+            })
+            .join('\n');
+    }
+
     HY.choirMounted = function (song) {
         var host = document.getElementById('hyScore');
         if (!host || !song.score || !window.ABCJS) {
             return;
         }
         try {
-            var tunes = window.ABCJS.renderAbc(host, song.score.abc, {
+            var tunes = window.ABCJS.renderAbc(host, scoreAbc(song.score.abc), {
                 responsive: 'resize',
                 staffwidth: Math.max(320, host.clientWidth || 640),
                 visualTranspose: HY.state.transpose,
@@ -98,8 +124,21 @@
                  * half of why a choir wants the staff. */
                 add_classes: true,
                 selectionColor: '#D11920',
-                wrap: { minSpacing: 1.6, maxSpacing: 2.8, preferredMeasuresPerLine: 4 },
-                format: { gchordfont: 'Inter 11', vocalfont: 'Literata 13' }
+                /* Fewer bars per line on a narrow screen, so the notes stay
+                 * big enough to read rather than being squeezed to fit. */
+                wrap: {
+                    minSpacing: 1.6,
+                    maxSpacing: 2.8,
+                    preferredMeasuresPerLine: (host.clientWidth || 360) < 520 ? 2 : 4
+                },
+                /* System fonts only. abcjs lays the drawing out from measured
+                 * text, so a webfont that has not loaded yet measures one way
+                 * and paints another, and the result overflows. */
+                format: {
+                    gchordfont: 'sans-serif 11',
+                    vocalfont: 'serif 13',
+                    annotationfont: 'sans-serif 11'
+                }
             });
             visual = tunes && tunes[0] ? tunes[0] : null;
         } catch (e) {

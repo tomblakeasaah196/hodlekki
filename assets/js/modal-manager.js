@@ -13,6 +13,16 @@
         '[contenteditable="true"]'
     ].join(',');
 
+    // In order: an explicit opt-in, then the platform autofocus hint, then a
+    // close button as the safe default for a dialog that asks for nothing.
+    const PREFERRED_FOCUS = [
+        '[data-modal-initial-focus]',
+        '[autofocus]',
+        'button[aria-label*="close" i]',
+        'button[title*="close" i]',
+        'button[onclick*="close" i]'
+    ];
+
     const registered = new Set();
     const openDialogs = [];
     const dialogState = new WeakMap();
@@ -136,9 +146,18 @@
         const state = dialogState.get(overlay);
         if (!state || topDialog() !== overlay) return;
 
-        const preferred = state.panel.querySelector(
-            '[data-modal-initial-focus], [autofocus], button[aria-label*="close" i], button[title*="close" i], button[onclick*="close" i]'
-        );
+        // Tried in order of preference, NOT as one selector list: a single
+        // querySelector with a comma-separated list returns the first match in
+        // DOCUMENT order, so a close button in the dialog header always beat an
+        // explicit [data-modal-initial-focus] further down the panel. That made
+        // opt-in focus impossible — the Hymnary's search dialog put the cursor
+        // on its X instead of its search box, and typing went nowhere.
+        // A dialog that sets neither attribute behaves exactly as before.
+        let preferred = null;
+        for (const selector of PREFERRED_FOCUS) {
+            preferred = state.panel.querySelector(selector);
+            if (preferred) break;
+        }
         const target = preferred || visibleFocusable(state.panel)[0] || state.panel;
         if (target === state.panel && !state.panel.hasAttribute('tabindex')) state.panel.setAttribute('tabindex', '-1');
         target.focus({ preventScroll: true });
