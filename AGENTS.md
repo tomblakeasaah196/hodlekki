@@ -88,9 +88,8 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   `composer install` and reports itself as skipped without it. The PWA/push
   suite is `php tests/pwa/run.php` (no database, no network) — run it after
   touching `includes/push_*.php`, `includes/pwa_*.php`, `manifest.php` or
-  `sw.js`. (It is not in
-  the workflow yet: the deploy app cannot push `.github/workflows/`, so the
-  owner adds that step.) On a machine with no PHP at all,
+  `sw.js`. (It is not in the workflow yet — but see the note below: an agent
+  CAN add the step itself now.) On a machine with no PHP at all,
   `python3 tests/php_structure_check.py <file>` still catches unbalanced
   brackets and unterminated strings. There is no browser/UI test suite, so
   always smoke the page you touched by hand. Touching Charis AWOL Monitoring
@@ -242,6 +241,19 @@ never treat it as proof the engine behaves.
   → Pull or Deploy → `Update from Remote`, then `Deploy HEAD Commit`.
   Or from cPanel → Terminal:
   `bash /home/smartqaq/repositories/hodlekki/bin/deploy.sh`.
+- **`.github/workflows/` CAN be pushed by an agent** (verified 2026-10-17: the
+  GitHub App has `workflows` permission). Earlier notes in this file said it
+  could not and told the owner to add CI steps by hand — that was true once and
+  is not any more. So when a module arrives with a test suite, add the step in
+  the same pull request rather than handing it back. Two suites are still
+  missing a step for that reason: `tests/pwa/run.php` and
+  `tests/assimilation_export_test.php`.
+- **The deployed copy of this workflow is a fossil — do not read it.**
+  `.deployignore` excludes `./.github`, and `bin/deploy.sh` never deletes, so
+  `/public_html/hodlc.lpc.cm/.github/workflows/deploy.yml` is frozen at
+  whatever was there before that exclusion was added. It is missing whole jobs.
+  The file in git is the only one that runs; editing from the docroot copy
+  silently deletes everything added since.
 - Full pipeline docs, secrets/vars list, rollback: `DEPLOY.md`.
 
 ## PR conventions
@@ -518,9 +530,9 @@ notification, call `push_send_to_user()` or `push_enqueue()` directly.
   `SE_REG_NOTICE_MIN_GAP_MINUTES`. Do not make `every` the default — a Chara
   night is 300 registrations, and that is how a congregation learns to ignore
   notifications. State is `reg_notice` rows in `se_audit_log`.
-- **Checks CI does not run yet** (the deploy app cannot push
-  `.github/workflows/`, so the owner adds them — same as the Assimilation
-  Excel suite):
+- **Checks CI does not run yet** (nobody has added the step; see the note on
+  `.github/workflows/` below — an agent can add it, it no longer has to be the
+  owner. Same situation as the Assimilation Excel suite):
   - `php tests/pwa/run.php` — 176 checks, no database, no network.
   - `node --experimental-default-type=module --check assets/js/pwa.js`
   - `node --experimental-default-type=module --check sw.js`
@@ -704,6 +716,13 @@ reader. Member and office guide: `modules/hymnal/how_to_use.md`.
   `INSERT IGNORE`, LIKE escapes with `ESCAPE '!'`, and columns one per line
   ending in `ENGINE=` so `tests/hymnal/lib.php` can translate the real
   migration.
+- `_hymnal_` is a required marker in `tests/special_events/db_setup.php`, so
+  the migration must apply against MySQL 8 and MariaDB 10.11 in the integration
+  job. A migration whose filename carries no required marker is reported as
+  "skipped" when it fails and the job still goes green — which is correct for
+  the two that alter platform columns the harness's stand-ins lack, and silent
+  for one that is simply broken. Add your module's marker when you add a
+  module, and verify it on BOTH engines first.
 - The module's dialogs follow the shared modal contract (ids contain `Modal`,
   closed only by a visible button).
 - **Playback is synthesised from the score**, so it exists for exactly the songs
@@ -715,7 +734,8 @@ reader. Member and office guide: `modules/hymnal/how_to_use.md`.
   `soundFontVolumeMultiplier: 3.0` explicitly; without it the same samples play
   back almost inaudibly.
 
-**Checks** (run them before pushing):
+**Checks** (CI runs them in the lint job, step "The Hymnary tests"; run them
+before pushing anyway):
 
 - `php tests/hymnal/run.php` — 264 checks, no MySQL, no network: the sol-fa
   arithmetic against music theory, the corpus and its manifest, the licence of
