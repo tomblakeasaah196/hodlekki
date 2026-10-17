@@ -185,6 +185,39 @@ jobs:
           done
           exit $fail
 
+      - name: The Hymnary tests
+        run: |
+          set -euo pipefail
+
+          # No MySQL and no network: the database half runs on in-memory
+          # SQLite built from the real migration. Without pdo_sqlite that half
+          # would print SKIP and pass, so refuse to run without it.
+          if ! php -m | grep -qix 'pdo_sqlite'; then
+            echo "::error::pdo_sqlite is missing — the Hymnary database tests would be skipped"
+            exit 1
+          fi
+          # Includes function_calls_test.php: every function the module calls
+          # must exist (php -l cannot see a call to a function never written).
+          # Also verifies every corpus file against MANIFEST, so a hymn's words
+          # cannot drift and a hand edit cannot hide.
+          php tests/hymnal/run.php
+
+          # The reader's scripts are classic scripts that nothing compiles, and
+          # bin/hymnal_parse_abc.mjs generates the corpus: a syntax error in
+          # either leaves members with a blank page or a broken build.
+          fail=0
+          for f in assets/js/hymnal/*.js; do
+            if ! out=$(node --check "$f" 2>&1); then
+              echo "::error file=$f::$(echo "$out" | grep -m1 -E 'SyntaxError|Error' || echo 'does not parse')"
+              fail=1
+            fi
+          done
+          if ! out=$(node --check bin/hymnal_parse_abc.mjs 2>&1); then
+            echo "::error file=bin/hymnal_parse_abc.mjs::$(echo "$out" | grep -m1 -E 'SyntaxError|Error' || echo 'does not parse')"
+            fail=1
+          fi
+          exit $fail
+
       - name: Secret sweep (block obvious leaks)
         run: |
           set -euo pipefail
