@@ -725,6 +725,16 @@ reader. Member and office guide: `modules/hymnal/how_to_use.md`.
   module, and verify it on BOTH engines first.
 - The module's dialogs follow the shared modal contract (ids contain `Modal`,
   closed only by a visible button).
+- **Share as a card follows the licence, not the button.** `refusal()` in
+  `assets/js/hymnal/share.js` allows `PD`, `CHURCH`, `CC-BY` and `CC-BY-SA`
+  only, and only published songs. A CCLI licence covers singing and projecting
+  the words in church, not posting them online, so a CCLI or `PERMISSION` song
+  keeps its share buttons greyed out with the reason. Do not widen that list
+  because a song "is sung every Sunday".
+- **The reader's menus are popovers, not dialogs** (`.hy-menu`, opened by the
+  button whose `aria-controls` names them, run by `app.js`). Their ids must not
+  contain "modal": modal-manager.js treats any fixed element whose id does as a
+  dialog, portals it and traps focus in it.
 - **Playback is synthesised from the score**, so it exists for exactly the songs
   that have one; where there is none, choir mode hides the controls and says the
   notes are not available. Never offer a play button that does nothing.

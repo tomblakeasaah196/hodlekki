@@ -207,7 +207,9 @@
             if (!opts.keepUrl && window.history && window.history.replaceState) {
                 window.history.replaceState({}, '', '?n=' + encodeURIComponent(song.n));
             }
-            window.scrollTo({ top: 0, behavior: 'auto' });
+            /* Back to the top of the new song — of whatever really scrolls,
+             * which on this platform is <main>, not the window. */
+            HY.scrollToTop();
             return song;
         }).catch(function (err) {
             HY.say(err.message || 'That hymn would not open.', 'error');

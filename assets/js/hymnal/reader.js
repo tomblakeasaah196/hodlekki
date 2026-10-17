@@ -170,18 +170,26 @@
             t.textContent = (HY.words(song) || song).title || song.title;
         }
 
+        /* An icon-only heart, so its name carries the state: a filled heart
+         * and "Remove from your favourites" once it is marked. */
         var fav = document.getElementById('hyFavourite');
         if (fav) {
             var on = HY.isFavourite(song.n);
+            var name = on ? 'Remove from your favourites' : 'Add to your favourites';
             fav.setAttribute('aria-pressed', on ? 'true' : 'false');
-            var lab = fav.querySelector('span');
-            if (lab) {
-                lab.textContent = on ? 'Favourited' : 'Favourite';
-            }
+            fav.setAttribute('aria-label', name);
             fav.disabled = !HY.boot.ready;
-            if (!HY.boot.ready) {
-                fav.title = 'Marking favourites switches on once the Hymnary is set up.';
-            }
+            fav.title = HY.boot.ready ? name : 'Marking favourites switches on once the Hymnary is set up.';
+        }
+
+        if (HY.share && HY.share.paint) {
+            HY.share.paint(song);
+        }
+
+        /* Opening a song resets the key to as written; the options button
+         * must not go on showing the last song's "+2". */
+        if (HY.paintChoirSummary) {
+            HY.paintChoirSummary();
         }
 
         var transport = document.getElementById('hyTransport');

@@ -204,6 +204,30 @@
         return keys.length ? song.langs[keys[0]] : null;
     };
 
+    /* The element that really scrolls the reader. includes/header.php gives
+     * the screen a fixed-height shell and scrolls its <main>, so window.scrollY
+     * is always 0 there; this finds the nearest scrolling ancestor of the
+     * page and falls back to the window where there is none. */
+    HY.scroller = function () {
+        var root = document.getElementById('hyRoot');
+        for (var el = root && root.parentElement; el && el !== document.body; el = el.parentElement) {
+            var oy = window.getComputedStyle(el).overflowY;
+            if (oy === 'auto' || oy === 'scroll') {
+                return el;
+            }
+        }
+        return null;
+    };
+
+    HY.scrollToTop = function () {
+        var el = HY.scroller();
+        if (el) {
+            el.scrollTop = 0;
+        } else {
+            window.scrollTo({ top: 0, behavior: 'auto' });
+        }
+    };
+
     HY.on = function (id, event, handler) {
         var node = document.getElementById(id);
         if (node) {

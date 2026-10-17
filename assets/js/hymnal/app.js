@@ -47,6 +47,155 @@
         }
     });
 
+    /* --------------------------------------------------------------- menus */
+
+    /* The mode menu, the ⋯ menu and the choir options are popovers, not
+     * dialogs. Each is a [hidden] panel next to the button that opens it
+     * (aria-controls). One is open at a time; it closes on a tap outside, on
+     * Escape (focus goes back to its button), when focus leaves it, and when one
+     * of its items is chosen. modal-manager.js never sees them: none has
+     * "modal" in its id. */
+    var openMenu = null;
+
+    function menuButton(menu) {
+        return menu ? document.querySelector('[aria-controls="' + menu.id + '"]') : null;
+    }
+
+    function menuItems(menu) {
+        return Array.prototype.filter.call(
+            menu.querySelectorAll('[role^="menuitem"]'),
+            function (item) { return !item.disabled && item.getClientRects().length > 0; }
+        );
+    }
+
+    function closeMenu(refocus) {
+        var menu = openMenu;
+        if (!menu) {
+            return;
+        }
+        openMenu = null;
+        menu.hidden = true;
+        var btn = menuButton(menu);
+        if (btn) {
+            btn.setAttribute('aria-expanded', 'false');
+            if (refocus) {
+                btn.focus();
+            }
+        }
+    }
+
+    function showMenu(menu, focusFirst) {
+        closeMenu(false);
+        var btn = menuButton(menu);
+        menu.hidden = false;
+        openMenu = menu;
+        if (btn) {
+            btn.setAttribute('aria-expanded', 'true');
+        }
+        /* The bar must not slide away under an open menu. */
+        var bar = document.getElementById('hyBar');
+        if (bar && bar.contains(menu)) {
+            bar.classList.remove('is-hidden');
+        }
+        if (focusFirst) {
+            var items = menuItems(menu);
+            var on = items.filter(function (i) { return i.getAttribute('aria-checked') === 'true'; })[0];
+            if (on || items[0]) {
+                (on || items[0]).focus();
+            }
+        }
+    }
+
+    HY.closeMenu = closeMenu;
+
+    /* Buttons that own a popover toggle it. A keyboard press (detail 0) puts
+     * focus on the first item, as a menu should; a tap leaves it where it is,
+     * so no focus ring flashes on a phone. */
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[aria-controls][aria-expanded]');
+        if (!btn) {
+            return;
+        }
+        var menu = document.getElementById(btn.getAttribute('aria-controls'));
+        if (!menu || !menu.classList.contains('hy-menu')) {
+            return;
+        }
+        if (openMenu === menu) {
+            closeMenu(false);
+        } else {
+            showMenu(menu, e.detail === 0);
+        }
+    });
+
+    /* Capture phase, so the menu is shut — and focus is back on its button —
+     * before the item's own handler opens a dialog. modal-manager.js records
+     * whatever has focus as the dialog's opener and returns focus there on
+     * close; a hidden menu item would leave focus nowhere. */
+    document.addEventListener('click', function (e) {
+        if (!openMenu) {
+            return;
+        }
+        var item = e.target.closest('[role^="menuitem"]');
+        if (item && openMenu.contains(item)) {
+            closeMenu(true);
+        }
+    }, true);
+
+    document.addEventListener('pointerdown', function (e) {
+        if (!openMenu) {
+            return;
+        }
+        var wrap = openMenu.closest('.hy-pop') || openMenu;
+        if (!wrap.contains(e.target)) {
+            closeMenu(false);
+        }
+    }, true);
+
+    document.addEventListener('focusin', function (e) {
+        if (!openMenu) {
+            return;
+        }
+        var wrap = openMenu.closest('.hy-pop') || openMenu;
+        if (!wrap.contains(e.target)) {
+            closeMenu(false);
+        }
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (!openMenu) {
+            return;
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeMenu(true);
+            return;
+        }
+        /* Arrow keys move through a real menu. The choir options panel holds a
+         * slider and a select, which need their arrows, so it is left alone. */
+        if (openMenu.getAttribute('role') !== 'menu') {
+            return;
+        }
+        var items = menuItems(openMenu);
+        if (!items.length) {
+            return;
+        }
+        var at = items.indexOf(document.activeElement);
+        var next = null;
+        if (e.key === 'ArrowDown') {
+            next = items[(at + 1) % items.length];
+        } else if (e.key === 'ArrowUp') {
+            next = items[(at - 1 + items.length) % items.length];
+        } else if (e.key === 'Home') {
+            next = items[0];
+        } else if (e.key === 'End') {
+            next = items[items.length - 1];
+        }
+        if (next) {
+            e.preventDefault();
+            next.focus();
+        }
+    });
+
     /* ------------------------------------------------------------- library */
 
     HY.on('hyLibraryOpen', 'click', function () {
@@ -100,25 +249,41 @@
 
     /* ---------------------------------------------------------------- mode */
 
+    /* The mode button shows the mode you are in — its icon, and its name in
+     * small type under it — and the menu ticks it. */
+    function paintMode() {
+        var choir = HY.state.mode === 'choir';
+        Array.prototype.forEach.call(document.querySelectorAll('#hyModeMenu [data-mode]'), function (item) {
+            item.setAttribute('aria-checked', String(item.getAttribute('data-mode') === HY.state.mode));
+        });
+        Array.prototype.forEach.call(document.querySelectorAll('#hyModeOpen [data-mode-icon]'), function (ic) {
+            ic.hidden = ic.getAttribute('data-mode-icon') !== HY.state.mode;
+        });
+        var label = document.getElementById('hyModeLabel');
+        if (label) {
+            label.textContent = choir ? 'Choir' : 'Congregation';
+        }
+        var btn = document.getElementById('hyModeOpen');
+        if (btn) {
+            btn.setAttribute('aria-label', 'Reading mode: ' + (choir ? 'Choir' : 'Congregation'));
+        }
+    }
+
     function setMode(mode) {
         HY.setMode(mode);
-        var c = document.getElementById('hyModeCongregation');
-        var k = document.getElementById('hyModeChoir');
-        if (c && k) {
-            var choir = HY.state.mode === 'choir';
-            c.classList.toggle('is-on', !choir);
-            k.classList.toggle('is-on', choir);
-            c.setAttribute('aria-selected', String(!choir));
-            k.setAttribute('aria-selected', String(choir));
-        }
-        if (!document.getElementById('hyModeChoir') || HY.state.mode !== 'choir') {
+        paintMode();
+        if (HY.state.mode !== 'choir') {
             HY.choirStop && HY.choirStop();
         }
         HY.renderSong();
     }
 
-    HY.on('hyModeCongregation', 'click', function () { setMode('congregation'); });
-    HY.on('hyModeChoir', 'click', function () { setMode('choir'); });
+    HY.on('hyModeMenu', 'click', function (e) {
+        var item = e.target.closest('[data-mode]');
+        if (item && item.getAttribute('data-mode') !== HY.state.mode) {
+            setMode(item.getAttribute('data-mode'));
+        }
+    });
 
     /* ------------------------------------------------------------- display */
 
@@ -191,6 +356,17 @@
         openModal('hyAboutModal');
     });
 
+    /* --------------------------------------------------------------- share */
+
+    /* Two doors to the same card: the round button at the foot of the song
+     * and "Share as a card" in the ⋯ menu. share.js decides whether this song
+     * may be shared at all, and says why not when it may not. */
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('[data-share]') && HY.share) {
+            HY.share.open();
+        }
+    });
+
     /* ---------------------------------------------------------------- page */
 
     ['hyPrev', 'hyPrev2'].forEach(function (id) {
@@ -224,6 +400,28 @@
         HY.choirAudioChanged();
     });
 
+    /* The options button carries the speed, and the key when it has moved,
+     * so a chorister can see at a glance that the music is not as written. */
+    function paintChoirSummary() {
+        var sum = document.getElementById('hyChoirOptsSum');
+        if (!sum) {
+            return;
+        }
+        var bits = [(Number(HY.prefs().tempo) || 100) + '%'];
+        var t = Number(HY.state.transpose) || 0;
+        if (t !== 0) {
+            bits.push((t > 0 ? '+' : '−') + Math.abs(t));
+        }
+        sum.textContent = bits.join(' · ');
+        var btn = document.getElementById('hyChoirOptsOpen');
+        if (btn) {
+            btn.setAttribute('aria-label', 'Playback options: speed ' + bits[0]
+                + (t !== 0 ? ', key ' + (t > 0 ? 'up ' : 'down ') + Math.abs(t) : ', key as written'));
+        }
+    }
+
+    HY.paintChoirSummary = paintChoirSummary;
+
     HY.on('hyTempo', 'input', function (e) {
         var pct = Number(e.target.value);
         var out = document.getElementById('hyTempoOut');
@@ -231,11 +429,13 @@
             out.textContent = pct + '%';
         }
         HY.setPrefs({ tempo: pct });
+        paintChoirSummary();
         HY.choirAudioChanged();
     });
 
     HY.on('hyTranspose', 'change', function (e) {
         HY.state.transpose = Number(e.target.value) || 0;
+        paintChoirSummary();
         /* The staff has to be redrawn for a visual transposition, and the sol-fa
          * does not change at all — that is the point of movable doh. */
         HY.renderSong();
@@ -246,8 +446,22 @@
         HY.renderSong();
     });
 
-    HY.on('hyInstrument', 'change', function (e) {
-        HY.setPrefs({ instrument: e.target.value });
+    function paintInstrument() {
+        var current = HY.prefs().instrument || 'acoustic_grand_piano';
+        Array.prototype.forEach.call(document.querySelectorAll('#hyInstrument [data-instrument]'), function (b) {
+            var on = b.getAttribute('data-instrument') === current;
+            b.classList.toggle('is-on', on);
+            b.setAttribute('aria-pressed', String(on));
+        });
+    }
+
+    HY.on('hyInstrument', 'click', function (e) {
+        var btn = e.target.closest('[data-instrument]');
+        if (!btn || btn.getAttribute('data-instrument') === (HY.prefs().instrument || 'acoustic_grand_piano')) {
+            return;
+        }
+        HY.setPrefs({ instrument: btn.getAttribute('data-instrument') });
+        paintInstrument();
         HY.choirAudioChanged();
     });
 
@@ -261,8 +475,9 @@
         if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) {
             return;
         }
-        /* Not while a dialog is up: the arrows belong to whatever is in it. */
-        if (document.querySelector('[id$="Modal"]:not([hidden])')) {
+        /* Not while a dialog or a menu is up: the arrows belong to whatever is
+         * in it. */
+        if (openMenu || document.querySelector('[id$="Modal"]:not([hidden])')) {
             return;
         }
         if (e.key === 'ArrowLeft') {
@@ -287,22 +502,32 @@
     /* --------------------------------------------------- the bar on a phone */
 
     /* The bar slides away while reading down and comes back on the first
-     * upward scroll, so a phone screen is nearly all words while singing. */
+     * upward scroll, so a phone screen is nearly all words while singing.
+     *
+     * The page does not scroll the window: includes/header.php gives the
+     * screen a fixed-height shell and scrolls its <main>. Listening on window
+     * meant the bar never moved, so this listens on whatever HY.scroller()
+     * finds, and still works on a page where that is the window. */
     (function () {
         var bar = document.getElementById('hyBar');
         if (!bar) {
             return;
         }
-        var last = window.scrollY;
+        var scroller = HY.scroller();
+        var target = scroller || window;
+        var read = function () {
+            return scroller ? scroller.scrollTop : window.scrollY;
+        };
+        var last = read();
         var ticking = false;
-        window.addEventListener('scroll', function () {
+        target.addEventListener('scroll', function () {
             if (ticking) {
                 return;
             }
             ticking = true;
             window.requestAnimationFrame(function () {
-                var now = window.scrollY;
-                if (now > last + 8 && now > 120) {
+                var now = read();
+                if (now > last + 8 && now > 120 && !(openMenu && bar.contains(openMenu))) {
                     bar.classList.add('is-hidden');
                 } else if (now < last - 8) {
                     bar.classList.remove('is-hidden');
@@ -339,14 +564,12 @@
                 out.textContent = (p.tempo || 100) + '%';
             }
         }
-        var instrument = document.getElementById('hyInstrument');
-        if (instrument) {
-            instrument.value = p.instrument || 'acoustic_grand_piano';
-        }
+        paintInstrument();
         var solfa = document.getElementById('hySolfaToggle');
         if (solfa) {
             solfa.checked = p.show_solfa !== false;
         }
+        paintChoirSummary();
 
         setMode(HY.state.mode);
     }
