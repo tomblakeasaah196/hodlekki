@@ -621,6 +621,125 @@ php bin/build_bible_kjv.php /tmp/eng-kjv.osis.xml
 php tests/bible/run.php
 ```
 
+## The Hymnary (added 2026-10-17)
+
+Household of David's own song library: 511 public-domain hymns (305 with
+four-part scores), the songs the music team adds, two reading modes
+(Congregation and Choir), generated tonic sol-fa, and a Studio with an AI
+reader. Member and office guide: `modules/hymnal/how_to_use.md`.
+
+| Path | What |
+| ---- | ---- |
+| `includes/hymnal/` | All module PHP. `bootstrap.php` is the only entry point (after `includes/db.php`). |
+| `includes/hymnal/corpus/` | The 511 hymns, sharded 50 per file, + `index.php`, `meta.php`, `MANIFEST`, `NUMBERS`. **Generated.** |
+| `includes/hymnal/solfa.php` | Tonic sol-fa from a score. Pure arithmetic, heavily tested. |
+| `includes/hymnal/collections.php` | The shelves. Code, not data — adding one needs no migration. |
+| `api/hymnal_api.php` | JSON endpoint (session + `X-Hymnal-CSRF` on POST; `ai_read` is multipart). |
+| `modules/hymnal/index.php` | The reader. `studio.php` is included only for holders of the Studio. |
+| `assets/js/hymnal/` | Classic scripts on `window.HODHymnal`. CSS in `assets/css/hymnal.css`. |
+| `assets/hymnal/` | Vendored abcjs + the self-hosted soundfont. See `assets/hymnal/VENDOR.md`. |
+| `bin/hymnal_parse_abc.mjs` | Stage one of the corpus build (node; uses abcjs). |
+| `bin/build_hymnal.php` | Stage two: writes `includes/hymnal/corpus/`. |
+| `db/migrations/20261120090000_hymnal_core.sql` | All `hymnal_*` tables. |
+
+**Rules that are not negotiable**
+
+- **No hymn text, tune or harmony is ever typed into this repository.** The
+  corpus comes only from `bin/build_hymnal.php`, and `MANIFEST` pins a SHA-256
+  per file — `tests/hymnal/run.php` fails on any drift, so a hand edit cannot
+  hide. Same contract as `includes/bible/kjv/`.
+- **Nothing enters the corpus unless its words AND tune AND arrangement are
+  each, separately, public domain.** A hymn being old is not a licence: a
+  modern four-part setting of an 1840s hymn is still somebody's copyright, and
+  `rightsGate()` exists to stop exactly that. `tune: null` means the status was
+  not recorded, which is a gap in the evidence, not an absence of claim — those
+  songs are held back and listed in `corpus/meta.php`. Licensed songs belong in
+  the Studio, each with its own licence record, never in the corpus.
+- **A published score and a published chord chart can carry the same tune under
+  DIFFERENT WORDS.** `scoreTextAgreement()` refuses a score below 0.35
+  agreement with the words (median across the corpus is 0.98; the five real
+  mismatches sit at 0.03–0.21). Do not relax that threshold without re-reading
+  why it is there: the alternative is the wrong words printed under the staff
+  and a choir rehearsing a text the congregation is not reading.
+- **A HOD number is permanent and never reused.** It is read out from the
+  pulpit. The corpus owns 1–1999 through the committed, append-only `NUMBERS`
+  ledger; `hymnal_songs` allocates from `HYMNAL_DB_NUMBER_FLOOR` (2000) up,
+  inside a transaction, with uniqueness from the unique key — never
+  check-then-insert. A retired song keeps its number reserved. Never renumber,
+  never sort `NUMBERS` by hand.
+- **Sol-fa is generated, never typed, and there is ONE implementation.**
+  `hymnal_solfa_song()` is the only place syllables are produced — the corpus
+  build and the Studio both call it. The notes it works from are extracted by
+  `assets/js/hymnal/abc_voices.js`, which is deliberately shared: node
+  `require()`s it for the build, the browser loads it in the Studio. Writing
+  either twice is how the two drift, and wrong sol-fa is worse for a chorister
+  than none.
+- **One doh serves a whole song**, taken from the melody, so the parts read
+  vertically as a printed sol-fa hymn does and a syllable means the same pitch
+  in every part. Movable doh also means **transposition does not change a
+  single syllable** — only the "doh = …" heading. Do not "fix" the commas on a
+  bass line by giving each voice its own doh.
+- **Everything a member writes is private.** Favourites, reading position and
+  display settings are scoped to the caller's user id on reads, updates AND
+  deletes. There is no view of one member's favourites for anyone else, pastors
+  included; do not add one.
+- **The Studio is gated on live roles, never `$_SESSION['active_role']`** (the
+  member switches that themselves). River of Life (department resolved by name,
+  4 in production) plus `Super_Admin` / `Resident_Pastor` / `Assoc_Pastor` may
+  edit; only the pastoral roles may publish. `api/hymnal_api.php` re-checks on
+  every write — a hidden button is not a permission.
+- **AI only through `hymnal_ai()`, and it decides nothing.** No personal data
+  in a prompt, ever — the only thing sent is the song. A call produces a
+  `hymnal_ai_jobs` row and nothing else; it becomes a song only when a person
+  has read it in the Studio form and pressed save, and the job records which
+  song it became. The model is asked to report what it could not read, and that
+  note is shown above the form. It is a sibling of `se_ai()` rather than a
+  caller: that function logs to `se_ai_requests`, counts against an event's
+  limits, and lives behind a bootstrap demanding `SE_HASH_PEPPER`.
+- **Degrade before the migration.** The tree reaches production before
+  `db/migrate.php` runs, so all 511 hymns must be readable with no tables at
+  all. Every DB action asks `hymnal_ready()`/`hymnal_table_exists()` first and
+  answers `FEATURE_NOT_READY`.
+- SQL stays portable to SQLite (the test DB): no `ON DUPLICATE KEY`, no
+  `INSERT IGNORE`, LIKE escapes with `ESCAPE '!'`, and columns one per line
+  ending in `ENGINE=` so `tests/hymnal/lib.php` can translate the real
+  migration.
+- The module's dialogs follow the shared modal contract (ids contain `Modal`,
+  closed only by a visible button).
+- **Playback is synthesised from the score**, so it exists for exactly the songs
+  that have one; where there is none, choir mode hides the controls and says the
+  notes are not available. Never offer a play button that does nothing.
+- abcjs and the FluidR3 soundfont are **vendored** under `assets/hymnal/` with
+  their SHA-256 in `VENDOR.md` — never a CDN. abcjs only applies its 3x volume
+  boost to its own default URL, so the reader passes
+  `soundFontVolumeMultiplier: 3.0` explicitly; without it the same samples play
+  back almost inaudibly.
+
+**Checks** (run them before pushing):
+
+- `php tests/hymnal/run.php` — 264 checks, no MySQL, no network: the sol-fa
+  arithmetic against music theory, the corpus and its manifest, the licence of
+  every one of the 511 hymns, search and browsing, the module against SQLite
+  built from the real migration (privacy between members, numbering, the
+  licence gate at publish), and that every function the module calls exists.
+- `node --check` each file in `assets/js/hymnal/` and `bin/hymnal_parse_abc.mjs`.
+- There is no browser suite; smoke `modules/hymnal/index.php` by hand (open a
+  hymn, switch to Choir, solo a part, transpose, play, then the Studio).
+
+**Regenerating the corpus** (only if the sources change), from the repo root:
+
+```bash
+node bin/hymnal_parse_abc.mjs <abc-dir> <source>/parsed
+php  bin/build_hymnal.php --source=<source> --verbose
+php  tests/hymnal/run.php
+```
+
+Commit everything under `includes/hymnal/corpus/`, `MANIFEST` and `NUMBERS`
+included. Stage one refuses to emit a score that still warns and lists it in
+`_excluded.json`; stage two carries that through to `meta.php`, so a newly
+malformed source shows up as a hymn without notes and a recorded reason rather
+than a silently broken staff.
+
 ## Departments module (ministry years)
 
 `modules/departments/` is ministry-year aware, and its rules are worth knowing

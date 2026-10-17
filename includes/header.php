@@ -36,7 +36,7 @@ $profilePicPath = !empty($_SESSION['picture_path']) ? htmlspecialchars($_SESSION
 
 $currentModule = basename(dirname($_SERVER['PHP_SELF']));
 $isDashboard = ($_SERVER['PHP_SELF'] == '/index.php' || $currentModule == 'dashboard');
-$moduleTitles = ['sms_studio' => 'SMS Studio', 'special_events' => 'Special Events', 'alerts' => 'Alerts Centre', 'bible' => 'The Bible'];
+$moduleTitles = ['sms_studio' => 'SMS Studio', 'special_events' => 'Special Events', 'alerts' => 'Alerts Centre', 'bible' => 'The Bible', 'hymnal' => 'Hymnary'];
 $moduleTitle = $moduleTitles[$currentModule] ?? ucfirst(str_replace('_', ' ', $currentModule));
 
 // Helper function for active link styling
@@ -267,6 +267,14 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
     <a href="/modules/bible/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'bible') ?>">
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5V5a2 2 0 012-2h14v18H6.5A2.5 2.5 0 014 19.5zM12 7v6M9 10h6"></path></svg>
         <span class="font-medium text-sm">The Bible</span>
+    </a>
+
+    <!-- The Hymnary: open to every signed-in member (modules/hymnal/). The
+         Studio inside it is gated separately, by River of Life membership or a
+         pastoral role — see includes/hymnal/rights.php. -->
+    <a href="/modules/hymnal/index.php" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 <?= getLinkStyle($currentModule == 'hymnal') ?>">
+        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 18V5l12-2v13M9 18a3 3 0 11-6 0 3 3 0 016 0zm12-2a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+        <span class="font-medium text-sm">Hymnary</span>
     </a>
 
     <!-- NEW REGIONS HUB LINK -->
@@ -553,6 +561,12 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
         'M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5V5a2 2 0 012-2h14v18H6.5A2.5 2.5 0 014 19.5zM12 7v6M9 10h6',
         ['bible', 'scripture', 'kjv', 'nkjv', 'niv', 'amp', 'amplified', 'verse', 'read', 'devotion', 'study', 'journal', 'notes', 'highlights', 'reading plan'],
         ['read' => 'Read', 'search' => 'Search', 'notes' => 'My Study', 'plans' => 'Reading Plans']);
+    $gsAdd('hymnal', 'Hymnary', '/modules/hymnal/index.php', 'Command Center',
+        'M9 18V5l12-2v13M9 18a3 3 0 11-6 0 3 3 0 016 0zm12-2a3 3 0 11-6 0 3 3 0 016 0z',
+        ['hymn', 'hymnal', 'hymnary', 'song', 'songs', 'worship', 'choir', 'sol-fa', 'solfa',
+            'tonic solfa', 'notes', 'score', 'sheet music', 'satb', 'chorus', 'praise',
+            'lyrics', 'words', 'rehearse', 'rehearsal', 'music', 'yoruba'],
+        ['congregation' => 'Words', 'choir' => 'Choir mode']);
     $gsAdd('regions', 'Regional Hubs', '/modules/regions/index.php', 'Command Center',
         'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z',
         ['regions', 'hubs', 'locations', 'broadcast'],
