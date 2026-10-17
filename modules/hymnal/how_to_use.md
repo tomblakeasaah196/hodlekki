@@ -18,7 +18,8 @@ Two modes, one library:
 
 ## 1. Finding a hymn
 
-Tap the book button at the top left. Then whichever is easiest:
+Tap the hymn number at the top left (or the magnifying glass beside it). Then
+whichever is easiest:
 
 - **Type the number.** When the Pastor calls out "Hymn 212", type `212` and
   press Enter. A number always wins over a word.
@@ -40,21 +41,55 @@ lately**, so during devotions it is usually one tap.
 
 The words, and nothing in the way of them.
 
-- **Text size:** tap `Aa`, then one of the six sizes. The largest is meant to be
-  readable at arm's length by someone who has left their glasses at home.
+- **The top bar** is four things: the hymn you are on (tap it to choose
+  another), the **reading mode** — its picture, with *Congregation* or *Choir*
+  written small underneath — the search, and **⋯** for everything else: *Share
+  as a card*, *Text & display*, *About this hymn*, and the Studio for the music
+  team. On a narrow phone the bar shows just the number; the full title is right
+  below it.
+- **Text size:** tap **⋯ → Text & display**, then one of the six sizes. The
+  largest is meant to be readable at arm's length by someone who has left their
+  glasses at home.
 - **Page:** **Paper** is the default — warm and low-contrast, so it does not
   glare in a dark auditorium. **White** is plain. **Night** is for a dark room.
 - **Verse numbers** run into the first line, as they do in a hymn book. A
   **refrain** is set in italic with a line beside it, so you can see at a glance
   what comes round again after every verse.
-- **Chords:** tap `Aa` and switch on *Show chords above the words*. Where a song
-  has no chords the switch is greyed out and says so, rather than doing nothing.
-- **Favourite:** the heart at the foot of the song. Your favourites are
-  **private to you** — nobody else can see them, including pastors and
+- **Chords:** **⋯ → Text & display**, and switch on *Show chords above the
+  words*. Where a song has no chords the switch is greyed out and says so,
+  rather than doing nothing.
+- **At the foot of the song:** *Previous* and *Next* at the edges, and between
+  them the **heart** and the **share** button.
+- **Favourite:** the heart. It fills in once the hymn is marked. Your favourites
+  are **private to you** — nobody else can see them, including pastors and
   administrators.
-- **About:** who wrote it, when, its metre and key, the Scripture behind it (tap
-  a reference to open it in the Bible), and under what right the church holds
-  it.
+- **About:** **⋯ → About this hymn** — who wrote it, when, its metre and key,
+  the Scripture behind it (tap a reference to open it in the Bible), and under
+  what right the church holds it.
+
+### Sharing a hymn as a card
+
+Tap the **share** button at the foot of the song, or **⋯ → Share as a card**.
+You get a picture of the hymn in the church's colours: the hymn number, the
+title, the verses, who wrote it, and the Household of David · Lekki name and
+logo. It is made like the Bible's verse cards, with the same six backgrounds.
+
+- **On the card:** it starts with **verse 1 and the refrain**. Tap any verse to
+  add it or take it off. The words shrink to fit; if you choose more than one
+  picture can hold, the card ends with "…" and the dialog tells you to choose
+  fewer verses or switch to *Status / Story*, which is tall and holds more.
+- **Background:** Paper, Night, Royal, Sunrise, Forest or Rose.
+- **Shape:** *Square* for a WhatsApp or Instagram post, *Status / Story* for a
+  status.
+- **Share** opens your phone's own share sheet (WhatsApp, Instagram and the
+  rest). Where a browser has none, the picture is downloaded instead and you
+  share it from your downloads. **Download** always saves it.
+
+**Which songs can be shared.** Every song in the library. Each card carries
+the writer's name and, in small faint type at the very foot, a line about the
+rights — "Words in the public domain" for the hymns, and a credit to the
+copyright holders (with the CCLI song number) for songs the music team added.
+A song that has not been published yet cannot be shared.
 
 On a phone the top bar slides away while you read down and comes back the
 moment you scroll up.
@@ -63,7 +98,8 @@ moment you scroll up.
 
 ## 3. Choir mode
 
-Tap **Choir** at the top.
+Tap the mode button at the top (the picture of people, with *Congregation*
+under it) and choose **Choir** — the music note.
 
 ### The staff
 
@@ -97,17 +133,24 @@ read the harmony together.
 
 ### Rehearsing one part
 
+The playback bar floats at the foot of the screen: **Play**, the parts, and an
+options button that shows the speed (and the key, when you have moved it — for
+example `90% · +2`).
+
 - **Tap S, A, T or B** to take just that part. It plays alone and the other
   rows dim on the page. Tap more than one to hear two together. Tap **All** to
   come back.
-- **Speed** slows the music down to half or pushes it to half again as fast.
-  "90%" means the same thing on every song.
-- **Sound** is the piano or voices.
 - **Play** is the round button; the space bar does the same.
+- Tap the **options button** for the rest:
+  - **Speed** slows the music down to half or pushes it to half again as fast.
+    "90%" means the same thing on every song.
+  - **Key** — see below.
+  - **Sound** is the piano or voices.
+  - **Show the sol-fa under the staff** switches the sol-fa rows off and on.
 
 ### Changing the key
 
-**Key** moves the song up or down by up to five semitones — for a congregation
+**Key** (in the options) moves the song up or down by up to five semitones — for a congregation
 that cannot reach the written key, or a soloist who needs it lower. The staff
 is redrawn in the new key and the playback follows.
 
@@ -129,7 +172,7 @@ with words only.
 ## 4. Languages
 
 Where a song has more than one set of words — the English and the Yoruba, for
-instance — a **Language** choice appears under `Aa`. Both sets sit against the
+instance — a **Language** choice appears in **⋯ → Text & display**. Both sets sit against the
 same song and the same tune, so the choir reads one score whichever words are
 being sung.
 
@@ -146,7 +189,7 @@ with music and do not see the Studio button, ask the church office to add you
 to River of Life. **Publishing** — making a song visible to the congregation —
 is a pastor or a Super_Admin: the music team prepares, a pastor releases.
 
-Tap **Studio** at the top right. There are two ways to get a song in, and they
+Tap **⋯** at the top right, then **Studio** (under *Music team*). There are two ways to get a song in, and they
 end at the same form.
 
 ### Let it be read for you
