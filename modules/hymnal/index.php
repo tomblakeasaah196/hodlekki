@@ -93,7 +93,7 @@ const HY_I_TUNE   = 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8
          The two menus are popovers, not dialogs: no "modal" in their ids, so
          modal-manager.js leaves them alone, and app.js closes them on a tap
          outside or Escape. -->
-    <header class="hy-bar" id="hyBar">
+    <div class="hy-bar" id="hyBar">
         <button type="button" class="hy-where" id="hyLibraryOpen" title="Choose a hymn">
             <span class="hy-where-n" id="hyWhereNumber"><?= $hyFirst ? (int) $hyFirst['n'] : '' ?></span>
             <span class="hy-where-t" id="hyWhereTitle"><?= htmlspecialchars((string) ($hyFirst['title'] ?? 'Hymnary'), ENT_QUOTES, 'UTF-8') ?></span>
@@ -154,7 +154,7 @@ const HY_I_TUNE   = 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8
                 </div>
             </div>
         </div>
-    </header>
+    </div>
 
     <?php if (empty($hyBoot['ready'])) : ?>
         <p class="hy-notready">
@@ -164,7 +164,11 @@ const HY_I_TUNE   = 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8
         </p>
     <?php endif; ?>
 
-    <main class="hy-main">
+    <!-- A <div>, not <main> or <header>: the page is already inside
+         includes/header.php's <main>, and pwa.css styles every <main> and
+         <header> in the installed app (it took this column's bottom padding,
+         so the floating choir bar covered the buttons under the song). -->
+    <div class="hy-main">
         <nav class="hy-side hy-side-prev"><button type="button" id="hyPrev" aria-label="Previous"><?= $icon(HY_I_LEFT, 'w-6 h-6') ?></button></nav>
         <nav class="hy-side hy-side-next"><button type="button" id="hyNext" aria-label="Next"><?= $icon(HY_I_RIGHT, 'w-6 h-6') ?></button></nav>
 
@@ -186,7 +190,7 @@ const HY_I_TUNE   = 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8
             </div>
             <button type="button" class="hy-btn hy-pager-next" id="hyNext2"><span>Next</span> <?= $icon(HY_I_RIGHT, 'hy-ic-sm') ?></button>
         </div>
-    </main>
+    </div>
 
     <!-- Choir controls. Floats at the foot of the screen in choir mode so a
          chorister can start the music or take one part with a thumb while
@@ -213,7 +217,7 @@ const HY_I_TUNE   = 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8
                 </label>
                 <label class="hy-tr-row">
                     <span class="hy-tr-k">Key</span>
-                    <select id="hyTranspose">
+                    <select id="hyTranspose" autocomplete="off">
                         <option value="-5">down 5</option>
                         <option value="-4">down 4</option>
                         <option value="-3">down 3</option>

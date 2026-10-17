@@ -39,15 +39,11 @@
     var SANS = '"Inter", system-ui, -apple-system, "Segoe UI", sans-serif';
     var BRAND = 'HOUSEHOLD OF DAVID · LEKKI';
 
-    /* Which songs may leave the building as a picture.
-     *
-     * Every one of the 511 hymns is public domain, words and tune alike. A song
-     * the music team adds carries its own licence, and a CCLI licence covers
-     * singing and projecting the words in church — not posting them online —
-     * so those songs, and anything used by someone's written permission, stay
-     * off the share sheet. A song written for this church, or under Creative
-     * Commons with credit, may go. */
-    var SHAREABLE = { 'PD': true, 'CHURCH': true, 'CC-BY': true, 'CC-BY-SA': true };
+    /* Every published song may be shared — the church's decision (October
+     * 2026), on the footing that these words are published widely already.
+     * What a card owes the people who wrote them is said on the card itself:
+     * the writer's name above the church's, and a faint rights line at the
+     * very foot (rightsLine()). Keep that line when changing the layout. */
 
     var st = {
         song: null,        /* the song the dialog was opened for */
@@ -73,12 +69,6 @@
         }
         if (song.origin === 'studio' && song.status && song.status !== 'published') {
             return 'This song has not been published to the congregation yet, so it cannot be shared.';
-        }
-        var code = (song.licence && song.licence.code) || '';
-        if (!SHAREABLE[code]) {
-            return code === 'CCLI'
-                ? 'This song is sung under the church’s CCLI licence, which covers singing it in church but not posting the words online.'
-                : 'This song is used by permission, and that permission does not cover posting the words online.';
         }
         var words = HY.words(song);
         if (!words || !words.sections || !words.sections.length) {
@@ -164,6 +154,18 @@
             bits.push(code.replace('-', ' '));
         }
         return bits.join(' · ');
+    }
+
+    /* The faint line at the foot of every card. Public-domain words say so;
+     * anything else credits its holders, with the CCLI song number where the
+     * church has one, as a projected slide would. */
+    function rightsLine(song) {
+        var lic = song.licence || {};
+        if (lic.code === 'PD') {
+            return 'Words in the public domain · shared for worship';
+        }
+        return 'Shared for worship · words © their copyright holders'
+            + (lic.ccli ? ' · CCLI song ' + lic.ccli : '');
     }
 
     /* --------------------------------------------------------------- canvas */
@@ -546,6 +548,12 @@
             var line = fitLine(ctx, who, '500', 26, 20, SANS, maxW);
             ctx.fillText(line, cx, creditBase);
         }
+
+        /* The rights line: small and faint on purpose, just inside the frame. */
+        ctx.fillStyle = t.soft;
+        ctx.globalAlpha = 0.6;
+        ctx.fillText(fitLine(ctx, rightsLine(song), '400', 16, 13, SANS, maxW), cx, H - 54);
+        ctx.globalAlpha = 1;
 
         return lay;
     }

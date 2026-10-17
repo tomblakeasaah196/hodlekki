@@ -490,7 +490,9 @@
             if (open) {
                 open.click();
             }
-        } else if (e.key === ' ' && HY.state.mode === 'choir') {
+        } else if (e.key === ' ' && HY.state.mode === 'choir'
+            /* Space on a button presses that button; only elsewhere is it play. */
+            && !(e.target.closest && e.target.closest('button, a[href], [role="button"], [role^="menuitem"]'))) {
             var song = HY.state.song;
             if (song && song.has && song.has.score) {
                 e.preventDefault();
@@ -565,6 +567,12 @@
             }
         }
         paintInstrument();
+        /* A page restored by Back can come with the browser's remembered
+         * select value; the key is always as written on arrival. */
+        var transpose = document.getElementById('hyTranspose');
+        if (transpose) {
+            transpose.value = String(HY.state.transpose || 0);
+        }
         var solfa = document.getElementById('hySolfaToggle');
         if (solfa) {
             solfa.checked = p.show_solfa !== false;

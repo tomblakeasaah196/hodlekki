@@ -85,13 +85,11 @@ logo. It is made like the Bible's verse cards, with the same six backgrounds.
   rest). Where a browser has none, the picture is downloaded instead and you
   share it from your downloads. **Download** always saves it.
 
-**Which songs can be shared.** All 511 hymns, because their words are in the
-public domain, and songs the music team added that were written for this church
-or are under a Creative Commons licence. A song held under the church's **CCLI**
-licence, or used by someone's written permission, cannot be posted as a picture:
-CCLI covers singing and projecting the words in church, not putting them online.
-On those songs the share button is greyed out and tapping it says why. A song
-that has not been published yet cannot be shared either.
+**Which songs can be shared.** Every song in the library. Each card carries
+the writer's name and, in small faint type at the very foot, a line about the
+rights — "Words in the public domain" for the hymns, and a credit to the
+copyright holders (with the CCLI song number) for songs the music team added.
+A song that has not been published yet cannot be shared.
 
 On a phone the top bar slides away while you read down and comes back the
 moment you scroll up.
