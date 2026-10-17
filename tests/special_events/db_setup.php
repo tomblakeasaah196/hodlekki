@@ -189,12 +189,28 @@ sort($files);
 
 $applied = 0;
 $skipped = 0;
+$skippedNames = [];
 foreach ($files as $file) {
     $name = basename($file);
 
-    // Reach/assimilation/SMS/security migrations reference platform tables we
-    // do not stand in. Only the module's own files are required to apply.
-    $isModule = str_contains($name, '_se_');
+    // Which migrations MUST apply here.
+    //
+    // This harness stands in 7 platform tables derived from how Special Events
+    // reads them (step 1), not from production DDL. So a migration that alters
+    // a platform column the stand-ins do not have will fail here, and that is
+    // expected: it is reported as skipped and the run carries on.
+    //
+    // The catch is that a genuinely BROKEN migration looks exactly the same —
+    // logged as "skipped", the job goes green, and the breakage is not found
+    // until it stops a production deploy (bin/deploy.sh runs db/migrate.php,
+    // and any failure there stops the deploy). So every module that owns
+    // tables of its own names its filename marker here, and its migrations are
+    // fatal rather than skippable.
+    //
+    // ADD YOUR MARKER WHEN YOU ADD A MODULE. Only markers verified to apply on
+    // BOTH engines belong here — a marker added without checking MariaDB as
+    // well as MySQL turns this shared gate red on somebody else's pull request.
+    $isModule = str_contains($name, '_se_') || str_contains($name, '_hymnal_');
 
     $sql = (string) file_get_contents($file);
     try {
@@ -211,10 +227,21 @@ foreach ($files as $file) {
             exit(1);
         }
         echo "  skipped  {$name}: " . $e->getMessage() . "\n";
+        $skippedNames[] = $name;
         $skipped++;
     }
 }
 echo "[se-test] migrations: {$applied} applied, {$skipped} skipped (non-module)\n";
+if ($skippedNames !== []) {
+    // Said out loud, because a skip is indistinguishable from a break and this
+    // line is the only thing standing between the two.
+    echo "[se-test] NOTE: a skipped migration is NOT checked by this run. If any file above\n";
+    echo "[se-test]       belongs to a module that owns its own tables, add its marker to\n";
+    echo "[se-test]       \$isModule so a real failure cannot pass for a harness gap:\n";
+    foreach ($skippedNames as $n) {
+        echo "[se-test]         - {$n}\n";
+    }
+}
 
 // --------------------------------------------------------------------------
 // 3. Optional seed data
