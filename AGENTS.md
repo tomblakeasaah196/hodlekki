@@ -824,10 +824,13 @@ status: someone clocked in three times still read "1st Timer".
   deliberately does nothing rather than promote unrecorded.
 - No `user_status_history` foreign key (the migration says why).
   `congregation_api.php` `delete_member` calls `ladder_forget_user()`.
-- The integration job's required-marker list in `tests/special_events/db_setup.php`
-  does not include this migration's name: that list is only for migrations
-  verified on both MySQL 8 and MariaDB 10.11, and this one has only been run on
-  SQLite-equivalent DDL. Verify it on both engines before adding a marker.
+- The migration is not on the required-marker list in
+  `tests/special_events/db_setup.php`, so a failure would show up there as a
+  "skipped" line rather than a red job. It was checked by hand against that
+  output on the PR that added it (#92): it applied on MySQL 8.0 and MariaDB 10.11,
+  and applied again cleanly on the second pass. It is forward-only and must not
+  be edited once applied, so add a marker only if you ship a new migration for
+  this table.
 
 ## Departments module (ministry years)
 
