@@ -243,8 +243,8 @@ try {
                         invitation_source = ?, invited_by = ?, is_born_again = ?, wants_to_join = ?, visitation_preference = ?, 
                         prayer_requests = ? 
                         $pic_update_sql
-                    WHERE id = ? AND spiritual_status IN ('1st_Timer', '2nd_Timer', '3rd_Timer')";
-            
+                    WHERE id = ? AND " . embrace_pipeline_sql($pdo, 'users');
+
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
 
@@ -254,8 +254,9 @@ try {
         // ACTION 2: FETCH FIRST TIMERS (With Secure Notes Array)
         // =====================================================================================
         case 'fetch_visitors':
+            $pipelineSql = embrace_pipeline_sql($pdo, 'u');
             $stmt = $pdo->query("
-                SELECT u.*, 
+                SELECT u.*,
                        f.status as followup_status, 
                        f.id as followup_id,
                        f.assigned_worker_id,
@@ -265,7 +266,7 @@ try {
                 FROM users u
                 LEFT JOIN embrace_followups f ON f.visitor_id = u.id AND f.id = (SELECT MAX(id) FROM embrace_followups WHERE visitor_id = u.id)
                 LEFT JOIN users w ON f.assigned_worker_id = w.id
-                WHERE u.spiritual_status IN ('1st_Timer', '2nd_Timer', '3rd_Timer')
+                WHERE $pipelineSql
                 ORDER BY u.created_at DESC
             ");
             $visitors = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -287,6 +288,7 @@ try {
         // ACTION 2.5: FETCH ARCHIVE (Promoted Members)
         // =====================================================================================
         case 'fetch_archive':
+            $pipelineSql = embrace_pipeline_sql($pdo, 'u');
             $stmt = $pdo->query("
                 SELECT u.id, u.first_name, u.last_name, u.phone, u.spiritual_status,
                        f.id as followup_id, f.assigned_worker_id, f.status as followup_status, 
@@ -295,7 +297,7 @@ try {
                 FROM users u
                 JOIN embrace_followups f ON f.visitor_id = u.id AND f.id = (SELECT MAX(id) FROM embrace_followups WHERE visitor_id = u.id)
                 LEFT JOIN users w ON f.assigned_worker_id = w.id
-                WHERE u.spiritual_status NOT IN ('1st_Timer', '2nd_Timer', '3rd_Timer')
+                WHERE u.spiritual_status IS NOT NULL AND NOT $pipelineSql
                 ORDER BY archive_date DESC
             ");
             $archived = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -456,6 +458,7 @@ try {
             // Do not overwrite a member already recorded as having left; an
             // empty attendance status here used to undo that.
             require_once __DIR__ . '/../includes/charis_helpers.php';
+            $statusBefore = ladder_status_of($pdo, (int) $visitor_id);
             if (charis_should_keep_attendance_status($pdo, (int) $visitor_id, (string) $attendance_status)) {
                 $stmt = $pdo->prepare("UPDATE users SET spiritual_status = ? WHERE id = ?");
                 $stmt->execute([$spiritual_status, $visitor_id]);
@@ -464,6 +467,7 @@ try {
                 $stmt->execute([$spiritual_status, $attendance_status, $visitor_id]);
                 charis_set_awol_exemption($pdo, (int) $visitor_id, (string) $attendance_status, (int) ($_SESSION['user_id'] ?? 0));
             }
+            ladder_note_change($pdo, (int) $visitor_id, $statusBefore, 'embrace_push', (int) $user_id);
 
             $idiStmt = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 1 AND is_active = 1");
             $idi_users = $idiStmt->fetchAll(PDO::FETCH_COLUMN);

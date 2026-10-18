@@ -822,9 +822,9 @@ require_once '../../includes/header.php';
 <!-- Add to Congregation Wizard (Attendance tab) -->
 <div id="attAddWizardModal" class="fixed inset-0 w-screen h-screen bg-gray-900/80 backdrop-blur-md hidden z-[9999] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[92vh]">
-        <div class="px-6 py-5 border-b border-gray-100 bg-red-50/60 flex justify-between items-start gap-4 shrink-0">
+        <div class="att-wiz-head px-6 py-5 border-b border-gray-100 bg-red-50/60 flex justify-between items-start gap-4 shrink-0">
             <div class="min-w-0">
-                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-hodRed mb-1">Can't find them?</p>
+                <p class="att-wiz-kicker text-[10px] font-black uppercase tracking-[0.18em] text-hodRed mb-1">Can't find them?</p>
                 <h3 id="attWizardTitle" class="text-xl md:text-2xl font-bold text-gray-900">Add to congregation</h3>
                 <p id="attWizardSubtitle" class="text-sm text-gray-500 mt-1">Create their profile and clock them straight into this event.</p>
                 <div id="attWizardDots" class="flex gap-2 mt-3" aria-hidden="true"></div>
@@ -980,6 +980,15 @@ require_once '../../includes/header.php';
     .att-choice-card:focus-visible{ outline:3px solid rgba(209,25,32,.3); outline-offset:2px; }
     .att-field-error{ border-color:#D11920 !important; background-color:#FEF2F2 !important; }
     .att-field-msg{ margin-top:.35rem; font-size:.72rem; font-weight:700; color:#D11920; line-height:1.35; }
+    /* While the on-screen keyboard is up (html.app-keyboard-open, set by modal-manager.js)
+       the wizard gives its space to the form: no kicker, subtitle or progress dots, tighter padding. */
+    html.app-keyboard-open #attWizardSubtitle,
+    html.app-keyboard-open #attWizardDots,
+    html.app-keyboard-open .att-wiz-kicker{ display:none; }
+    html.app-keyboard-open .att-wiz-head{ padding-top:.7rem; padding-bottom:.7rem; }
+    html.app-keyboard-open #attWizardTitle{ font-size:1.05rem; line-height:1.3; }
+    html.app-keyboard-open #attWizardBody{ padding-top:1rem; padding-bottom:1rem; }
+    html.app-keyboard-open #attWizardFooter{ padding-top:.65rem; padding-bottom:.65rem; }
     @media (prefers-reduced-motion:reduce){
         #attSearchPopover.att-pop-open, .att-kpi-pill .att-kpi-chevron, .att-group-reveal{ animation:none; }
         .att-kpi-chevron, .att-kpi-pill, .att-pop-icon-btn{ transition:none; }
@@ -2458,25 +2467,55 @@ require_once '../../includes/header.php';
             setAttendanceKpiSearchMode(true);
             if(($(this).val() || '').trim() !== '') openAttSearchPopover();
         })
-        .on('blur', function(){
-            // KPI auto-collapse on mobile (PR #41) still applies; the popover
-            // itself only closes on Escape or an outside click.
+        .on('blur', function(e){
             clearTimeout(attKpiFocusTimer);
             attKpiFocusTimer = setTimeout(() => setAttendanceKpiSearchMode(false), 220);
+            // The dropdown belongs to the field: leaving the field closes it,
+            // unless focus went to a control inside the dropdown or a pointer
+            // is down on it (see attPopTouching below).
+            const next = e.relatedTarget;
+            if(next && $(next).closest('#attSearchPopover, #attAddPersonLink').length) return;
+            if(attPopTouching) return;
+            closeAttSearchPopover();
         });
     function renderAttSearchPopoverOpenState(){
         if(!attSearchPopoverOpen) openAttSearchPopover();
         else renderAttSearchPopover();
     }
-    // Escape closes the popover; a click/tap outside closes it. Focus is never
-    // trapped — Tab moves through the popover rows and on down the page.
+    // The dropdown is open only while the person is in the field or working
+    // inside it. Escape, losing focus (above) and a tap, click or swipe that
+    // starts anywhere outside it all close it. Focus is never trapped — Tab
+    // moves through the dropdown rows and on down the page.
+    //
+    // attPopTouching is true while a pointer is down inside the dropdown. A
+    // button tapped on iOS never takes focus, so the field's blur arrives with
+    // no relatedTarget; without this the dropdown would close before the tap's
+    // click could land and Clock In would do nothing. On touch screens the
+    // compatibility mouse events (and so the blur) come AFTER pointerup, so the
+    // flag is held until the click has run, with a timeout as the backstop for a
+    // pointer that is cancelled (a drag that scrolls the results).
+    let attPopTouching = false;
+    let attPopTouchTimer = null;
     $(document).on('keydown.attSearchPopover', function(e){
         if(e.key === 'Escape' && attSearchPopoverOpen) closeAttSearchPopover();
     });
-    $(document).on('mousedown.attSearchPopover', function(e){
-        if(!attSearchPopoverOpen) return;
-        if($(e.target).closest('#attSearchPopover, #rosterSearch, #attAddPersonLink').length) return;
+    $(document).on('pointerdown.attSearchPopover', function(e){
+        clearTimeout(attPopTouchTimer);
+        if(!attSearchPopoverOpen){ attPopTouching = false; return; }
+        if($(e.target).closest('#attSearchPopover, #rosterSearch, #attAddPersonLink').length){
+            attPopTouching = $(e.target).closest('#attSearchPopover').length > 0;
+            return;
+        }
+        attPopTouching = false;
         closeAttSearchPopover();
+    });
+    $(document).on('pointerup.attSearchPopover pointercancel.attSearchPopover', function(){
+        clearTimeout(attPopTouchTimer);
+        attPopTouchTimer = setTimeout(() => { attPopTouching = false; }, 600);
+    });
+    $(document).on('click.attSearchPopover', function(){
+        clearTimeout(attPopTouchTimer);
+        setTimeout(() => { attPopTouching = false; }, 0);
     });
     $(window).on('resize', function(){ setAttendanceKpiSearchMode(document.activeElement === document.getElementById('rosterSearch')); });
     $('#searchClockedIn').on('keyup', function(){ const v=$(this).val().toLowerCase(); $('#clockedInTableBody tr').each(function(){ const t=$(this).text().toLowerCase(); $(this).toggle(t.indexOf(v)>-1); }); });
@@ -2780,7 +2819,7 @@ require_once '../../includes/header.php';
 
     // ---- field builders ----
     function attWizText(id, value, type, attrs){
-        return `<input type="${type || 'text'}" id="${id}" value="${esc(value || '')}" ${attrs || ''} class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-hodBlue focus:ring-2 focus:ring-blue-100 transition-all">`;
+        return `<input type="${type || 'text'}" id="${id}" value="${esc(value || '')}" enterkeyhint="next" ${attrs || ''} class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-hodBlue focus:ring-2 focus:ring-blue-100 transition-all">`;
     }
     function attWizSelect(id, options, value, allowBlank, blankLabel){
         const opts = (allowBlank ? [`<option value="">${blankLabel || 'Not specified'}</option>`] : [])
@@ -2798,12 +2837,12 @@ require_once '../../includes/header.php';
         const input = $('#' + inputId);
         if(!input.length) return;
         if(message){
-            input.addClass('att-field-error').attr('aria-invalid', 'true');
+            input.addClass('att-field-error').attr({ 'aria-invalid': 'true', 'aria-describedby': inputId + 'Msg' });
             let msg = input.siblings('.att-field-msg');
-            if(!msg.length) msg = $('<p class="att-field-msg"></p>').insertAfter(input);
+            if(!msg.length) msg = $('<p class="att-field-msg" role="alert"></p>').attr('id', inputId + 'Msg').insertAfter(input);
             msg.text(message);
         } else {
-            input.removeClass('att-field-error').removeAttr('aria-invalid');
+            input.removeClass('att-field-error').removeAttr('aria-invalid').removeAttr('aria-describedby');
             input.siblings('.att-field-msg').remove();
         }
     }
@@ -2836,25 +2875,78 @@ require_once '../../includes/header.php';
         }
     }
 
-    function attWizardValidateBasic(){
-        const w = attWizardState;
-        const d = w.data;
-        let ok = true;
-        if(!d.first_name){ attWizSetError('attWizFirst', 'First name is required.'); ok = false; } else attWizSetError('attWizFirst', null);
-        if(!d.last_name){ attWizSetError('attWizLast', 'Last name is required.'); ok = false; } else attWizSetError('attWizLast', null);
-        const digits = (d.phone.match(/\d/g) || []).join('');
-        if(!d.phone){ attWizSetError('attWizPhone', 'Phone number is required — it prevents duplicate profiles.'); ok = false; }
-        else if(digits.length < 9 || digits.length > 15){ attWizSetError('attWizPhone', 'Enter a valid phone number (9 to 15 digits).'); ok = false; }
-        else attWizSetError('attWizPhone', null);
-        return ok;
+    // ---- validation: a step cannot be left while a starred field is incomplete ----
+    // Fields that are checked on each step, in the order they appear on screen.
+    // The first one that fails is where the cursor goes when Next is pressed.
+    const ATT_WIZ_STEP_FIELDS = {
+        basic:   ['attWizFirst', 'attWizLast', 'attWizPhone'],
+        profile: ['attWizEmail', 'attWizAddress']
+    };
+
+    // The words shown beside a field, or '' when its value is fine. Used both when
+    // Next is pressed and live as the person corrects a flagged field.
+    function attWizFieldProblem(id){
+        const raw = ($('#' + id).val() || '').trim();
+        switch(id){
+            case 'attWizFirst': return raw ? '' : 'First name is required.';
+            case 'attWizLast':  return raw ? '' : 'Last name is required.';
+            case 'attWizPhone': {
+                if(!raw) return 'Phone number is required — it prevents duplicate profiles.';
+                const digits = (raw.match(/\d/g) || []).length;
+                return (digits < 9 || digits > 15) ? 'Enter a valid phone number (9 to 15 digits).' : '';
+            }
+            case 'attWizAddress': return raw ? '' : 'Address is required. Enter where they live — area and street is enough.';
+            case 'attWizEmail':
+                return (raw && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(raw)) ? 'That email doesn\'t look right. Please check it, or leave it blank.' : '';
+        }
+        return '';
     }
+
+    // Marks every failing field on the step and returns the id of the first one
+    // (null when the step is complete).
+    function attWizardValidateStep(step){
+        let first = null;
+        (ATT_WIZ_STEP_FIELDS[step] || []).forEach(function(id){
+            if(!$('#' + id).length) return;
+            const problem = attWizFieldProblem(id);
+            attWizSetError(id, problem || null);
+            if(problem && !first) first = id;
+        });
+        return first;
+    }
+
+    // Put the cursor in the field and bring it into the middle of what is visible,
+    // which on a phone is also what opens the keyboard on it.
+    function attWizardFocusField(id){
+        const el = document.getElementById(id);
+        if(!el) return;
+        el.focus({ preventScroll: true });
+        el.scrollIntoView({ block: 'center', inline: 'nearest' });
+    }
+
+    // A flagged field clears the moment what is typed is acceptable.
+    $('#attWizardBody').on('input change', '.att-field-error', function(){
+        if(!attWizFieldProblem(this.id)) attWizSetError(this.id, null);
+    });
+
+    // Enter moves to the next field (the phone keyboard's key is labelled "Next");
+    // on the last field it is the Next button. It never submits half a form.
+    $('#attWizardBody').on('keydown', 'input:not([type="checkbox"]):not([readonly])', function(e){
+        if(e.key !== 'Enter') return;
+        e.preventDefault();
+        const fields = $('#attWizardBody').find('input:not([type="checkbox"]):not([readonly]), select, textarea').filter(':visible').toArray();
+        const at = fields.indexOf(this);
+        if(at > -1 && at < fields.length - 1) fields[at + 1].focus();
+        else attWizardNext();
+    });
 
     function attWizardNext(){
         const w = attWizardState;
         if(!w || w.busy) return;
         attWizardCollect();
+        const firstBad = attWizardValidateStep(w.step);
+        if(firstBad){ attWizardFocusField(firstBad); return; }
         if(w.step === 'basic'){
-            if(!attWizardValidateBasic()) return;
             // Duplicate-phone pre-check (both paths create a profile). If the
             // number already exists we surface the person so staff can clock
             // them in instead of creating a second profile.
@@ -2878,12 +2970,6 @@ require_once '../../includes/header.php';
             return;
         }
         if(w.step === 'profile'){
-            attWizardCollect();
-            if(w.data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(w.data.email)){
-                attWizSetError('attWizEmail', 'That email doesn\'t look right. Please check it, or leave it blank.');
-                return;
-            }
-            attWizSetError('attWizEmail', null);
             attWizardGo('review');
             return;
         }
@@ -3019,9 +3105,9 @@ require_once '../../includes/header.php';
             $('#attWizardSubtitle').text(w.type === 'member' ? 'Who are we adding to the congregation?' : 'Who is joining us today?');
             const d = w.data;
             body.html(`<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                ${attWizField('attWizFirst', 'First name', attWizText('attWizFirst', d.first_name, 'text', 'maxlength="50" autocomplete="off"'), true)}
-                ${attWizField('attWizLast', 'Last name', attWizText('attWizLast', d.last_name, 'text', 'maxlength="50" autocomplete="off"'), true)}
-                ${attWizField('attWizPhone', 'Phone', attWizText('attWizPhone', d.phone, 'tel', 'maxlength="25" inputmode="tel" autocomplete="off"'), true, 'Used to prevent duplicate profiles.')}
+                ${attWizField('attWizFirst', 'First name', attWizText('attWizFirst', d.first_name, 'text', 'maxlength="50" autocomplete="off" aria-required="true"'), true)}
+                ${attWizField('attWizLast', 'Last name', attWizText('attWizLast', d.last_name, 'text', 'maxlength="50" autocomplete="off" aria-required="true"'), true)}
+                ${attWizField('attWizPhone', 'Phone', attWizText('attWizPhone', d.phone, 'tel', 'maxlength="25" inputmode="tel" autocomplete="off" aria-required="true"'), true, 'Used to prevent duplicate profiles.')}
                 ${attWizField('attWizGender', 'Gender', attWizSelect('attWizGender', ['Male', 'Female'], d.gender, true, 'Not specified'), false)}
             </div>
             <div id="attWizDupPanel" class="hidden mt-4"></div>`);
@@ -3036,14 +3122,14 @@ require_once '../../includes/header.php';
         else if(w.step === 'profile'){
             const d = w.data;
             if(w.type === 'first_timer'){
-                $('#attWizardTitle').text('A little more (optional)');
-                $('#attWizardSubtitle').text('Same details as the public "I\'m New Here" card — skip anything you don\'t have.');
+                $('#attWizardTitle').text('A little more');
+                $('#attWizardSubtitle').text('Where they live is required. Everything else on the public "I\'m New Here" card is optional — skip what you don\'t have.');
                 body.html(`<div class="space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         ${attWizField('attWizEmail', 'Personal email', attWizText('attWizEmail', d.email, 'email', 'maxlength="100" inputmode="email" autocomplete="off"'), false)}
                         ${attWizField('attWizDob', 'Date of birth', attWizText('attWizDob', d.dob, 'date', 'max="' + new Date().toISOString().slice(0, 10) + '"'), false)}
                         ${attWizField('attWizMarital', 'Marital status', attWizSelect('attWizMarital', ['Single', 'Married', 'Separated', 'Divorced'], d.marital_status, false), false)}
-                        ${attWizField('attWizAddress', 'Where do they live?', attWizText('attWizAddress', d.physical_address, 'text', 'maxlength="255" autocomplete="off"'), false)}
+                        ${attWizField('attWizAddress', 'Where do they live?', attWizText('attWizAddress', d.physical_address, 'text', 'maxlength="255" autocomplete="off" aria-required="true"'), true)}
                         ${attWizField('attWizInvitedBy', 'Who invited them?', attWizText('attWizInvitedBy', d.invited_by, 'text', 'maxlength="150" autocomplete="off"'), false)}
                     </div>
                     <div class="space-y-2.5 pt-1">
@@ -3074,7 +3160,7 @@ require_once '../../includes/header.php';
                         <div id="attWizAnniversaryWrap" class="${d.marital_status === 'Married' ? '' : 'hidden'}">
                             ${attWizField('attWizAnniversary', 'Wedding anniversary', attWizText('attWizAnniversary', d.wedding_anniversary, 'date'), false)}
                         </div>
-                        ${attWizField('attWizAddress', 'Physical address', attWizText('attWizAddress', d.physical_address, 'text', 'maxlength="255" autocomplete="off"'), false)}
+                        ${attWizField('attWizAddress', 'Physical address', attWizText('attWizAddress', d.physical_address, 'text', 'maxlength="255" autocomplete="off" aria-required="true"'), true)}
                     </div>
                     <div>
                         <label for="attWizComments" class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Pastoral comments / notes</label>
@@ -3194,6 +3280,17 @@ require_once '../../includes/header.php';
         attWizardError('Server Error — could not create the profile. Please try again.');
     }
 
+    // Where each field the server can complain about lives in the wizard.
+    const ATT_WIZ_FIELD_HOME = {
+        first_name:       ['basic',   'attWizFirst'],
+        last_name:        ['basic',   'attWizLast'],
+        phone:            ['basic',   'attWizPhone'],
+        gender:           ['basic',   'attWizGender'],
+        email:            ['profile', 'attWizEmail'],
+        dob:              ['profile', 'attWizDob'],
+        physical_address: ['profile', 'attWizAddress']
+    };
+
     function attWizardCreated(res){
         const w = attWizardState;
         if(!w) return;
@@ -3201,6 +3298,18 @@ require_once '../../includes/header.php';
             w.busy = false;
             const btn = $('#attWizSubmitBtn');
             if(btn.length) btn.prop('disabled', false).text('Add & Clock In');
+            // The server named the field it rejected: take the person back to it
+            // with the message beside it, instead of a banner they may not see.
+            // (A duplicate phone keeps its banner — it carries the "clock that
+            // profile in instead" action.)
+            const home = (!res.existing_user_id && res.field) ? ATT_WIZ_FIELD_HOME[res.field] : null;
+            if(home){
+                attWizardGo(home[0]);
+                attWizSetError(home[1], res.message || 'Please check this field.');
+                attWizardFocusField(home[1]);
+                showToast(res.message || 'Please check the highlighted field.', 'error');
+                return;
+            }
             attWizardError(res.message || 'Could not create the profile.', res.existing_user_id);
             return;
         }

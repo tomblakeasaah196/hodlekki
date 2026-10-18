@@ -203,6 +203,21 @@ $sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_He
             touch-action: pan-y;
         }
         .app-modal-overlay > .app-modal-panel:focus { outline: none; }
+        /*
+         * On-screen keyboard. While one is open modal-manager.js sets
+         * html.app-keyboard-open and publishes the VISUAL viewport's height and
+         * top edge; the layout viewport (100dvh) does not shrink on Android
+         * Chrome or iOS Safari, so without this a dialog extends behind the
+         * keyboard and its lower fields and buttons cannot be reached.
+         */
+        html.app-keyboard-open .app-modal-overlay {
+            top: var(--app-vv-top, 0px) !important;
+            bottom: auto !important;
+            height: var(--app-vv-height, 100dvh) !important;
+        }
+        html.app-keyboard-open .app-modal-overlay:not(.app-modal-preserve-layout) > .app-modal-panel {
+            max-height: calc(var(--app-vv-height, 100dvh) - 1.5rem) !important;
+        }
         html.app-modal-open,
         body.app-modal-open { overscroll-behavior: none; }
         main.app-modal-scroll-locked { overflow: hidden !important; }

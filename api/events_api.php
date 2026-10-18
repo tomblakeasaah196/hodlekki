@@ -3,6 +3,7 @@
 
 // 1. Core Includes & Headers
 require_once '../includes/db.php';
+require_once __DIR__ . '/../includes/status_ladder.php';
 header('Content-Type: application/json');
 
 /**
@@ -586,6 +587,9 @@ try {
             ");
             $attStmt->execute([$event_id, $target_user_id, $user_id, $today]);
 
+            // A Sunday clock-in can move a 1st/2nd/3rd Timer up the ladder.
+            ladder_advance_user($pdo, (int) $target_user_id);
+
             $timeStmt = $pdo->prepare("SELECT DATE_FORMAT(check_in_time, '%h:%i %p') as time_format FROM attendance WHERE id = ?");
             $timeStmt->execute([$pdo->lastInsertId()]);
             $timeData = $timeStmt->fetch(PDO::FETCH_ASSOC);
@@ -612,6 +616,9 @@ try {
                 echo json_encode(['status' => 'warning', 'message' => 'User was not checked in.']);
                 exit;
             }
+
+            // Withdrawing a clock-in takes back a promotion it had earned.
+            ladder_rollback_user($pdo, (int) $target_user_id);
 
             echo json_encode(['status' => 'success', 'message' => 'Attendee moved back to pending.']);
             break;
@@ -727,6 +734,7 @@ try {
             // onto the Charis AWOL list.
             require_once __DIR__ . '/../includes/charis_helpers.php';
             $keepAttendance = charis_should_keep_attendance_status($pdo, (int) $target_user_id, (string) $attendance_status);
+            $statusBefore = ladder_status_of($pdo, (int) $target_user_id);
 
             if ($keepAttendance) {
                 if ($phone !== '') {
@@ -743,6 +751,7 @@ try {
                 $upd = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, gender = ?, spiritual_status = ?, attendance_status = ? WHERE id = ?");
                 $upd->execute([$first_name, $last_name, $gender !== '' ? $gender : null, $spiritual_status ?: 'Visitor', $attendance_status ?: 'New', $target_user_id]);
             }
+            ladder_note_change($pdo, (int) $target_user_id, $statusBefore, 'events_profile', (int) $user_id);
 
             echo json_encode(['status' => 'success', 'message' => 'Details updated.']);
             break;
@@ -807,6 +816,13 @@ try {
             $digits = preg_replace('/\D/', '', $phone);
             if ($phone === '' || strlen($digits) < 9 || strlen($digits) > 15) {
                 echo json_encode(['status' => 'error', 'message' => 'Please enter a valid phone number (9 to 15 digits).', 'field' => 'phone']);
+                exit;
+            }
+
+            // users.physical_address cannot hold NULL, so an empty address used to
+            // fail the INSERT below with a generic "system error". Ask for it by name.
+            if ($address === '') {
+                echo json_encode(['status' => 'error', 'message' => 'Address is required. Enter where they live — area and street is enough.', 'field' => 'physical_address']);
                 exit;
             }
 
@@ -1351,11 +1367,14 @@ try {
             };
 
             if ($workflowMode) {
+                // Status as at the event's day, so a past event keeps its first timers.
+                $statusAt = ladder_status_at_sql($pdo, 'u', 'ev.event_date');
                 $checkStmt = $pdo->prepare("
                     SELECT c.id, c.full_name, c.phone, c.is_member, c.is_walkin, c.source,
                            c.checkin_date, c.checked_in_at AS marked_at,
-                           u.first_name, u.last_name, u.gender, u.spiritual_status
+                           u.first_name, u.last_name, u.gender, $statusAt AS spiritual_status
                     FROM checkins c
+                    JOIN events ev ON ev.id = c.event_id
                     LEFT JOIN users u ON u.id = c.user_id
                     WHERE c.event_id = ?
                     ORDER BY c.checked_in_at DESC, c.id DESC
@@ -1425,21 +1444,28 @@ try {
             // Normal attendance mode: Sunday/Midweek services use the roster-based
             // attendance table as the source of truth. We union QR checkins so any
             // defensive/self-check-in records still count, but dedupe by user.
+            // Status as at the event's day (worked out outside the GROUP BY).
+            $statusAt = ladder_status_at_sql($pdo, 's', 'ev.event_date');
             $attendanceStmt = $pdo->prepare("
-                SELECT u.id, u.first_name, u.last_name, u.phone, u.gender, u.spiritual_status,
-                       MIN(src.marked_at) AS marked_at
+                SELECT s.id, s.first_name, s.last_name, s.phone, s.gender, $statusAt AS spiritual_status,
+                       s.marked_at
                 FROM (
-                    SELECT user_id, check_in_time AS marked_at
-                    FROM attendance
-                    WHERE event_id = ? AND status = 'Present' AND user_id IS NOT NULL
-                    UNION ALL
-                    SELECT user_id, checked_in_at AS marked_at
-                    FROM checkins
-                    WHERE event_id = ? AND user_id IS NOT NULL
-                ) src
-                JOIN users u ON u.id = src.user_id
-                GROUP BY u.id, u.first_name, u.last_name, u.phone, u.gender, u.spiritual_status
-                ORDER BY marked_at DESC, u.first_name ASC, u.last_name ASC
+                    SELECT u.id, u.first_name, u.last_name, u.phone, u.gender, u.spiritual_status,
+                           MIN(src.marked_at) AS marked_at
+                    FROM (
+                        SELECT user_id, check_in_time AS marked_at
+                        FROM attendance
+                        WHERE event_id = ? AND status = 'Present' AND user_id IS NOT NULL
+                        UNION ALL
+                        SELECT user_id, checked_in_at AS marked_at
+                        FROM checkins
+                        WHERE event_id = ? AND user_id IS NOT NULL
+                    ) src
+                    JOIN users u ON u.id = src.user_id
+                    GROUP BY u.id, u.first_name, u.last_name, u.phone, u.gender, u.spiritual_status
+                ) s
+                JOIN events ev ON ev.id = " . (int) $event_id . "
+                ORDER BY s.marked_at DESC, s.first_name ASC, s.last_name ASC
             ");
             $attendanceStmt->execute([$event_id, $event_id]);
             $attendanceRowsRaw = $attendanceStmt->fetchAll(PDO::FETCH_ASSOC);

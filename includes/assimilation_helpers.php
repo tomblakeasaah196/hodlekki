@@ -68,16 +68,46 @@ const ASSIM_DEFAULT_GUIDE_FILE = __DIR__ . '/assimilation_volunteer_guide.md';
 // Every caller — filters, analytics, returned-home detection, the drawer
 // timeline and the cron — goes through this one function. Wrap it in
 // parentheses and alias it: "FROM " . assim_attendance_union_sql() . " att".
-function assim_attendance_union_sql(): string {
+//
+// With no argument it is every service. Pass event categories
+// (e.g. ['Sunday_Service']) to count only days attended at events of those
+// kinds — the Sunday ladder uses this so a Thursday service never moves anyone
+// along. Both spellings an event can be stored under ('Sunday_Service' and
+// 'Sunday Service') match. The categories are inlined, so they must be plain
+// words; anything else is refused rather than escaped. $user_ids narrows both
+// halves to those people (cast to int and inlined) so a single member's count
+// does not materialise the whole church's history first.
+function assim_attendance_union_sql(array $event_categories = [], array $user_ids = []): string {
+    $checkin_join = $attend_join = $checkin_where = $attend_where = '';
+    if ($user_ids) {
+        $ids = implode(',', array_map('intval', $user_ids));
+        $checkin_where = "AND c.user_id IN ($ids)";
+        $attend_where  = "AND a.user_id IN ($ids)";
+    }
+    if ($event_categories) {
+        $quoted = [];
+        foreach ($event_categories as $category) {
+            $category = str_replace(' ', '_', trim((string) $category));
+            if (!preg_match('/^[A-Za-z_]+$/', $category)) {
+                throw new InvalidArgumentException('Invalid event category: ' . $category);
+            }
+            $quoted[$category] = "'" . $category . "'";
+        }
+        $in = implode(', ', $quoted);
+        $checkin_join  = "JOIN events e ON e.id = c.event_id";
+        $attend_join   = "JOIN events e ON e.id = a.event_id";
+        $checkin_where .= " AND REPLACE(e.event_category, ' ', '_') IN ($in)";
+        $attend_where  .= " AND REPLACE(e.event_category, ' ', '_') IN ($in)";
+    }
     return "(
         SELECT c.user_id AS user_id, c.checkin_date AS attended_on
-          FROM checkins c
-         WHERE c.user_id IS NOT NULL AND c.checkin_date IS NOT NULL
+          FROM checkins c $checkin_join
+         WHERE c.user_id IS NOT NULL AND c.checkin_date IS NOT NULL $checkin_where
         UNION
         SELECT a.user_id AS user_id, COALESCE(a.attendance_date, DATE(a.check_in_time)) AS attended_on
-          FROM attendance a
+          FROM attendance a $attend_join
          WHERE a.user_id IS NOT NULL AND a.status = 'Present'
-           AND COALESCE(a.attendance_date, a.check_in_time) IS NOT NULL
+           AND COALESCE(a.attendance_date, a.check_in_time) IS NOT NULL $attend_where
     )";
 }
 

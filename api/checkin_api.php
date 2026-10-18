@@ -14,6 +14,7 @@
  */
 
 require_once '../includes/db.php';
+require_once __DIR__ . '/../includes/status_ladder.php';
 header('Content-Type: application/json');
 
 /* ---- CSRF (public page sets it in a session; check for state-changing POSTs) ---- */
@@ -653,6 +654,8 @@ try {
 
             // If they are a member, ALSO write to the existing attendance table
             ci_write_attendance($pdo, $event['id'], $memberUserId, $checkedBy, $checkinDate);
+            // A Sunday check-in can move a 1st/2nd/3rd Timer up the ladder.
+            if ($memberUserId) ladder_advance_user($pdo, (int) $memberUserId);
 
             echo json_encode([
                 'status'=>'success',
@@ -734,6 +737,7 @@ try {
 
             // If the walk-in turns out to be a member, ALSO write to attendance
             ci_write_attendance($pdo, $event['id'], $memberUserId, $checkedBy, $checkinDate);
+            if ($memberUserId) ladder_advance_user($pdo, (int) $memberUserId);
 
             echo json_encode([
                 'status'=>'success',

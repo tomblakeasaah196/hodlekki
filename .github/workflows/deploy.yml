@@ -218,6 +218,20 @@ jobs:
           fi
           exit $fail
 
+      - name: The Sunday ladder tests
+        run: |
+          set -euo pipefail
+
+          # No MySQL and no network: runs the real engine, the Embrace pipeline
+          # predicate and the as-at-date report status on in-memory SQLite.
+          # Without pdo_sqlite the script prints SKIP and exits 0, so refuse to
+          # run without it.
+          if ! php -m | grep -qix 'pdo_sqlite'; then
+            echo "::error::pdo_sqlite is missing — the Sunday ladder tests would be skipped"
+            exit 1
+          fi
+          php tests/status_ladder_test.php
+
       - name: Secret sweep (block obvious leaks)
         run: |
           set -euo pipefail

@@ -89,7 +89,10 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   suite is `php tests/pwa/run.php` (no database, no network) — run it after
   touching `includes/push_*.php`, `includes/pwa_*.php`, `manifest.php` or
   `sw.js`. (It is not in the workflow yet — but see the note below: an agent
-  CAN add the step itself now.) On a machine with no PHP at all,
+  CAN add the step itself now.) The Sunday ladder suite is
+  `php tests/status_ladder_test.php` (SQLite, in CI) — run it whenever you touch
+  `includes/status_ladder.php`, `embrace_pipeline_sql()`, or anything that
+  writes or reports `users.spiritual_status`. On a machine with no PHP at all,
   `python3 tests/php_structure_check.py <file>` still catches unbalanced
   brackets and unterminated strings. There is no browser/UI test suite, so
   always smoke the page you touched by hand. Touching Charis AWOL Monitoring
@@ -770,6 +773,65 @@ included. Stage one refuses to emit a score that still warns and lists it in
 malformed source shows up as a hymn without notes and a recorded reason rather
 than a silently broken staff.
 
+## Sunday ladder (added 2026-10-18)
+
+1st Timer → 2nd → 3rd → Visitor, driven by Sunday attendance. Engine:
+`includes/status_ladder.php`. Schema: `db/migrations/20261122090000_user_status_history.sql`
+(`user_status_history`). Before this, nothing ever changed a person's timer
+status: someone clocked in three times still read "1st Timer".
+
+- **One "time" is one calendar day present at a SUNDAY service** (decided with
+  the church). Midweek and special events never count. 1 Sunday = 1st, 2 = 2nd,
+  3 = 3rd, 4+ = Visitor. Counting goes through
+  `assim_attendance_union_sql(['Sunday_Service'], $ids)` — the shared helper
+  grew an optional category and user filter for this; never query `attendance`
+  or `checkins` directly.
+- **Forward only.** Only current 1st/2nd/3rd Timers are touched. Member, Worker,
+  Pastor, Non_Member and Visitor never are, nor is anyone Relocated / Attends
+  Another Church / `awol_exempt`. A status staff set by hand is never lowered.
+  The one exception: `clock_out` (withdrawing a clock-in) calls
+  `ladder_rollback_user()`, which undoes a promotion **the ladder itself made**
+  and only while the history still ends in ladder rows — a hand edit afterwards
+  is never rolled back, and nobody drops below where the ladder found them.
+- **Hooks:** `events_api.php` `mark_attendance` / `clock_out`, and both QR
+  actions in `checkin_api.php`, call `ladder_advance_user()`. It never throws.
+  `bin/deploy.sh` step 6 runs `db/backfill_status_ladder.php` (`--dry-run`
+  lists who would move) on every deploy as the catch-up and safety net; it is
+  idempotent and never fails the deploy.
+- **Every writer of `users.spiritual_status` must record itself.** Read
+  `ladder_status_of()` before the UPDATE and call `ladder_note_change()` after
+  it (see `events_api.php` `update_person_details`, `congregation_api.php`,
+  `embrace_api.php` `promote_member`, `academy_api.php`). A writer that skips
+  this makes event reports and the Embrace list wrong without any error.
+  Initial statuses on INSERT need no history row.
+- **Event reports read status AS AT THE EVENT'S DAY**, never `u.spiritual_status`:
+  use `ladder_status_at_sql($pdo, 'u', 'ev.event_date')` (a change made on the
+  day counts as already happened). Otherwise promoting people shrinks the
+  first-timer count on every past service. Done in `event_analytics_helpers.php`
+  and `events_api.php` `attendance_kpis`; do it in any new per-event report.
+- **Embrace's active list is `embrace_pipeline_sql()`, not a status list.** It is
+  the three timer statuses **plus** a Visitor the ladder graduated (their latest
+  history row is the ladder's move to Visitor) whose latest follow-up is not a
+  final report (`EMBRACE_FINAL_FOLLOWUP_STATUSES`: Completed, Unreachable) —
+  including someone never assigned a worker. An ordinary Visitor is never pulled
+  in. `fetch_visitors`, `fetch_archive`, `update_visitor` and the Excel register
+  all use it; the Archive is its complement. Do not hard-code
+  `IN ('1st_Timer','2nd_Timer','3rd_Timer')` for "in Embrace".
+- **Degrade before the migration.** The tree reaches production before
+  `db/migrate.php`. `ladder_ready()` is false until `user_status_history`
+  exists: nothing moves, nothing is logged, reports read the current status,
+  and Embrace shows just the timers. Every move must be recorded, so the ladder
+  deliberately does nothing rather than promote unrecorded.
+- No `user_status_history` foreign key (the migration says why).
+  `congregation_api.php` `delete_member` calls `ladder_forget_user()`.
+- The migration is not on the required-marker list in
+  `tests/special_events/db_setup.php`, so a failure would show up there as a
+  "skipped" line rather than a red job. It was checked by hand against that
+  output on the PR that added it (#92): it applied on MySQL 8.0 and MariaDB 10.11,
+  and applied again cleanly on the second pass. It is forward-only and must not
+  be edited once applied, so add a marker only if you ship a new migration for
+  this table.
+
 ## Departments module (ministry years)
 
 `modules/departments/` is ministry-year aware, and its rules are worth knowing
@@ -795,6 +857,36 @@ before touching anything that reads `user_departments`:
   measured with `ctx.measureText`, and the fitter guarantees one A4 page.
 
 ## Common pitfalls spotted during onboarding
+
+- **A dialog must fit above the on-screen keyboard.** On Android Chrome and iOS
+  Safari the keyboard shrinks only the *visual* viewport; `100dvh` does not
+  change, so a dialog sized to it runs behind the keyboard and its lower fields
+  and its Next/Save button cannot be reached or scrolled to (the Attendance
+  "Can't find them?" wizard hid Phone and Next this way). `modal-manager.js`
+  now sets `html.app-keyboard-open`, `--app-vv-height` and `--app-vv-top` while a
+  dialog is open and the visual viewport is >120px shorter than the layout
+  viewport, and the shared CSS in `includes/header.php` fits every
+  `.app-modal-overlay` / `.app-modal-panel` into it. It also scrolls the focused
+  field to the middle. So: keep a dialog's scrolling inside `.app-modal-panel`
+  (give the form area `overflow-y-auto flex-1`, header and footer `shrink-0`),
+  never size a dialog with `vh`/`dvh` yourself, and if it has a tall header use
+  `html.app-keyboard-open` to compact it (see `.att-wiz-head`).
+- **Wizard steps must refuse an incomplete starred field.** In the Attendance
+  add-person wizard a step cannot be left while a required field is empty or
+  invalid: Next marks every failing field, puts the cursor in the first one and
+  scrolls it into view (`attWizardValidateStep` / `attWizardFocusField`, fields
+  listed in `ATT_WIZ_STEP_FIELDS`, wording in `attWizFieldProblem`). The address
+  is required on both paths because `users.physical_address` cannot hold NULL —
+  an empty one used to fail the INSERT with a generic error. When the server
+  answers with a `field`, `attWizardCreated` sends the person back to that
+  field (`ATT_WIZ_FIELD_HOME`) rather than showing a banner. A new required
+  field goes in all three places.
+- **The Quick Search dropdown belongs to its field.** It closes on Escape, on
+  blur, and on any pointer that goes down outside it (touch included — a swipe
+  that starts outside counts). A pointer down *inside* it sets `attPopTouching`
+  so the field's blur does not close it before a tap's click lands (iOS never
+  focuses a tapped button). Do not go back to a `mousedown`-only outside handler:
+  touch scrolling never fires it.
 
 - `includes/auth_middleware.php` is currently an **empty file**. Do not
   rely on it as a guard; every page/API rolls its own session check.
