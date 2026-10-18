@@ -855,6 +855,36 @@ before touching anything that reads `user_departments`:
 
 ## Common pitfalls spotted during onboarding
 
+- **A dialog must fit above the on-screen keyboard.** On Android Chrome and iOS
+  Safari the keyboard shrinks only the *visual* viewport; `100dvh` does not
+  change, so a dialog sized to it runs behind the keyboard and its lower fields
+  and its Next/Save button cannot be reached or scrolled to (the Attendance
+  "Can't find them?" wizard hid Phone and Next this way). `modal-manager.js`
+  now sets `html.app-keyboard-open`, `--app-vv-height` and `--app-vv-top` while a
+  dialog is open and the visual viewport is >120px shorter than the layout
+  viewport, and the shared CSS in `includes/header.php` fits every
+  `.app-modal-overlay` / `.app-modal-panel` into it. It also scrolls the focused
+  field to the middle. So: keep a dialog's scrolling inside `.app-modal-panel`
+  (give the form area `overflow-y-auto flex-1`, header and footer `shrink-0`),
+  never size a dialog with `vh`/`dvh` yourself, and if it has a tall header use
+  `html.app-keyboard-open` to compact it (see `.att-wiz-head`).
+- **Wizard steps must refuse an incomplete starred field.** In the Attendance
+  add-person wizard a step cannot be left while a required field is empty or
+  invalid: Next marks every failing field, puts the cursor in the first one and
+  scrolls it into view (`attWizardValidateStep` / `attWizardFocusField`, fields
+  listed in `ATT_WIZ_STEP_FIELDS`, wording in `attWizFieldProblem`). The address
+  is required on both paths because `users.physical_address` cannot hold NULL —
+  an empty one used to fail the INSERT with a generic error. When the server
+  answers with a `field`, `attWizardCreated` sends the person back to that
+  field (`ATT_WIZ_FIELD_HOME`) rather than showing a banner. A new required
+  field goes in all three places.
+- **The Quick Search dropdown belongs to its field.** It closes on Escape, on
+  blur, and on any pointer that goes down outside it (touch included — a swipe
+  that starts outside counts). A pointer down *inside* it sets `attPopTouching`
+  so the field's blur does not close it before a tap's click lands (iOS never
+  focuses a tapped button). Do not go back to a `mousedown`-only outside handler:
+  touch scrolling never fires it.
+
 - `includes/auth_middleware.php` is currently an **empty file**. Do not
   rely on it as a guard; every page/API rolls its own session check.
   The one shared hook that *does* run everywhere is

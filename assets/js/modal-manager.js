@@ -225,12 +225,70 @@
         const top = topDialog();
         if (top) isolate(top);
         else clearInert();
+
+        syncViewport(false);
     }
 
     function queueSync() {
         if (syncQueued) return;
         syncQueued = true;
         queueMicrotask(sync);
+    }
+
+    // On-screen keyboard. Android Chrome and iOS Safari shrink only the VISUAL
+    // viewport when the keyboard opens; the layout viewport -- and so 100dvh --
+    // keeps its full height. A dialog sized to it therefore runs behind the
+    // keyboard: nothing in it needs scrolling as far as the browser can tell, so
+    // the fields and the Next/Save button underneath can never be reached.
+    //
+    // While a dialog is open and the visual viewport is clearly shorter than the
+    // layout viewport, publish its height and top edge as CSS variables and flag
+    // <html>; the shared dialog CSS in includes/header.php then fits the overlay
+    // and panel into the part of the screen that is actually visible. Nothing
+    // changes without a keyboard, on desktop, or in browsers that resize the
+    // layout viewport themselves (there the two heights match).
+    const KEYBOARD_MIN_PX = 120; // a URL bar hiding or showing is smaller than this
+    let keyboardOpen = false;
+    let revealTimer = null;
+
+    // `reveal` is true only when the keyboard itself moved (resize, rotation) or
+    // focus changed. Mutation-driven syncs and the visual viewport panning must
+    // not re-centre the field: that would fight someone scrolling the form.
+    function syncViewport(reveal) {
+        const vv = window.visualViewport;
+        const root = document.documentElement;
+        // A pinch-zoom also shrinks the visual viewport; it is not a keyboard.
+        const open = !!vv && openDialogs.length > 0 && Math.abs(vv.scale - 1) < 0.05
+            && (window.innerHeight - vv.height) > KEYBOARD_MIN_PX;
+
+        if (open) {
+            root.style.setProperty('--app-vv-height', vv.height + 'px');
+            root.style.setProperty('--app-vv-top', vv.offsetTop + 'px');
+        } else {
+            root.style.removeProperty('--app-vv-height');
+            root.style.removeProperty('--app-vv-top');
+        }
+        root.classList.toggle('app-keyboard-open', open);
+        const changed = open !== keyboardOpen;
+        keyboardOpen = open;
+        if (reveal || changed) scheduleReveal();
+    }
+
+    // Once the dialog has been resized, bring the field being typed in into the
+    // middle of what is visible. Debounced: the keyboard animates in over
+    // several resize events.
+    function scheduleReveal() {
+        window.clearTimeout(revealTimer);
+        if (!keyboardOpen) return;
+        revealTimer = window.setTimeout(revealFocused, 120);
+    }
+
+    function revealFocused() {
+        const top = topDialog();
+        const element = document.activeElement;
+        if (!top || !(element instanceof HTMLElement) || !top.contains(element)) return;
+        if (!element.matches('input, select, textarea, [contenteditable="true"]')) return;
+        element.scrollIntoView({ block: 'center', inline: 'nearest' });
     }
 
     // Widget libraries such as Select2 teleport their dropdown surface away
@@ -304,6 +362,7 @@
         const top = topDialog();
         if (!top) return;
         if (!isInsideTopDialog(event.target)) focusDialog(top);
+        else scheduleReveal();
     }
 
     function init() {
@@ -323,6 +382,12 @@
         document.addEventListener('click', blockOutsideDismissal, true);
         document.addEventListener('keydown', handleKeydown, true);
         document.addEventListener('focusin', handleFocus, true);
+
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => syncViewport(true));
+            window.visualViewport.addEventListener('scroll', () => syncViewport(false));
+        }
+        window.addEventListener('orientationchange', () => syncViewport(true));
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });

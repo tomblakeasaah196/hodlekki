@@ -819,6 +819,13 @@ try {
                 exit;
             }
 
+            // users.physical_address cannot hold NULL, so an empty address used to
+            // fail the INSERT below with a generic "system error". Ask for it by name.
+            if ($address === '') {
+                echo json_encode(['status' => 'error', 'message' => 'Address is required. Enter where they live — area and street is enough.', 'field' => 'physical_address']);
+                exit;
+            }
+
             if ($email !== '') {
                 if (mb_strlen($email) > 100 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                     echo json_encode(['status' => 'error', 'message' => 'That email address doesn\'t look right. Please check it, or leave it blank.', 'field' => 'email']);
