@@ -89,7 +89,10 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   suite is `php tests/pwa/run.php` (no database, no network) — run it after
   touching `includes/push_*.php`, `includes/pwa_*.php`, `manifest.php` or
   `sw.js`. (It is not in the workflow yet — but see the note below: an agent
-  CAN add the step itself now.) On a machine with no PHP at all,
+  CAN add the step itself now.) The Sunday ladder suite is
+  `php tests/status_ladder_test.php` (SQLite, in CI) — run it whenever you touch
+  `includes/status_ladder.php`, `embrace_pipeline_sql()`, or anything that
+  writes or reports `users.spiritual_status`. On a machine with no PHP at all,
   `python3 tests/php_structure_check.py <file>` still catches unbalanced
   brackets and unterminated strings. There is no browser/UI test suite, so
   always smoke the page you touched by hand. Touching Charis AWOL Monitoring
@@ -769,6 +772,62 @@ included. Stage one refuses to emit a score that still warns and lists it in
 `_excluded.json`; stage two carries that through to `meta.php`, so a newly
 malformed source shows up as a hymn without notes and a recorded reason rather
 than a silently broken staff.
+
+## Sunday ladder (added 2026-10-18)
+
+1st Timer → 2nd → 3rd → Visitor, driven by Sunday attendance. Engine:
+`includes/status_ladder.php`. Schema: `db/migrations/20261122090000_user_status_history.sql`
+(`user_status_history`). Before this, nothing ever changed a person's timer
+status: someone clocked in three times still read "1st Timer".
+
+- **One "time" is one calendar day present at a SUNDAY service** (decided with
+  the church). Midweek and special events never count. 1 Sunday = 1st, 2 = 2nd,
+  3 = 3rd, 4+ = Visitor. Counting goes through
+  `assim_attendance_union_sql(['Sunday_Service'], $ids)` — the shared helper
+  grew an optional category and user filter for this; never query `attendance`
+  or `checkins` directly.
+- **Forward only.** Only current 1st/2nd/3rd Timers are touched. Member, Worker,
+  Pastor, Non_Member and Visitor never are, nor is anyone Relocated / Attends
+  Another Church / `awol_exempt`. A status staff set by hand is never lowered.
+  The one exception: `clock_out` (withdrawing a clock-in) calls
+  `ladder_rollback_user()`, which undoes a promotion **the ladder itself made**
+  and only while the history still ends in ladder rows — a hand edit afterwards
+  is never rolled back, and nobody drops below where the ladder found them.
+- **Hooks:** `events_api.php` `mark_attendance` / `clock_out`, and both QR
+  actions in `checkin_api.php`, call `ladder_advance_user()`. It never throws.
+  `bin/deploy.sh` step 6 runs `db/backfill_status_ladder.php` (`--dry-run`
+  lists who would move) on every deploy as the catch-up and safety net; it is
+  idempotent and never fails the deploy.
+- **Every writer of `users.spiritual_status` must record itself.** Read
+  `ladder_status_of()` before the UPDATE and call `ladder_note_change()` after
+  it (see `events_api.php` `update_person_details`, `congregation_api.php`,
+  `embrace_api.php` `promote_member`, `academy_api.php`). A writer that skips
+  this makes event reports and the Embrace list wrong without any error.
+  Initial statuses on INSERT need no history row.
+- **Event reports read status AS AT THE EVENT'S DAY**, never `u.spiritual_status`:
+  use `ladder_status_at_sql($pdo, 'u', 'ev.event_date')` (a change made on the
+  day counts as already happened). Otherwise promoting people shrinks the
+  first-timer count on every past service. Done in `event_analytics_helpers.php`
+  and `events_api.php` `attendance_kpis`; do it in any new per-event report.
+- **Embrace's active list is `embrace_pipeline_sql()`, not a status list.** It is
+  the three timer statuses **plus** a Visitor the ladder graduated (their latest
+  history row is the ladder's move to Visitor) whose latest follow-up is not a
+  final report (`EMBRACE_FINAL_FOLLOWUP_STATUSES`: Completed, Unreachable) —
+  including someone never assigned a worker. An ordinary Visitor is never pulled
+  in. `fetch_visitors`, `fetch_archive`, `update_visitor` and the Excel register
+  all use it; the Archive is its complement. Do not hard-code
+  `IN ('1st_Timer','2nd_Timer','3rd_Timer')` for "in Embrace".
+- **Degrade before the migration.** The tree reaches production before
+  `db/migrate.php`. `ladder_ready()` is false until `user_status_history`
+  exists: nothing moves, nothing is logged, reports read the current status,
+  and Embrace shows just the timers. Every move must be recorded, so the ladder
+  deliberately does nothing rather than promote unrecorded.
+- No `user_status_history` foreign key (the migration says why).
+  `congregation_api.php` `delete_member` calls `ladder_forget_user()`.
+- The integration job's required-marker list in `tests/special_events/db_setup.php`
+  does not include this migration's name: that list is only for migrations
+  verified on both MySQL 8 and MariaDB 10.11, and this one has only been run on
+  SQLite-equivalent DDL. Verify it on both engines before adding a marker.
 
 ## Departments module (ministry years)
 

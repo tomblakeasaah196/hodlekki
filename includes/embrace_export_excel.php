@@ -175,11 +175,13 @@ function embrace_export_stream_excel(PDO $pdo, string $startDate, string $endDat
     // Everyone added in the range who is still in the pipeline, plus anyone
     // already pushed to the Congregation who went through Embrace (has a
     // follow-up). Previously the pushed people silently dropped out.
+    $pipelineSql = embrace_pipeline_sql($pdo, 'u');
     $stmt = $pdo->prepare("
         SELECT u.id, u.first_name, u.last_name, u.phone, u.email, u.gender, u.marital_status,
                u.wedding_anniversary, u.physical_address, u.invitation_source, u.invited_by,
                u.is_born_again, u.wants_to_join, u.visitation_preference, u.prayer_requests,
                u.comments, u.created_at, u.spiritual_status,
+               CASE WHEN $pipelineSql THEN 1 ELSE 0 END AS in_pipeline,
                (SELECT f.status FROM embrace_followups f
                  WHERE f.visitor_id = u.id ORDER BY f.id DESC LIMIT 1) AS followup_status,
                (SELECT CONCAT_WS(' ', w.first_name, w.last_name) FROM embrace_followups f
@@ -187,7 +189,7 @@ function embrace_export_stream_excel(PDO $pdo, string $startDate, string $endDat
                  WHERE f.visitor_id = u.id ORDER BY f.id DESC LIMIT 1) AS current_worker
         FROM users u
         WHERE DATE(u.created_at) BETWEEN ? AND ?
-          AND (u.spiritual_status IN ('1st_Timer', '2nd_Timer', '3rd_Timer')
+          AND ($pipelineSql
                OR EXISTS (SELECT 1 FROM embrace_followups ef WHERE ef.visitor_id = u.id))
         ORDER BY u.created_at ASC, u.id ASC
     ");
@@ -297,7 +299,7 @@ function embrace_export_stream_excel(PDO $pdo, string $startDate, string $endDat
 
     foreach ($visitors as $v) {
         $vid = (int) $v['id'];
-        $inPipeline = in_array($v['spiritual_status'] ?? '', ['1st_Timer', '2nd_Timer', '3rd_Timer'], true);
+        $inPipeline = (int) ($v['in_pipeline'] ?? 0) === 1;
         $inPipeline ? $pipelineCount++ : $congregationCount++;
 
         $values = embrace_export_row_values(

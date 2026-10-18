@@ -12,6 +12,7 @@
 #   3. composer install --no-dev
 #   4. php db/migrate.php
 #   5. php db/backfill_embrace_sunday_checkins.php
+#   6. php db/backfill_status_ladder.php
 #
 # Only one deploy runs at a time (flock on /home/smartqaq/.deploy.lock).
 # Full log always mirrored to /home/smartqaq/deploy.log so you can review
@@ -101,6 +102,15 @@ echo "[deploy] composer install done"
 #    A failure here is logged but never fails the deploy (see the script's
 #    own exit-code handling), so a data hiccup can't block shipping code.
 "$PHP" db/backfill_embrace_sunday_checkins.php
+
+# 6. Sunday ladder catch-up: move any 1st/2nd/3rd Timer to the step their
+#    Sunday attendance has earned (forward only; see includes/status_ladder.php).
+#    Same standing-safety-net contract as step 5: idempotent, re-runs on every
+#    deploy, and nothing that goes wrong in it fails the deploy (the code is
+#    already live by now, and the next deploy simply tries again). It must run
+#    AFTER step 4 -- it needs user_status_history, and does nothing if that
+#    table is not there yet.
+"$PHP" db/backfill_status_ladder.php || echo "[deploy] WARNING: status ladder catch-up failed (not fatal) — see output above"
 
 echo "============================================================"
 echo "[deploy] $(date -Iseconds) OK"

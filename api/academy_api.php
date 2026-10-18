@@ -2,6 +2,7 @@
 // /api/academy_api.php
 
 require_once '../includes/db.php';
+require_once __DIR__ . '/../includes/status_ladder.php';
 header('Content-Type: application/json');
 
 // 1. Core Security & Session Check
@@ -459,7 +460,9 @@ try {
 
         case 'graduate_student':
             if (!$is_admin) exit();
+            $statusBefore = ladder_status_of($pdo, (int) ($_POST['student_id'] ?? 0));
             $pdo->prepare("UPDATE users SET spiritual_status = 'Worker' WHERE id = ?")->execute([$_POST['student_id'] ?? '']);
+            ladder_note_change($pdo, (int) ($_POST['student_id'] ?? 0), $statusBefore, 'academy_graduate', (int) $user_id);
             $pdo->prepare("UPDATE academy_enrollments SET graduation_status = 'Graduated' WHERE user_id = ? AND batch_id = ?")->execute([$_POST['student_id'] ?? '', $_POST['batch_id'] ?? '']);
             echo json_encode(['status' => 'success', 'message' => 'Student officially promoted to Worker!']);
             break;

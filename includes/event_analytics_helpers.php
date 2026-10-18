@@ -21,7 +21,13 @@
 //
 // Sunday/Midweek services NEVER use event_registrations — this file never
 // touches that table.
+//
+// spiritual_status is read AS AT THE END OF THE EVENT'S DAY, not as it is now
+// (ladder_status_at_sql): the Sunday ladder promotes people, and a past
+// service's "first timers" must not shrink as they move on.
 // ============================================================================
+
+require_once __DIR__ . '/status_ladder.php';
 
 const EA_CATEGORIES = ['Sunday_Service', 'Midweek_Service'];
 
@@ -177,10 +183,12 @@ function ea_bulk_attendance_stats(PDO $pdo, array $eventIds): array {
     $regionSelect = ($hasRegionCol && $hasRegions) ? "r.name AS region_name" : "NULL AS region_name";
     $regionJoin   = ($hasRegionCol && $hasRegions) ? "LEFT JOIN regions r ON r.id = u.region_id" : "";
 
+    $statusAt = ladder_status_at_sql($pdo, 'u', 'ev.event_date');
     $sql = "
-        SELECT ea.event_id, u.id AS user_id, u.gender, u.spiritual_status, $regionSelect
+        SELECT ea.event_id, u.id AS user_id, u.gender, $statusAt AS spiritual_status, $regionSelect
         FROM ($unionSql) ea
         JOIN users u ON u.id = ea.user_id
+        JOIN events ev ON ev.id = ea.event_id
         $regionJoin
     ";
     $stmt = $pdo->prepare($sql);
@@ -285,14 +293,22 @@ function ea_event_roster(PDO $pdo, int $eventId): array {
         $params[] = $eventId;
     }
 
+    // The grouped query stays as it was; the as-at status is worked out one
+    // level up so it never has to be functionally dependent on the GROUP BY.
+    $statusAt = ladder_status_at_sql($pdo, 's', 'ev.event_date');
     $sql = "
-        SELECT u.id, u.first_name, u.last_name, u.gender, u.spiritual_status, u.phone, $regionSelect AS region_name,
-               MIN(ea.marked_at) AS marked_at
-        FROM ($unionSql) ea
-        JOIN users u ON u.id = ea.user_id
-        $regionJoin
-        GROUP BY u.id
-        ORDER BY u.first_name ASC, u.last_name ASC
+        SELECT s.id, s.first_name, s.last_name, s.gender, $statusAt AS spiritual_status,
+               s.phone, s.region_name, s.marked_at
+        FROM (
+            SELECT u.id, u.first_name, u.last_name, u.gender, u.spiritual_status, u.phone, $regionSelect AS region_name,
+                   MIN(ea.marked_at) AS marked_at
+            FROM ($unionSql) ea
+            JOIN users u ON u.id = ea.user_id
+            $regionJoin
+            GROUP BY u.id
+        ) s
+        JOIN events ev ON ev.id = " . (int) $eventId . "
+        ORDER BY s.first_name ASC, s.last_name ASC
     ";
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);

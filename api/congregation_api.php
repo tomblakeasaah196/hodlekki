@@ -3,6 +3,7 @@
 
 // 1. Core Includes & Headers
 require_once '../includes/db.php';
+require_once __DIR__ . '/../includes/status_ladder.php';
 header('Content-Type: application/json');
 
 // 2. Security Check
@@ -316,12 +317,14 @@ try {
             }
             $params[] = $target_id;
 
+            $statusBefore = ladder_status_of($pdo, (int) $target_id);
             $stmt = $pdo->prepare("
-                UPDATE users 
+                UPDATE users
                 SET first_name = ?, last_name = ?, real_email = ?, phone = ?, dob = ?, gender = ?, physical_address = ?, latitude = ?, longitude = ?, attendance_status = ?, spiritual_status = ?, marital_status = ?, wedding_anniversary = ?, new_church_name = ?, comments = ? $pic_update_sql
                 WHERE id = ?
             ");
             $stmt->execute($params);
+            ladder_note_change($pdo, (int) $target_id, $statusBefore, 'congregation_edit', (int) $user_id);
 
             // This editor is the deliberate place to record that someone has
             // relocated or now worships elsewhere, so keep the AWOL exemption
@@ -348,6 +351,7 @@ try {
             // this will seamlessly wipe their entire trace from the system.
             $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
             $stmt->execute([$target_id]);
+            ladder_forget_user($pdo, (int) $target_id);
 
             echo json_encode(['status' => 'success', 'message' => 'Member profile permanently deleted from the database.']);
             break;
