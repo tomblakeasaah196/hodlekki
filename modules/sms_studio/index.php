@@ -946,6 +946,10 @@ function renderCampaign(ids){
     clearTimeout(campTimer);
     if (c.remaining > 0 && !c.cancelled && !res.cron_ok) driveQueue(false);
     campTimer = setTimeout(()=>{ if (drawerIs('campaign', ids)) renderCampaign(ids); }, c.remaining > 0 ? 4000 : 20000);
+  }).fail(function(){
+    // One failed poll (a network blip, a session refresh) used to end the live view — and the page-driven send — for good.
+    clearTimeout(campTimer);
+    campTimer = setTimeout(()=>{ if (drawerIs('campaign', ids)) renderCampaign(ids); }, 6000);
   });
 }
 $(document).on('click','.drawer-hist', function(){
