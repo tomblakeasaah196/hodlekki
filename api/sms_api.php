@@ -212,8 +212,9 @@ try {
 
         /* ================================================================
          * AUDIENCE — build recipient list
-         * POST: audience = 'users' | 'registrations' | 'checkins'
+         * POST: audience = 'users' | 'registrations' | 'checkins' | 'everyone'
          *       statuses[] (users) | event_id (registrations / checkins), search
+         *       'everyone' = every table that holds a person, merged by number
          * ================================================================ */
         case 'fetch_recipients':
             $audience = $_POST['audience'] ?? 'users';
@@ -225,11 +226,13 @@ try {
 
             if ($audience === 'registrations')  $res = sms_audience_registrations($pdo, $eventId ?: null, $search);
             elseif ($audience === 'checkins')   $res = sms_audience_checkins($pdo, $eventId ?: null, $search);
+            elseif ($audience === 'everyone')   $res = sms_audience_everyone($pdo, $search);
             else                                $res = sms_audience_users($pdo, $statuses, $search);
             sms_json([
                 'status' => 'success', 'data' => $res['data'], 'count' => count($res['data']),
                 'valid_count' => count($res['data']), 'invalid_count' => $res['dropped'],
-                'shared_phones' => $res['duplicates'], 'truncated' => $res['truncated'], 'cap' => SMS_AUDIENCE_CAP,
+                'shared_phones' => $res['duplicates'], 'excluded_count' => $res['excluded'] ?? 0,
+                'truncated' => $res['truncated'], 'cap' => SMS_AUDIENCE_CAP,
             ]);
 
         /* ================================================================
@@ -325,7 +328,7 @@ try {
                 if (isset($seen[$ph])) { $dupes++; continue; }
                 $seen[$ph] = true;
                 $row = [
-                    'source'    => in_array($rec['source'] ?? '', ['user', 'registration', 'checkin'], true) ? $rec['source'] : 'manual',
+                    'source'    => is_string($rec['source'] ?? null) && array_key_exists($rec['source'], SMS_EVERYONE_SOURCES) ? $rec['source'] : 'manual',
                     'source_id' => isset($rec['source_id']) && is_numeric($rec['source_id']) ? (int)$rec['source_id'] : null,
                     'phone'     => $ph,
                 ];
@@ -338,10 +341,10 @@ try {
             if (!$clean) sms_fail('None of the selected numbers is a valid Nigerian mobile number.');
 
             $title    = sms_cut(trim((string)($_POST['title'] ?? '')), 200) ?: ('Bulk SMS – ' . date('j M Y, g:i a'));
-            $audience = in_array($_POST['audience'] ?? '', ['users', 'registrations', 'checkins'], true) ? $_POST['audience'] : 'users';
+            $audience = in_array($_POST['audience'] ?? '', ['users', 'registrations', 'checkins', 'everyone'], true) ? $_POST['audience'] : 'users';
             $eventId  = (int)($_POST['event_id'] ?? 0);
             // Check-in campaigns now keep their event too, so the Event Report counts them.
-            $eventId  = ($audience !== 'users' && $eventId > 0) ? $eventId : null;
+            $eventId  = (in_array($audience, ['registrations', 'checkins'], true) && $eventId > 0) ? $eventId : null;
             $filters  = (string)($_POST['filters'] ?? '');
             $filters  = ($filters !== '' && is_array(json_decode($filters, true))) ? sms_cut($filters, 2000) : null;
 
@@ -679,6 +682,26 @@ try {
                 $p->execute([$pid]);
                 if ($u = $p->fetch(PDO::FETCH_ASSOC)) $person = ['kind' => 'Event attendee (check-in)', 'name' => $u['full_name'], 'email' => null,
                     'phone_on_file' => $u['phone'], 'status' => 'Checked in to ' . ($u['title'] ?: 'an event') . ($u['checkin_date'] ? ' on ' . date('j M Y', strtotime($u['checkin_date'])) : '') . ($u['blessing_ref'] ? ' · verse ' . $u['blessing_ref'] : '')];
+            } elseif ($m['source_type'] === 'se_contact' && $pid && sms_table_exists($pdo, 'se_contacts')) {
+                $p = $pdo->prepare("SELECT first_name, last_name, email, phone_e164 FROM se_contacts WHERE id = ?");
+                $p->execute([$pid]);
+                if ($u = $p->fetch(PDO::FETCH_ASSOC)) $person = ['kind' => 'Special Events guest', 'name' => sms_person_name($u['first_name'], $u['last_name']),
+                    'email' => $u['email'], 'phone_on_file' => $u['phone_e164'], 'status' => 'Registered for a Special Event'];
+            } elseif ($m['source_type'] === 'academy' && $pid && sms_table_exists($pdo, 'academy_applications')) {
+                $p = $pdo->prepare("SELECT full_name, email_address, phone_number, application_status FROM academy_applications WHERE id = ?");
+                $p->execute([$pid]);
+                if ($u = $p->fetch(PDO::FETCH_ASSOC)) $person = ['kind' => 'Academy applicant', 'name' => $u['full_name'], 'email' => $u['email_address'],
+                    'phone_on_file' => $u['phone_number'], 'status' => 'Application ' . ($u['application_status'] ?: 'on file')];
+            } elseif ($m['source_type'] === 'idi' && $pid && sms_table_exists($pdo, 'idi_mobilization')) {
+                $p = $pdo->prepare("SELECT full_name, phone_number, event_campaign FROM idi_mobilization WHERE id = ?");
+                $p->execute([$pid]);
+                if ($u = $p->fetch(PDO::FETCH_ASSOC)) $person = ['kind' => 'IDI mobilization contact', 'name' => $u['full_name'], 'email' => null,
+                    'phone_on_file' => $u['phone_number'], 'status' => 'On the ' . ($u['event_campaign'] ?: 'IDI') . ' call list'];
+            } elseif ($m['source_type'] === 'reach' && $pid && sms_table_exists($pdo, 'reach_leads')) {
+                $p = $pdo->prepare("SELECT first_name, last_name, phone, status FROM reach_leads WHERE id = ?");
+                $p->execute([$pid]);
+                if ($u = $p->fetch(PDO::FETCH_ASSOC)) $person = ['kind' => 'Reach lead', 'name' => sms_person_name($u['first_name'], $u['last_name']), 'email' => null,
+                    'phone_on_file' => $u['phone'], 'status' => 'Outreach lead · ' . str_replace('_', ' ', (string)$u['status'])];
             }
 
             // This number's messaging record
