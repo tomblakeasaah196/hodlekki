@@ -46,6 +46,8 @@ is_same('Lagos landline 01 is rejected', null,            sms_normalize_phone('0
 
 echo "sms_gsm_clean / sms_segments\n";
 is_same('curly apostrophe becomes plain', "it's", sms_gsm_clean("it\u{2019}s"));
+is_same('a tab becomes a space (GSM-7)',  'GSM-7', sms_segments(sms_gsm_clean("Dear\tAda"))['encoding']);
+is_same('a line separator becomes a line break', "Dear\nAda", sms_gsm_clean("Dear\u{2028}Ada"));
 is_same('160 GSM-7 characters is one page', 1, sms_segments(str_repeat('a', 160))['pages']);
 is_same('161 is two pages',                 2, sms_segments(str_repeat('a', 161))['pages']);
 is_same('306 is two pages (153 per part)',  2, sms_segments(str_repeat('a', 306))['pages']);
@@ -73,6 +75,8 @@ is_same('sender ID is trimmed',              'HODLEKKI: ', sms_signature(['sende
 is_same('body gets the prefix',              'HODLEKKI: Dear Ada', sms_sign_body('Dear Ada', $hod));
 is_same('already signed: not doubled',       'HODLEKKI: Dear Ada', sms_sign_body('HODLEKKI: Dear Ada', $hod));
 is_same('already signed, any case',          'hodlekki: Dear Ada', sms_sign_body('hodlekki: Dear Ada', $hod));
+is_same('starts with the name, no colon',     'HODLEKKI - Dear Ada', sms_sign_body('HODLEKKI - Dear Ada', $hod));
+is_same('a longer word is not the name',      'HODLEKKI: HODLEKKIANS unite', sms_sign_body('HODLEKKIANS unite', $hod));
 is_same('empty body stays empty (refused)',  '',                   sms_sign_body('', $hod));
 is_same('off: body untouched',               'Dear Ada',           sms_sign_body('Dear Ada', ['sender_id' => 'HODLEKKI', 'sign_mode' => 'none']));
 is_same('150 chars + prefix still one page', 1, sms_segments(sms_sign_body(str_repeat('a', 150), $hod))['pages']);
@@ -96,6 +100,16 @@ $w = sms_wallet_check(['api_token' => '', 'unit_price' => ''], 700);
 is_same('unreadable balance fails closed',   false, $w['ok']);
 is_same('…and says why',                     true,  strpos((string)$w['message'], 'Nothing was queued') !== false);
 is_same('…with the amount it needed',        4543.0, $w['need']);
+
+echo "sms_http_ok (what counts as a BulkSMS refusal)\n";
+$ok = ['ok' => true, 'status' => 200, 'errno' => 0, 'message' => null, 'raw' => '', 'data' => null];
+is_same('plain success',                     true,  sms_http_ok(array_merge($ok, ['data' => ['status' => 'success', 'data' => ['message_id' => 'x']]])));
+is_same('top-level error',                   false, sms_http_ok(array_merge($ok, ['data' => ['status' => 'error', 'message' => 'no']])));
+is_same('error nested under data',           false, sms_http_ok(array_merge($ok, ['data' => ['status' => 'success', 'data' => ['status' => 'error', 'message' => 'no']]])));
+is_same('error envelope',                    false, sms_http_ok(array_merge($ok, ['data' => ['error' => ['code' => 'BSNG-2011']]])));
+is_same('a list under data is fine',         true,  sms_http_ok(array_merge($ok, ['data' => ['status' => 'success', 'data' => [['message_id' => 'x']]]])));
+is_same('HTTP 401 is not ok',                false, sms_http_ok(array_merge($ok, ['status' => 401, 'data' => ['message' => 'Unauthenticated']])));
+is_same('transport failure is not ok',       false, sms_http_ok(array_merge($ok, ['ok' => false, 'status' => 0])));
 
 echo "sms_map_dlr_status\n";
 is_same('DELIVRD',               'delivered', sms_map_dlr_status('DELIVRD'));

@@ -499,7 +499,7 @@ const GSM_CLEAN = {'‘':"'",'’':"'",'‚':"'",'‛':"'",'′':"'",'´':"'",
   '‐':'-','‑':'-','‒':'-','–':'-','—':'-','―':'-','−':'-',
   '…':'...','•':'-',' ':' ',' ':' ',' ':' ',' ':' ',' ':' ',
   '​':'','﻿':'','­':''};
-function gsmClean(t){ return (t||'').replace(/\r\n/g,'\n').replace(/[‘’‚‛′´“”„‟″‐-―−…•     ​﻿­]/g, c => GSM_CLEAN[c] ?? c); }
+function gsmClean(t){ return (t||'').replace(/\r\n/g,'\n').replace(/\t/g,' ').replace(/[\u2028\u2029]/g,'\n').replace(/[‘’‚‛′´“”„‟″‐-―−…•     ​﻿­]/g, c => GSM_CLEAN[c] ?? c); }
 const GSM7 = "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
 const GSM7_EXT = "^{}\\[~]|€";
 function smsPages(text){
@@ -525,7 +525,11 @@ const SAMPLE = { first_name:'Ada', last_name:'Example', name:'Ada Example', phon
 /* The sender name the server writes at the start of every message (Settings → "Sender name in the text"),
    mirrored here so the preview, the unit count and the cost match what is sent (sms_sign_body()). */
 function signature(){ return (lastHealth && lastHealth.signature) ? String(lastHealth.signature) : ''; }
-function sign(text){ const s = signature(); if (!s || !text) return text; return text.toLowerCase().indexOf(s.trim().toLowerCase()) === 0 ? text : s + text; }
+function sign(text){
+  const s = signature(); if (!s || !text) return text;
+  const name = s.replace(/[:\s]+$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');   // already starts with the sender name as a word: leave it
+  return new RegExp('^' + name + '(?![A-Za-z0-9])', 'i').test(text) ? text : s + text;
+}
 function unitPrice(){ const p = lastHealth ? Number(lastHealth.unit_price) : 0; return p > 0 ? p : 6.49; }
 
 /* ================================================================
@@ -555,6 +559,9 @@ function loadHealth(){
     $('#myPhone').text(res.my_phone || 'none on your profile');
     renderHealth();
     if (currentTab==='settings') renderChecklist();
+    // While the cron job is down, keep sending from whichever Studio tab is open — not only the campaign drawer.
+    const h = res.health || {};
+    if (h.queued > 0 && h.configured && !(h.cron_age_sec != null && h.cron_age_sec <= 180)) driveQueue(false);
   });
 }
 function pill(cls, html, title){ return `<span class="px-3 py-1.5 rounded-full ${cls}" ${title?`title="${esc(title)}"`:''}>${html}</span>`; }
