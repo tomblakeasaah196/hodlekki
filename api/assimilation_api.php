@@ -662,6 +662,7 @@ try {
                 'recent_days'   => $recent,
                 'follow_ups'  => $fu->fetchAll(PDO::FETCH_ASSOC),
                 'assignments' => $hist->fetchAll(PDO::FETCH_ASSOC),
+                'sms_notes'   => assim_sms_notes($pdo, [$person])[$person] ?? [],
                 'cross_links' => $links,
                 'can_assign'  => $is_manager,
                 'can_log'     => $is_manager || (int) $case['assigned_to'] === $user_id,

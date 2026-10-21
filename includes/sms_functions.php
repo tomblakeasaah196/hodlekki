@@ -551,6 +551,95 @@ function sms_audience_everyone(PDO $pdo, $search, $cap = SMS_AUDIENCE_CAP) {
     return ['data'=>$out, 'dropped'=>count($invalid), 'duplicates'=>$dupes, 'truncated'=>$truncated, 'excluded'=>$excluded];
 }
 
+/** Follow-up outcomes after which a person is never texted from an Assimilation list. */
+const SMS_ASSIM_DO_NOT_TEXT = ['Asked_For_No_Contact', 'Not_Interested'];
+const SMS_ASSIM_NOTES_KEPT  = 2;
+
+/**
+ * Assimilation audience: everyone an Assimilation rule catches ("fewer than N
+ * services in the past M months", plus its filters), through the same
+ * assim_find_query() the Assimilation module uses, so the two never disagree.
+ * Only people with a profile can be on it: attendance is matched by users.id.
+ *
+ * Left out: anyone a follow-up ever recorded as 'Asked for no contact' or
+ * 'Not interested' (or whose case closed Not interested), and numbers flagged
+ * phone_status = 'invalid'. Relocated people are already left out by the rule.
+ *
+ * Returns the usual audience shape plus 'excluded' (do-not-text people) and
+ * 'no_phone' (people the rule caught who have no number on file).
+ */
+function sms_audience_assimilation(PDO $pdo, array $rule, $search, $cap = SMS_AUDIENCE_CAP) {
+    require_once __DIR__ . '/assimilation_helpers.php';
+    $rule = assim_normalize_rule(['search' => (string)$search] + $rule);
+    $q = assim_find_query($rule, ['order' => 'u.first_name, u.last_name, u.id']);
+    $st = $pdo->prepare($q['sql']);
+    $st->execute($q['params']);
+    $people = $st->fetchAll(PDO::FETCH_ASSOC);
+
+    $doNotText = [];
+    $in = "'" . implode("','", SMS_ASSIM_DO_NOT_TEXT) . "'";
+    foreach ($pdo->query("SELECT c.user_id FROM assimilation_follow_ups f JOIN assimilation_cases c ON c.id = f.case_id
+                          WHERE f.outcome IN ($in)
+                          UNION SELECT user_id FROM assimilation_cases WHERE status = 'Not_Interested'")->fetchAll(PDO::FETCH_COLUMN) as $uid) {
+        $doNotText[(int)$uid] = true;
+    }
+    $flagged = [];
+    if (sms_column_exists($pdo, 'users', 'phone_status')) {
+        foreach ($pdo->query("SELECT id FROM users WHERE phone_status = 'invalid'")->fetchAll(PDO::FETCH_COLUMN) as $uid) {
+            $flagged[(int)$uid] = true;
+        }
+    }
+
+    $out = []; $seen = []; $dropped = 0; $dupes = 0; $excluded = 0; $noPhone = 0; $truncated = false;
+    foreach ($people as $p) {
+        $id = (int)$p['id'];
+        if (isset($doNotText[$id])) { $excluded++; continue; }
+        if (trim((string)$p['phone']) === '') { $noPhone++; continue; }
+        $n = isset($flagged[$id]) ? null : sms_normalize_phone($p['phone']);
+        if ($n === null) { $dropped++; continue; }
+        if (isset($seen[$n])) { $dupes++; continue; }
+        if (count($out) >= $cap) { $truncated = true; break; }
+        $seen[$n] = true;
+        $first = sms_clean_name($p['first_name']); $last = sms_clean_name($p['last_name']);
+        $out[] = [
+            'source' => 'user', 'source_id' => $id,
+            'name' => trim($first . ' ' . $last) ?: 'Unnamed',
+            'phone' => $n,
+            'first_name' => $first, 'last_name' => $last,
+            'email' => '', 'event_title' => '',
+            'status_label' => $p['spiritual_status'] ?? '',
+            'since_words' => assim_since_words($p['last_attended']),
+            'services_in_window' => (int)$p['services_in_window'],
+        ];
+    }
+    return ['data'=>$out, 'dropped'=>$dropped, 'duplicates'=>$dupes, 'truncated'=>$truncated,
+            'excluded'=>$excluded, 'no_phone'=>$noPhone, 'summary'=>assim_rule_summary($rule)];
+}
+
+/**
+ * Leave a system note on the person's Assimilation record for a message an
+ * Assimilation-list campaign just sent, and keep only their latest
+ * SMS_ASSIM_NOTES_KEPT notes. Never throws: a note must not stop the queue.
+ */
+function sms_assim_note(PDO $pdo, int $userId, int $logId, ?int $campaignId, ?int $sentBy) {
+    try {
+        if ($userId <= 0 || $logId <= 0 || !sms_table_exists($pdo, 'assimilation_sms_notes')) return;
+        $b = $pdo->prepare("SELECT body FROM sms_log WHERE id = ?");
+        $b->execute([$logId]);
+        $body = $b->fetchColumn();
+        if ($body === false) return;
+        $pdo->prepare("INSERT INTO assimilation_sms_notes (user_id, sms_log_id, campaign_id, body, sent_by) VALUES (?,?,?,?,?)")
+            ->execute([$userId, $logId, $campaignId, (string)$body, $sentBy]);
+        $old = $pdo->prepare("SELECT id FROM assimilation_sms_notes WHERE user_id = ? ORDER BY id DESC LIMIT 100 OFFSET " . SMS_ASSIM_NOTES_KEPT);
+        $old->execute([$userId]);
+        $ids = array_map('intval', $old->fetchAll(PDO::FETCH_COLUMN));
+        if ($ids) $pdo->prepare("DELETE FROM assimilation_sms_notes WHERE id IN (" . sms_in_list($ids) . ")")->execute($ids);
+    } catch (Throwable $e) {
+        error_log('SMS Assimilation note: ' . $e->getMessage());
+    }
+}
+function sms_in_list(array $ids) { return implode(',', array_fill(0, count($ids), '?')); }
+
 /* ============================================================================
  * TEXT: GSM-7 clean-up, segment counting, merge-field rendering
  * ========================================================================== */
@@ -1230,7 +1319,7 @@ function sms_process_queue(PDO $pdo, $budget = 50, $runSource = 'cron') {
 
 /** Send one sms_queue job. Returns the sms_send_one result (status may also be 'cancelled'). */
 function sms_process_job(PDO $pdo, array $settings, array $job) {
-    $c = $pdo->prepare("SELECT id, body_template, created_by, status FROM sms_campaigns WHERE id = ?");
+    $c = $pdo->prepare("SELECT id, body_template, created_by, status, audience FROM sms_campaigns WHERE id = ?");
     $c->execute([$job['campaign_id']]);
     $camp = $c->fetch(PDO::FETCH_ASSOC);
     if (!$camp) {
@@ -1273,6 +1362,12 @@ function sms_process_job(PDO $pdo, array $settings, array $job) {
     $qStatus = $r['status'] === 'sent' ? 'done' : 'error';
     $pdo->prepare("UPDATE sms_queue SET status = ?, sent_status = ?, error_message = ? WHERE id = ?")
         ->execute([$qStatus, $r['status'], $r['error'], $job['id']]);
+    // Assimilation lists leave the message on the person's record ('unknown' may have gone out too).
+    if (($camp['audience'] ?? '') === 'assimilation' && ($recipient['source'] ?? '') === 'user'
+        && in_array($r['status'], ['sent', 'unknown'], true) && !empty($r['log_id'])) {
+        sms_assim_note($pdo, (int)($recipient['source_id'] ?? 0), (int)$r['log_id'], (int)$job['campaign_id'],
+                       $camp['created_by'] !== null ? (int)$camp['created_by'] : null);
+    }
     return $r;
 }
 

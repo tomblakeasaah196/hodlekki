@@ -1000,6 +1000,49 @@ function assim_analytics(PDO $pdo, string $from, string $to): array {
 }
 
 // ==========================================================================
+// SMS NOTES — what SMS Studio last sent these people from an Assimilation
+// list. System-written by the SMS queue (sms_assim_note()), two per person.
+// ==========================================================================
+
+// [user_id => [{body, sent_at, sent_by, status}, ...newest first]]. Empty
+// until 20261123090000_assimilation_sms_notes.sql has been applied.
+function assim_sms_notes(PDO $pdo, array $user_ids): array {
+    static $ready = null;
+    $user_ids = array_values(array_unique(array_filter(array_map('intval', $user_ids))));
+    if (!$user_ids) {
+        return [];
+    }
+    if ($ready === null) {
+        $st = $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'assimilation_sms_notes'");
+        $ready = (int) $st->fetchColumn() > 0;
+    }
+    if (!$ready) {
+        return [];
+    }
+    $in   = implode(',', array_fill(0, count($user_ids), '?'));
+    $stmt = $pdo->prepare("
+        SELECT n.user_id, n.body, n.sent_at, l.status,
+               TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) AS sent_by
+          FROM assimilation_sms_notes n
+          LEFT JOIN sms_log l ON l.id = n.sms_log_id
+          LEFT JOIN users u ON u.id = n.sent_by
+         WHERE n.user_id IN ({$in})
+         ORDER BY n.user_id, n.id DESC
+    ");
+    $stmt->execute($user_ids);
+    $out = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $n) {
+        $out[(int) $n['user_id']][] = [
+            'body'    => $n['body'],
+            'sent_at' => $n['sent_at'],
+            'sent_by' => $n['sent_by'] ?: null,
+            'status'  => $n['status'] ?: 'sent',
+        ];
+    }
+    return $out;
+}
+
+// ==========================================================================
 // SMALL SHARED PIECES
 // ==========================================================================
 

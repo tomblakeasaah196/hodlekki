@@ -38,6 +38,15 @@ function sms_ids_param($v, $max = 500) {
 }
 function sms_in(array $ids) { return implode(',', array_fill(0, count($ids), '?')); }
 function sms_person_name($first, $last) { return trim(($first ?? '') . ' ' . ($last ?? '')); }
+/** Assimilation lists show who has been absent, so they follow Assimilation's own manager rule. */
+function sms_can_use_assimilation(PDO $pdo, int $userId) {
+    require_once __DIR__ . '/../includes/assimilation_helpers.php';
+    return assim_is_manager($pdo, $userId, (string)($_SESSION['active_role'] ?? ''));
+}
+function sms_assim_rule_param() {
+    $raw = json_decode((string)($_POST['rule'] ?? ''), true);
+    return is_array($raw) ? $raw : [];
+}
 
 /* ============================================================================
  * SECURITY: auth + CSRF + RBAC
@@ -226,9 +235,20 @@ try {
             sms_json(['status'=>'success','data'=>$rows]);
 
         /* ================================================================
+         * ASSIMILATION LIST — the wizard's live count
+         * ================================================================ */
+        case 'assim_count':
+            if (!sms_can_use_assimilation($pdo, $user_id)) sms_fail('Only pastors and department Directors/HODs can build Assimilation lists.');
+            $res = sms_audience_assimilation($pdo, sms_assim_rule_param(), '');
+            sms_json(['status'=>'success','data'=>[
+                'reachable' => count($res['data']), 'no_phone' => $res['no_phone'], 'invalid' => $res['dropped'],
+                'excluded' => $res['excluded'], 'shared' => $res['duplicates'], 'summary' => $res['summary'],
+            ]]);
+
+        /* ================================================================
          * AUDIENCE — build recipient list
-         * POST: audience = 'users' | 'registrations' | 'checkins' | 'everyone'
-         *       statuses[] (users) | event_id (registrations / checkins), search
+         * POST: audience = 'users' | 'registrations' | 'checkins' | 'everyone' | 'assimilation'
+         *       statuses[] (users) | event_id (registrations / checkins) | rule JSON (assimilation), search
          *       'everyone' = every table that holds a person, merged by number
          * ================================================================ */
         case 'fetch_recipients':
@@ -242,11 +262,16 @@ try {
             if ($audience === 'registrations')  $res = sms_audience_registrations($pdo, $eventId ?: null, $search);
             elseif ($audience === 'checkins')   $res = sms_audience_checkins($pdo, $eventId ?: null, $search);
             elseif ($audience === 'everyone')   $res = sms_audience_everyone($pdo, $search);
+            elseif ($audience === 'assimilation') {
+                if (!sms_can_use_assimilation($pdo, $user_id)) sms_fail('Only pastors and department Directors/HODs can build Assimilation lists.');
+                $res = sms_audience_assimilation($pdo, sms_assim_rule_param(), $search);
+            }
             else                                $res = sms_audience_users($pdo, $statuses, $search);
             sms_json([
                 'status' => 'success', 'data' => $res['data'], 'count' => count($res['data']),
                 'valid_count' => count($res['data']), 'invalid_count' => $res['dropped'],
                 'shared_phones' => $res['duplicates'], 'excluded_count' => $res['excluded'] ?? 0,
+                'no_phone_count' => $res['no_phone'] ?? 0, 'summary' => $res['summary'] ?? null,
                 'truncated' => $res['truncated'], 'cap' => SMS_AUDIENCE_CAP,
             ]);
 
@@ -361,7 +386,8 @@ try {
             if (!$wallet['ok']) sms_fail($wallet['message']);
 
             $title    = sms_cut(trim((string)($_POST['title'] ?? '')), 200) ?: ('Bulk SMS – ' . date('j M Y, g:i a'));
-            $audience = in_array($_POST['audience'] ?? '', ['users', 'registrations', 'checkins', 'everyone'], true) ? $_POST['audience'] : 'users';
+            $audience = in_array($_POST['audience'] ?? '', ['users', 'registrations', 'checkins', 'everyone', 'assimilation'], true) ? $_POST['audience'] : 'users';
+            if ($audience === 'assimilation' && !sms_can_use_assimilation($pdo, $user_id)) sms_fail('Only pastors and department Directors/HODs can send to Assimilation lists.');
             $eventId  = (int)($_POST['event_id'] ?? 0);
             // Check-in campaigns now keep their event too, so the Event Report counts them.
             $eventId  = (in_array($audience, ['registrations', 'checkins'], true) && $eventId > 0) ? $eventId : null;
@@ -886,6 +912,11 @@ try {
             // from === to marks a note on the timeline rather than a status change
             sms_log_event($pdo, $r['log_id'], $r['status'], $r['status'], 'studio', ['detail' => 'This is a resend of message #' . $row['id'] . ', requested by ' . $MY_NAME . '.', 'user_id' => $user_id]);
             sms_log_event($pdo, $row['id'], $row['status'], $row['status'], 'studio', ['detail' => 'Resent by ' . $MY_NAME . ' as message #' . $r['log_id'] . ' (' . $r['status'] . ').', 'user_id' => $user_id]);
+            if ($row['campaign_id'] && $row['source_type'] === 'user' && in_array($r['status'], ['sent', 'unknown'], true)) {
+                $ca = $pdo->prepare("SELECT audience FROM sms_campaigns WHERE id = ?");
+                $ca->execute([$row['campaign_id']]);
+                if ($ca->fetchColumn() === 'assimilation') sms_assim_note($pdo, (int)$row['source_id'], (int)$r['log_id'], (int)$row['campaign_id'], $user_id);
+            }
             if ($r['status'] === 'sent') sms_json(['status'=>'success','message'=>'Re-sent to ' . $row['recipient_phone'] . ' as message #' . $r['log_id'] . '.','log_id'=>$r['log_id']]);
             sms_json(['status'=>'error','message'=>($r['status'] === 'blocked' ? '' : 'Resend failed: ') . ($r['error'] ?? 'Unknown'),'log_id'=>$r['log_id']]);
 
