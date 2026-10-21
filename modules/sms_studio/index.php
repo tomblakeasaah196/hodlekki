@@ -705,6 +705,7 @@ function renderHealth(){
   else out += pill('bg-emerald-100 text-emerald-700', '✓ BulkSMS connected');
   if (h.vault_ok) {
     if (h.schema_ready === false) out += pill('bg-amber-100 text-amber-800', '! Database update pending — run db/migrate.php');
+    else if (h.schema_latest === false) out += pill('bg-amber-100 text-amber-800', '! Database update pending (retries and cron diagnosis) — run db/migrate.php', 'Until it runs, a refused message is not retried and an empty wallet is not waited for.');
     const age = h.cron_age_sec, seen = h.cron_seen_age_sec;
     const firing = seen != null && seen <= 180;   // the cron job itself is firing (stamped before any work)
     if (age == null && !firing) out += pill('bg-amber-100 text-amber-800', '! Background sender has never run — add the cron job (see Settings)', 'Until it runs, campaigns are sent while this page is open.');
@@ -714,7 +715,8 @@ function renderHealth(){
     if (h.queued > 0) {
       out += pill('bg-sky-100 text-sky-700', `${h.queued} message(s) waiting to send` + (h.oldest_queued_at_t ? ' · since ' + esc(h.oldest_queued_at_t.label) : ''));
       if (h.last_message && /^(Paused|Waiting)/.test(h.last_message)) out += pill('bg-amber-100 text-amber-800', '⏸ ' + esc(h.last_message.replace(/\s+\d+ sent, .*$/, '')), 'The background sender stopped sending on purpose. It tries again by itself.');
-      if (age == null || age > 180) out += `<button id="btnSendQueuedNow" class="px-3 py-1.5 rounded-full bg-hodBlue text-white hover:bg-[#152750]">Send queued now</button>`;
+      if ((age == null || age > 180) && !driving) out += `<button id="btnSendQueuedNow" class="px-3 py-1.5 rounded-full bg-hodBlue text-white hover:bg-[#152750]">Send queued now</button>`;
+      else if (driving) out += pill('bg-sky-50 text-sky-700', 'Sending from this page…');
     }
     if (h.webhook_secret_set && h.webhook_url_set) out += pill('bg-emerald-50 text-emerald-700', '✓ Delivery webhook on' + (h.last_webhook_at_t ? ' · last report ' + ago(h.last_webhook_at_t) : ' · no report received yet'));
     else out += pill('bg-gray-100 text-gray-600', 'Delivery reports by polling (webhook not set up)');
@@ -724,17 +726,21 @@ function renderHealth(){
 $(document).on('click','#btnSendQueuedNow', function(){ driveQueue(true); });
 
 /* Send from this page while cron is down (one run at a time, serialised) */
+let lockedUntil = 0;   // after a 'locked' answer (the cron or another tab is sending) wait before asking again
 function driveQueue(loud){
   if (driving) return;
+  if (Date.now() < lockedUntil) { if (loud) toast('Another sender run (the background sender or another tab) holds the lock — waiting.', 'info'); return; }
   driving = true;
   if (loud) toast('Sending queued messages from this page… keep it open.', 'info');
   api('process_queue', {}, function(res){
     driving = false;
-    if (res.status==='success' && loud) toast(res.message, 'info');
+    if (res.status==='success' && res.result && res.result.locked) { lockedUntil = Date.now() + 20000; if (loud) toast('Another sender run (the background sender or another tab) holds the lock — waiting.', 'info'); }
+    else if (res.status==='success' && loud) toast(res.message, 'info');
     loadHealth();
     if (res.status==='success' && res.result && res.result.remaining > 0 && !res.result.locked && loud) driveQueue(true);
-  }).fail(function(){ driving = false; });
+  }).fail(function(){ driving = false; setTimeout(loadHealth, 8000); });   // one failed request must not end the page-driven send
 }
+document.addEventListener('visibilitychange', function(){ if (!document.hidden) loadHealth(); });
 
 /* ================================================================
    AUDIENCE
@@ -1045,9 +1051,10 @@ $('#btnSendCampaign').on('click', function(){
   $('#btnConfirmSend').prop('disabled', true).text('Checking wallet…');
   openModal('confirmModal');
   // The server refuses a campaign the wallet cannot pay for (send_campaign); show that here before the click.
-  api('wallet', {}, function(res){
+  api('wallet', { phones: JSON.stringify(arr.map(r => r.phone)) }, function(res){
     const price = (res.unit_price > 0) ? Number(res.unit_price) : unitPrice();
     const need = a.units * price;
+    if (res.suppressed > 0) $('#walletLine').before(`<div class="text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-100 rounded-lg px-3 py-2">${res.suppressed} selected number(s) are on the suppression list and will be skipped (₦0): ${esc((res.suppressed_sample||[]).join(', '))}${res.suppressed > 5 ? '…' : ''}. Release them on the Suppression tab first if they should receive this.</div>`);
     if (res.status === 'success' && res.ok && res.balance !== null) {
       const short = Number(res.balance) < need;
       $('#walletLine').html(`BulkSMS wallet: <b>${naira(res.balance)}</b> · this campaign needs about <b>${naira(need)}</b> (${a.units} × ₦${price.toFixed(2)})`
@@ -1142,9 +1149,10 @@ function renderCampaign(ids){
     if (!drawerIs('campaign', ids)) return;
     if (res.status!=='success'){ $('#drawerBody').html('<p class="text-red-500">'+esc(res.message)+'</p>'); return; }
     const c = res.campaign, done = c.total - c.remaining, pct = c.total ? Math.round(done/c.total*100) : 100;
+    const notSent = (c.log.failed||0) + (c.log.blocked||0) + (c.log.unknown||0);
     $('#drawerTitle').text(c.title);
     let html = `<div class="space-y-2">
-        <div class="flex justify-between text-sm font-bold"><span>${done} of ${c.total} handed to BulkSMS</span><span>${pct}%</span></div>
+        <div class="flex justify-between text-sm font-bold"><span>${done} of ${c.total} processed${notSent ? ` · <span class="text-red-600">${notSent} not sent</span>` : ''}</span><span>${pct}%</span></div>
         ${progressBar(c)}
         <p class="text-[12px]">${countsLine(c.log)}</p>
       </div>`;

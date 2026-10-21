@@ -164,8 +164,8 @@ try {
             foreach (SMS_KEYS as $k) $vals[$k] = trim((string)($_POST[$k] ?? ''));
             if ($vals['api_token'] === '') sms_fail('API token is required.');
             if ($vals['sender_id'] === '') sms_fail('Sender ID is required.');
-            if (!preg_match('/^[A-Za-z0-9 .&\-]{3,11}$/', $vals['sender_id'])) {
-                sms_fail('Sender ID must be 3–11 letters, numbers or spaces, exactly as approved on BulkSMS.');
+            if (!preg_match('/^[A-Za-z0-9]{3,11}$/', $vals['sender_id'])) {
+                sms_fail('Sender ID must be 3–11 letters or numbers (no spaces), exactly as approved on BulkSMS.');
             }
             // The API token travels as a Bearer header to this URL: never over plain HTTP.
             if ($vals['base_url'] !== '') {
@@ -211,8 +211,21 @@ try {
             $settings = sms_load_settings($pdo);
             if (empty($settings['api_token'])) sms_fail('BulkSMS not configured.');
             $b = sms_fetch_balance($settings);
+            // Which of the selected numbers the suppression list would skip (₦0), so the owner
+            // sees it before pressing Send rather than as "Blocked" rows afterwards.
+            $suppressed = []; $phones = json_decode((string)($_POST['phones'] ?? '[]'), true);
+            if (is_array($phones) && $phones && sms_table_exists($pdo, 'sms_suppression')) {
+                $norm = [];
+                foreach (array_slice($phones, 0, SMS_MAX_CAMPAIGN) as $ph) { if (($n = sms_normalize_phone(is_scalar($ph) ? $ph : '')) !== null) $norm[$n] = true; }
+                foreach (array_chunk(array_keys($norm), 500) as $chunk) {
+                    $st = $pdo->prepare("SELECT phone FROM sms_suppression WHERE released_at IS NULL AND phone IN (" . sms_in($chunk) . ")");
+                    $st->execute($chunk);
+                    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $ph) $suppressed[] = $ph;
+                }
+            }
             sms_json(['status'=>'success', 'ok'=>$b['ok'], 'balance'=>$b['balance'], 'error'=>$b['error'],
-                      'unit_price'=>sms_unit_price($settings), 'signature'=>sms_signature($settings)]);
+                      'unit_price'=>sms_unit_price($settings), 'signature'=>sms_signature($settings),
+                      'suppressed'=>count($suppressed), 'suppressed_sample'=>array_slice($suppressed, 0, 5)]);
 
         /* ================================================================
          * SETTINGS — list the account's approved sender IDs
@@ -903,6 +916,10 @@ try {
             if ($row['status'] === 'queued') sms_fail('This message is being handed to BulkSMS right now. Wait for its result before resending.');
             if ($row['status'] === 'unknown' && empty($_POST['confirm_unknown'])) {
                 sms_json(['status'=>'confirm','message'=>'We never learned whether this message went out. Check the BulkSMS dashboard first — resending may give this person the same message twice. Resend anyway?']);
+            }
+            if (in_array($row['status'], ['sent', 'pending'], true) && empty($_POST['confirm_unknown'])) {
+                sms_json(['status'=>'confirm','message'=>'BulkSMS already accepted this message' . ($row['message_id'] ? ' (ID ' . $row['message_id'] . ')' : '')
+                    . '; only the carrier\'s delivery report is still missing. Resending sends — and bills — it again. Use "Check delivery now" first. Resend anyway?']);
             }
             $name = sms_clean_name($row['recipient_name']);
             $recipient = [

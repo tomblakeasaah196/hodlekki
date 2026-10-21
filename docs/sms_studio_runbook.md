@@ -41,6 +41,7 @@ Proof that it works, in this order:
 | Studio agrees | SMS Studio status bar | green **Background sender running · Ns ago** |
 | Migrations applied | `/usr/local/bin/ea-php83 db/migrate.php --status \| tail -n 8` | `Pending: (none)` |
 | Errors | `tail -n 40 includes/error_log` | nothing from today |
+| Table shapes (once) | `mysql -u DB_USER -p DB_NAME -e "SHOW CREATE TABLE sms_log\G SHOW CREATE TABLE sms_queue\G SELECT @@sql_mode;"` (values from `.env`) | `body`, `raw_response`, `error_message` are TEXT; `message_id` VARCHAR(128); `api_code` VARCHAR(32); `sms_queue` has `log_id` and `attempts` |
 
 The Studio tells three states apart: **stopped** (the job is not firing:
 cPanel → Cron Jobs), **fires but does not finish · reason** (the job runs but
@@ -67,7 +68,7 @@ and `/home/smartqaq/sms_worker.log`), and **running**.
 
 ## 4. Before the campaign
 
-1. **Suppression tab**: review the list. Numbers there get nothing (₦0). Release anyone who should receive this send.
+1. **Suppression tab**: review the list. Numbers there get nothing (₦0). Release anyone who should receive this send. The confirm dialog also counts how many of the selected numbers are suppressed. A number is suppressed automatically after three carrier failures in a row, and a DND refusal on the default route counts as one, so people blocked only by DND end up here over time.
 2. **Campaigns tab**: nothing should be *Queued* or *Sending* from earlier — the worker sends in id order, so old rows go out first and spend the wallet.
 3. **Audience**: pick it, *Select shown*, and read the info line: valid numbers, invalid left out, shared numbers merged, numbers left out (opted out / marked invalid).
 4. **Message**: keep the rendered text (with the `HODLEKKI: ` prefix, which the preview shows) under 160 GSM-7 characters for one page. The counter warns when the prefix pushes someone onto a second page. The naira sign `₦`, emoji and a few symbols switch a text to Unicode (70 characters per page, about three times the bill); write `NGN` or `N` instead.
@@ -88,5 +89,6 @@ and `/home/smartqaq/sms_worker.log`), and **running**.
 ## 7. After the send
 
 - History → filter **Failed**: a DND-active number on the default route shows as failed and its unit is refunded by BulkSMS (the Studio shows the cost at submission; the wallet is the authoritative figure). Those people can only be reached through the corporate route.
-- *Resend* on a single message is allowed for failed and unknown rows; an *Outcome unknown* row asks for confirmation because the message may already have gone out.
+- *Resend* on a single message is for failed rows. A *Submitted · awaiting report* row was already accepted by BulkSMS (its ID is in the row): resending it sends and bills it again, so the Studio asks first; use *Check delivery now* instead. An *Outcome unknown* row asks for confirmation because the message may already have gone out.
+- If the worker ever shows **Paused: BulkSMS refused N messages in a row**, the cause is systemic (API token, sender ID, account standing). Fix it in Settings or on the BulkSMS account; the held-back rows are tried again every five minutes on their own.
 - After three carrier failures in a row a number is auto-suppressed; check the Suppression tab after a large send and release numbers that were only DND-blocked if the corporate route becomes available.

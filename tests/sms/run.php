@@ -93,6 +93,11 @@ is_same('data.balance number',               100.0,   sms_parse_balance(['data' 
 is_same('naira sign stripped',               12.5,    sms_parse_balance(['balance' => '₦12.50']));
 is_same('nothing there',                     null,    sms_parse_balance(['status' => 'success']));
 is_same('not an array',                      null,    sms_parse_balance('oops'));
+is_same('data.wallet.balance (unseen shape)', 250.5,   sms_parse_balance(['status' => 'success', 'data' => ['wallet' => ['balance' => '250.50', 'currency' => 'NGN']]]));
+is_same('wallet_balance key',                 99.0,    sms_parse_balance(['data' => ['wallet_balance' => 99]]));
+is_same('NGN prefix stripped',                1200.0,  sms_parse_balance(['balance' => 'NGN 1,200.00']));
+is_same('a boolean is not a balance',         null,    sms_parse_balance(['balance' => true]));
+is_same('too deep is ignored',                null,    sms_parse_balance(['a' => ['b' => ['c' => ['d' => ['balance' => 5]]]]]));
 is_same('700 units at 6.49 need 4543.00',    4543.0,  round(700 * sms_unit_price(['unit_price' => '']), 2));
 // sms_wallet_check needs the network for the balance; the refusal path is exercised
 // without it: no token = cannot read the balance = fail closed, nothing queued.
