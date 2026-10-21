@@ -22,6 +22,15 @@ if (!sms_user_can_send()) {
 if (empty($_SESSION['sms_csrf'])) $_SESSION['sms_csrf'] = bin2hex(random_bytes(32));
 $SMS_CSRF = $_SESSION['sms_csrf'];
 $SMS_STATUSES = ['Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer', 'Member', 'Worker', 'Pastor', 'Non_Member'];
+
+// Assimilation lists show who has been absent, so only Assimilation managers get them.
+require_once __DIR__ . '/../../includes/assimilation_helpers.php';
+$CAN_ASSIM = assim_is_manager($pdo, (int)$_SESSION['user_id'], (string)($_SESSION['active_role'] ?? ''));
+$ASSIM_DEPTS = $ASSIM_REGIONS = [];
+if ($CAN_ASSIM) {
+    $ASSIM_DEPTS   = $pdo->query("SELECT id, name FROM departments ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+    $ASSIM_REGIONS = $pdo->query("SELECT id, name FROM regions ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+}
 ?>
 <style>
   .sms-scroll::-webkit-scrollbar{ width:8px; height:8px; }
@@ -92,6 +101,12 @@ $SMS_STATUSES = ['Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer', 'Member', 'Wo
             <input type="radio" name="audience" value="everyone" class="w-4 h-4 text-hodBlue">
             <div><p class="font-bold text-gray-800 text-sm">Everyone (All Sources)</p><p class="text-xs text-gray-500">Every person who has ever visited, registered or attended: congregation, registrations, check-ins, Special Events, Academy, IDI and Reach. No status filter, one message per phone number.</p></div>
           </label>
+          <?php if ($CAN_ASSIM): ?>
+          <label class="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:border-hodBlue/40">
+            <input type="radio" name="audience" value="assimilation" class="w-4 h-4 text-hodBlue">
+            <div><p class="font-bold text-gray-800 text-sm">Assimilation List (Build One)</p><p class="text-xs text-gray-500">People who have drifted, e.g. fewer than 4 services in 4 months. Built with the Assimilation wizard; each message is noted on their Assimilation record.</p></div>
+          </label>
+          <?php endif; ?>
         </div>
 
         <div id="userFilters" class="mb-4">
@@ -126,6 +141,18 @@ $SMS_STATUSES = ['Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer', 'Member', 'Wo
             <option value="">-- Every event --</option>
           </select>
         </div>
+
+        <?php if ($CAN_ASSIM): ?>
+        <div id="assimFilters" class="hidden mb-4">
+          <div class="flex flex-col sm:flex-row sm:items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3">
+            <div class="flex-1 min-w-0">
+              <p class="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Assimilation list</p>
+              <p id="assimSummary" class="text-sm font-semibold text-gray-800 mt-0.5">No list yet. Build one to see who it catches.</p>
+            </div>
+            <button type="button" id="btnAssimBuild" class="shrink-0 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-colors">Build the list</button>
+          </div>
+        </div>
+        <?php endif; ?>
 
         <div class="flex gap-2 mb-2">
           <div class="relative flex-1">
@@ -405,6 +432,109 @@ $SMS_STATUSES = ['Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer', 'Member', 'Wo
   <div id="drawerBody" class="flex-1 overflow-y-auto sms-scroll p-5 space-y-5"></div>
 </aside>
 
+<?php if ($CAN_ASSIM): ?>
+<!-- ==================== ASSIMILATION LIST WIZARD ==================== -->
+<div id="assimWizard" class="fixed inset-0 hidden z-[9998] items-stretch md:items-center justify-center bg-gray-900/60 backdrop-blur-sm md:p-4" role="dialog" aria-modal="true" aria-labelledby="awTitle">
+  <div class="bg-white w-full h-full md:h-auto md:max-h-[92vh] md:max-w-xl md:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-3 shrink-0">
+      <div class="flex-1 min-w-0">
+        <p class="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Assimilation list · <span id="awStepNum">1/4</span></p>
+        <h3 id="awTitle" class="font-bold text-gray-900">How long have they been away?</h3>
+      </div>
+      <button type="button" data-close="assimWizard" aria-label="Close the list builder" class="text-gray-400 hover:text-red-500 text-2xl leading-none px-2">&times;</button>
+    </div>
+    <div class="flex-1 overflow-y-auto sms-scroll px-5 py-5">
+
+      <!-- STEP 1 — how long away -->
+      <section data-astep="0" class="aw-step space-y-2" role="radiogroup" aria-label="How long away">
+        <button type="button" data-away="nos" class="aw-away w-full text-left border-2 border-gray-100 rounded-2xl px-4 py-3 hover:border-emerald-200"><span class="block font-bold text-gray-900 text-sm">Just missed a few Sundays</span><span class="block text-xs text-gray-500">Fewer than 1 service in the past month</span></button>
+        <button type="button" data-away="slip" class="aw-away w-full text-left border-2 border-gray-100 rounded-2xl px-4 py-3 hover:border-emerald-200"><span class="block font-bold text-gray-900 text-sm">Slipping away</span><span class="block text-xs text-gray-500">Fewer than 3 services in the past 2 months</span></button>
+        <button type="button" data-away="gone" class="aw-away w-full text-left border-2 border-gray-100 rounded-2xl px-4 py-3 hover:border-emerald-200"><span class="block font-bold text-gray-900 text-sm">Gone a while</span><span class="block text-xs text-gray-500">Fewer than 5 services in the past 3 months</span></button>
+        <button type="button" data-away="custom" class="aw-away w-full text-left border-2 border-gray-100 rounded-2xl px-4 py-3 hover:border-emerald-200"><span class="block font-bold text-gray-900 text-sm">Set my own</span><span class="block text-xs text-gray-500">e.g. fewer than 4 services in 4 months</span></button>
+        <div id="awCustom" class="hidden bg-gray-50 border border-gray-100 rounded-2xl p-4">
+          <div class="flex flex-wrap items-center justify-center gap-2 text-sm font-semibold text-gray-700">
+            <span>Fewer than</span>
+            <span class="inline-flex items-center gap-1">
+              <button type="button" class="aw-step-btn w-9 h-9 rounded-xl bg-white border border-gray-200 font-bold" data-field="max" data-delta="-1" aria-label="Fewer services">&minus;</button>
+              <span id="awMax" class="w-9 text-center font-bold text-lg text-emerald-800">4</span>
+              <button type="button" class="aw-step-btn w-9 h-9 rounded-xl bg-white border border-gray-200 font-bold" data-field="max" data-delta="1" aria-label="More services">+</button>
+            </span>
+            <span>services in the past</span>
+            <span class="inline-flex items-center gap-1">
+              <button type="button" class="aw-step-btn w-9 h-9 rounded-xl bg-white border border-gray-200 font-bold" data-field="win" data-delta="-1" aria-label="Shorter window">&minus;</button>
+              <span id="awWin" class="w-9 text-center font-bold text-lg text-emerald-800">4</span>
+              <button type="button" class="aw-step-btn w-9 h-9 rounded-xl bg-white border border-gray-200 font-bold" data-field="win" data-delta="1" aria-label="Longer window">+</button>
+            </span>
+            <select id="awUnit" aria-label="Window unit" class="px-3 py-2 border border-gray-200 rounded-xl font-bold bg-white outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="days">days</option><option value="weeks">weeks</option><option value="months" selected>months</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 2 — who -->
+      <section data-astep="1" class="aw-step hidden space-y-3">
+        <button type="button" id="awEveryone" class="w-full text-left border-2 border-gray-100 rounded-2xl px-4 py-3 hover:border-emerald-200"><span class="block font-bold text-gray-900 text-sm">Everyone in the house</span><span class="block text-xs text-gray-500">First-timers to pastors, nobody filtered out</span></button>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <?php foreach (ASSIM_SPIRITUAL_STATUSES as $s): ?>
+          <button type="button" class="aw-status border-2 border-gray-100 rounded-xl px-3 py-2.5 text-xs font-bold text-gray-700 hover:border-emerald-200" data-status="<?= htmlspecialchars($s) ?>" aria-pressed="false"><?= htmlspecialchars(str_replace('_', ' ', $s)) ?></button>
+          <?php endforeach; ?>
+        </div>
+      </section>
+
+      <!-- STEP 3 — fine tune -->
+      <section data-astep="2" class="aw-step hidden space-y-4">
+        <p class="text-xs text-gray-500">All optional. Skip ahead if it already feels right.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Department
+            <select id="awDept" class="mt-1.5 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white normal-case tracking-normal outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="0">Any department</option>
+              <?php foreach ($ASSIM_DEPTS as $d): ?><option value="<?= (int)$d['id'] ?>"><?= htmlspecialchars($d['name']) ?></option><?php endforeach; ?>
+            </select>
+          </label>
+          <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Region
+            <select id="awRegion" class="mt-1.5 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white normal-case tracking-normal outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="0">Any region</option>
+              <?php foreach ($ASSIM_REGIONS as $r): ?><option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['name']) ?></option><?php endforeach; ?>
+            </select>
+          </label>
+          <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Gender
+            <select id="awGender" class="mt-1.5 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white normal-case tracking-normal outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="">Anyone</option><option value="Male">Male</option><option value="Female">Female</option>
+            </select>
+          </label>
+          <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Age
+            <select id="awAge" class="mt-1.5 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white normal-case tracking-normal outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="">Any age</option>
+              <?php foreach (array_keys(ASSIM_AGE_BANDS) as $b): ?><option value="<?= htmlspecialchars($b) ?>"><?= htmlspecialchars($b) ?></option><?php endforeach; ?>
+            </select>
+          </label>
+        </div>
+        <label class="flex items-center justify-between gap-3 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 cursor-pointer">
+          <span class="text-sm font-semibold text-gray-700">Only people who have attended before</span>
+          <input type="checkbox" id="awEver" checked class="w-5 h-5 rounded text-emerald-600">
+        </label>
+      </section>
+
+      <!-- STEP 4 — review -->
+      <section data-astep="3" class="aw-step hidden space-y-4">
+        <div class="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 text-center" aria-live="polite">
+          <p id="awCount" class="font-bold text-4xl text-emerald-800 leading-none">…</p>
+          <p class="text-xs font-bold text-emerald-700/80 uppercase tracking-wider mt-2">people we can text</p>
+        </div>
+        <p id="awSummaryLine" class="text-sm font-semibold text-gray-800 text-center"></p>
+        <ul id="awBreakdown" class="text-xs text-gray-600 space-y-1"></ul>
+        <p class="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">Each message is kept on the person&rsquo;s Assimilation record as a system note (their last 2 SMS), so whoever calls them next knows what they were told.</p>
+      </section>
+    </div>
+    <div class="px-5 py-4 border-t border-gray-100 bg-gray-50 flex gap-2 justify-between shrink-0">
+      <button type="button" id="awBack" class="invisible px-4 py-2.5 rounded-xl text-sm font-bold bg-white border border-gray-200 text-gray-700">Back</button>
+      <button type="button" id="awNext" class="px-5 py-2.5 rounded-xl text-sm font-bold bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-50">Continue</button>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
 <!-- Busy overlay (short actions) -->
 <div id="busyOverlay" class="fixed inset-0 hidden z-[9999] items-center justify-center bg-gray-900/30 backdrop-blur-sm">
   <div class="bg-white px-6 py-5 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-bold text-gray-700">
@@ -584,6 +714,7 @@ function currentEventId(){
 }
 function onAudienceChange(){
   const aud = currentAudience();
+  $('#assimFilters').toggleClass('hidden', aud!=='assimilation');
   $('#userFilters').toggleClass('hidden', aud!=='users');
   $('#regFilters').toggleClass('hidden', aud!=='registrations');
   $('#checkinFilters').toggleClass('hidden', aud!=='checkins');
@@ -593,11 +724,93 @@ function onAudienceChange(){
 $(document).on('change','input[name="audience"], input[name="regscope"], .status-chip, .event-select', onAudienceChange);
 $('#contactSearch').on('input', function(){ clearTimeout(fetchTimer); fetchTimer = setTimeout(fetchRecipients, 400); });
 
+/* ================================================================
+   ASSIMILATION LIST WIZARD — the same rule as Assimilation's Build a List
+================================================================ */
+const AW_AWAY = { nos:{max:1, win:1, unit:'months'}, slip:{max:3, win:2, unit:'months'}, gone:{max:5, win:3, unit:'months'} };
+const AW_TITLES = ['How long have they been away?', 'Who should be on it?', 'Fine-tune, if you like', 'Here is your list'];
+let assimRule = null;       // the rule in use; null until a list is built
+let assimSummary = '';
+const aw = { step:0, away:'slip', custom:{max:4, win:4, unit:'months'}, who:new Set(), countSeq:0, summary:'' };
+
+function awRule(){
+  const a = aw.away==='custom' ? aw.custom : AW_AWAY[aw.away];
+  return { max_services:a.max, window_value:a.win, window_unit:a.unit, spiritual_status:[...aw.who],
+    department_id:+$('#awDept').val()||0, region_id:+$('#awRegion').val()||0,
+    gender:$('#awGender').val()||'', age_band:$('#awAge').val()||'', ever_attended:$('#awEver').is(':checked') ? 1 : 0 };
+}
+function awPaint(){
+  const on = 'border-emerald-600 bg-emerald-50', off = 'border-gray-100';
+  $('.aw-away').each(function(){ const sel = this.dataset.away===aw.away; $(this).toggleClass(on, sel).toggleClass(off, !sel).attr('aria-checked', sel); });
+  $('#awCustom').toggleClass('hidden', aw.away!=='custom');
+  $('#awMax').text(aw.custom.max); $('#awWin').text(aw.custom.win); $('#awUnit').val(aw.custom.unit);
+  $('#awEveryone').toggleClass(on, !aw.who.size).toggleClass(off, !!aw.who.size).attr('aria-pressed', !aw.who.size);
+  $('.aw-status').each(function(){ const sel = aw.who.has(this.dataset.status); $(this).toggleClass(on, sel).toggleClass(off, !sel).attr('aria-pressed', sel); });
+}
+function awShow(step){
+  aw.step = Math.max(0, Math.min(3, step));
+  $('.aw-step').each(function(){ $(this).toggleClass('hidden', +this.dataset.astep!==aw.step); });
+  $('#awTitle').text(AW_TITLES[aw.step]);
+  $('#awStepNum').text((aw.step+1) + '/4');
+  $('#awBack').toggleClass('invisible', aw.step===0);
+  $('#awNext').text(aw.step===3 ? 'Use this list' : 'Continue').prop('disabled', false);
+  if (aw.step===3) awCount();
+}
+function awCount(){
+  const seq = ++aw.countSeq;
+  $('#awCount').text('…'); $('#awSummaryLine').text(''); $('#awBreakdown').empty(); $('#awNext').prop('disabled', true);
+  api('assim_count', { rule: JSON.stringify(awRule()) }, function(res){
+    if (seq!==aw.countSeq) return;
+    if (res.status!=='success'){ $('#awCount').text('—'); $('#awSummaryLine').text(res.message||'Could not count this list.'); return; }
+    const d = res.data;
+    aw.summary = d.summary || '';
+    $('#awCount').text(d.reachable);
+    $('#awSummaryLine').text(aw.summary.charAt(0).toUpperCase() + aw.summary.slice(1));
+    const rows = [];
+    if (d.no_phone) rows.push(`${d.no_phone} on the list have no phone number`);
+    if (d.invalid) rows.push(`${d.invalid} have a phone number that is not a valid Nigerian mobile`);
+    if (d.excluded) rows.push(`${d.excluded} left out: a follow-up recorded "no contact" or "not interested"`);
+    if (d.shared) rows.push(`${d.shared} share a number with someone else on the list (one message each)`);
+    $('#awBreakdown').html(rows.map(t=>`<li>• ${esc(t)}</li>`).join(''));
+    $('#awNext').prop('disabled', !d.reachable);
+  });
+}
+function openAssimWizard(){ awPaint(); awShow(0); openModal('assimWizard'); }
+$(document).on('click', '.aw-away', function(){ aw.away = this.dataset.away; awPaint(); });
+$(document).on('click', '.aw-step-btn', function(){
+  const f = this.dataset.field, lim = f==='max' ? [1, 200] : [1, 104];
+  aw.custom[f] = Math.max(lim[0], Math.min(lim[1], aw.custom[f] + (+this.dataset.delta)));
+  awPaint();
+});
+$(document).on('change', '#awUnit', function(){ aw.custom.unit = this.value; });
+$(document).on('click', '#awEveryone', function(){ aw.who.clear(); awPaint(); });
+$(document).on('click', '.aw-status', function(){ const s = this.dataset.status; if (aw.who.has(s)) aw.who.delete(s); else aw.who.add(s); awPaint(); });
+$(document).on('click', '#awBack', function(){ awShow(aw.step - 1); });
+$(document).on('click', '#awNext', function(){
+  if (aw.step < 3) { awShow(aw.step + 1); return; }
+  assimRule = awRule(); assimSummary = aw.summary;
+  closeModal('assimWizard');
+  $('#assimSummary').text(assimSummary.charAt(0).toUpperCase() + assimSummary.slice(1));
+  $('#btnAssimBuild').text('Change the list');
+  fetchRecipients();
+});
+$(document).on('click', '#btnAssimBuild', openAssimWizard);
+$(document).on('change', 'input[name="audience"]', function(){ if (this.value==='assimilation' && !assimRule) openAssimWizard(); });
+
 let recipXhr = null;
 function fetchRecipients(){
   const aud = currentAudience();
   const data = { audience:aud, search:$('#contactSearch').val()||'', event_id: currentEventId() };
   if (aud==='users') data.statuses = currentStatuses();
+  if (aud==='assimilation') {
+    if (!assimRule) {
+      if (recipXhr) recipXhr.abort();
+      recipients = []; $('#audienceInfo').text('');
+      $('#contactList').html('<div class="p-6 text-center text-gray-400 text-sm">Build an Assimilation list to see who it catches.</div>');
+      return;
+    }
+    data.rule = JSON.stringify(assimRule);
+  }
   $('#contactList').html('<div class="p-6 text-center text-gray-400 text-sm">Loading…</div>');
   if (recipXhr) recipXhr.abort();
   recipXhr = api('fetch_recipients', data, function(res){
@@ -606,7 +819,10 @@ function fetchRecipients(){
     let info = `${res.count} contact(s) with a valid Nigerian mobile number.`;
     if (res.invalid_count) info += ` ${res.invalid_count} invalid number(s) left out.`;
     if (res.shared_phones) info += ` ${res.shared_phones} shared number(s) merged into one message each.`;
-    if (res.excluded_count) info += ` ${res.excluded_count} number(s) left out because they opted out or are marked invalid.`;
+    if (res.excluded_count) info += aud==='assimilation'
+      ? ` ${res.excluded_count} person(s) left out because a follow-up recorded "no contact" or "not interested".`
+      : ` ${res.excluded_count} number(s) left out because they opted out or are marked invalid.`;
+    if (res.no_phone_count) info += ` ${res.no_phone_count} person(s) on the list have no phone number.`;
     if (res.truncated) info += ` Showing the first ${res.cap} — narrow the filter to reach the rest.`;
     $('#audienceInfo').html(res.truncated ? `<span class="text-amber-700 font-bold">${esc(info)}</span>` : esc(info));
     renderContactList();
@@ -617,7 +833,9 @@ function renderContactList(){
   let html = '';
   recipients.forEach((r,i)=>{
     const on = selected.has(r.phone);
-    const sub = r.sources ? r.sources.join(' · ') : r.source==='checkin' ? 'Check-in · ' + (r.blessing_ref||'no verse') : (r.source==='user' ? (r.status_label ? r.status_label.replace(/_/g,' ') : 'Congregation') : (r.event_title||'Registration'));
+    const sub = r.sources ? r.sources.join(' · ')
+      : r.since_words ? [(r.status_label||'').replace(/_/g,' '), r.since_words==='never recorded' ? 'No attendance on record' : 'Last seen ' + r.since_words].filter(Boolean).join(' · ')
+      : r.source==='checkin' ? 'Check-in · ' + (r.blessing_ref||'no verse') : (r.source==='user' ? (r.status_label ? r.status_label.replace(/_/g,' ') : 'Congregation') : (r.event_title||'Registration'));
     html += `<label class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-blue-50/40" data-row="${i}">
       <input type="checkbox" class="contact-cb w-4 h-4 rounded text-hodBlue" data-i="${i}" ${on?'checked':''}>
       <div class="flex-1 min-w-0">
@@ -795,7 +1013,7 @@ $('#btnConfirmSend').on('click', function(){
   api('send_campaign', {
     template: tpl, audience: currentAudience(), recipients: JSON.stringify(arr),
     title: $('#campaignTitle').val().trim(), event_id: currentEventId(), client_token: composeToken,
-    filters: JSON.stringify({ audience: currentAudience(), statuses: currentStatuses(), event_id: currentEventId(), search: $('#contactSearch').val()||'' })
+    filters: JSON.stringify({ audience: currentAudience(), statuses: currentStatuses(), event_id: currentEventId(), search: $('#contactSearch').val()||'', rule: currentAudience()==='assimilation' ? assimRule : undefined })
   }, function(res){
     $b.prop('disabled', false).text('Yes, send it');
     if (res.status !== 'success'){ toast(res.message, 'error'); return; }
@@ -1218,7 +1436,7 @@ $('#settingsForm').on('submit', function(e){
 $(function(){
   // <main> is animated with a transform and z-0, which traps position:fixed children
   // under the app header. Lift the drawer and modals out to <body>.
-  $('#drawerOverlay, #smsDrawer, #confirmModal, #busyOverlay').appendTo('body');
+  $('#drawerOverlay, #smsDrawer, #confirmModal, #busyOverlay, #assimWizard').appendTo('body');
   api('fetch_events', {}, function(res){
     if (res.status!=='success' || !res.data) return;
     const opts = res.data.map(e=>`<option value="${+e.id}">${esc(e.title)}${e.date_label?' · '+esc(e.date_label):''}</option>`).join('');
