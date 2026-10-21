@@ -944,6 +944,7 @@ function sms_send_one($pdo, array $settings, array $recipient, $template, $campa
         $errMsg = sms_api_error($res);
     }
     $messageId = $messageId !== null ? sms_cut((string)$messageId, 128) : null;
+    $apiCode = ($apiCode !== null && is_scalar($apiCode) && (string)$apiCode !== '') ? sms_cut((string)$apiCode, 32) : null;   // VARCHAR(32)
     $cost = is_numeric($cost) ? (float)$cost : null;
     $units = is_numeric($units) ? (int)$units : null;
 
@@ -964,8 +965,9 @@ function sms_send_one($pdo, array $settings, array $recipient, $template, $campa
     $detail = $status === 'sent'
         ? 'Accepted by BulkSMS' . ($messageId ? ' · message ID ' . $messageId : '') . ($cost !== null ? ' · ₦' . $cost : '') . ' · route ' . $gatewayUsed
         : $errMsg;
+    $rawMsg = is_array($res['data']) ? ($res['data']['message'] ?? '') : '';
     sms_log_event($pdo, $logId, $ready ? 'queued' : null, $status, 'bulksms', [
-        'raw' => is_array($res['data']) ? (string)($res['data']['message'] ?? '') : '',
+        'raw' => is_scalar($rawMsg) ? (string)$rawMsg : json_encode($rawMsg),
         'code' => $apiCode, 'detail' => $detail, 'user_id' => $userId,
     ]);
     return ['status'=>$status, 'phone'=>$phone, 'message_id'=>$messageId, 'error'=>$errMsg, 'cost'=>$cost, 'log_id'=>$logId];
@@ -996,8 +998,9 @@ function sms_apply_dlr(PDO $pdo, array $row, $rawStatus, $source, array $x = [])
 
     $note = $mapped === 'delivered' ? null : sms_cut($raw, 191);
     if ($allowed) {
+        $code = isset($x['code']) && is_scalar($x['code']) && (string)$x['code'] !== '' ? sms_cut((string)$x['code'], 32) : null;
         $pdo->prepare("UPDATE sms_log SET status = ?, api_code = COALESCE(?, api_code), error_message = ?, updated_at = NOW() WHERE id = ?")
-            ->execute([$mapped, $x['code'] ?? null, $note, $row['id']]);
+            ->execute([$mapped, $code, $note, $row['id']]);
         sms_log_event($pdo, $row['id'], $current, $mapped, $source, [
             'raw' => $raw, 'code' => $x['code'] ?? null, 'provider_time' => $x['provider_time'] ?? null,
             'detail' => $x['detail'] ?? null, 'user_id' => $x['user_id'] ?? null,
@@ -1055,12 +1058,12 @@ function sms_extract_reports($data) {
  * Ask BulkSMS for the delivery report of one sent message and apply it.
  * Returns ['ok'=>bool, 'status'=>current status, 'raw'=>carrier words|null, 'changed'=>bool, 'error'=>string|null]
  */
-function sms_poll_delivery(PDO $pdo, array $settings, array $row, $source = 'poll', $userId = null) {
+function sms_poll_delivery(PDO $pdo, array $settings, array $row, $source = 'poll', $userId = null, $allowRetry = true) {
     $out = ['ok'=>false, 'status'=>$row['status'], 'raw'=>null, 'changed'=>false, 'error'=>null];
     if (empty($row['message_id'])) { $out['error'] = 'This message has no BulkSMS message ID, so there is no delivery report to fetch.'; return $out; }
     if (empty($settings['api_token'])) { $out['error'] = 'BulkSMS is not configured.'; return $out; }
 
-    $res = sms_http('GET', sms_base_url($settings) . '/delivery-reports?message_id=' . urlencode($row['message_id']), $settings['api_token']);
+    $res = sms_http('GET', sms_base_url($settings) . '/delivery-reports?message_id=' . urlencode($row['message_id']), $settings['api_token'], null, 0, $allowRetry);
     if (sms_column_exists($pdo, 'sms_log', 'dlr_checked_at')) {
         $pdo->prepare("UPDATE sms_log SET dlr_checked_at = NOW() WHERE id = ?")->execute([$row['id']]);
     }
@@ -1112,9 +1115,15 @@ function sms_process_queue(PDO $pdo, $budget = 50, $runSource = 'cron') {
     $start = microtime(true);
     $out = ['ran'=>false, 'locked'=>false, 'sent'=>0, 'failed'=>0, 'blocked'=>0, 'unknown'=>0,
             'recovered'=>0, 'polled'=>0, 'expired'=>0, 'remaining'=>0, 'message'=>''];
-    if ((int)$pdo->query("SELECT GET_LOCK('" . SMS_WORKER_LOCK . "', 0)")->fetchColumn() !== 1) {
+    // The cron waits a few seconds: while the Studio page is driving the queue
+    // (25 s runs with short gaps) a zero wait lost every minute, the cron never
+    // stamped its heartbeat, and the page kept driving. The wait counts against
+    // the budget, so a run still ends within $budget seconds of its start.
+    $wait = $runSource === 'cron' ? 10 : 0;
+    if ((int)$pdo->query("SELECT GET_LOCK('" . SMS_WORKER_LOCK . "', " . (int)$wait . ")")->fetchColumn() !== 1) {
         $out['locked'] = true;
         $out['message'] = 'Another send run is already in progress.';
+        if ($runSource === 'cron') sms_worker_note($pdo, 'Skipped: another run (the Studio page, or the previous minute) still held the lock.');
         return $out;
     }
     try {
@@ -1305,17 +1314,29 @@ function sms_poll_due(PDO $pdo, array $settings, callable $timeLeft) {
         ORDER BY created_at DESC LIMIT " . (int)SMS_POLLS_PER_RUN)->fetchAll(PDO::FETCH_ASSOC);
     $n = 0;
     foreach ($rows as $row) {
-        if ($timeLeft() <= 3) break;
-        sms_poll_delivery($pdo, $settings, $row, 'poll');
+        // One look-up can take up to a 30 s transport timeout, so keep real
+        // headroom: a run that overran into the next minute made that minute
+        // exit on the lock and the status bar call the worker "stopped".
+        if ($timeLeft() <= 12) break;
+        try {
+            sms_poll_delivery($pdo, $settings, $row, 'poll', null, false);   // no transport retries: the next run asks again
+        } catch (Throwable $e) {
+            error_log('SMS poll: log ' . $row['id'] . ': ' . $e->getMessage());   // one bad row must not end the run before the heartbeat
+        }
         $n++;
         usleep(500000);   // stay well inside the 120 requests/minute limit
     }
     return $n;
 }
 
-function sms_worker_heartbeat(PDO $pdo, $runSource, array $out) {
+/**
+ * $completed = false records what a cron run did (or the error that stopped it)
+ * without advancing last_cron_at, so the status bar does not call a failing
+ * worker "running".
+ */
+function sms_worker_heartbeat(PDO $pdo, $runSource, array $out, $completed = true) {
     if (!sms_table_exists($pdo, 'sms_worker_heartbeat')) return;
-    $isCron = $runSource === 'cron' ? 1 : 0;
+    $isCron = ($runSource === 'cron' && $completed) ? 1 : 0;
     $pdo->prepare("INSERT INTO sms_worker_heartbeat (id, last_run_at, last_cron_at, last_source, last_sent, last_failed, last_polled, last_message)
                    VALUES (1, NOW(), IF(? = 1, NOW(), NULL), ?, ?, ?, ?, ?)
                    ON DUPLICATE KEY UPDATE last_run_at = NOW(), last_cron_at = IF(? = 1, NOW(), last_cron_at),
@@ -1324,12 +1345,41 @@ function sms_worker_heartbeat(PDO $pdo, $runSource, array $out) {
                    $isCron, $runSource, $out['sent'], $out['failed'], $out['polled'], sms_cut($out['message'], 255)]);
 }
 
+/**
+ * "The cron fired": stamped by cron/sms_queue_worker.php before the lock and
+ * before any work, so the Studio can tell a cron that never runs from one that
+ * runs every minute and fails or finds the lock held. Needs the
+ * last_cron_seen_at column (20261021150000_sms_worker_heartbeat_seen.sql).
+ */
+function sms_worker_seen(PDO $pdo) {
+    if (!sms_table_exists($pdo, 'sms_worker_heartbeat') || !sms_column_exists($pdo, 'sms_worker_heartbeat', 'last_cron_seen_at')) return;
+    try {
+        $pdo->exec("INSERT INTO sms_worker_heartbeat (id, last_cron_seen_at) VALUES (1, NOW())
+                    ON DUPLICATE KEY UPDATE last_cron_seen_at = NOW()");
+    } catch (PDOException $e) {
+        error_log('SMS worker: could not stamp last_cron_seen_at: ' . $e->getMessage());
+    }
+}
+
+/** Leave a one-line note for the status bar without touching the run stamps. */
+function sms_worker_note(PDO $pdo, $message) {
+    if (!sms_table_exists($pdo, 'sms_worker_heartbeat')) return;
+    try {
+        $pdo->prepare("INSERT INTO sms_worker_heartbeat (id, last_message) VALUES (1, ?)
+                       ON DUPLICATE KEY UPDATE last_message = VALUES(last_message)")
+            ->execute([sms_cut($message, 255)]);
+    } catch (PDOException $e) {
+        error_log('SMS worker: could not record a note: ' . $e->getMessage());
+    }
+}
+
 /** What the Studio status bar shows: queue depth, cron freshness, webhook + vault health. */
 function sms_health(PDO $pdo) {
     $h = [
         'vault_ok' => sms_vault_ready(), 'configured' => false, 'decrypt_failed' => [],
         'queued' => 0, 'sending' => 0, 'oldest_queued_at' => null,
         'last_run_at' => null, 'last_cron_at' => null, 'cron_age_sec' => null, 'last_message' => null,
+        'last_cron_seen_at' => null, 'cron_seen_age_sec' => null,
         'webhook_secret_set' => sms_webhook_secret() !== '', 'webhook_url_set' => false, 'last_webhook_at' => null,
         'schema_ready' => sms_schema_ready($pdo), 'now' => date('Y-m-d H:i:s'),
     ];
@@ -1349,13 +1399,17 @@ function sms_health(PDO $pdo) {
         $h['oldest_queued_at'] = $pdo->query("SELECT MIN(c.created_at) FROM sms_queue q JOIN sms_campaigns c ON c.id = q.campaign_id WHERE q.status = 'queued'")->fetchColumn() ?: null;
     }
     if (sms_table_exists($pdo, 'sms_worker_heartbeat')) {
-        $hb = $pdo->query("SELECT last_run_at, last_cron_at, last_message, TIMESTAMPDIFF(SECOND, last_cron_at, NOW()) AS cron_age
-                           FROM sms_worker_heartbeat WHERE id = 1")->fetch(PDO::FETCH_ASSOC);
+        $seenCol = sms_column_exists($pdo, 'sms_worker_heartbeat', 'last_cron_seen_at');
+        $hb = $pdo->query("SELECT last_run_at, last_cron_at, last_message, TIMESTAMPDIFF(SECOND, last_cron_at, NOW()) AS cron_age"
+                        . ($seenCol ? ", last_cron_seen_at, TIMESTAMPDIFF(SECOND, last_cron_seen_at, NOW()) AS seen_age" : ", NULL AS last_cron_seen_at, NULL AS seen_age")
+                        . " FROM sms_worker_heartbeat WHERE id = 1")->fetch(PDO::FETCH_ASSOC);
         if ($hb) {
             $h['last_run_at'] = $hb['last_run_at'];
             $h['last_cron_at'] = $hb['last_cron_at'];
             $h['cron_age_sec'] = $hb['cron_age'] !== null ? (int)$hb['cron_age'] : null;
             $h['last_message'] = $hb['last_message'];
+            $h['last_cron_seen_at'] = $hb['last_cron_seen_at'];
+            $h['cron_seen_age_sec'] = $hb['seen_age'] !== null ? (int)$hb['seen_age'] : null;
         }
     }
     if (sms_table_exists($pdo, 'sms_webhook_log')) {

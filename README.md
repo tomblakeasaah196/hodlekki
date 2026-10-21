@@ -185,7 +185,7 @@ GitHub Secrets / Variables), and rollback instructions live in
 
 **Cron (once, in cPanel → Cron Jobs):**
 ```
-* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >/dev/null 2>&1
+* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1
 0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/reach_lost_souls.php >/dev/null 2>&1
 15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/assimilation_watchlists.php >/dev/null 2>&1
 */5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/special_events.php >/dev/null 2>&1
@@ -196,7 +196,11 @@ GitHub Secrets / Variables), and rollback instructions live in
 then fetches delivery reports for messages still awaiting one. Overlapping
 runs are safe (a MySQL named lock lets one run at a time) and a run that
 dies mid-send is recovered without texting anyone twice. SMS Studio's
-status bar turns red when this job has not run for 3 minutes.
+status bar turns red when this job has not completed a run for 3 minutes,
+and says "fires but does not finish" when the job is firing but every run
+fails (the reason is in the status bar, `includes/error_log` and the cron
+log). Keep the `>> /home/smartqaq/sms_worker.log 2>&1` redirect: with
+`>/dev/null` a worker that dies every minute leaves no trace anywhere.
 
 `special_events.php` is the Special Events housekeeper: it creates the
 event reminders that are due (each one exactly once, however often the job

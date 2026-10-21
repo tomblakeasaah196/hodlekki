@@ -391,8 +391,9 @@ $SMS_STATUSES = ['Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer', 'Member', 'Wo
     <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 md:p-7">
       <h3 class="text-lg font-bold text-gray-900 mb-3">Delivery setup checklist</h3>
       <ul id="setupChecklist" class="space-y-2 text-sm"></ul>
-      <p class="text-[11px] text-gray-500 mt-3">Background sender cron (cPanel → Cron Jobs, every minute):</p>
-      <pre class="bg-gray-900 text-green-300 text-[11px] rounded-xl p-3 mt-1 overflow-x-auto sms-scroll">* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >/dev/null 2>&1</pre>
+      <p class="text-[11px] text-gray-500 mt-3">Background sender cron (cPanel → Cron Jobs, every minute). Keep its output in a log file — a worker that dies every minute is invisible with <code>&gt;/dev/null</code>:</p>
+      <pre class="bg-gray-900 text-green-300 text-[11px] rounded-xl p-3 mt-1 overflow-x-auto sms-scroll">* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1</pre>
+      <p class="text-[11px] text-gray-500 mt-2">To check it from cPanel → Terminal: <code>tail -n 30 /home/smartqaq/sms_worker.log</code> (one line per minute) and <code>tail -n 50 /home/smartqaq/public_html/hodlc.lpc.cm/includes/error_log</code> (errors).</p>
     </div>
   </section>
 </div>
@@ -566,9 +567,11 @@ function renderHealth(){
   else out += pill('bg-emerald-100 text-emerald-700', '✓ BulkSMS connected');
   if (h.vault_ok) {
     if (h.schema_ready === false) out += pill('bg-amber-100 text-amber-800', '! Database update pending — run db/migrate.php');
-    const age = h.cron_age_sec;
-    if (age == null) out += pill('bg-amber-100 text-amber-800', '! Background sender has never run — add the cron job (see Settings)', 'Until it runs, campaigns are sent while this page is open.');
-    else if (age > 180) out += pill('bg-red-100 text-red-700', '✕ Background sender stopped · last run ' + secsLabel(age), 'Campaigns are sent while this page is open until the cron job is fixed.');
+    const age = h.cron_age_sec, seen = h.cron_seen_age_sec;
+    const firing = seen != null && seen <= 180;   // the cron job itself is firing (stamped before any work)
+    if (age == null && !firing) out += pill('bg-amber-100 text-amber-800', '! Background sender has never run — add the cron job (see Settings)', 'Until it runs, campaigns are sent while this page is open.');
+    else if ((age == null || age > 180) && firing) out += pill('bg-red-100 text-red-700', '✕ Background sender fires but does not finish · last try ' + secsLabel(seen) + (h.last_message ? ' · ' + esc(h.last_message) : ''), 'The cron job runs every minute but each run fails or finds another run holding the lock. Read includes/error_log and the cron log file. Campaigns are sent while this page is open meanwhile.');
+    else if (age == null || age > 180) out += pill('bg-red-100 text-red-700', '✕ Background sender stopped · last run ' + secsLabel(age), 'The cron job is not firing at all (cPanel → Cron Jobs). Campaigns are sent while this page is open until it is fixed.');
     else out += pill('bg-emerald-100 text-emerald-700', '✓ Background sender running · ' + secsLabel(age));
     if (h.queued > 0) {
       out += pill('bg-sky-100 text-sky-700', `${h.queued} message(s) waiting to send` + (h.oldest_queued_at_t ? ' · since ' + esc(h.oldest_queued_at_t.label) : ''));
@@ -1212,7 +1215,8 @@ function renderChecklist(){
     item(h.configured && !(h.decrypt_failed||[]).length, 'BulkSMS token and sender ID saved', 'Unlock above and save the API token and an approved sender ID.') +
     item(!!h.signature, 'Sender name written at the start of every message' + (h.signature ? ' (“' + esc(String(h.signature).trim()) + '”)' : ''), 'Unlock above and set “Sender name in the text” back to the default.') +
     item(h.schema_ready, 'Database is up to date', 'Run php db/migrate.php (the deploy does this automatically).') +
-    item(h.cron_age_sec != null && h.cron_age_sec <= 180, 'Background sender cron is running' + (h.cron_age_sec!=null ? ' (last run ' + secsLabel(h.cron_age_sec) + ')' : ''), 'Add the cron line below in cPanel → Cron Jobs.') +
+    item(h.cron_age_sec != null && h.cron_age_sec <= 180, 'Background sender cron is running' + (h.cron_age_sec!=null ? ' (last run ' + secsLabel(h.cron_age_sec) + ')' : ''),
+      (h.cron_seen_age_sec != null && h.cron_seen_age_sec <= 180) ? 'The cron job fires but its runs do not finish: ' + esc(h.last_message || 'see includes/error_log and the cron log file') : 'Add the cron line below in cPanel → Cron Jobs.') +
     item(h.webhook_secret_set, 'SMS_WEBHOOK_SECRET is set in .env (optional)', 'Add SMS_WEBHOOK_SECRET to .env to receive instant delivery reports.') +
     item(h.webhook_url_set, 'Delivery webhook URL saved (optional)', 'Unlock above and click "Use this site\'s webhook URL". Without it the sender polls BulkSMS instead.')
   );
