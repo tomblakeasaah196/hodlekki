@@ -114,6 +114,8 @@ try {
                     'sender_id'   => $settings['sender_id'] ? substr($settings['sender_id'], 0, 2) . '…' : '',
                     'gateway'     => $settings['gateway'] ?: 'direct-refund (default)',
                     'webhook_url' => $settings['webhook_url'] ? 'set' : 'not set',
+                    'sign_mode'   => sms_signature($settings) !== '' ? 'written at the start of every message ("' . sms_signature($settings) . '…")' : 'not written in the text',
+                    'unit_price'  => '₦' . number_format(sms_unit_price($settings), 2) . ($settings['unit_price'] === '' ? ' (BulkSMS list price — set the price of your route)' : ''),
                 ],
                 'my_phone' => $ME['phone'] ?? '',
             ]);
@@ -162,8 +164,8 @@ try {
             foreach (SMS_KEYS as $k) $vals[$k] = trim((string)($_POST[$k] ?? ''));
             if ($vals['api_token'] === '') sms_fail('API token is required.');
             if ($vals['sender_id'] === '') sms_fail('Sender ID is required.');
-            if (!preg_match('/^[A-Za-z0-9 .&\-]{3,11}$/', $vals['sender_id'])) {
-                sms_fail('Sender ID must be 3–11 letters, numbers or spaces, exactly as approved on BulkSMS.');
+            if (!preg_match('/^[A-Za-z0-9]{3,11}$/', $vals['sender_id'])) {
+                sms_fail('Sender ID must be 3–11 letters or numbers (no spaces), exactly as approved on BulkSMS.');
             }
             // The API token travels as a Bearer header to this URL: never over plain HTTP.
             if ($vals['base_url'] !== '') {
@@ -173,6 +175,10 @@ try {
                 }
             }
             if ($vals['gateway'] !== '' && !in_array($vals['gateway'], SMS_GATEWAYS, true)) sms_fail('Unknown gateway.');
+            if ($vals['sign_mode'] !== '' && !in_array($vals['sign_mode'], SMS_SIGN_MODES, true)) sms_fail('Unknown "sender name in the text" option.');
+            if ($vals['unit_price'] !== '' && (!is_numeric($vals['unit_price']) || (float)$vals['unit_price'] <= 0 || (float)$vals['unit_price'] > 1000)) {
+                sms_fail('Price per SMS unit must be a number of naira, e.g. 6.49.');
+            }
             if ($vals['webhook_url'] !== '') {
                 $u = parse_url($vals['webhook_url']);
                 if (!$u || strtolower($u['scheme'] ?? '') !== 'https' || empty($u['host'])) sms_fail('Webhook URL must start with https://.');
@@ -194,10 +200,32 @@ try {
             if (empty($settings['api_token'])) sms_fail($failed ? 'Stored credentials cannot be decrypted (SMS_VAULT_KEY changed?). Re-enter them.' : 'API token not configured.');
             $res = sms_http('GET', sms_base_url($settings) . '/balance', $settings['api_token']);
             if (!sms_http_ok($res)) sms_fail('Connection failed: ' . sms_api_error($res));
-            $d = $res['data'];
-            $bal = $d['balance']['total_balance'] ?? ($d['data']['balance'] ?? ($d['data']['total_balance'] ?? ($d['balance'] ?? null)));
-            if (is_array($bal)) $bal = $bal['total_balance'] ?? ($bal['amount'] ?? null);
-            sms_json(['status'=>'success','message'=>'Connection OK.' . (is_numeric($bal) ? ' Balance: ₦' . number_format((float)$bal, 2) : ' (balance not returned)'),'balance'=>$bal]);
+            $bal = sms_parse_balance($res['data']);
+            sms_json(['status'=>'success','message'=>'Connection OK.' . ($bal !== null ? ' Balance: ₦' . number_format($bal, 2) : ' (balance not returned)'),'balance'=>$bal]);
+
+        /* ================================================================
+         * WALLET — balance, price per unit and the sender name, for the
+         * confirm dialog (the server repeats the check in send_campaign)
+         * ================================================================ */
+        case 'wallet':
+            $settings = sms_load_settings($pdo);
+            if (empty($settings['api_token'])) sms_fail('BulkSMS not configured.');
+            $b = sms_fetch_balance($settings);
+            // Which of the selected numbers the suppression list would skip (₦0), so the owner
+            // sees it before pressing Send rather than as "Blocked" rows afterwards.
+            $suppressed = []; $phones = json_decode((string)($_POST['phones'] ?? '[]'), true);
+            if (is_array($phones) && $phones && sms_table_exists($pdo, 'sms_suppression')) {
+                $norm = [];
+                foreach (array_slice($phones, 0, SMS_MAX_CAMPAIGN) as $ph) { if (($n = sms_normalize_phone(is_scalar($ph) ? $ph : '')) !== null) $norm[$n] = true; }
+                foreach (array_chunk(array_keys($norm), 500) as $chunk) {
+                    $st = $pdo->prepare("SELECT phone FROM sms_suppression WHERE released_at IS NULL AND phone IN (" . sms_in($chunk) . ")");
+                    $st->execute($chunk);
+                    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $ph) $suppressed[] = $ph;
+                }
+            }
+            sms_json(['status'=>'success', 'ok'=>$b['ok'], 'balance'=>$b['balance'], 'error'=>$b['error'],
+                      'unit_price'=>sms_unit_price($settings), 'signature'=>sms_signature($settings),
+                      'suppressed'=>count($suppressed), 'suppressed_sample'=>array_slice($suppressed, 0, 5)]);
 
         /* ================================================================
          * SETTINGS — list the account's approved sender IDs
@@ -360,10 +388,21 @@ try {
                 foreach (['name', 'first_name', 'last_name', 'guest_name', 'email', 'event_title', 'blessing_ref'] as $k) {
                     $row[$k] = sms_cut(is_scalar($rec[$k] ?? null) ? (string)$rec[$k] : '', 190);
                 }
-                $units += sms_segments(sms_render($template, $row))['pages'];
+                $units += sms_segments(sms_sign_body(sms_render($template, $row), $settings))['pages'];
                 $clean[] = $row;
             }
             if (!$clean) sms_fail('None of the selected numbers is a valid Nigerian mobile number.');
+
+            // Pre-flight: the wallet must cover the whole campaign before anything is queued
+            // (a campaign that dies half way on "Insufficient balance" is the worst outcome).
+            $wallet = sms_wallet_check($settings, $units);
+            if (!$wallet['ok']) {
+                // The one escape hatch: a Super Admin may go ahead when the balance could not be
+                // READ (never when it is too low), and the bypass is logged.
+                $override = $wallet['balance'] === null && !empty($_POST['wallet_override']) && sms_user_is_super_admin();
+                if (!$override) sms_fail($wallet['message']);
+                error_log('SMS: ' . $MY_NAME . ' (Super Admin) queued a campaign of ' . count($clean) . ' without a readable wallet balance: ' . $wallet['message']);
+            }
 
             $title    = sms_cut(trim((string)($_POST['title'] ?? '')), 200) ?: ('Bulk SMS – ' . date('j M Y, g:i a'));
             $audience = in_array($_POST['audience'] ?? '', ['users', 'registrations', 'checkins', 'everyone', 'assimilation'], true) ? $_POST['audience'] : 'users';
@@ -402,6 +441,7 @@ try {
                            . ($dupes ? ", {$dupes} duplicate number(s) merged" : '') . '.',
                 'campaign_id' => $campaignId, 'queued' => count($clean), 'invalid' => $invalid,
                 'duplicates' => $dupes, 'est_units' => $units, 'cron_ok' => $cronOk,
+                'wallet_balance' => $wallet['balance'], 'est_cost' => $wallet['need'], 'unit_price' => $wallet['unit_price'],
             ]);
 
         /* ================================================================
@@ -514,7 +554,8 @@ try {
                 'total' => $total, 'remaining' => $remaining, 'queue' => $qs, 'log' => $ls, 'cost' => round($cost, 2),
                 'cancelled' => in_array('cancelled', array_column($camps, 'status'), true),
                 'filters' => json_decode((string)$c0['filters_json'], true),
-            ], 'cron_ok' => $h['cron_age_sec'] !== null && $h['cron_age_sec'] < 180, 'cron_age_sec' => $h['cron_age_sec']]);
+            ], 'cron_ok' => $h['cron_age_sec'] !== null && $h['cron_age_sec'] < 180, 'cron_age_sec' => $h['cron_age_sec'],
+               'worker_message' => $h['last_message']]);
 
         /* ================================================================
          * CAMPAIGNS — stop everything not yet sent
@@ -875,6 +916,10 @@ try {
             if ($row['status'] === 'queued') sms_fail('This message is being handed to BulkSMS right now. Wait for its result before resending.');
             if ($row['status'] === 'unknown' && empty($_POST['confirm_unknown'])) {
                 sms_json(['status'=>'confirm','message'=>'We never learned whether this message went out. Check the BulkSMS dashboard first — resending may give this person the same message twice. Resend anyway?']);
+            }
+            if (in_array($row['status'], ['sent', 'pending'], true) && empty($_POST['confirm_unknown'])) {
+                sms_json(['status'=>'confirm','message'=>'BulkSMS already accepted this message' . ($row['message_id'] ? ' (ID ' . $row['message_id'] . ')' : '')
+                    . '; only the carrier\'s delivery report is still missing. Resending sends — and bills — it again. Use "Check delivery now" first. Resend anyway?']);
             }
             $name = sms_clean_name($row['recipient_name']);
             $recipient = [

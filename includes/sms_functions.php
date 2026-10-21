@@ -22,6 +22,8 @@ require_once __DIR__ . '/sms_status.php';     // sms_map_dlr_status(), sms_expla
 const SMS_DEFAULT_BASE      = 'https://www.bulksmsnigeria.com/api/v2';
 const SMS_ALLOWED_ROLES     = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head'];
 const SMS_GATEWAYS          = ['direct-refund', 'direct-corporate', 'otp', 'dual-backup'];
+const SMS_SIGN_MODES        = ['prefix', 'none'];   // where the sender name goes in the text ('' = prefix)
+const SMS_DEFAULT_UNIT_PRICE = 6.49;  // ₦ per SMS unit when Settings has no price (BulkSMS list price, ex VAT)
 const SMS_BURST_PER_HOUR    = 3;      // messages to one handset per rolling hour
 const SMS_SUPPRESS_AFTER    = 3;      // consecutive carrier failures before auto-suppression
 const SMS_DLR_GIVE_UP_HOURS = 72;     // no final delivery report after this -> 'unknown'
@@ -120,7 +122,7 @@ function sms_decrypt($enc, $iv, $tag) {
 /* ============================================================================
  * SETTINGS LOAD / SAVE (encrypted rows)
  * ========================================================================== */
-const SMS_KEYS = ['base_url', 'api_token', 'sender_id', 'gateway', 'webhook_url'];
+const SMS_KEYS = ['base_url', 'api_token', 'sender_id', 'gateway', 'webhook_url', 'sign_mode', 'unit_price'];
 
 /**
  * $failed receives the keys that exist but could not be decrypted (the vault
@@ -156,6 +158,100 @@ function sms_base_url(array $settings) {
 function sms_webhook_secret() {
     $s = $_ENV['SMS_WEBHOOK_SECRET'] ?? getenv('SMS_WEBHOOK_SECRET');
     return trim((string)($s === false ? '' : $s));
+}
+
+/* ============================================================================
+ * SENDER NAME IN THE TEXT + WALLET PRE-FLIGHT
+ * ========================================================================== */
+/**
+ * The sender name written into the text of every message ("HODLEKKI: Dear…").
+ * The alphanumeric sender ID (the 'from' field) is not shown by every route or
+ * handset, and nothing in the BulkSMS API lets us ask for it to be appended, so
+ * the Studio writes it itself. On by default; Settings → "Sender name in the
+ * text" = none turns it off. Returns '' when off or no sender ID is saved.
+ */
+function sms_signature(array $settings) {
+    if (($settings['sign_mode'] ?? '') === 'none') return '';
+    $sender = trim((string)($settings['sender_id'] ?? ''));
+    return $sender === '' ? '' : $sender . ': ';
+}
+/** Put the sender name in front of a rendered body, once (a resend already carries it). */
+function sms_sign_body($body, array $settings) {
+    $body = (string)$body;
+    $sig = sms_signature($settings);
+    if ($sig === '' || $body === '') return $body;
+    // Already starts with the sender name as a word ("HODLEKKI: …", "HODLEKKI - …", "hodlekki …"): leave it.
+    if (preg_match('/^' . preg_quote(rtrim($sig, ': '), '/') . '(?![A-Za-z0-9])/iu', $body)) return $body;
+    return $sig . $body;
+}
+/** ₦ per SMS unit used for the pre-flight cost check (Settings, else the BulkSMS list price). */
+function sms_unit_price(array $settings) {
+    $p = is_numeric($settings['unit_price'] ?? null) ? (float)$settings['unit_price'] : 0.0;
+    return $p > 0 ? $p : SMS_DEFAULT_UNIT_PRICE;
+}
+/** Pull the wallet balance out of any shape BulkSMS has used for GET /balance. */
+function sms_parse_balance($d) {
+    if (!is_array($d)) return null;
+    $bal = $d['balance']['total_balance'] ?? ($d['data']['balance'] ?? ($d['data']['total_balance'] ?? ($d['balance'] ?? null)));
+    if (is_array($bal)) $bal = $bal['total_balance'] ?? ($bal['amount'] ?? ($bal['balance'] ?? null));
+    $n = sms_balance_number($bal);
+    // Any other shape: the first number under a key that names a balance, up to three levels down.
+    return $n !== null ? $n : sms_balance_search($d, 0);
+}
+function sms_balance_number($v) {
+    if (is_bool($v) || $v === null) return null;
+    if (is_string($v)) $v = str_replace([',', '₦', 'NGN', ' '], '', trim($v));
+    return is_numeric($v) ? (float)$v : null;
+}
+function sms_balance_search(array $a, $depth) {
+    foreach ($a as $k => $v) {
+        if (is_string($k) && preg_match('/balance|wallet|credit/i', $k)) {
+            $n = sms_balance_number(is_array($v) ? ($v['total_balance'] ?? ($v['balance'] ?? ($v['amount'] ?? null))) : $v);
+            if ($n !== null) return $n;
+        }
+    }
+    if ($depth >= 3) return null;
+    foreach ($a as $v) {
+        if (is_array($v) && ($n = sms_balance_search($v, $depth + 1)) !== null) return $n;
+    }
+    return null;
+}
+/** Ask BulkSMS for the wallet balance. Returns ['ok'=>bool, 'balance'=>float|null, 'error'=>string|null]. */
+function sms_fetch_balance(array $settings, $allowRetry = true) {
+    if (empty($settings['api_token'])) return ['ok'=>false, 'balance'=>null, 'error'=>'BulkSMS is not configured.'];
+    $res = sms_http('GET', sms_base_url($settings) . '/balance', $settings['api_token'], null, 0, $allowRetry);
+    if (!sms_http_ok($res)) return ['ok'=>false, 'balance'=>null, 'error'=>sms_api_error($res)];
+    $bal = sms_parse_balance($res['data']);
+    if ($bal === null) {
+        error_log('SMS balance: BulkSMS answered without a readable balance: ' . sms_cut((string)$res['raw'], 500));
+        return ['ok'=>false, 'balance'=>null, 'error'=>'BulkSMS answered without a readable balance (the reply is in includes/error_log).'];
+    }
+    return ['ok'=>true, 'balance'=>$bal, 'error'=>null];
+}
+/**
+ * Refuse to queue a campaign the wallet cannot pay for. A campaign that runs out
+ * of credit half way leaves hundreds of "Insufficient balance" failures and a
+ * list of people to chase, so the check is a hard stop, and it fails closed when
+ * the balance cannot be read (the send would fail at BulkSMS anyway).
+ * Returns ['ok'=>bool, 'balance', 'need', 'units', 'unit_price', 'message'].
+ */
+function sms_wallet_check(array $settings, $units) {
+    $units = (int)$units;
+    $price = sms_unit_price($settings);
+    $need  = round($units * $price, 2);
+    $b = sms_fetch_balance($settings);
+    $out = ['ok'=>false, 'balance'=>$b['balance'], 'need'=>$need, 'units'=>$units, 'unit_price'=>$price, 'message'=>null];
+    if (!$b['ok']) {
+        $out['message'] = 'Could not confirm the BulkSMS wallet balance (' . $b['error'] . '). Nothing was queued — try again in a moment.';
+        return $out;
+    }
+    if ($b['balance'] < $need) {
+        $out['message'] = sprintf('Wallet too low: ₦%s available, this campaign needs about ₦%s (%d unit(s) × ₦%s). Fund the BulkSMS wallet, then send again. Nothing was queued.',
+            number_format($b['balance'], 2), number_format($need, 2), $units, number_format($price, 2));
+        return $out;
+    }
+    $out['ok'] = true;
+    return $out;
 }
 
 /* ============================================================================
@@ -585,6 +681,7 @@ function sms_gsm_clean($text) {
         "\u{00A0}" => ' ', "\u{2007}" => ' ', "\u{2009}" => ' ', "\u{200A}" => ' ', "\u{202F}" => ' ',
         "\u{200B}" => '', "\u{FEFF}" => '', "\u{00AD}" => '',
         "\r\n" => "\n",
+        "\t" => ' ', "\u{2028}" => "\n", "\u{2029}" => "\n",   // a pasted tab or line separator silently tripled the bill (Unicode)
     ];
     return strtr((string)$text, $map);
 }
@@ -683,8 +780,45 @@ function sms_http($method, $url, $token, $payload = null, $attempt = 0, $allowRe
 
 /** Transport OK, HTTP 2xx, JSON body, and BulkSMS did not say status=error. */
 function sms_http_ok(array $res) {
-    return $res['ok'] && $res['status'] >= 200 && $res['status'] < 300 && is_array($res['data'])
-        && strtolower((string)($res['data']['status'] ?? 'success')) !== 'error';
+    if (!($res['ok'] && $res['status'] >= 200 && $res['status'] < 300 && is_array($res['data']))) return false;
+    $d = $res['data'];
+    if (strtolower((string)($d['status'] ?? 'success')) === 'error') return false;
+    // A message ID anywhere in the reply means BulkSMS took the message, whatever else the envelope says.
+    if (sms_reply_message_id($d) !== null) return true;
+    // Otherwise an error wrapped one level down (`data.status`) or in an `error` envelope is a refusal.
+    if (is_array($d['data'] ?? null) && !array_is_list($d['data']) && strtolower((string)($d['data']['status'] ?? '')) === 'error') return false;
+    $err = $d['error'] ?? null;
+    if (is_string($err) && !in_array(strtolower(trim($err)), ['', 'none', 'false', '0', 'null', 'ok'], true)) return false;
+    if (is_array($err) && (!empty($err['message']) || !empty($err['code']))) return false;
+    return true;
+}
+
+/** The message ID in any shape BulkSMS has used for an accepted submit (data[0].message_id, data.message_id/id/messageId/reference, message_id), or null. */
+function sms_reply_message_id($d) {
+    if (!is_array($d)) return null;
+    $dd = $d['data'] ?? [];
+    if (is_array($dd) && isset($dd[0]) && is_array($dd[0])) $dd = $dd[0];
+    $cands = is_array($dd) ? [$dd['message_id'] ?? null, $dd['id'] ?? null, $dd['messageId'] ?? null, $dd['reference'] ?? null] : [];
+    $cands[] = $d['message_id'] ?? null;
+    $cands[] = $d['id'] ?? null;
+    foreach ($cands as $c) if (is_scalar($c) && !is_bool($c) && (string)$c !== '') return (string)$c;
+    return null;
+}
+
+/**
+ * How the worker treats a BulkSMS refusal (an answer that did not accept the message):
+ *   'wallet'    refused for lack of credit (BSNG-3000/3001/3002 or balance wording) — wait for funding;
+ *   'transient' rate limited (HTTP 429 / BSNG-4003): BulkSMS never took it, nothing billed — hand it over again next minute;
+ *   null        final.
+ * Only answers that provably never reached the gateway are 'transient'. A 5xx, even with a
+ * readable body, is classified 'unknown' by sms_send_one() and is never re-sent.
+ */
+function sms_refusal_kind(array $res, $apiCode, $errMsg) {
+    $code = strtoupper((string)(is_scalar($apiCode) ? $apiCode : ''));
+    if (in_array($code, ['BSNG-3000', 'BSNG-3001', 'BSNG-3002'], true)) return 'wallet';
+    if (preg_match('/insufficient|balance|credit|fund|top-?up/i', (string)$errMsg)) return 'wallet';
+    if ((int)$res['status'] === 429 || $code === 'BSNG-4003') return 'transient';
+    return null;
 }
 
 /** Plain-English reason for a failed BulkSMS call (network, HTTP status, BSNG code, validation errors). */
@@ -874,7 +1008,7 @@ function sms_send_one($pdo, array $settings, array $recipient, $template, $campa
     $srcId    = isset($recipient['source_id']) && is_numeric($recipient['source_id']) ? (int)$recipient['source_id'] : null;
     $senderId = (string)($settings['sender_id'] ?? '');
     $gateway  = in_array($settings['gateway'] ?? '', SMS_GATEWAYS, true) ? $settings['gateway'] : 'direct-refund';
-    $body     = sms_render($template, $recipient);
+    $body     = sms_sign_body(sms_render($template, $recipient), $settings);   // "HODLEKKI: …" on every message
     $ready    = sms_schema_ready($pdo);
     $linkQueue = function ($logId) use ($pdo, $queueId, $ready) {
         if ($queueId && $ready) $pdo->prepare("UPDATE sms_queue SET log_id = ? WHERE id = ?")->execute([$logId, $queueId]);
@@ -904,7 +1038,21 @@ function sms_send_one($pdo, array $settings, array $recipient, $template, $campa
 
     // (b) Record the attempt BEFORE the billable call (only once the schema supports 'queued')
     $logId = null;
-    if ($ready) {
+    $reuseId = !empty($opts['log_id']) ? (int)$opts['log_id'] : 0;
+    if ($ready && $reuseId) {
+        // A retry of a refused hand-over goes round on the same row, so the campaign
+        // counts one message per person and the timeline keeps the refusal.
+        $st = $pdo->prepare("UPDATE sms_log SET status = 'queued', sender_id = ?, gateway_used = ?, body = ?, api_code = NULL,
+                                error_message = NULL, raw_response = NULL, updated_at = NOW()
+                             WHERE id = ? AND status = 'failed' AND (message_id IS NULL OR message_id = '')");
+        $st->execute([$senderId, $gateway, $body, $reuseId]);
+        if ($st->rowCount()) {
+            $logId = $reuseId;
+            sms_log_event($pdo, $logId, 'failed', 'queued', $source, ['detail' => 'Handing the message to BulkSMS again (' . $gateway . ' route).', 'user_id' => $userId]);
+            $linkQueue($logId);
+        }
+    }
+    if ($ready && !$logId) {
         $pdo->prepare("INSERT INTO sms_log
             (campaign_id, source_type, source_id, recipient_phone, recipient_name, sender_id, gateway_used, body, status, created_by)
             VALUES (?,?,?,?,?,?,?,?, 'queued', ?)")
@@ -930,11 +1078,13 @@ function sms_send_one($pdo, array $settings, array $recipient, $template, $campa
 
     // (d) Classify the answer
     $apiCode = null; $messageId = null; $status = 'failed'; $cost = null; $units = null; $errMsg = null;
+    $transient = false; $walletEmpty = false; $refused = false;   // see sms_refusal_kind(); 'refused' = BulkSMS answered and did not take it
     $gatewayUsed = $gateway; $rawResponse = $res['data'] !== null ? json_encode($res['data']) : $res['raw'];
     if (!$res['ok']) {
         // 6/7 = could not resolve / connect, 35/60 = TLS handshake / certificate: the request never left.
         if (in_array((int)$res['errno'], [5, 6, 7, 35, 60], true)) {
             $errMsg = 'Could not reach BulkSMS (' . $res['message'] . '). Nothing was sent.';
+            $transient = true;
         } else {
             $status = 'unknown';
             $errMsg = 'No answer from BulkSMS (' . $res['message'] . '). The message MAY have gone out — check the BulkSMS dashboard before resending.';
@@ -944,22 +1094,37 @@ function sms_send_one($pdo, array $settings, array $recipient, $template, $campa
         $dd = $d['data'] ?? [];
         if (is_array($dd) && isset($dd[0]) && is_array($dd[0])) $dd = $dd[0];
         $status = 'sent';
-        $messageId = $dd['message_id'] ?? ($dd['id'] ?? ($d['message_id'] ?? null));
+        $messageId = sms_reply_message_id($d);
         $cost = $dd['cost'] ?? ($dd['total_cost'] ?? ($d['cost'] ?? null));
         $units = $dd['units'] ?? ($dd['pages'] ?? null);
         $gatewayUsed = $dd['gateway_used'] ?? $gateway;
         $apiCode = $d['code'] ?? null;
         if ($messageId === null || $messageId === '') {
-            $errMsg = 'Accepted by BulkSMS, but no message ID came back, so delivery cannot be tracked.';
+            if (strtolower((string)($d['status'] ?? '')) === 'success') {
+                $errMsg = 'Accepted by BulkSMS, but no message ID came back, so delivery cannot be tracked.';
+            } else {
+                // Neither an ID nor a word of success: not a failure to resend, not a success to count.
+                $status = 'unknown';
+                $errMsg = 'BulkSMS answered without a message ID or a success status. The message MAY have gone out — check the BulkSMS dashboard before resending.';
+            }
         }
-    } elseif ($res['status'] >= 500 && $res['data'] === null) {
+    } elseif ($res['status'] >= 500) {
+        // A server error, with or without a readable body, may have happened after the
+        // message was handed to the carrier: never re-sent, the owner checks the dashboard.
+        $apiCode = is_array($res['data']) ? ($res['data']['code'] ?? null) : null;
         $status = 'unknown';
-        $errMsg = 'BulkSMS answered HTTP ' . $res['status'] . ' without a readable reply. The message MAY have gone out — check the BulkSMS dashboard before resending.';
+        $errMsg = 'BulkSMS answered HTTP ' . $res['status'] . ($res['data'] === null ? ' without a readable reply' : ' (' . sms_api_error($res) . ')')
+                . '. The message MAY have gone out — check the BulkSMS dashboard before resending.';
     } else {
         $apiCode = is_array($res['data']) ? ($res['data']['code'] ?? null) : null;
         $errMsg = sms_api_error($res);
+        $refused = true;
+        $kind = sms_refusal_kind($res, $apiCode, $errMsg);
+        $transient = $kind === 'transient';
+        $walletEmpty = $kind === 'wallet';
     }
     $messageId = $messageId !== null ? sms_cut((string)$messageId, 128) : null;
+    $apiCode = ($apiCode !== null && is_scalar($apiCode) && (string)$apiCode !== '') ? sms_cut((string)$apiCode, 32) : null;   // VARCHAR(32)
     $cost = is_numeric($cost) ? (float)$cost : null;
     $units = is_numeric($units) ? (int)$units : null;
 
@@ -980,11 +1145,13 @@ function sms_send_one($pdo, array $settings, array $recipient, $template, $campa
     $detail = $status === 'sent'
         ? 'Accepted by BulkSMS' . ($messageId ? ' · message ID ' . $messageId : '') . ($cost !== null ? ' · ₦' . $cost : '') . ' · route ' . $gatewayUsed
         : $errMsg;
+    $rawMsg = is_array($res['data']) ? ($res['data']['message'] ?? '') : '';
     sms_log_event($pdo, $logId, $ready ? 'queued' : null, $status, 'bulksms', [
-        'raw' => is_array($res['data']) ? (string)($res['data']['message'] ?? '') : '',
+        'raw' => is_scalar($rawMsg) ? (string)$rawMsg : json_encode($rawMsg),
         'code' => $apiCode, 'detail' => $detail, 'user_id' => $userId,
     ]);
-    return ['status'=>$status, 'phone'=>$phone, 'message_id'=>$messageId, 'error'=>$errMsg, 'cost'=>$cost, 'log_id'=>$logId];
+    return ['status'=>$status, 'phone'=>$phone, 'message_id'=>$messageId, 'error'=>$errMsg, 'cost'=>$cost, 'log_id'=>$logId,
+            'transient'=>$transient, 'wallet_empty'=>$walletEmpty, 'refused'=>$refused];
 }
 
 /* ============================================================================
@@ -1012,8 +1179,9 @@ function sms_apply_dlr(PDO $pdo, array $row, $rawStatus, $source, array $x = [])
 
     $note = $mapped === 'delivered' ? null : sms_cut($raw, 191);
     if ($allowed) {
+        $code = isset($x['code']) && is_scalar($x['code']) && (string)$x['code'] !== '' ? sms_cut((string)$x['code'], 32) : null;
         $pdo->prepare("UPDATE sms_log SET status = ?, api_code = COALESCE(?, api_code), error_message = ?, updated_at = NOW() WHERE id = ?")
-            ->execute([$mapped, $x['code'] ?? null, $note, $row['id']]);
+            ->execute([$mapped, $code, $note, $row['id']]);
         sms_log_event($pdo, $row['id'], $current, $mapped, $source, [
             'raw' => $raw, 'code' => $x['code'] ?? null, 'provider_time' => $x['provider_time'] ?? null,
             'detail' => $x['detail'] ?? null, 'user_id' => $x['user_id'] ?? null,
@@ -1071,12 +1239,12 @@ function sms_extract_reports($data) {
  * Ask BulkSMS for the delivery report of one sent message and apply it.
  * Returns ['ok'=>bool, 'status'=>current status, 'raw'=>carrier words|null, 'changed'=>bool, 'error'=>string|null]
  */
-function sms_poll_delivery(PDO $pdo, array $settings, array $row, $source = 'poll', $userId = null) {
+function sms_poll_delivery(PDO $pdo, array $settings, array $row, $source = 'poll', $userId = null, $allowRetry = true) {
     $out = ['ok'=>false, 'status'=>$row['status'], 'raw'=>null, 'changed'=>false, 'error'=>null];
     if (empty($row['message_id'])) { $out['error'] = 'This message has no BulkSMS message ID, so there is no delivery report to fetch.'; return $out; }
     if (empty($settings['api_token'])) { $out['error'] = 'BulkSMS is not configured.'; return $out; }
 
-    $res = sms_http('GET', sms_base_url($settings) . '/delivery-reports?message_id=' . urlencode($row['message_id']), $settings['api_token']);
+    $res = sms_http('GET', sms_base_url($settings) . '/delivery-reports?message_id=' . urlencode($row['message_id']), $settings['api_token'], null, 0, $allowRetry);
     if (sms_column_exists($pdo, 'sms_log', 'dlr_checked_at')) {
         $pdo->prepare("UPDATE sms_log SET dlr_checked_at = NOW() WHERE id = ?")->execute([$row['id']]);
     }
@@ -1126,11 +1294,17 @@ function sms_poll_delivery(PDO $pdo, array $settings, array $row, $source = 'pol
  */
 function sms_process_queue(PDO $pdo, $budget = 50, $runSource = 'cron') {
     $start = microtime(true);
-    $out = ['ran'=>false, 'locked'=>false, 'sent'=>0, 'failed'=>0, 'blocked'=>0, 'unknown'=>0,
-            'recovered'=>0, 'polled'=>0, 'expired'=>0, 'remaining'=>0, 'message'=>''];
-    if ((int)$pdo->query("SELECT GET_LOCK('" . SMS_WORKER_LOCK . "', 0)")->fetchColumn() !== 1) {
+    $out = ['ran'=>false, 'locked'=>false, 'sent'=>0, 'failed'=>0, 'blocked'=>0, 'unknown'=>0, 'retried'=>0,
+            'recovered'=>0, 'polled'=>0, 'expired'=>0, 'remaining'=>0, 'paused'=>null, 'message'=>''];
+    // The cron waits a few seconds: while the Studio page is driving the queue
+    // (25 s runs with short gaps) a zero wait lost every minute, the cron never
+    // stamped its heartbeat, and the page kept driving. The wait counts against
+    // the budget, so a run still ends within $budget seconds of its start.
+    $wait = $runSource === 'cron' ? 10 : 0;
+    if ((int)$pdo->query("SELECT GET_LOCK('" . SMS_WORKER_LOCK . "', " . (int)$wait . ")")->fetchColumn() !== 1) {
         $out['locked'] = true;
         $out['message'] = 'Another send run is already in progress.';
+        if ($runSource === 'cron') sms_worker_note($pdo, 'Skipped: another run (the Studio page, or the previous minute) still held the lock.');
         return $out;
     }
     try {
@@ -1151,9 +1325,34 @@ function sms_process_queue(PDO $pdo, $budget = 50, $runSource = 'cron') {
         $lastSend = 0.0;
         $timeLeft = function () use ($start, $budget) { return $budget - (microtime(true) - $start); };
 
-        while ($timeLeft() > 4) {
+        // An empty wallet must not turn the rest of a campaign into "Insufficient
+        // balance" failures one by one: with work waiting, look at the balance once
+        // and wait for funding instead (a balance that cannot be read does not stop
+        // the run — send_campaign already refused anything the wallet could not pay).
+        $waiting = (int)$pdo->query("SELECT COUNT(*) FROM sms_queue WHERE status = 'queued'")->fetchColumn();
+        if ($waiting > 0 && sms_table_exists($pdo, 'sms_worker_heartbeat')) {
+            // After a run of refusals (see the breaker below) wait five minutes before probing again.
+            $hb = $pdo->query("SELECT last_message, TIMESTAMPDIFF(SECOND, last_run_at, NOW()) AS age FROM sms_worker_heartbeat WHERE id = 1")->fetch(PDO::FETCH_ASSOC);
+            if ($hb && strncmp((string)$hb['last_message'], 'Paused: BulkSMS refused', 23) === 0 && $hb['age'] !== null && (int)$hb['age'] < 300) {
+                $out['paused'] = preg_replace('/\s+\d+ sent, .*$/s', '', (string)$hb['last_message']);
+            }
+        }
+        if ($waiting > 0 && $out['paused'] === null && $timeLeft() > 20) {
+            $b = sms_fetch_balance($settings, false);   // no transport retries inside the run budget
+            if ($b['ok'] && $b['balance'] < sms_unit_price($settings)) {
+                $out['paused'] = sprintf('Waiting for the BulkSMS wallet to be funded: ₦%s available, %d message(s) queued. Sending resumes by itself.', number_format($b['balance'], 2), $waiting);
+            }
+        }
+        if ($waiting > 0 && $out['paused'] === null && trim((string)$settings['sender_id']) === '') {
+            $out['paused'] = 'Paused: no sender ID is saved in Settings, and BulkSMS refuses every message without one.';
+        }
+        $refusals = [];   // queue ids refused in a row with nothing accepted in between
+
+        while ($out['paused'] === null && $timeLeft() > 4) {
+            // A row put back by a temporary refusal keeps its locked_at, so it waits a minute before the next try.
             $pdo->exec("UPDATE sms_queue SET status = 'sending', locked_at = NOW()
-                        WHERE status = 'queued' ORDER BY id LIMIT " . (int)SMS_WORKER_CLAIM);
+                        WHERE status = 'queued' AND (locked_at IS NULL OR locked_at < (NOW() - INTERVAL 60 SECOND))
+                        ORDER BY id LIMIT " . (int)SMS_WORKER_CLAIM);
             $jobs = $pdo->query("SELECT * FROM sms_queue WHERE status = 'sending' ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
             if (!$jobs) break;
             foreach ($jobs as $job) {
@@ -1163,7 +1362,7 @@ function sms_process_queue(PDO $pdo, $budget = 50, $runSource = 'cron') {
                     continue;
                 }
                 $seen[$job['id']] = true;
-                if ($timeLeft() <= 4) {   // out of time: hand untouched jobs back
+                if ($timeLeft() <= 4 || $out['paused'] !== null) {   // out of time, or the wallet ran dry: hand untouched jobs back
                     $pdo->prepare("UPDATE sms_queue SET status = 'queued', locked_at = NULL WHERE id = ? AND status = 'sending'")->execute([$job['id']]);
                     continue;
                 }
@@ -1174,13 +1373,52 @@ function sms_process_queue(PDO $pdo, $budget = 50, $runSource = 'cron') {
                     $r = sms_process_job($pdo, $settings, $job);
                 } catch (Throwable $e) {
                     error_log('SMS worker: job ' . $job['id'] . ' crashed: ' . $e->getMessage());
-                    $pdo->prepare("UPDATE sms_queue SET status = 'error', sent_status = 'failed', error_message = ? WHERE id = ?")
-                        ->execute(['Internal error: ' . sms_cut($e->getMessage(), 200), $job['id']]);
-                    $r = ['status' => 'failed'];
+                    // The error may have struck AFTER the billable call: settle like sms_recover_orphans()
+                    // — a log row still at 'queued' becomes 'unknown' (never re-sent), not 'failed'.
+                    $sentStatus = 'failed';
+                    try {
+                        $lid = sms_column_exists($pdo, 'sms_queue', 'log_id')
+                             ? (int)$pdo->query("SELECT log_id FROM sms_queue WHERE id = " . (int)$job['id'])->fetchColumn() : 0;
+                        if ($lid) {
+                            $why = 'The sending process hit an error while this message was being handed to BulkSMS ('
+                                 . sms_cut($e->getMessage(), 120) . '). It may or may not have gone out — check the BulkSMS dashboard before resending.';
+                            $st = $pdo->prepare("UPDATE sms_log SET status = 'unknown', error_message = ?, updated_at = NOW() WHERE id = ? AND status = 'queued'");
+                            $st->execute([$why, $lid]);
+                            if ($st->rowCount()) { sms_log_event($pdo, $lid, 'queued', 'unknown', 'system', ['detail' => $why]); $sentStatus = 'unknown'; }
+                        }
+                    } catch (Throwable $x) {
+                        error_log('SMS worker: could not settle the log row of job ' . $job['id'] . ': ' . $x->getMessage());
+                    }
+                    $pdo->prepare("UPDATE sms_queue SET status = 'error', sent_status = ?, error_message = ? WHERE id = ?")
+                        ->execute([$sentStatus, 'Internal error: ' . sms_cut($e->getMessage(), 200), $job['id']]);
+                    $r = ['status' => $sentStatus];
                 }
                 $lastSend = microtime(true);
-                $k = $r['status'] === 'sent' ? 'sent' : (in_array($r['status'], ['blocked', 'unknown'], true) ? $r['status'] : 'failed');
+                if ($r['status'] === 'wallet') {
+                    // BulkSMS refused for lack of credit: this row is back in the queue (no attempt
+                    // counted); the rest of the batch is handed back above and the run stops sending.
+                    $out['paused'] = 'Paused: the BulkSMS wallet is empty (' . sms_cut((string)($r['error'] ?? ''), 120) . '). Fund it; sending resumes by itself.';
+                    continue;
+                }
+                $k = $r['status'] === 'sent' ? 'sent' : (in_array($r['status'], ['blocked', 'unknown', 'retried'], true) ? $r['status'] : 'failed');
                 if ($r['status'] !== 'cancelled') $out[$k]++;
+                // Breaker: five refusals in a row with nothing accepted (token revoked, sender ID
+                // unapproved, account suspended) stop the run instead of failing everyone. The
+                // refused rows go back in the queue and are tried again after five minutes.
+                if ($r['status'] === 'sent') $refusals = [];
+                elseif ($r['status'] === 'failed' && !empty($r['refused']) && sms_column_exists($pdo, 'sms_queue', 'attempts')) {
+                    $refusals[] = (int)$job['id'];
+                    if (count($refusals) >= 5) {
+                        $lastErr = sms_cut((string)($r['error'] ?? ''), 140);
+                        $pdo->prepare("UPDATE sms_queue SET status = 'queued', locked_at = NOW(), sent_status = NULL, error_message = ?
+                                       WHERE id IN (" . implode(',', array_fill(0, count($refusals), '?')) . ") AND status = 'error'")
+                            ->execute(array_merge(['Held back: BulkSMS refused several messages in a row — ' . $lastErr], $refusals));
+                        $out['failed'] -= count($refusals);
+                        $out['retried'] += count($refusals);
+                        $out['paused'] = 'Paused: BulkSMS refused ' . count($refusals) . ' messages in a row (' . $lastErr . '). Fix the cause (API token, sender ID, account), the worker tries again every 5 minutes.';
+                        $refusals = [];
+                    }
+                }
             }
         }
         foreach (array_keys($touched) as $cid) sms_refresh_campaign($pdo, $cid);
@@ -1188,11 +1426,17 @@ function sms_process_queue(PDO $pdo, $budget = 50, $runSource = 'cron') {
         $out['expired'] = sms_expire_stale($pdo);
         if ($timeLeft() > 3) $out['polled'] = sms_poll_due($pdo, $settings, $timeLeft);
         $out['remaining'] = (int)$pdo->query("SELECT COUNT(*) FROM sms_queue WHERE status IN ('queued','sending')")->fetchColumn();
-        $out['message'] = "{$out['sent']} sent, {$out['failed']} failed, {$out['blocked']} blocked, {$out['unknown']} unknown; "
+        $out['message'] = ($out['paused'] !== null ? $out['paused'] . ' ' : '')   // first, so the status bar and the back-off above can read it
+                        . "{$out['sent']} sent, {$out['failed']} failed, {$out['blocked']} blocked, {$out['unknown']} unknown"
+                        . ($out['retried'] ? ", {$out['retried']} to retry" : '') . "; "
                         . "{$out['polled']} delivery reports checked; {$out['remaining']} still queued.";
         sms_worker_heartbeat($pdo, $runSource, $out);
     } finally {
-        $pdo->query("SELECT RELEASE_LOCK('" . SMS_WORKER_LOCK . "')");
+        try {
+            $pdo->query("SELECT RELEASE_LOCK('" . SMS_WORKER_LOCK . "')");
+        } catch (Throwable $e) {
+            error_log('SMS worker: could not release the lock (the connection dropped?): ' . $e->getMessage());   // the lock dies with the connection
+        }
     }
     return $out;
 }
@@ -1218,7 +1462,29 @@ function sms_process_job(PDO $pdo, array $settings, array $job) {
     // created_by = whoever queued the campaign (was NULL, so History never showed who sent it)
     $r = sms_send_one($pdo, $settings, $recipient, $camp['body_template'], (int)$job['campaign_id'],
                       $camp['created_by'] !== null ? (int)$camp['created_by'] : null,
-                      ['queue_id' => (int)$job['id'], 'source' => 'worker']);
+                      ['queue_id' => (int)$job['id'], 'source' => 'worker',
+                       // a retry goes round on the row the first attempt wrote (only if that row is a refusal)
+                       'log_id' => !empty($job['log_id']) ? (int)$job['log_id'] : null]);
+
+    // Refused with nothing billed: an empty wallet waits for funding (no attempt
+    // counted); a temporary refusal goes back in the queue for the next minute, at
+    // most twice. Needs sms_queue.attempts (20261021150100_sms_queue_attempts.sql).
+    if ($r['status'] === 'failed' && (!empty($r['wallet_empty']) || !empty($r['transient']))
+        && sms_column_exists($pdo, 'sms_queue', 'attempts')) {
+        $wallet = !empty($r['wallet_empty']);
+        if ($wallet || (int)($job['attempts'] ?? 0) < 2) {
+            $why = ($wallet ? 'Waiting for the wallet to be funded: ' : 'Will try again in a minute: ') . sms_cut((string)$r['error'], 400);
+            $pdo->prepare("UPDATE sms_queue SET status = 'queued', locked_at = NOW(), sent_status = NULL, error_message = ?, attempts = attempts + ? WHERE id = ?")
+                ->execute([$why, $wallet ? 0 : 1, $job['id']]);
+            if (!empty($r['log_id'])) {
+                sms_log_event($pdo, $r['log_id'], 'failed', 'failed', 'worker', ['detail' => $wallet
+                    ? 'BulkSMS refused this for lack of credit; nothing was billed. The worker will send it once the wallet is funded.'
+                    : 'Temporary refusal; nothing was billed. The worker will hand this person\'s message to BulkSMS again in a minute (try ' . ((int)($job['attempts'] ?? 0) + 2) . ' of 3).']);
+            }
+            $r['status'] = $wallet ? 'wallet' : 'retried';
+            return $r;
+        }
+    }
     $qStatus = $r['status'] === 'sent' ? 'done' : 'error';
     $pdo->prepare("UPDATE sms_queue SET status = ?, sent_status = ?, error_message = ? WHERE id = ?")
         ->execute([$qStatus, $r['status'], $r['error'], $job['id']]);
@@ -1311,6 +1577,22 @@ function sms_expire_stale(PDO $pdo) {
         $st->execute([$why, $r['id']]);
         if ($st->rowCount()) sms_log_event($pdo, $r['id'], $r['status'], 'unknown', 'system', ['detail' => $why]);
     }
+    // A row left at 'queued' (the hand-over died before its result was written, and no
+    // run is working on it) blocked that number as a duplicate for 24 h and could not be
+    // resent. After ten minutes its outcome is simply unknown.
+    if (sms_column_exists($pdo, 'sms_queue', 'log_id')) {
+        $stuck = $pdo->query("SELECT l.id FROM sms_log l
+                              LEFT JOIN sms_queue q ON q.log_id = l.id AND q.status = 'sending'
+                              WHERE l.status = 'queued' AND l.created_at < (NOW() - INTERVAL 10 MINUTE) AND q.id IS NULL
+                              ORDER BY l.id LIMIT 100")->fetchAll(PDO::FETCH_COLUMN);
+        $why = 'The hand-over to BulkSMS never reported back. The message may or may not have gone out — check the BulkSMS dashboard before resending.';
+        foreach ($stuck as $id) {
+            $st = $pdo->prepare("UPDATE sms_log SET status = 'unknown', error_message = ?, updated_at = NOW() WHERE id = ? AND status = 'queued'");
+            $st->execute([$why, $id]);
+            if ($st->rowCount()) sms_log_event($pdo, $id, 'queued', 'unknown', 'system', ['detail' => $why]);
+        }
+        $rows = array_merge($rows, $stuck);
+    }
     return count($rows);
 }
 
@@ -1324,20 +1606,32 @@ function sms_poll_due(PDO $pdo, array $settings, callable $timeLeft) {
                OR (created_at > (NOW() - INTERVAL 1 HOUR)  AND dlr_checked_at < (NOW() - INTERVAL 2 MINUTE))
                OR (created_at > (NOW() - INTERVAL 24 HOUR) AND dlr_checked_at < (NOW() - INTERVAL 15 MINUTE))
                OR dlr_checked_at < (NOW() - INTERVAL 6 HOUR))
-        ORDER BY created_at DESC LIMIT " . (int)SMS_POLLS_PER_RUN)->fetchAll(PDO::FETCH_ASSOC);
+        ORDER BY (dlr_checked_at IS NULL) DESC, dlr_checked_at ASC, id ASC LIMIT " . (int)SMS_POLLS_PER_RUN)->fetchAll(PDO::FETCH_ASSOC);   // never checked first, then the longest-unchecked
     $n = 0;
     foreach ($rows as $row) {
-        if ($timeLeft() <= 3) break;
-        sms_poll_delivery($pdo, $settings, $row, 'poll');
+        // One look-up can take up to a 30 s transport timeout, so keep real
+        // headroom: a run that overran into the next minute made that minute
+        // exit on the lock and the status bar call the worker "stopped".
+        if ($timeLeft() <= 12) break;
+        try {
+            sms_poll_delivery($pdo, $settings, $row, 'poll', null, false);   // no transport retries: the next run asks again
+        } catch (Throwable $e) {
+            error_log('SMS poll: log ' . $row['id'] . ': ' . $e->getMessage());   // one bad row must not end the run before the heartbeat
+        }
         $n++;
         usleep(500000);   // stay well inside the 120 requests/minute limit
     }
     return $n;
 }
 
-function sms_worker_heartbeat(PDO $pdo, $runSource, array $out) {
+/**
+ * $completed = false records what a cron run did (or the error that stopped it)
+ * without advancing last_cron_at, so the status bar does not call a failing
+ * worker "running".
+ */
+function sms_worker_heartbeat(PDO $pdo, $runSource, array $out, $completed = true) {
     if (!sms_table_exists($pdo, 'sms_worker_heartbeat')) return;
-    $isCron = $runSource === 'cron' ? 1 : 0;
+    $isCron = ($runSource === 'cron' && $completed) ? 1 : 0;
     $pdo->prepare("INSERT INTO sms_worker_heartbeat (id, last_run_at, last_cron_at, last_source, last_sent, last_failed, last_polled, last_message)
                    VALUES (1, NOW(), IF(? = 1, NOW(), NULL), ?, ?, ?, ?, ?)
                    ON DUPLICATE KEY UPDATE last_run_at = NOW(), last_cron_at = IF(? = 1, NOW(), last_cron_at),
@@ -1346,20 +1640,55 @@ function sms_worker_heartbeat(PDO $pdo, $runSource, array $out) {
                    $isCron, $runSource, $out['sent'], $out['failed'], $out['polled'], sms_cut($out['message'], 255)]);
 }
 
+/**
+ * "The cron fired": stamped by cron/sms_queue_worker.php before the lock and
+ * before any work, so the Studio can tell a cron that never runs from one that
+ * runs every minute and fails or finds the lock held. Needs the
+ * last_cron_seen_at column (20261021150000_sms_worker_heartbeat_seen.sql).
+ */
+function sms_worker_seen(PDO $pdo) {
+    if (!sms_table_exists($pdo, 'sms_worker_heartbeat') || !sms_column_exists($pdo, 'sms_worker_heartbeat', 'last_cron_seen_at')) return;
+    try {
+        $pdo->exec("INSERT INTO sms_worker_heartbeat (id, last_cron_seen_at) VALUES (1, NOW())
+                    ON DUPLICATE KEY UPDATE last_cron_seen_at = NOW()");
+    } catch (PDOException $e) {
+        error_log('SMS worker: could not stamp last_cron_seen_at: ' . $e->getMessage());
+    }
+}
+
+/** Leave a one-line note for the status bar without touching the run stamps. */
+function sms_worker_note(PDO $pdo, $message) {
+    if (!sms_table_exists($pdo, 'sms_worker_heartbeat')) return;
+    try {
+        $pdo->prepare("INSERT INTO sms_worker_heartbeat (id, last_message) VALUES (1, ?)
+                       ON DUPLICATE KEY UPDATE last_message = VALUES(last_message)")
+            ->execute([sms_cut($message, 255)]);
+    } catch (PDOException $e) {
+        error_log('SMS worker: could not record a note: ' . $e->getMessage());
+    }
+}
+
 /** What the Studio status bar shows: queue depth, cron freshness, webhook + vault health. */
 function sms_health(PDO $pdo) {
     $h = [
         'vault_ok' => sms_vault_ready(), 'configured' => false, 'decrypt_failed' => [],
         'queued' => 0, 'sending' => 0, 'oldest_queued_at' => null,
         'last_run_at' => null, 'last_cron_at' => null, 'cron_age_sec' => null, 'last_message' => null,
+        'last_cron_seen_at' => null, 'cron_seen_age_sec' => null,
         'webhook_secret_set' => sms_webhook_secret() !== '', 'webhook_url_set' => false, 'last_webhook_at' => null,
         'schema_ready' => sms_schema_ready($pdo), 'now' => date('Y-m-d H:i:s'),
+        // the two 2026-10-21 columns: retries, the wallet pause and the "fires but fails" pill need them
+        'schema_latest' => sms_column_exists($pdo, 'sms_queue', 'attempts') && sms_column_exists($pdo, 'sms_worker_heartbeat', 'last_cron_seen_at'),
     ];
     $failed = [];
     $s = sms_load_settings($pdo, $failed);
     $h['configured'] = !empty($s['api_token']);
     $h['decrypt_failed'] = $failed;
     $h['webhook_url_set'] = !empty($s['webhook_url']);
+    $h['sender_id']  = (string)$s['sender_id'];
+    $h['signature']  = sms_signature($s);           // what the composer shows at the start of every preview
+    $h['gateway']    = $s['gateway'] ?: 'direct-refund';
+    $h['unit_price'] = sms_unit_price($s);
     $q = $pdo->query("SELECT SUM(status = 'queued') AS queued, SUM(status = 'sending') AS sending FROM sms_queue")->fetch(PDO::FETCH_ASSOC);
     $h['queued'] = (int)($q['queued'] ?? 0);
     $h['sending'] = (int)($q['sending'] ?? 0);
@@ -1367,13 +1696,17 @@ function sms_health(PDO $pdo) {
         $h['oldest_queued_at'] = $pdo->query("SELECT MIN(c.created_at) FROM sms_queue q JOIN sms_campaigns c ON c.id = q.campaign_id WHERE q.status = 'queued'")->fetchColumn() ?: null;
     }
     if (sms_table_exists($pdo, 'sms_worker_heartbeat')) {
-        $hb = $pdo->query("SELECT last_run_at, last_cron_at, last_message, TIMESTAMPDIFF(SECOND, last_cron_at, NOW()) AS cron_age
-                           FROM sms_worker_heartbeat WHERE id = 1")->fetch(PDO::FETCH_ASSOC);
+        $seenCol = sms_column_exists($pdo, 'sms_worker_heartbeat', 'last_cron_seen_at');
+        $hb = $pdo->query("SELECT last_run_at, last_cron_at, last_message, TIMESTAMPDIFF(SECOND, last_cron_at, NOW()) AS cron_age"
+                        . ($seenCol ? ", last_cron_seen_at, TIMESTAMPDIFF(SECOND, last_cron_seen_at, NOW()) AS seen_age" : ", NULL AS last_cron_seen_at, NULL AS seen_age")
+                        . " FROM sms_worker_heartbeat WHERE id = 1")->fetch(PDO::FETCH_ASSOC);
         if ($hb) {
             $h['last_run_at'] = $hb['last_run_at'];
             $h['last_cron_at'] = $hb['last_cron_at'];
             $h['cron_age_sec'] = $hb['cron_age'] !== null ? (int)$hb['cron_age'] : null;
             $h['last_message'] = $hb['last_message'];
+            $h['last_cron_seen_at'] = $hb['last_cron_seen_at'];
+            $h['cron_seen_age_sec'] = $hb['seen_age'] !== null ? (int)$hb['seen_age'] : null;
         }
     }
     if (sms_table_exists($pdo, 'sms_webhook_log')) {

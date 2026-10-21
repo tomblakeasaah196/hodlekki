@@ -51,6 +51,14 @@ try {
     $pdo->exec("SET time_zone = '+01:00';");
     
 } catch (\PDOException $e) {
+    // A cron job (CLI) must fail loudly: the JSON below went to stdout with exit
+    // code 0, so a worker whose database connection failed looked like a run
+    // that did nothing, every minute, with nothing in any log.
+    if (PHP_SAPI === 'cli') {
+        fwrite(STDERR, 'Database Connection Failed: ' . $e->getMessage() . "\n");
+        error_log('CLI: database connection failed: ' . $e->getMessage());
+        exit(1);
+    }
     die(json_encode([
         "status" => "error", 
         "message" => "Database Connection Failed: Check your configuration or credentials."

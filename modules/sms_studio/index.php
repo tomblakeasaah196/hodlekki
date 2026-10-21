@@ -340,6 +340,8 @@ if ($CAN_ASSIM) {
           <p><span class="font-bold text-gray-600">Sender ID:</span> <span id="maskSender" class="text-gray-500">—</span></p>
           <p><span class="font-bold text-gray-600">Gateway:</span> <span id="maskGateway" class="text-gray-500">—</span></p>
           <p><span class="font-bold text-gray-600">Delivery webhook:</span> <span id="maskWebhook" class="text-gray-500">—</span></p>
+          <p><span class="font-bold text-gray-600">Sender name in the text:</span> <span id="maskSign" class="text-gray-500">—</span></p>
+          <p><span class="font-bold text-gray-600">Price per SMS unit:</span> <span id="maskPrice" class="text-gray-500">—</span></p>
         </div>
         <div class="flex gap-2">
           <input id="unlockPwd" type="password" autocomplete="current-password" placeholder="Enter your ERP password to unlock…" class="flex-1 px-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-hodBlue">
@@ -380,6 +382,22 @@ if ($CAN_ASSIM) {
               <option value="dual-backup">dual-backup</option>
             </select>
           </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-gray-600 uppercase mb-1.5">Sender name in the text</label>
+              <select id="sSignMode" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hodBlue outline-none bg-white text-sm">
+                <option value="">Write it at the start of every message (default)</option>
+                <option value="prefix">Write it at the start of every message</option>
+                <option value="none">Do not write it (sender ID field only)</option>
+              </select>
+              <p class="text-[11px] text-gray-400 mt-1">Every message begins with the sender ID, e.g. “HODLEKKI: Dear Ada…”, so people see who wrote even where a route hides the sender ID. It counts towards the characters and the cost. On the BulkSMS dashboard set “Append Sender ID” to <b>Don't Append</b>, or the name may appear twice.</p>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-600 uppercase mb-1.5">Price per SMS unit (₦)</label>
+              <input type="text" id="sUnitPrice" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="6.49" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hodBlue outline-none text-sm">
+              <p class="text-[11px] text-gray-400 mt-1">Used to check the wallet before a campaign is queued. Take it from BulkSMS pricing for the gateway chosen above (the corporate route costs more than direct-refund).</p>
+            </div>
+          </div>
           <div>
             <label class="block text-xs font-bold text-gray-600 uppercase mb-1.5">Delivery Webhook URL (recommended)</label>
             <div class="flex gap-2">
@@ -400,8 +418,9 @@ if ($CAN_ASSIM) {
     <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 md:p-7">
       <h3 class="text-lg font-bold text-gray-900 mb-3">Delivery setup checklist</h3>
       <ul id="setupChecklist" class="space-y-2 text-sm"></ul>
-      <p class="text-[11px] text-gray-500 mt-3">Background sender cron (cPanel → Cron Jobs, every minute):</p>
-      <pre class="bg-gray-900 text-green-300 text-[11px] rounded-xl p-3 mt-1 overflow-x-auto sms-scroll">* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >/dev/null 2>&1</pre>
+      <p class="text-[11px] text-gray-500 mt-3">Background sender cron (cPanel → Cron Jobs, every minute). Keep its output in a log file — a worker that dies every minute is invisible with <code>&gt;/dev/null</code>:</p>
+      <pre class="bg-gray-900 text-green-300 text-[11px] rounded-xl p-3 mt-1 overflow-x-auto sms-scroll">* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1</pre>
+      <p class="text-[11px] text-gray-500 mt-2">To check it from cPanel → Terminal: <code>tail -n 30 /home/smartqaq/sms_worker.log</code> (one line per minute) and <code>tail -n 50 /home/smartqaq/public_html/hodlc.lpc.cm/includes/error_log</code> (errors).</p>
     </div>
   </section>
 </div>
@@ -548,6 +567,7 @@ if ($CAN_ASSIM) {
    STATE
 ================================================================ */
 const CSRF = <?= json_encode($SMS_CSRF) ?>;
+const IS_SUPER_ADMIN = <?= sms_user_is_super_admin() ? 'true' : 'false' ?>;
 const API = '/api/sms_api.php';
 let recipients = [];          // contacts for the current filter
 let selected = new Map();     // phone -> recipient
@@ -610,7 +630,7 @@ const GSM_CLEAN = {'‘':"'",'’':"'",'‚':"'",'‛':"'",'′':"'",'´':"'",
   '‐':'-','‑':'-','‒':'-','–':'-','—':'-','―':'-','−':'-',
   '…':'...','•':'-',' ':' ',' ':' ',' ':' ',' ':' ',' ':' ',
   '​':'','﻿':'','­':''};
-function gsmClean(t){ return (t||'').replace(/\r\n/g,'\n').replace(/[‘’‚‛′´“”„‟″‐-―−…•     ​﻿­]/g, c => GSM_CLEAN[c] ?? c); }
+function gsmClean(t){ return (t||'').replace(/\r\n/g,'\n').replace(/\t/g,' ').replace(/[\u2028\u2029]/g,'\n').replace(/[‘’‚‛′´“”„‟″‐-―−…•     ​﻿­]/g, c => GSM_CLEAN[c] ?? c); }
 const GSM7 = "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
 const GSM7_EXT = "^{}\\[~]|€";
 function smsPages(text){
@@ -633,6 +653,15 @@ function render(tpl, d){
   return gsmClean((tpl||'').replace(/{{([a-z_]+)}}/g, (m,k) => (k in map) ? map[k] : m)).trim();
 }
 const SAMPLE = { first_name:'Ada', last_name:'Example', name:'Ada Example', phone:'2348031234567', email:'ada@example.com', event_title:'Sunday Service', blessing_ref:'Numbers 6:24' };
+/* The sender name the server writes at the start of every message (Settings → "Sender name in the text"),
+   mirrored here so the preview, the unit count and the cost match what is sent (sms_sign_body()). */
+function signature(){ return (lastHealth && lastHealth.signature) ? String(lastHealth.signature) : ''; }
+function sign(text){
+  const s = signature(); if (!s || !text) return text;
+  const name = s.replace(/[:\s]+$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');   // already starts with the sender name as a word: leave it
+  return new RegExp('^' + name + '(?![A-Za-z0-9])', 'i').test(text) ? text : s + text;
+}
+function unitPrice(){ const p = lastHealth ? Number(lastHealth.unit_price) : 0; return p > 0 ? p : 6.49; }
 
 /* ================================================================
    TABS
@@ -661,6 +690,9 @@ function loadHealth(){
     $('#myPhone').text(res.my_phone || 'none on your profile');
     renderHealth();
     if (currentTab==='settings') renderChecklist();
+    // While the cron job is down, keep sending from whichever Studio tab is open — not only the campaign drawer.
+    const h = res.health || {};
+    if (h.queued > 0 && h.configured && !(h.cron_age_sec != null && h.cron_age_sec <= 180)) driveQueue(false);
   });
 }
 function pill(cls, html, title){ return `<span class="px-3 py-1.5 rounded-full ${cls}" ${title?`title="${esc(title)}"`:''}>${html}</span>`; }
@@ -673,13 +705,18 @@ function renderHealth(){
   else out += pill('bg-emerald-100 text-emerald-700', '✓ BulkSMS connected');
   if (h.vault_ok) {
     if (h.schema_ready === false) out += pill('bg-amber-100 text-amber-800', '! Database update pending — run db/migrate.php');
-    const age = h.cron_age_sec;
-    if (age == null) out += pill('bg-amber-100 text-amber-800', '! Background sender has never run — add the cron job (see Settings)', 'Until it runs, campaigns are sent while this page is open.');
-    else if (age > 180) out += pill('bg-red-100 text-red-700', '✕ Background sender stopped · last run ' + secsLabel(age), 'Campaigns are sent while this page is open until the cron job is fixed.');
+    else if (h.schema_latest === false) out += pill('bg-amber-100 text-amber-800', '! Database update pending (retries and cron diagnosis) — run db/migrate.php', 'Until it runs, a refused message is not retried and an empty wallet is not waited for.');
+    const age = h.cron_age_sec, seen = h.cron_seen_age_sec;
+    const firing = seen != null && seen <= 180;   // the cron job itself is firing (stamped before any work)
+    if (age == null && !firing) out += pill('bg-amber-100 text-amber-800', '! Background sender has never run — add the cron job (see Settings)', 'Until it runs, campaigns are sent while this page is open.');
+    else if ((age == null || age > 180) && firing) out += pill('bg-red-100 text-red-700', '✕ Background sender fires but does not finish · last try ' + secsLabel(seen) + (h.last_message ? ' · ' + esc(h.last_message) : ''), 'The cron job runs every minute but each run fails or finds another run holding the lock. Read includes/error_log and the cron log file. Campaigns are sent while this page is open meanwhile.');
+    else if (age == null || age > 180) out += pill('bg-red-100 text-red-700', '✕ Background sender stopped · last run ' + secsLabel(age), 'The cron job is not firing at all (cPanel → Cron Jobs). Campaigns are sent while this page is open until it is fixed.');
     else out += pill('bg-emerald-100 text-emerald-700', '✓ Background sender running · ' + secsLabel(age));
     if (h.queued > 0) {
       out += pill('bg-sky-100 text-sky-700', `${h.queued} message(s) waiting to send` + (h.oldest_queued_at_t ? ' · since ' + esc(h.oldest_queued_at_t.label) : ''));
-      if (age == null || age > 180) out += `<button id="btnSendQueuedNow" class="px-3 py-1.5 rounded-full bg-hodBlue text-white hover:bg-[#152750]">Send queued now</button>`;
+      if (h.last_message && /^(Paused|Waiting)/.test(h.last_message)) out += pill('bg-amber-100 text-amber-800', '⏸ ' + esc(h.last_message.replace(/\s+\d+ sent, .*$/, '')), 'The background sender stopped sending on purpose. It tries again by itself.');
+      if ((age == null || age > 180) && !driving) out += `<button id="btnSendQueuedNow" class="px-3 py-1.5 rounded-full bg-hodBlue text-white hover:bg-[#152750]">Send queued now</button>`;
+      else if (driving) out += pill('bg-sky-50 text-sky-700', 'Sending from this page…');
     }
     if (h.webhook_secret_set && h.webhook_url_set) out += pill('bg-emerald-50 text-emerald-700', '✓ Delivery webhook on' + (h.last_webhook_at_t ? ' · last report ' + ago(h.last_webhook_at_t) : ' · no report received yet'));
     else out += pill('bg-gray-100 text-gray-600', 'Delivery reports by polling (webhook not set up)');
@@ -689,17 +726,21 @@ function renderHealth(){
 $(document).on('click','#btnSendQueuedNow', function(){ driveQueue(true); });
 
 /* Send from this page while cron is down (one run at a time, serialised) */
+let lockedUntil = 0;   // after a 'locked' answer (the cron or another tab is sending) wait before asking again
 function driveQueue(loud){
   if (driving) return;
+  if (Date.now() < lockedUntil) { if (loud) toast('Another sender run (the background sender or another tab) holds the lock — waiting.', 'info'); return; }
   driving = true;
   if (loud) toast('Sending queued messages from this page… keep it open.', 'info');
   api('process_queue', {}, function(res){
     driving = false;
-    if (res.status==='success' && loud) toast(res.message, 'info');
+    if (res.status==='success' && res.result && res.result.locked) { lockedUntil = Date.now() + 20000; if (loud) toast('Another sender run (the background sender or another tab) holds the lock — waiting.', 'info'); }
+    else if (res.status==='success' && loud) toast(res.message, 'info');
     loadHealth();
     if (res.status==='success' && res.result && res.result.remaining > 0 && !res.result.locked && loud) driveQueue(true);
-  }).fail(function(){ driving = false; });
+  }).fail(function(){ driving = false; setTimeout(loadHealth, 8000); });   // one failed request must not end the page-driven send
 }
+document.addEventListener('visibilitychange', function(){ if (!document.hidden) loadHealth(); });
 
 /* ================================================================
    AUDIENCE
@@ -900,18 +941,20 @@ function analyse(){
   const tpl = $('#messageTemplate').val() || '';
   const arr = [...selected.values()];
   const first = arr[0] || SAMPLE;
-  const preview = render(tpl, first);
+  const preview = sign(render(tpl, first));
   $('#previewWho').text(arr[0] ? (arr[0].name || arr[0].phone) : 'a sample contact');
   $('#previewBox').text(preview || 'Start typing a message to see the live preview.');
 
-  const p = smsPages(gsmClean(tpl));
-  $('#charCount').text(tpl.length + ' characters in the template · ' + p.enc);
+  const p = smsPages(sign(gsmClean(tpl)));
+  $('#charCount').text(tpl.length + ' characters in the template · ' + p.enc + (signature() ? ' · "' + signature().trim() + '" is written at the start of every message (+' + signature().length + ' characters)' : ''));
   // Cost over the real, merged messages (names and verses change the length)
-  let units = 0, maxPages = 0;
+  let units = 0, maxPages = 0, pushed = 0;
   const missing = {};
   const used = [...new Set((tpl.match(/{{([a-z_]+)}}/g)||[]).map(t=>t.slice(2,-2)))];
   arr.forEach(r=>{
-    const pg = smsPages(render(tpl, r)).pages; units += pg; if (pg>maxPages) maxPages = pg;
+    const bare = render(tpl, r);
+    const pg = smsPages(sign(bare)).pages; units += pg; if (pg>maxPages) maxPages = pg;
+    if (signature() && pg > smsPages(bare).pages) pushed++;
     used.forEach(k=>{ const v = k==='full_name' ? (r.first_name||'') : (k==='guest_name' ? (r.guest_name||r.first_name||r.name||'') : (r[k]||'')); if (!String(v).trim()) missing[k] = (missing[k]||0)+1; });
   });
   if (arr.length) $('#smsCount').text(`${units} SMS unit(s) for ${arr.length} recipient(s)` + (maxPages>1 ? ` · longest is ${maxPages} pages` : ''));
@@ -929,6 +972,7 @@ function analyse(){
     else if (fixable.length) warn.push(['blue', `Curly quotes / long dashes (${fixable.map(c=>'“'+esc(c)+'”').join(' ')}) are converted to plain characters automatically so the message stays cheap. <button id="btnFixChars" class="underline font-bold">Convert them in the box now</button>`]);
   }
   if (maxPages > 3) warn.push(['amber', `Some messages run to ${maxPages} pages — every page is billed. Consider shortening.`]);
+  if (pushed) warn.push(['amber', `The sender name at the start ("${esc(signature().trim())}") pushes ${pushed} of ${arr.length} message(s) onto an extra page. Shorten the text by ${signature().length} characters to keep them to one page.`]);
   $('#composeWarnings').html(warn.map(w=>{
     const cls = w[0]==='red' ? 'bg-red-50 text-red-700 border-red-100' : (w[0]==='amber' ? 'bg-amber-50 text-amber-800 border-amber-100' : 'bg-blue-50 text-hodBlue border-blue-100');
     return `<div class="text-[11px] font-semibold border rounded-lg px-3 py-2 ${cls}">${w[1]}</div>`;
@@ -978,7 +1022,7 @@ $('#btnSendTest').on('click', function(){
   const a = analyse();
   if (a.unknown.length && !confirm('The message has an unknown merge field that will be sent literally. Send the test anyway?')) return;
   const phone = $('#testPhone').val().trim();
-  if (!confirm('This sends a REAL SMS to ' + (phone || 'your own number') + ' and is billed (about ₦5–7 per page). Send the test?')) return;
+  if (!confirm('This sends a REAL SMS to ' + (phone || 'your own number') + ' and is billed (about ₦' + unitPrice().toFixed(2) + ' per page). Send the test?')) return;
   busy(true, 'Sending test…');
   api('send_test', { template:tpl, audience:currentAudience(), event_id: currentEventId(), test_phone: phone }, function(res){
     busy(false); toast(res.message, res.status);
@@ -996,14 +1040,39 @@ $('#btnSendCampaign').on('click', function(){
   const cronOk = h.cron_age_sec != null && h.cron_age_sec <= 180;
   let body = `<div class="grid grid-cols-2 gap-3">
       <div class="bg-blue-50 rounded-xl p-3"><p class="text-[10px] font-bold text-hodBlue uppercase">Recipients</p><p class="text-2xl font-black text-gray-900">${arr.length}</p></div>
-      <div class="bg-amber-50 rounded-xl p-3"><p class="text-[10px] font-bold text-amber-700 uppercase">SMS units (billed)</p><p class="text-2xl font-black text-gray-900">${a.units}</p><p class="text-[10px] text-amber-700">≈ ₦${(a.units*6).toLocaleString()} at ~₦6/unit</p></div>
+      <div class="bg-amber-50 rounded-xl p-3"><p class="text-[10px] font-bold text-amber-700 uppercase">SMS units (billed)</p><p class="text-2xl font-black text-gray-900">${a.units}</p><p class="text-[10px] text-amber-700">≈ ${naira(a.units*unitPrice())} at ₦${unitPrice().toFixed(2)}/unit (Settings)</p></div>
     </div>
+    <div id="walletLine" class="text-[11px] font-semibold bg-gray-50 text-gray-600 border border-gray-100 rounded-lg px-3 py-2">Checking the BulkSMS wallet…</div>
     <div><p class="text-[11px] font-bold text-gray-500 uppercase mb-1">What ${esc(arr[0].name||arr[0].phone)} will receive</p>
-      <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 whitespace-pre-wrap text-gray-800">${esc(render(tpl, arr[0]))}</div></div>`;
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 whitespace-pre-wrap text-gray-800">${esc(sign(render(tpl, arr[0])))}</div></div>`;
   if (a.warn.length) body += a.warn.map(w=>`<div class="text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-100 rounded-lg px-3 py-2">${w[1].replace(/<button[\s\S]*<\/button>/,'')}</div>`).join('');
   if (!cronOk) body += `<div class="text-[11px] font-semibold bg-red-50 text-red-700 border border-red-100 rounded-lg px-3 py-2">The background sender is not running, so messages will be sent from this page — keep it open until the campaign shows 100%.</div>`;
   $('#confirmBody').html(body);
+  $('#btnConfirmSend').prop('disabled', true).text('Checking wallet…');
   openModal('confirmModal');
+  // The server refuses a campaign the wallet cannot pay for (send_campaign); show that here before the click.
+  api('wallet', { phones: JSON.stringify(arr.map(r => r.phone)) }, function(res){
+    const price = (res.unit_price > 0) ? Number(res.unit_price) : unitPrice();
+    const need = a.units * price;
+    if (res.suppressed > 0) $('#walletLine').before(`<div class="text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-100 rounded-lg px-3 py-2">${res.suppressed} selected number(s) are on the suppression list and will be skipped (₦0): ${esc((res.suppressed_sample||[]).join(', '))}${res.suppressed > 5 ? '…' : ''}. Release them on the Suppression tab first if they should receive this.</div>`);
+    if (res.status === 'success' && res.ok && res.balance !== null) {
+      const short = Number(res.balance) < need;
+      $('#walletLine').html(`BulkSMS wallet: <b>${naira(res.balance)}</b> · this campaign needs about <b>${naira(need)}</b> (${a.units} × ₦${price.toFixed(2)})`
+          + (short ? ' — <b>fund the wallet first</b>. The Studio will not queue a campaign it cannot pay for.' : ' ✓'))
+        .removeClass('bg-gray-50 text-gray-600 border-gray-100')
+        .addClass(short ? 'bg-red-50 text-red-700 border-red-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100');
+      $('#btnConfirmSend').prop('disabled', short).text(short ? 'Wallet too low' : 'Yes, send it');
+    } else {
+      $('#walletLine').html('Could not read the BulkSMS wallet balance' + (res && res.error ? ' (' + esc(res.error) + ')' : (res && res.message ? ' (' + esc(res.message) + ')' : '')) + '. The send is refused until the balance can be read — close this and try again in a moment.'
+          + (IS_SUPER_ADMIN ? '<label class="block mt-2 font-bold"><input type="checkbox" id="walletOverride" class="mr-1.5">Send anyway (Super Admin) — you have checked the wallet on the BulkSMS dashboard yourself</label>' : ''))
+        .removeClass('bg-gray-50 text-gray-600 border-gray-100').addClass('bg-red-50 text-red-700 border-red-100');
+      $('#btnConfirmSend').prop('disabled', true).text('Wallet unreadable');
+      $('#walletOverride').on('change', function(){ $('#btnConfirmSend').prop('disabled', !this.checked).text(this.checked ? 'Yes, send it' : 'Wallet unreadable'); });
+    }
+  }).fail(function(){
+    $('#walletLine').text('Could not reach the server to read the wallet balance. Close this and try again.').removeClass('bg-gray-50 text-gray-600 border-gray-100').addClass('bg-red-50 text-red-700 border-red-100');
+    $('#btnConfirmSend').prop('disabled', true).text('Wallet unreadable');
+  });
 });
 
 $('#btnConfirmSend').on('click', function(){
@@ -1013,6 +1082,7 @@ $('#btnConfirmSend').on('click', function(){
   api('send_campaign', {
     template: tpl, audience: currentAudience(), recipients: JSON.stringify(arr),
     title: $('#campaignTitle').val().trim(), event_id: currentEventId(), client_token: composeToken,
+    wallet_override: $('#walletOverride').is(':checked') ? 1 : '',
     filters: JSON.stringify({ audience: currentAudience(), statuses: currentStatuses(), event_id: currentEventId(), search: $('#contactSearch').val()||'', rule: currentAudience()==='assimilation' ? assimRule : undefined })
   }, function(res){
     $b.prop('disabled', false).text('Yes, send it');
@@ -1079,12 +1149,16 @@ function renderCampaign(ids){
     if (!drawerIs('campaign', ids)) return;
     if (res.status!=='success'){ $('#drawerBody').html('<p class="text-red-500">'+esc(res.message)+'</p>'); return; }
     const c = res.campaign, done = c.total - c.remaining, pct = c.total ? Math.round(done/c.total*100) : 100;
+    const notSent = (c.log.failed||0) + (c.log.blocked||0) + (c.log.unknown||0);
     $('#drawerTitle').text(c.title);
     let html = `<div class="space-y-2">
-        <div class="flex justify-between text-sm font-bold"><span>${done} of ${c.total} handed to BulkSMS</span><span>${pct}%</span></div>
+        <div class="flex justify-between text-sm font-bold"><span>${done} of ${c.total} processed${notSent ? ` · <span class="text-red-600">${notSent} not sent</span>` : ''}</span><span>${pct}%</span></div>
         ${progressBar(c)}
         <p class="text-[12px]">${countsLine(c.log)}</p>
       </div>`;
+    if (c.remaining > 0 && !c.cancelled && res.worker_message && /^(Paused|Waiting)/.test(res.worker_message)) {
+      html += `<div class="text-[11px] bg-amber-50 text-amber-800 border border-amber-100 rounded-lg px-3 py-2 font-semibold">⏸ ${esc(res.worker_message.replace(/\s+\d+ sent, .*$/, ''))}</div>`;
+    }
     if (c.remaining > 0 && !c.cancelled) {
       html += res.cron_ok
         ? `<div class="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg px-3 py-2 font-semibold">Sending in the background (about one message per second). You can close this.</div>`
@@ -1106,6 +1180,10 @@ function renderCampaign(ids){
     clearTimeout(campTimer);
     if (c.remaining > 0 && !c.cancelled && !res.cron_ok) driveQueue(false);
     campTimer = setTimeout(()=>{ if (drawerIs('campaign', ids)) renderCampaign(ids); }, c.remaining > 0 ? 4000 : 20000);
+  }).fail(function(){
+    // One failed poll (a network blip, a session refresh) used to end the live view — and the page-driven send — for good.
+    clearTimeout(campTimer);
+    campTimer = setTimeout(()=>{ if (drawerIs('campaign', ids)) renderCampaign(ids); }, 6000);
   });
 }
 $(document).on('click','.drawer-hist', function(){
@@ -1370,6 +1448,7 @@ function loadSettingsStatus(){
     const m = res.masked || {};
     $('#maskBase').text(m.base_url||'—'); $('#maskToken').text(m.api_token||'not set'); $('#maskSender').text(m.sender_id||'not set');
     $('#maskGateway').text(m.gateway||'—'); $('#maskWebhook').text(m.webhook_url||'—');
+    $('#maskSign').text(m.sign_mode||'—'); $('#maskPrice').text(m.unit_price||'—');
     $('#settingsLocked').removeClass('hidden'); $('#settingsUnlocked').addClass('hidden');
   });
 }
@@ -1379,8 +1458,10 @@ function renderChecklist(){
   $('#setupChecklist').html(
     item(h.vault_ok, 'SMS_VAULT_KEY is set in .env', 'Add a 64-hex-character SMS_VAULT_KEY to .env on the server.') +
     item(h.configured && !(h.decrypt_failed||[]).length, 'BulkSMS token and sender ID saved', 'Unlock above and save the API token and an approved sender ID.') +
+    item(!!h.signature, 'Sender name written at the start of every message' + (h.signature ? ' (“' + esc(String(h.signature).trim()) + '”)' : ''), 'Unlock above and set “Sender name in the text” back to the default.') +
     item(h.schema_ready, 'Database is up to date', 'Run php db/migrate.php (the deploy does this automatically).') +
-    item(h.cron_age_sec != null && h.cron_age_sec <= 180, 'Background sender cron is running' + (h.cron_age_sec!=null ? ' (last run ' + secsLabel(h.cron_age_sec) + ')' : ''), 'Add the cron line below in cPanel → Cron Jobs.') +
+    item(h.cron_age_sec != null && h.cron_age_sec <= 180, 'Background sender cron is running' + (h.cron_age_sec!=null ? ' (last run ' + secsLabel(h.cron_age_sec) + ')' : ''),
+      (h.cron_seen_age_sec != null && h.cron_seen_age_sec <= 180) ? 'The cron job fires but its runs do not finish: ' + esc(h.last_message || 'see includes/error_log and the cron log file') : 'Add the cron line below in cPanel → Cron Jobs.') +
     item(h.webhook_secret_set, 'SMS_WEBHOOK_SECRET is set in .env (optional)', 'Add SMS_WEBHOOK_SECRET to .env to receive instant delivery reports.') +
     item(h.webhook_url_set, 'Delivery webhook URL saved (optional)', 'Unlock above and click "Use this site\'s webhook URL". Without it the sender polls BulkSMS instead.')
   );
@@ -1395,6 +1476,7 @@ function unlockSettings(){
     const s = res.settings || {};
     $('#sBase').val(s.base_url || 'https://www.bulksmsnigeria.com/api/v2'); $('#sToken').val(s.api_token||''); $('#sSender').val(s.sender_id||'');
     $('#sGateway').val(s.gateway||''); $('#sWebhook').val(s.webhook_url||'');
+    $('#sSignMode').val(s.sign_mode||''); $('#sUnitPrice').val(s.unit_price||'');
     webhookSuggestion = res.webhook_suggestion || '';
     $('#btnUseWebhook').toggleClass('opacity-50', !webhookSuggestion);
     $('#unlockPwd').val(''); $('#settingsLocked').addClass('hidden'); $('#settingsUnlocked').removeClass('hidden');
@@ -1424,7 +1506,8 @@ $('#btnFetchSenders').on('click', function(){
 $(document).on('click','.pick-sender', function(){ $('#sSender').val(String($(this).data('v'))); });
 $('#settingsForm').on('submit', function(e){
   e.preventDefault();
-  api('save_settings', { base_url:$('#sBase').val(), api_token:$('#sToken').val(), sender_id:$('#sSender').val(), gateway:$('#sGateway').val(), webhook_url:$('#sWebhook').val() }, function(res){
+  api('save_settings', { base_url:$('#sBase').val(), api_token:$('#sToken').val(), sender_id:$('#sSender').val(), gateway:$('#sGateway').val(), webhook_url:$('#sWebhook').val(),
+                         sign_mode:$('#sSignMode').val(), unit_price:$('#sUnitPrice').val().trim() }, function(res){
     toast(res.message,res.status);
     if (res.status==='success'){ loadSettingsStatus(); loadHealth(); }
   });
