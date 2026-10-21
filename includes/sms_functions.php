@@ -380,6 +380,176 @@ function sms_audience_registrations(PDO $pdo, $eventId, $search, $cap = SMS_AUDI
     return ['data'=>$out, 'dropped'=>$dropped, 'duplicates'=>$dupes, 'truncated'=>$truncated];
 }
 
+/** Where an "Everyone" recipient was found, in the order a number's name is taken from. */
+const SMS_EVERYONE_SOURCES = [
+    'user' => 'Congregation', 'registration' => 'Registration', 'checkin' => 'Check-in',
+    'se_contact' => 'Special Events', 'academy' => 'Academy', 'idi' => 'IDI', 'reach' => 'Reach',
+];
+
+/**
+ * Everyone audience: every person who has ever visited, registered or attended,
+ * across users, event_registrations, checkins, se_contacts, academy_applications,
+ * idi_mobilization and reach_leads. No status filter: many of these people have
+ * no spiritual_status at all, which is why the Congregation audience misses them.
+ *
+ * One recipient per normalized number. The first source in SMS_EVERYONE_SOURCES
+ * that has the number gives its name; later sources only fill blanks and add
+ * themselves to `sources`. A number is left out everywhere when users has it
+ * flagged phone_status = 'invalid', or when its Special Events contact opted out.
+ * Special Events guests who never ticked follow-up consent are not added from
+ * that table (they still come in if another table has them).
+ *
+ * Returns the usual audience shape plus 'excluded' (numbers left out by those rules).
+ */
+function sms_audience_everyone(PDO $pdo, $search, $cap = SMS_AUDIENCE_CAP) {
+    $split = function ($full) {
+        $full = sms_clean_name($full);
+        $at = strpos($full, ' ');
+        return [$full, $at === false ? $full : substr($full, 0, $at), $at === false ? '' : trim(substr($full, $at + 1))];
+    };
+    $rows = [];      // [kind, id, raw phone, name, first, last, email]
+    $blocked = [];   // normalized numbers that must not be messaged
+
+    $hasPhoneStatus = sms_column_exists($pdo, 'users', 'phone_status');
+    $st = $pdo->query("SELECT id, first_name, last_name, phone, email"
+        . ($hasPhoneStatus ? ", phone_status" : ", NULL AS phone_status")
+        . " FROM users WHERE phone IS NOT NULL AND TRIM(phone) <> '' ORDER BY id");
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $u) {
+        if (($u['phone_status'] ?? '') === 'invalid') {
+            if ($n = sms_normalize_phone($u['phone'])) $blocked[$n] = true;
+            continue;
+        }
+        $first = sms_clean_name($u['first_name']); $last = sms_clean_name($u['last_name']);
+        $rows[] = ['user', $u['id'], $u['phone'], trim($first . ' ' . $last), $first, $last, $u['email'] ?? ''];
+    }
+
+    $st = $pdo->query("SELECT r.id, r.guest_name, r.guest_phone, r.guest_email,
+                              u.first_name, u.last_name, u.phone AS user_phone, u.email AS user_email
+                       FROM event_registrations r
+                       LEFT JOIN users u ON u.id = COALESCE(r.user_id, r.matched_user_id)
+                       ORDER BY r.id DESC");
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $phone = trim((string)($r['guest_phone'] ?? '')) !== '' ? $r['guest_phone'] : ($r['user_phone'] ?? '');
+        if (trim((string)$phone) === '') continue;
+        [$name, $first, $last] = $split($r['guest_name']);
+        if (sms_clean_name($r['first_name']) !== '') {
+            $first = sms_clean_name($r['first_name']); $last = sms_clean_name($r['last_name']);
+            $name = trim($first . ' ' . $last);
+        }
+        $rows[] = ['registration', $r['id'], $phone, $name, $first, $last, $r['guest_email'] ?: ($r['user_email'] ?? '')];
+    }
+
+    $st = $pdo->query("SELECT id, full_name, phone FROM checkins
+                       WHERE phone IS NOT NULL AND TRIM(phone) <> '' ORDER BY id DESC");
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $c) {
+        [$name, $first, $last] = $split($c['full_name']);
+        $rows[] = ['checkin', $c['id'], $c['phone'], $name, $first, $last, ''];
+    }
+
+    if (sms_table_exists($pdo, 'se_contacts') && sms_table_exists($pdo, 'se_registrations')) {
+        $st = $pdo->query("SELECT c.id, c.first_name, c.last_name, c.email, c.phone_e164,
+                                  c.consent_followup, c.opted_out_at
+                           FROM se_contacts c
+                           WHERE c.erased_at IS NULL
+                             AND EXISTS (SELECT 1 FROM se_registrations r WHERE r.contact_id = c.id AND r.is_test = 0)
+                           ORDER BY c.id");
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            if ($c['opted_out_at'] !== null) {
+                if ($n = sms_normalize_phone($c['phone_e164'])) $blocked[$n] = true;
+                continue;
+            }
+            if ((int)$c['consent_followup'] !== 1) continue;
+            $first = sms_clean_name($c['first_name']); $last = sms_clean_name($c['last_name']);
+            $rows[] = ['se_contact', $c['id'], $c['phone_e164'], trim($first . ' ' . $last), $first, $last, $c['email'] ?? ''];
+        }
+    }
+
+    if (sms_table_exists($pdo, 'academy_applications')) {
+        $st = $pdo->query("SELECT a.id, a.full_name, a.phone_number, a.whatsapp_number, a.email_address, u.phone AS user_phone
+                           FROM academy_applications a LEFT JOIN users u ON u.id = a.user_id
+                           ORDER BY a.id DESC");
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $a) {
+            // The typed number first; WhatsApp or the member's own number when it isn't usable.
+            $phone = '';
+            foreach ([$a['phone_number'], $a['whatsapp_number'], $a['user_phone']] as $p) {
+                if (trim((string)$p) === '') continue;
+                if ($phone === '') $phone = $p;
+                if (sms_normalize_phone($p) !== null) { $phone = $p; break; }
+            }
+            if ($phone === '') continue;
+            [$name, $first, $last] = $split($a['full_name']);
+            $rows[] = ['academy', $a['id'], $phone, $name, $first, $last, $a['email_address'] ?? ''];
+        }
+    }
+
+    if (sms_table_exists($pdo, 'idi_mobilization')) {
+        $st = $pdo->query("SELECT id, full_name, phone_number FROM idi_mobilization
+                           WHERE phone_number IS NOT NULL AND TRIM(phone_number) <> '' ORDER BY id");
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $m) {
+            [$name, $first, $last] = $split($m['full_name']);
+            $rows[] = ['idi', $m['id'], $m['phone_number'], $name, $first, $last, ''];
+        }
+    }
+
+    if (sms_table_exists($pdo, 'reach_leads')) {
+        $st = $pdo->query("SELECT id, first_name, last_name, phone FROM reach_leads
+                           WHERE phone IS NOT NULL AND TRIM(phone) <> '' ORDER BY id");
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $l) {
+            $first = sms_clean_name($l['first_name']); $last = sms_clean_name($l['last_name']);
+            $rows[] = ['reach', $l['id'], $l['phone'], trim($first . ' ' . $last), $first, $last, ''];
+        }
+    }
+
+    // Merge: one recipient per number, highest-priority source first.
+    $order = array_flip(array_keys(SMS_EVERYONE_SOURCES));
+    usort($rows, function ($a, $b) use ($order) { return $order[$a[0]] <=> $order[$b[0]]; });   // stable in PHP 8
+    $byPhone = []; $invalid = []; $dupes = 0;
+    foreach ($rows as [$kind, $id, $raw, $name, $first, $last, $email]) {
+        $n = sms_normalize_phone($raw);
+        if ($n === null) { $invalid[preg_replace('/\D+/', '', (string)$raw) ?: (string)$raw] = true; continue; }
+        $label = SMS_EVERYONE_SOURCES[$kind];
+        if (!isset($byPhone[$n])) {
+            $byPhone[$n] = [
+                'source' => $kind, 'source_id' => (int)$id,
+                'name' => $name, 'phone' => $n,
+                'first_name' => $first, 'last_name' => $last,
+                'email' => (string)$email, 'event_title' => '',
+                'sources' => [$label],
+            ];
+            continue;
+        }
+        $dupes++;
+        $e = &$byPhone[$n];
+        if (!in_array($label, $e['sources'], true)) $e['sources'][] = $label;
+        if ($e['name'] === '' && $name !== '') { $e['name'] = $name; $e['first_name'] = $first; $e['last_name'] = $last; }
+        if ($e['email'] === '' && (string)$email !== '') $e['email'] = (string)$email;
+        unset($e);
+    }
+
+    $excluded = 0;
+    foreach (array_keys($blocked) as $n) {
+        if (isset($byPhone[$n])) { unset($byPhone[$n]); $excluded++; }
+    }
+
+    $search = trim((string)$search);
+    $digits = ltrim(preg_replace('/\D+/', '', $search) ?? '', '0');
+    $out = [];
+    foreach ($byPhone as $r) {
+        if ($search !== '') {
+            $hit = stripos($r['name'], $search) !== false || stripos($r['email'], $search) !== false
+                || ($digits !== '' && strpos($r['phone'], $digits) !== false);
+            if (!$hit) continue;
+        }
+        if ($r['name'] === '') $r['name'] = 'Guest';
+        $out[] = $r;
+    }
+    usort($out, function ($a, $b) { return strcasecmp($a['name'], $b['name']); });
+    $truncated = count($out) > $cap;
+    if ($truncated) $out = array_slice($out, 0, $cap);
+
+    return ['data'=>$out, 'dropped'=>count($invalid), 'duplicates'=>$dupes, 'truncated'=>$truncated, 'excluded'=>$excluded];
+}
+
 /* ============================================================================
  * TEXT: GSM-7 clean-up, segment counting, merge-field rendering
  * ========================================================================== */
