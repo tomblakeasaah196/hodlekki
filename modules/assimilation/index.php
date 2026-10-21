@@ -938,6 +938,21 @@ try {
     const pad2 = n => String(n).padStart(2, '0');
     const ymd = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
+    // The last SMS Studio messages from an Assimilation list, as a read-only system note.
+    const SMS_NOTE_WORDS = { delivered: 'Delivered', failed: 'Not delivered', unknown: 'Outcome unknown' };
+    function smsNotesHtml(notes) {
+        if (!notes || !notes.length) return '';
+        return `<div class="space-y-2">${notes.map(n => `
+            <div class="rounded-2xl border border-sky-100 bg-sky-50/60 p-3.5 space-y-1.5">
+                <div class="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-sky-900">
+                    <span class="rounded-full bg-sky-700 text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">System</span>
+                    <span>SMS sent ${escapeHtml(relTime(n.sent_at))}${n.sent_by ? ' by ' + escapeHtml(n.sent_by) : ''}</span>
+                    ${SMS_NOTE_WORDS[n.status] ? `<span class="text-sky-700/80">&middot; ${SMS_NOTE_WORDS[n.status]}</span>` : ''}
+                </div>
+                <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line break-words">${escapeHtml(n.body)}</p>
+            </div>`).join('')}</div>`;
+    }
+
     // Twelve thin bars, one per month; grey means they were not in the house.
     function sparkline(trend, cls = '') {
         if (!trend || !trend.length) return '';
@@ -1846,6 +1861,7 @@ try {
             section('Call essentials', essentials)
             + section('Attendance over the last year', timeline)
             + (actions ? section('Actions', `<div class="space-y-2">${actions}</div>`) : '')
+            + (d.sms_notes && d.sms_notes.length ? section('Last SMS sent to them', smsNotesHtml(d.sms_notes)) : '')
             + section(c.closed_at ? 'This follow-up' : 'Log a follow-up', logForm)
             + section('What has happened', fu)
             + history

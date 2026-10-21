@@ -207,6 +207,36 @@ months.
 You can also mark it by hand with **They came back to church** in the drawer,
 for the times someone walks in and nobody scanned them.
 
+## 6b. Texting an Assimilation list from SMS Studio
+
+SMS Studio has an **Assimilation List (Build One)** audience. It opens a short
+wizard with the same choices as **Build a List**: how long they have been away
+(the three shortcuts, or your own numbers such as *fewer than 4 services in 4
+months*), who to include, and the optional department, region, gender, age and
+"has attended before" filters. The last step shows how many people you can text
+and why anyone else is missing (no phone number, an invalid number, a shared
+number, or a do-not-text record). **Use this list** loads them into Compose.
+
+- **Same rule, same people.** It uses the Find people engine, so the list
+  matches what Find people shows for the same choices. Relocated people are
+  left out, as they are here.
+- **People who asked us to stop are never texted.** Anyone a follow-up ever
+  recorded as *Asked for no contact* or *Not interested*, or whose follow-up
+  closed *Not interested*, is left out, along with numbers flagged invalid.
+- **People already being called are included.** If they have an open
+  follow-up, they get the text too.
+- **Who can use it:** the same people who can use Find people (Super Admins,
+  pastors, and department Directors and HODs). Other SMS Studio users don't
+  see the option.
+
+**Every message leaves a note.** When an Assimilation-list SMS goes out, a
+**System** note with the exact message is added to the person's record, whether
+or not they have a follow-up. Only their **last 2** SMS are kept. The notes show
+in the drawer under **Last SMS sent to them**, and on the volunteer page under
+the person's card, so whoever calls next knows what they were last told. A
+message that was blocked or refused leaves no note. Texts sent to other SMS
+Studio audiences don't add notes.
+
 ## 7. The team
 
 Anyone in the congregation can be an Assimilation volunteer — **not only
@@ -311,6 +341,12 @@ assignments on their phone. Quiet hours are under the same gear icon.
   Use it for anything that asks "were they in the house?" — never query
   `checkins` or `attendance` directly from Assimilation code.
 - Nightly job: `cron/assimilation_watchlists.php` (crontab line in the README).
+- SMS notes: `assimilation_sms_notes`
+  (`db/migrations/20261123090000_assimilation_sms_notes.sql`), one row per
+  message, keyed by `users.id`. Written only by `sms_assim_note()` in
+  `includes/sms_functions.php`, from the queue worker and Resend. It keeps two
+  rows per person. Read by `assim_sms_notes()`. The SMS Studio audience is
+  `sms_audience_assimilation()`, which calls `assim_find_query()`.
 - Any change under `modules/assimilation/`, `api/assimilation_*` or
   `assimilation.php` must update this file in the same PR — CI enforces it.
 - `assimilation.php` carries the PWA partials (`includes/pwa_head.php` in the

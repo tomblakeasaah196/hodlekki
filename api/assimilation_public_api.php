@@ -140,6 +140,7 @@ function assim_pub_card(PDO $pdo, array $row, array $sparklines, array $notes): 
         'is_mine'        => $row['assigned_to'] !== null,
         'last_note'      => $notes[$id] ?? null,
         'prior'          => $row['prior'] ?? null,
+        'sms_notes'      => $row['sms_notes'] ?? [],
         'watchlist'      => $row['watchlist_name'] ?? null,
         'watchlist_open' => !empty($row['watchlist_open']),
         'trend'          => array_map(fn($m) => $m['count'], assim_months_frame($sparklines[(int) $row['user_id']] ?? [], 12)),
@@ -238,13 +239,14 @@ try {
             $brought_home->execute([$vid]);
 
             $prior = assim_prior_contacts($pdo, array_merge(array_column($mine, 'user_id'), array_column($pool, 'user_id')));
+            $sms   = assim_sms_notes($pdo, array_column($rows, 'user_id'));
             echo json_encode(['status' => 'success', 'data' => [
                 'volunteer'    => [
                     'name'  => assim_short_name($volunteer['first_name'], $volunteer['last_name']),
                     'photo' => $volunteer['picture_path'] ?: null,
                 ],
-                'mine'         => array_map(fn($r) => assim_pub_card($pdo, $r + ['prior' => $prior[(int) $r['user_id']] ?? null], $sparklines, $notes), $mine),
-                'pool'         => array_map(fn($r) => assim_pub_card($pdo, $r + ['prior' => $prior[(int) $r['user_id']] ?? null], $sparklines, $notes), $pool),
+                'mine'         => array_map(fn($r) => assim_pub_card($pdo, $r + ['prior' => $prior[(int) $r['user_id']] ?? null, 'sms_notes' => $sms[(int) $r['user_id']] ?? []], $sparklines, $notes), $mine),
+                'pool'         => array_map(fn($r) => assim_pub_card($pdo, $r + ['prior' => $prior[(int) $r['user_id']] ?? null, 'sms_notes' => $sms[(int) $r['user_id']] ?? []], $sparklines, $notes), $pool),
                 'allow_claim'  => $self,
                 'channels'     => ASSIM_CHANNELS,
                 'outcomes'     => ASSIM_OUTCOMES,

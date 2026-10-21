@@ -398,6 +398,11 @@ function personCard(c, inPool) {
             ${sparkline(c.trend)}
         </div>
         ${note ? `<p class="text-xs text-gray-600 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 leading-relaxed line-clamp-3">${escapeHtml(note)}</p>` : ''}
+        ${(c.sms_notes || []).map(n => `
+            <div class="text-xs bg-sky-50 border border-sky-100 rounded-xl px-3 py-2 space-y-1">
+                <p class="font-bold text-sky-900"><span class="rounded-full bg-sky-700 text-white px-1.5 py-0.5 text-[9px] uppercase tracking-wider mr-1">System</span>SMS sent ${escapeHtml(niceDate(String(n.sent_at || '').slice(0, 10)))}</p>
+                <p class="text-gray-700 leading-relaxed whitespace-pre-line break-words line-clamp-4">${escapeHtml(n.body)}</p>
+            </div>`).join('')}
         ${c.next_touch && !inPool ? `<p class="text-xs font-semibold text-hodBlue">Next touch: ${escapeHtml(niceDate(c.next_touch))}</p>` : ''}
         ${inPool ? `
             <button type="button" onclick="claim(${c.case_id})" class="w-full min-h-[48px] bg-hodHome hover:bg-emerald-800 text-white rounded-xl font-bold text-sm transition-all">I&rsquo;ll call ${escapeHtml(c.first_name)}</button>`
