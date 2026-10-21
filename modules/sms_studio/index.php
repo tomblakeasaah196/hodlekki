@@ -88,6 +88,10 @@ $SMS_STATUSES = ['Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer', 'Member', 'Wo
             <input type="radio" name="audience" value="checkins" class="w-4 h-4 text-hodBlue">
             <div><p class="font-bold text-gray-800 text-sm">Check-ins (Attendees)</p><p class="text-xs text-gray-500">Everyone who checked in to an event, one message per phone number.</p></div>
           </label>
+          <label class="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:border-hodBlue/40">
+            <input type="radio" name="audience" value="everyone" class="w-4 h-4 text-hodBlue">
+            <div><p class="font-bold text-gray-800 text-sm">Everyone (All Sources)</p><p class="text-xs text-gray-500">Every person who has ever visited, registered or attended: congregation, registrations, check-ins, Special Events, Academy, IDI and Reach. No status filter, one message per phone number.</p></div>
+          </label>
         </div>
 
         <div id="userFilters" class="mb-4">
@@ -602,6 +606,7 @@ function fetchRecipients(){
     let info = `${res.count} contact(s) with a valid Nigerian mobile number.`;
     if (res.invalid_count) info += ` ${res.invalid_count} invalid number(s) left out.`;
     if (res.shared_phones) info += ` ${res.shared_phones} shared number(s) merged into one message each.`;
+    if (res.excluded_count) info += ` ${res.excluded_count} number(s) left out because they opted out or are marked invalid.`;
     if (res.truncated) info += ` Showing the first ${res.cap} — narrow the filter to reach the rest.`;
     $('#audienceInfo').html(res.truncated ? `<span class="text-amber-700 font-bold">${esc(info)}</span>` : esc(info));
     renderContactList();
@@ -612,7 +617,7 @@ function renderContactList(){
   let html = '';
   recipients.forEach((r,i)=>{
     const on = selected.has(r.phone);
-    const sub = r.source==='checkin' ? 'Check-in · ' + (r.blessing_ref||'no verse') : (r.source==='user' ? (r.status_label ? r.status_label.replace(/_/g,' ') : 'Congregation') : (r.event_title||'Registration'));
+    const sub = r.sources ? r.sources.join(' · ') : r.source==='checkin' ? 'Check-in · ' + (r.blessing_ref||'no verse') : (r.source==='user' ? (r.status_label ? r.status_label.replace(/_/g,' ') : 'Congregation') : (r.event_title||'Registration'));
     html += `<label class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-blue-50/40" data-row="${i}">
       <input type="checkbox" class="contact-cb w-4 h-4 rounded text-hodBlue" data-i="${i}" ${on?'checked':''}>
       <div class="flex-1 min-w-0">
