@@ -110,6 +110,28 @@ is_same('error envelope',                    false, sms_http_ok(array_merge($ok,
 is_same('a list under data is fine',         true,  sms_http_ok(array_merge($ok, ['data' => ['status' => 'success', 'data' => [['message_id' => 'x']]]])));
 is_same('HTTP 401 is not ok',                false, sms_http_ok(array_merge($ok, ['status' => 401, 'data' => ['message' => 'Unauthenticated']])));
 is_same('transport failure is not ok',       false, sms_http_ok(array_merge($ok, ['ok' => false, 'status' => 0])));
+is_same('"error": "none" is still a success', true,  sms_http_ok(array_merge($ok, ['data' => ['status' => 'success', 'error' => 'none', 'data' => ['message_id' => 'x']]])));
+is_same('a message ID beats a nested error word', true, sms_http_ok(array_merge($ok, ['data' => ['data' => ['status' => 'error-free', 'message_id' => 'm1']]])));
+is_same('"error": {"code": 0} is a success',   true,  sms_http_ok(array_merge($ok, ['data' => ['status' => 'success', 'error' => ['code' => 0]]])));
+
+echo "sms_reply_message_id / sms_refusal_kind (what may be handed over again)\n";
+is_same('data.message_id',          'a1', sms_reply_message_id(['data' => ['message_id' => 'a1']]));
+is_same('data[0].message_id',       'a2', sms_reply_message_id(['data' => [['message_id' => 'a2']]]));
+is_same('data.messageId',           'a3', sms_reply_message_id(['data' => ['messageId' => 'a3']]));
+is_same('top-level message_id',     'a4', sms_reply_message_id(['message_id' => 'a4']));
+is_same('numeric id is kept',       '77', sms_reply_message_id(['data' => ['id' => 77]]));
+is_same('nothing',                  null, sms_reply_message_id(['status' => 'success']));
+$r429 = ['ok' => true, 'status' => 429, 'errno' => 0, 'message' => null, 'raw' => '', 'data' => ['message' => 'Too Many Attempts.']];
+$r422 = ['ok' => true, 'status' => 422, 'errno' => 0, 'message' => null, 'raw' => '', 'data' => ['status' => 'error', 'code' => 'BSNG-2011']];
+is_same('HTTP 429 is transient',             'transient', sms_refusal_kind($r429, null, 'Too Many Attempts.'));
+is_same('BSNG-4003 is transient',            'transient', sms_refusal_kind($r422, 'BSNG-4003', 'Rate limit exceeded'));
+is_same('BSNG-3000 waits for the wallet',    'wallet',    sms_refusal_kind($r422, 'BSNG-3000', 'Insufficient balance'));
+is_same('BSNG-3002 waits for the wallet',    'wallet',    sms_refusal_kind($r422, 'BSNG-3002', 'Minimum balance'));
+is_same('"low credit" wording waits',        'wallet',    sms_refusal_kind($r422, null, 'Your credit is too low'));
+is_same('"top up" wording waits',            'wallet',    sms_refusal_kind($r422, null, 'Please top-up your account'));
+is_same('unapproved sender ID is final',     null,        sms_refusal_kind($r422, 'BSNG-2011', 'Sender ID not registered or not approved.'));
+is_same('gateway unavailable is NOT re-sent', null,       sms_refusal_kind($r422, 'BSNG-4001', 'SMS gateway unavailable'));
+is_same('BulkSMS 5000 is NOT re-sent',       null,        sms_refusal_kind(array_merge($r422, ['status' => 200]), 'BSNG-5000', 'Internal server error'));
 
 echo "sms_map_dlr_status\n";
 is_same('DELIVRD',               'delivered', sms_map_dlr_status('DELIVRD'));

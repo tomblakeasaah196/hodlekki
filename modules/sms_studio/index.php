@@ -390,7 +390,7 @@ if ($CAN_ASSIM) {
                 <option value="prefix">Write it at the start of every message</option>
                 <option value="none">Do not write it (sender ID field only)</option>
               </select>
-              <p class="text-[11px] text-gray-400 mt-1">Every message begins with the sender ID, e.g. “HODLEKKI: Dear Ada…”, so people see who wrote even where a route hides the sender ID. It counts towards the characters and the cost.</p>
+              <p class="text-[11px] text-gray-400 mt-1">Every message begins with the sender ID, e.g. “HODLEKKI: Dear Ada…”, so people see who wrote even where a route hides the sender ID. It counts towards the characters and the cost. On the BulkSMS dashboard set “Append Sender ID” to <b>Don't Append</b>, or the name may appear twice.</p>
             </div>
             <div>
               <label class="block text-xs font-bold text-gray-600 uppercase mb-1.5">Price per SMS unit (₦)</label>
@@ -567,6 +567,7 @@ if ($CAN_ASSIM) {
    STATE
 ================================================================ */
 const CSRF = <?= json_encode($SMS_CSRF) ?>;
+const IS_SUPER_ADMIN = <?= sms_user_is_super_admin() ? 'true' : 'false' ?>;
 const API = '/api/sms_api.php';
 let recipients = [];          // contacts for the current filter
 let selected = new Map();     // phone -> recipient
@@ -712,6 +713,7 @@ function renderHealth(){
     else out += pill('bg-emerald-100 text-emerald-700', '✓ Background sender running · ' + secsLabel(age));
     if (h.queued > 0) {
       out += pill('bg-sky-100 text-sky-700', `${h.queued} message(s) waiting to send` + (h.oldest_queued_at_t ? ' · since ' + esc(h.oldest_queued_at_t.label) : ''));
+      if (h.last_message && /^(Paused|Waiting)/.test(h.last_message)) out += pill('bg-amber-100 text-amber-800', '⏸ ' + esc(h.last_message.replace(/\s+\d+ sent, .*$/, '')), 'The background sender stopped sending on purpose. It tries again by itself.');
       if (age == null || age > 180) out += `<button id="btnSendQueuedNow" class="px-3 py-1.5 rounded-full bg-hodBlue text-white hover:bg-[#152750]">Send queued now</button>`;
     }
     if (h.webhook_secret_set && h.webhook_url_set) out += pill('bg-emerald-50 text-emerald-700', '✓ Delivery webhook on' + (h.last_webhook_at_t ? ' · last report ' + ago(h.last_webhook_at_t) : ' · no report received yet'));
@@ -1054,9 +1056,11 @@ $('#btnSendCampaign').on('click', function(){
         .addClass(short ? 'bg-red-50 text-red-700 border-red-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100');
       $('#btnConfirmSend').prop('disabled', short).text(short ? 'Wallet too low' : 'Yes, send it');
     } else {
-      $('#walletLine').html('Could not read the BulkSMS wallet balance' + (res && res.error ? ' (' + esc(res.error) + ')' : (res && res.message ? ' (' + esc(res.message) + ')' : '')) + '. The send is refused until the balance can be read — close this and try again in a moment.')
+      $('#walletLine').html('Could not read the BulkSMS wallet balance' + (res && res.error ? ' (' + esc(res.error) + ')' : (res && res.message ? ' (' + esc(res.message) + ')' : '')) + '. The send is refused until the balance can be read — close this and try again in a moment.'
+          + (IS_SUPER_ADMIN ? '<label class="block mt-2 font-bold"><input type="checkbox" id="walletOverride" class="mr-1.5">Send anyway (Super Admin) — you have checked the wallet on the BulkSMS dashboard yourself</label>' : ''))
         .removeClass('bg-gray-50 text-gray-600 border-gray-100').addClass('bg-red-50 text-red-700 border-red-100');
       $('#btnConfirmSend').prop('disabled', true).text('Wallet unreadable');
+      $('#walletOverride').on('change', function(){ $('#btnConfirmSend').prop('disabled', !this.checked).text(this.checked ? 'Yes, send it' : 'Wallet unreadable'); });
     }
   }).fail(function(){
     $('#walletLine').text('Could not reach the server to read the wallet balance. Close this and try again.').removeClass('bg-gray-50 text-gray-600 border-gray-100').addClass('bg-red-50 text-red-700 border-red-100');
@@ -1071,6 +1075,7 @@ $('#btnConfirmSend').on('click', function(){
   api('send_campaign', {
     template: tpl, audience: currentAudience(), recipients: JSON.stringify(arr),
     title: $('#campaignTitle').val().trim(), event_id: currentEventId(), client_token: composeToken,
+    wallet_override: $('#walletOverride').is(':checked') ? 1 : '',
     filters: JSON.stringify({ audience: currentAudience(), statuses: currentStatuses(), event_id: currentEventId(), search: $('#contactSearch').val()||'', rule: currentAudience()==='assimilation' ? assimRule : undefined })
   }, function(res){
     $b.prop('disabled', false).text('Yes, send it');
@@ -1143,6 +1148,9 @@ function renderCampaign(ids){
         ${progressBar(c)}
         <p class="text-[12px]">${countsLine(c.log)}</p>
       </div>`;
+    if (c.remaining > 0 && !c.cancelled && res.worker_message && /^(Paused|Waiting)/.test(res.worker_message)) {
+      html += `<div class="text-[11px] bg-amber-50 text-amber-800 border border-amber-100 rounded-lg px-3 py-2 font-semibold">⏸ ${esc(res.worker_message.replace(/\s+\d+ sent, .*$/, ''))}</div>`;
+    }
     if (c.remaining > 0 && !c.cancelled) {
       html += res.cron_ok
         ? `<div class="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg px-3 py-2 font-semibold">Sending in the background (about one message per second). You can close this.</div>`

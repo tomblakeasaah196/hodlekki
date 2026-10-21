@@ -383,7 +383,13 @@ try {
             // Pre-flight: the wallet must cover the whole campaign before anything is queued
             // (a campaign that dies half way on "Insufficient balance" is the worst outcome).
             $wallet = sms_wallet_check($settings, $units);
-            if (!$wallet['ok']) sms_fail($wallet['message']);
+            if (!$wallet['ok']) {
+                // The one escape hatch: a Super Admin may go ahead when the balance could not be
+                // READ (never when it is too low), and the bypass is logged.
+                $override = $wallet['balance'] === null && !empty($_POST['wallet_override']) && sms_user_is_super_admin();
+                if (!$override) sms_fail($wallet['message']);
+                error_log('SMS: ' . $MY_NAME . ' (Super Admin) queued a campaign of ' . count($clean) . ' without a readable wallet balance: ' . $wallet['message']);
+            }
 
             $title    = sms_cut(trim((string)($_POST['title'] ?? '')), 200) ?: ('Bulk SMS – ' . date('j M Y, g:i a'));
             $audience = in_array($_POST['audience'] ?? '', ['users', 'registrations', 'checkins', 'everyone', 'assimilation'], true) ? $_POST['audience'] : 'users';
@@ -535,7 +541,8 @@ try {
                 'total' => $total, 'remaining' => $remaining, 'queue' => $qs, 'log' => $ls, 'cost' => round($cost, 2),
                 'cancelled' => in_array('cancelled', array_column($camps, 'status'), true),
                 'filters' => json_decode((string)$c0['filters_json'], true),
-            ], 'cron_ok' => $h['cron_age_sec'] !== null && $h['cron_age_sec'] < 180, 'cron_age_sec' => $h['cron_age_sec']]);
+            ], 'cron_ok' => $h['cron_age_sec'] !== null && $h['cron_age_sec'] < 180, 'cron_age_sec' => $h['cron_age_sec'],
+               'worker_message' => $h['last_message']]);
 
         /* ================================================================
          * CAMPAIGNS — stop everything not yet sent
