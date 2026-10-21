@@ -232,6 +232,12 @@ jobs:
           fi
           php tests/status_ladder_test.php
 
+      - name: SMS Studio helper tests
+        # No database, no network: phone normalisation, GSM-7 segment counting,
+        # the sender name written into every text, the wallet pre-flight
+        # arithmetic and delivery-status mapping (includes/sms_functions.php).
+        run: php tests/sms/run.php
+
       - name: Secret sweep (block obvious leaks)
         run: |
           set -euo pipefail

@@ -22,6 +22,8 @@ require_once __DIR__ . '/sms_status.php';     // sms_map_dlr_status(), sms_expla
 const SMS_DEFAULT_BASE      = 'https://www.bulksmsnigeria.com/api/v2';
 const SMS_ALLOWED_ROLES     = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head'];
 const SMS_GATEWAYS          = ['direct-refund', 'direct-corporate', 'otp', 'dual-backup'];
+const SMS_SIGN_MODES        = ['prefix', 'none'];   // where the sender name goes in the text ('' = prefix)
+const SMS_DEFAULT_UNIT_PRICE = 6.49;  // ₦ per SMS unit when Settings has no price (BulkSMS list price, ex VAT)
 const SMS_BURST_PER_HOUR    = 3;      // messages to one handset per rolling hour
 const SMS_SUPPRESS_AFTER    = 3;      // consecutive carrier failures before auto-suppression
 const SMS_DLR_GIVE_UP_HOURS = 72;     // no final delivery report after this -> 'unknown'
@@ -120,7 +122,7 @@ function sms_decrypt($enc, $iv, $tag) {
 /* ============================================================================
  * SETTINGS LOAD / SAVE (encrypted rows)
  * ========================================================================== */
-const SMS_KEYS = ['base_url', 'api_token', 'sender_id', 'gateway', 'webhook_url'];
+const SMS_KEYS = ['base_url', 'api_token', 'sender_id', 'gateway', 'webhook_url', 'sign_mode', 'unit_price'];
 
 /**
  * $failed receives the keys that exist but could not be decrypted (the vault
@@ -156,6 +158,77 @@ function sms_base_url(array $settings) {
 function sms_webhook_secret() {
     $s = $_ENV['SMS_WEBHOOK_SECRET'] ?? getenv('SMS_WEBHOOK_SECRET');
     return trim((string)($s === false ? '' : $s));
+}
+
+/* ============================================================================
+ * SENDER NAME IN THE TEXT + WALLET PRE-FLIGHT
+ * ========================================================================== */
+/**
+ * The sender name written into the text of every message ("HODLEKKI: Dear…").
+ * The alphanumeric sender ID (the 'from' field) is not shown by every route or
+ * handset, and nothing in the BulkSMS API lets us ask for it to be appended, so
+ * the Studio writes it itself. On by default; Settings → "Sender name in the
+ * text" = none turns it off. Returns '' when off or no sender ID is saved.
+ */
+function sms_signature(array $settings) {
+    if (($settings['sign_mode'] ?? '') === 'none') return '';
+    $sender = trim((string)($settings['sender_id'] ?? ''));
+    return $sender === '' ? '' : $sender . ': ';
+}
+/** Put the sender name in front of a rendered body, once (a resend already carries it). */
+function sms_sign_body($body, array $settings) {
+    $body = (string)$body;
+    $sig = sms_signature($settings);
+    if ($sig === '' || $body === '') return $body;
+    if (stripos($body, rtrim($sig)) === 0) return $body;
+    return $sig . $body;
+}
+/** ₦ per SMS unit used for the pre-flight cost check (Settings, else the BulkSMS list price). */
+function sms_unit_price(array $settings) {
+    $p = is_numeric($settings['unit_price'] ?? null) ? (float)$settings['unit_price'] : 0.0;
+    return $p > 0 ? $p : SMS_DEFAULT_UNIT_PRICE;
+}
+/** Pull the wallet balance out of any shape BulkSMS has used for GET /balance. */
+function sms_parse_balance($d) {
+    if (!is_array($d)) return null;
+    $bal = $d['balance']['total_balance'] ?? ($d['data']['balance'] ?? ($d['data']['total_balance'] ?? ($d['balance'] ?? null)));
+    if (is_array($bal)) $bal = $bal['total_balance'] ?? ($bal['amount'] ?? ($bal['balance'] ?? null));
+    if (is_string($bal)) $bal = str_replace([',', '₦', ' '], '', $bal);
+    return is_numeric($bal) ? (float)$bal : null;
+}
+/** Ask BulkSMS for the wallet balance. Returns ['ok'=>bool, 'balance'=>float|null, 'error'=>string|null]. */
+function sms_fetch_balance(array $settings) {
+    if (empty($settings['api_token'])) return ['ok'=>false, 'balance'=>null, 'error'=>'BulkSMS is not configured.'];
+    $res = sms_http('GET', sms_base_url($settings) . '/balance', $settings['api_token']);
+    if (!sms_http_ok($res)) return ['ok'=>false, 'balance'=>null, 'error'=>sms_api_error($res)];
+    $bal = sms_parse_balance($res['data']);
+    if ($bal === null) return ['ok'=>false, 'balance'=>null, 'error'=>'BulkSMS answered without a readable balance.'];
+    return ['ok'=>true, 'balance'=>$bal, 'error'=>null];
+}
+/**
+ * Refuse to queue a campaign the wallet cannot pay for. A campaign that runs out
+ * of credit half way leaves hundreds of "Insufficient balance" failures and a
+ * list of people to chase, so the check is a hard stop, and it fails closed when
+ * the balance cannot be read (the send would fail at BulkSMS anyway).
+ * Returns ['ok'=>bool, 'balance', 'need', 'units', 'unit_price', 'message'].
+ */
+function sms_wallet_check(array $settings, $units) {
+    $units = (int)$units;
+    $price = sms_unit_price($settings);
+    $need  = round($units * $price, 2);
+    $b = sms_fetch_balance($settings);
+    $out = ['ok'=>false, 'balance'=>$b['balance'], 'need'=>$need, 'units'=>$units, 'unit_price'=>$price, 'message'=>null];
+    if (!$b['ok']) {
+        $out['message'] = 'Could not confirm the BulkSMS wallet balance (' . $b['error'] . '). Nothing was queued — try again in a moment.';
+        return $out;
+    }
+    if ($b['balance'] < $need) {
+        $out['message'] = sprintf('Wallet too low: ₦%s available, this campaign needs about ₦%s (%d unit(s) × ₦%s). Fund the BulkSMS wallet, then send again. Nothing was queued.',
+            number_format($b['balance'], 2), number_format($need, 2), $units, number_format($price, 2));
+        return $out;
+    }
+    $out['ok'] = true;
+    return $out;
 }
 
 /* ============================================================================
@@ -615,7 +688,7 @@ function sms_send_one($pdo, array $settings, array $recipient, $template, $campa
     $srcId    = isset($recipient['source_id']) && is_numeric($recipient['source_id']) ? (int)$recipient['source_id'] : null;
     $senderId = (string)($settings['sender_id'] ?? '');
     $gateway  = in_array($settings['gateway'] ?? '', SMS_GATEWAYS, true) ? $settings['gateway'] : 'direct-refund';
-    $body     = sms_render($template, $recipient);
+    $body     = sms_sign_body(sms_render($template, $recipient), $settings);   // "HODLEKKI: …" on every message
     $ready    = sms_schema_ready($pdo);
     $linkQueue = function ($logId) use ($pdo, $queueId, $ready) {
         if ($queueId && $ready) $pdo->prepare("UPDATE sms_queue SET log_id = ? WHERE id = ?")->execute([$logId, $queueId]);
@@ -1095,6 +1168,10 @@ function sms_health(PDO $pdo) {
     $h['configured'] = !empty($s['api_token']);
     $h['decrypt_failed'] = $failed;
     $h['webhook_url_set'] = !empty($s['webhook_url']);
+    $h['sender_id']  = (string)$s['sender_id'];
+    $h['signature']  = sms_signature($s);           // what the composer shows at the start of every preview
+    $h['gateway']    = $s['gateway'] ?: 'direct-refund';
+    $h['unit_price'] = sms_unit_price($s);
     $q = $pdo->query("SELECT SUM(status = 'queued') AS queued, SUM(status = 'sending') AS sending FROM sms_queue")->fetch(PDO::FETCH_ASSOC);
     $h['queued'] = (int)($q['queued'] ?? 0);
     $h['sending'] = (int)($q['sending'] ?? 0);

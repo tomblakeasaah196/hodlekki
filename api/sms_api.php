@@ -105,6 +105,8 @@ try {
                     'sender_id'   => $settings['sender_id'] ? substr($settings['sender_id'], 0, 2) . '…' : '',
                     'gateway'     => $settings['gateway'] ?: 'direct-refund (default)',
                     'webhook_url' => $settings['webhook_url'] ? 'set' : 'not set',
+                    'sign_mode'   => sms_signature($settings) !== '' ? 'written at the start of every message ("' . sms_signature($settings) . '…")' : 'not written in the text',
+                    'unit_price'  => '₦' . number_format(sms_unit_price($settings), 2) . ($settings['unit_price'] === '' ? ' (BulkSMS list price — set the price of your route)' : ''),
                 ],
                 'my_phone' => $ME['phone'] ?? '',
             ]);
@@ -164,6 +166,10 @@ try {
                 }
             }
             if ($vals['gateway'] !== '' && !in_array($vals['gateway'], SMS_GATEWAYS, true)) sms_fail('Unknown gateway.');
+            if ($vals['sign_mode'] !== '' && !in_array($vals['sign_mode'], SMS_SIGN_MODES, true)) sms_fail('Unknown "sender name in the text" option.');
+            if ($vals['unit_price'] !== '' && (!is_numeric($vals['unit_price']) || (float)$vals['unit_price'] <= 0 || (float)$vals['unit_price'] > 1000)) {
+                sms_fail('Price per SMS unit must be a number of naira, e.g. 6.49.');
+            }
             if ($vals['webhook_url'] !== '') {
                 $u = parse_url($vals['webhook_url']);
                 if (!$u || strtolower($u['scheme'] ?? '') !== 'https' || empty($u['host'])) sms_fail('Webhook URL must start with https://.');
@@ -185,10 +191,19 @@ try {
             if (empty($settings['api_token'])) sms_fail($failed ? 'Stored credentials cannot be decrypted (SMS_VAULT_KEY changed?). Re-enter them.' : 'API token not configured.');
             $res = sms_http('GET', sms_base_url($settings) . '/balance', $settings['api_token']);
             if (!sms_http_ok($res)) sms_fail('Connection failed: ' . sms_api_error($res));
-            $d = $res['data'];
-            $bal = $d['balance']['total_balance'] ?? ($d['data']['balance'] ?? ($d['data']['total_balance'] ?? ($d['balance'] ?? null)));
-            if (is_array($bal)) $bal = $bal['total_balance'] ?? ($bal['amount'] ?? null);
-            sms_json(['status'=>'success','message'=>'Connection OK.' . (is_numeric($bal) ? ' Balance: ₦' . number_format((float)$bal, 2) : ' (balance not returned)'),'balance'=>$bal]);
+            $bal = sms_parse_balance($res['data']);
+            sms_json(['status'=>'success','message'=>'Connection OK.' . ($bal !== null ? ' Balance: ₦' . number_format($bal, 2) : ' (balance not returned)'),'balance'=>$bal]);
+
+        /* ================================================================
+         * WALLET — balance, price per unit and the sender name, for the
+         * confirm dialog (the server repeats the check in send_campaign)
+         * ================================================================ */
+        case 'wallet':
+            $settings = sms_load_settings($pdo);
+            if (empty($settings['api_token'])) sms_fail('BulkSMS not configured.');
+            $b = sms_fetch_balance($settings);
+            sms_json(['status'=>'success', 'ok'=>$b['ok'], 'balance'=>$b['balance'], 'error'=>$b['error'],
+                      'unit_price'=>sms_unit_price($settings), 'signature'=>sms_signature($settings)]);
 
         /* ================================================================
          * SETTINGS — list the account's approved sender IDs
@@ -332,10 +347,15 @@ try {
                 foreach (['name', 'first_name', 'last_name', 'guest_name', 'email', 'event_title', 'blessing_ref'] as $k) {
                     $row[$k] = sms_cut(is_scalar($rec[$k] ?? null) ? (string)$rec[$k] : '', 190);
                 }
-                $units += sms_segments(sms_render($template, $row))['pages'];
+                $units += sms_segments(sms_sign_body(sms_render($template, $row), $settings))['pages'];
                 $clean[] = $row;
             }
             if (!$clean) sms_fail('None of the selected numbers is a valid Nigerian mobile number.');
+
+            // Pre-flight: the wallet must cover the whole campaign before anything is queued
+            // (a campaign that dies half way on "Insufficient balance" is the worst outcome).
+            $wallet = sms_wallet_check($settings, $units);
+            if (!$wallet['ok']) sms_fail($wallet['message']);
 
             $title    = sms_cut(trim((string)($_POST['title'] ?? '')), 200) ?: ('Bulk SMS – ' . date('j M Y, g:i a'));
             $audience = in_array($_POST['audience'] ?? '', ['users', 'registrations', 'checkins'], true) ? $_POST['audience'] : 'users';
@@ -373,6 +393,7 @@ try {
                            . ($dupes ? ", {$dupes} duplicate number(s) merged" : '') . '.',
                 'campaign_id' => $campaignId, 'queued' => count($clean), 'invalid' => $invalid,
                 'duplicates' => $dupes, 'est_units' => $units, 'cron_ok' => $cronOk,
+                'wallet_balance' => $wallet['balance'], 'est_cost' => $wallet['need'], 'unit_price' => $wallet['unit_price'],
             ]);
 
         /* ================================================================

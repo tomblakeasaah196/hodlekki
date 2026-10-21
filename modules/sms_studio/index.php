@@ -309,6 +309,8 @@ $SMS_STATUSES = ['Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer', 'Member', 'Wo
           <p><span class="font-bold text-gray-600">Sender ID:</span> <span id="maskSender" class="text-gray-500">—</span></p>
           <p><span class="font-bold text-gray-600">Gateway:</span> <span id="maskGateway" class="text-gray-500">—</span></p>
           <p><span class="font-bold text-gray-600">Delivery webhook:</span> <span id="maskWebhook" class="text-gray-500">—</span></p>
+          <p><span class="font-bold text-gray-600">Sender name in the text:</span> <span id="maskSign" class="text-gray-500">—</span></p>
+          <p><span class="font-bold text-gray-600">Price per SMS unit:</span> <span id="maskPrice" class="text-gray-500">—</span></p>
         </div>
         <div class="flex gap-2">
           <input id="unlockPwd" type="password" autocomplete="current-password" placeholder="Enter your ERP password to unlock…" class="flex-1 px-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-hodBlue">
@@ -348,6 +350,22 @@ $SMS_STATUSES = ['Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer', 'Member', 'Wo
               <option value="otp">otp</option>
               <option value="dual-backup">dual-backup</option>
             </select>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-gray-600 uppercase mb-1.5">Sender name in the text</label>
+              <select id="sSignMode" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hodBlue outline-none bg-white text-sm">
+                <option value="">Write it at the start of every message (default)</option>
+                <option value="prefix">Write it at the start of every message</option>
+                <option value="none">Do not write it (sender ID field only)</option>
+              </select>
+              <p class="text-[11px] text-gray-400 mt-1">Every message begins with the sender ID, e.g. “HODLEKKI: Dear Ada…”, so people see who wrote even where a route hides the sender ID. It counts towards the characters and the cost.</p>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-600 uppercase mb-1.5">Price per SMS unit (₦)</label>
+              <input type="text" id="sUnitPrice" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="6.49" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hodBlue outline-none text-sm">
+              <p class="text-[11px] text-gray-400 mt-1">Used to check the wallet before a campaign is queued. Take it from BulkSMS pricing for the gateway chosen above (the corporate route costs more than direct-refund).</p>
+            </div>
           </div>
           <div>
             <label class="block text-xs font-bold text-gray-600 uppercase mb-1.5">Delivery Webhook URL (recommended)</label>
@@ -499,6 +517,11 @@ function render(tpl, d){
   return gsmClean((tpl||'').replace(/{{([a-z_]+)}}/g, (m,k) => (k in map) ? map[k] : m)).trim();
 }
 const SAMPLE = { first_name:'Ada', last_name:'Example', name:'Ada Example', phone:'2348031234567', email:'ada@example.com', event_title:'Sunday Service', blessing_ref:'Numbers 6:24' };
+/* The sender name the server writes at the start of every message (Settings → "Sender name in the text"),
+   mirrored here so the preview, the unit count and the cost match what is sent (sms_sign_body()). */
+function signature(){ return (lastHealth && lastHealth.signature) ? String(lastHealth.signature) : ''; }
+function sign(text){ const s = signature(); if (!s || !text) return text; return text.toLowerCase().indexOf(s.trim().toLowerCase()) === 0 ? text : s + text; }
+function unitPrice(){ const p = lastHealth ? Number(lastHealth.unit_price) : 0; return p > 0 ? p : 6.49; }
 
 /* ================================================================
    TABS
@@ -677,18 +700,20 @@ function analyse(){
   const tpl = $('#messageTemplate').val() || '';
   const arr = [...selected.values()];
   const first = arr[0] || SAMPLE;
-  const preview = render(tpl, first);
+  const preview = sign(render(tpl, first));
   $('#previewWho').text(arr[0] ? (arr[0].name || arr[0].phone) : 'a sample contact');
   $('#previewBox').text(preview || 'Start typing a message to see the live preview.');
 
-  const p = smsPages(gsmClean(tpl));
-  $('#charCount').text(tpl.length + ' characters in the template · ' + p.enc);
+  const p = smsPages(sign(gsmClean(tpl)));
+  $('#charCount').text(tpl.length + ' characters in the template · ' + p.enc + (signature() ? ' · "' + signature().trim() + '" is written at the start of every message (+' + signature().length + ' characters)' : ''));
   // Cost over the real, merged messages (names and verses change the length)
-  let units = 0, maxPages = 0;
+  let units = 0, maxPages = 0, pushed = 0;
   const missing = {};
   const used = [...new Set((tpl.match(/{{([a-z_]+)}}/g)||[]).map(t=>t.slice(2,-2)))];
   arr.forEach(r=>{
-    const pg = smsPages(render(tpl, r)).pages; units += pg; if (pg>maxPages) maxPages = pg;
+    const bare = render(tpl, r);
+    const pg = smsPages(sign(bare)).pages; units += pg; if (pg>maxPages) maxPages = pg;
+    if (signature() && pg > smsPages(bare).pages) pushed++;
     used.forEach(k=>{ const v = k==='full_name' ? (r.first_name||'') : (k==='guest_name' ? (r.guest_name||r.first_name||r.name||'') : (r[k]||'')); if (!String(v).trim()) missing[k] = (missing[k]||0)+1; });
   });
   if (arr.length) $('#smsCount').text(`${units} SMS unit(s) for ${arr.length} recipient(s)` + (maxPages>1 ? ` · longest is ${maxPages} pages` : ''));
@@ -706,6 +731,7 @@ function analyse(){
     else if (fixable.length) warn.push(['blue', `Curly quotes / long dashes (${fixable.map(c=>'“'+esc(c)+'”').join(' ')}) are converted to plain characters automatically so the message stays cheap. <button id="btnFixChars" class="underline font-bold">Convert them in the box now</button>`]);
   }
   if (maxPages > 3) warn.push(['amber', `Some messages run to ${maxPages} pages — every page is billed. Consider shortening.`]);
+  if (pushed) warn.push(['amber', `The sender name at the start ("${esc(signature().trim())}") pushes ${pushed} of ${arr.length} message(s) onto an extra page. Shorten the text by ${signature().length} characters to keep them to one page.`]);
   $('#composeWarnings').html(warn.map(w=>{
     const cls = w[0]==='red' ? 'bg-red-50 text-red-700 border-red-100' : (w[0]==='amber' ? 'bg-amber-50 text-amber-800 border-amber-100' : 'bg-blue-50 text-hodBlue border-blue-100');
     return `<div class="text-[11px] font-semibold border rounded-lg px-3 py-2 ${cls}">${w[1]}</div>`;
@@ -755,7 +781,7 @@ $('#btnSendTest').on('click', function(){
   const a = analyse();
   if (a.unknown.length && !confirm('The message has an unknown merge field that will be sent literally. Send the test anyway?')) return;
   const phone = $('#testPhone').val().trim();
-  if (!confirm('This sends a REAL SMS to ' + (phone || 'your own number') + ' and is billed (about ₦5–7 per page). Send the test?')) return;
+  if (!confirm('This sends a REAL SMS to ' + (phone || 'your own number') + ' and is billed (about ₦' + unitPrice().toFixed(2) + ' per page). Send the test?')) return;
   busy(true, 'Sending test…');
   api('send_test', { template:tpl, audience:currentAudience(), event_id: currentEventId(), test_phone: phone }, function(res){
     busy(false); toast(res.message, res.status);
@@ -773,14 +799,36 @@ $('#btnSendCampaign').on('click', function(){
   const cronOk = h.cron_age_sec != null && h.cron_age_sec <= 180;
   let body = `<div class="grid grid-cols-2 gap-3">
       <div class="bg-blue-50 rounded-xl p-3"><p class="text-[10px] font-bold text-hodBlue uppercase">Recipients</p><p class="text-2xl font-black text-gray-900">${arr.length}</p></div>
-      <div class="bg-amber-50 rounded-xl p-3"><p class="text-[10px] font-bold text-amber-700 uppercase">SMS units (billed)</p><p class="text-2xl font-black text-gray-900">${a.units}</p><p class="text-[10px] text-amber-700">≈ ₦${(a.units*6).toLocaleString()} at ~₦6/unit</p></div>
+      <div class="bg-amber-50 rounded-xl p-3"><p class="text-[10px] font-bold text-amber-700 uppercase">SMS units (billed)</p><p class="text-2xl font-black text-gray-900">${a.units}</p><p class="text-[10px] text-amber-700">≈ ${naira(a.units*unitPrice())} at ₦${unitPrice().toFixed(2)}/unit (Settings)</p></div>
     </div>
+    <div id="walletLine" class="text-[11px] font-semibold bg-gray-50 text-gray-600 border border-gray-100 rounded-lg px-3 py-2">Checking the BulkSMS wallet…</div>
     <div><p class="text-[11px] font-bold text-gray-500 uppercase mb-1">What ${esc(arr[0].name||arr[0].phone)} will receive</p>
-      <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 whitespace-pre-wrap text-gray-800">${esc(render(tpl, arr[0]))}</div></div>`;
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 whitespace-pre-wrap text-gray-800">${esc(sign(render(tpl, arr[0])))}</div></div>`;
   if (a.warn.length) body += a.warn.map(w=>`<div class="text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-100 rounded-lg px-3 py-2">${w[1].replace(/<button[\s\S]*<\/button>/,'')}</div>`).join('');
   if (!cronOk) body += `<div class="text-[11px] font-semibold bg-red-50 text-red-700 border border-red-100 rounded-lg px-3 py-2">The background sender is not running, so messages will be sent from this page — keep it open until the campaign shows 100%.</div>`;
   $('#confirmBody').html(body);
+  $('#btnConfirmSend').prop('disabled', true).text('Checking wallet…');
   openModal('confirmModal');
+  // The server refuses a campaign the wallet cannot pay for (send_campaign); show that here before the click.
+  api('wallet', {}, function(res){
+    const price = (res.unit_price > 0) ? Number(res.unit_price) : unitPrice();
+    const need = a.units * price;
+    if (res.status === 'success' && res.ok && res.balance !== null) {
+      const short = Number(res.balance) < need;
+      $('#walletLine').html(`BulkSMS wallet: <b>${naira(res.balance)}</b> · this campaign needs about <b>${naira(need)}</b> (${a.units} × ₦${price.toFixed(2)})`
+          + (short ? ' — <b>fund the wallet first</b>. The Studio will not queue a campaign it cannot pay for.' : ' ✓'))
+        .removeClass('bg-gray-50 text-gray-600 border-gray-100')
+        .addClass(short ? 'bg-red-50 text-red-700 border-red-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100');
+      $('#btnConfirmSend').prop('disabled', short).text(short ? 'Wallet too low' : 'Yes, send it');
+    } else {
+      $('#walletLine').html('Could not read the BulkSMS wallet balance' + (res && res.error ? ' (' + esc(res.error) + ')' : (res && res.message ? ' (' + esc(res.message) + ')' : '')) + '. The send is refused until the balance can be read — close this and try again in a moment.')
+        .removeClass('bg-gray-50 text-gray-600 border-gray-100').addClass('bg-red-50 text-red-700 border-red-100');
+      $('#btnConfirmSend').prop('disabled', true).text('Wallet unreadable');
+    }
+  }).fail(function(){
+    $('#walletLine').text('Could not reach the server to read the wallet balance. Close this and try again.').removeClass('bg-gray-50 text-gray-600 border-gray-100').addClass('bg-red-50 text-red-700 border-red-100');
+    $('#btnConfirmSend').prop('disabled', true).text('Wallet unreadable');
+  });
 });
 
 $('#btnConfirmSend').on('click', function(){
@@ -1147,6 +1195,7 @@ function loadSettingsStatus(){
     const m = res.masked || {};
     $('#maskBase').text(m.base_url||'—'); $('#maskToken').text(m.api_token||'not set'); $('#maskSender').text(m.sender_id||'not set');
     $('#maskGateway').text(m.gateway||'—'); $('#maskWebhook').text(m.webhook_url||'—');
+    $('#maskSign').text(m.sign_mode||'—'); $('#maskPrice').text(m.unit_price||'—');
     $('#settingsLocked').removeClass('hidden'); $('#settingsUnlocked').addClass('hidden');
   });
 }
@@ -1156,6 +1205,7 @@ function renderChecklist(){
   $('#setupChecklist').html(
     item(h.vault_ok, 'SMS_VAULT_KEY is set in .env', 'Add a 64-hex-character SMS_VAULT_KEY to .env on the server.') +
     item(h.configured && !(h.decrypt_failed||[]).length, 'BulkSMS token and sender ID saved', 'Unlock above and save the API token and an approved sender ID.') +
+    item(!!h.signature, 'Sender name written at the start of every message' + (h.signature ? ' (“' + esc(String(h.signature).trim()) + '”)' : ''), 'Unlock above and set “Sender name in the text” back to the default.') +
     item(h.schema_ready, 'Database is up to date', 'Run php db/migrate.php (the deploy does this automatically).') +
     item(h.cron_age_sec != null && h.cron_age_sec <= 180, 'Background sender cron is running' + (h.cron_age_sec!=null ? ' (last run ' + secsLabel(h.cron_age_sec) + ')' : ''), 'Add the cron line below in cPanel → Cron Jobs.') +
     item(h.webhook_secret_set, 'SMS_WEBHOOK_SECRET is set in .env (optional)', 'Add SMS_WEBHOOK_SECRET to .env to receive instant delivery reports.') +
@@ -1172,6 +1222,7 @@ function unlockSettings(){
     const s = res.settings || {};
     $('#sBase').val(s.base_url || 'https://www.bulksmsnigeria.com/api/v2'); $('#sToken').val(s.api_token||''); $('#sSender').val(s.sender_id||'');
     $('#sGateway').val(s.gateway||''); $('#sWebhook').val(s.webhook_url||'');
+    $('#sSignMode').val(s.sign_mode||''); $('#sUnitPrice').val(s.unit_price||'');
     webhookSuggestion = res.webhook_suggestion || '';
     $('#btnUseWebhook').toggleClass('opacity-50', !webhookSuggestion);
     $('#unlockPwd').val(''); $('#settingsLocked').addClass('hidden'); $('#settingsUnlocked').removeClass('hidden');
@@ -1201,7 +1252,8 @@ $('#btnFetchSenders').on('click', function(){
 $(document).on('click','.pick-sender', function(){ $('#sSender').val(String($(this).data('v'))); });
 $('#settingsForm').on('submit', function(e){
   e.preventDefault();
-  api('save_settings', { base_url:$('#sBase').val(), api_token:$('#sToken').val(), sender_id:$('#sSender').val(), gateway:$('#sGateway').val(), webhook_url:$('#sWebhook').val() }, function(res){
+  api('save_settings', { base_url:$('#sBase').val(), api_token:$('#sToken').val(), sender_id:$('#sSender').val(), gateway:$('#sGateway').val(), webhook_url:$('#sWebhook').val(),
+                         sign_mode:$('#sSignMode').val(), unit_price:$('#sUnitPrice').val().trim() }, function(res){
     toast(res.message,res.status);
     if (res.status==='success'){ loadSettingsStatus(); loadHealth(); }
   });
