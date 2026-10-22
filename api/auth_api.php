@@ -131,48 +131,15 @@ try {
         }
     }
 
-    // 10. Fetch all roles assigned to this user.
-    //     Frozen role rows are excluded: a revoked-then-reinstated account comes
-    //     back with zero clearance until an admin restores its roles.
-    $roleSql = "
-        SELECT r.id, r.role_name
-        FROM roles r
-        JOIN user_roles ur ON r.id = ur.role_id
-        WHERE ur.user_id = :user_id
-    ";
-    if ($securityOn) {
-        // The migration guarantees user_roles.is_frozen exists; before it has
-        // run we keep the original (unfiltered) behaviour so login never breaks
-        // in the window between rsync and `php db/migrate.php`.
-        $roleSql .= " AND COALESCE(ur.is_frozen, 0) = 0";
-    }
-    $roleStmt = $pdo->prepare($roleSql);
-    $roleStmt->execute(['user_id' => $user['id']]);
-    $roles = $roleStmt->fetchAll();
-
-    // 11. Rotate the session id before storing anything (session-fixation guard)
-    if (session_status() === PHP_SESSION_ACTIVE) {
-        session_regenerate_id(true);
-    }
-
-    // 12. Store essential user data in the secure session
-    $_SESSION['user_id'] = $user['id'];
-    $_SESSION['first_name'] = $user['first_name'];
-    $_SESSION['last_name'] = $user['last_name'];
-    $_SESSION['email'] = $user['email'];
-    $_SESSION['picture_path'] = $user['picture_path'];
-    $_SESSION['auth_started_at'] = time();
-
-    // 13. Handle RBAC (Role-Based Access Control) setup
-    if (count($roles) > 0) {
-        $_SESSION['roles'] = $roles; // Store all roles in case they have multiple
-        $_SESSION['active_role'] = $roles[0]['role_name']; // Default to primary
-        $_SESSION['active_role_id'] = $roles[0]['id'];
-    } else {
-        $_SESSION['roles'] = [];
-        $_SESSION['active_role'] = 'Member'; // Fallback
-        $_SESSION['active_role_id'] = null;
-    }
+    // 10–13. Fetch the roles, rotate the session id (session-fixation guard)
+    //        and fill the session. Shared with "stay signed in" so a resumed
+    //        session is built exactly like this one (includes/auth_helpers.php).
+    //        Frozen role rows are excluded once the security migration has run:
+    //        a revoked-then-reinstated account comes back with zero clearance
+    //        until an admin restores its roles. Before it has run we keep the
+    //        unfiltered behaviour so login never breaks in the window between
+    //        rsync and `php db/migrate.php`.
+    $roles = auth_start_session($pdo, $user, $securityOn);
 
     // 14. Record the successful sign-in and register this browser session so it
     //     shows up in (and can be killed from) the admin Security Centre.
@@ -193,6 +160,15 @@ try {
 
         $mustChange = (int) ($user['must_change_password'] ?? 0) === 1;
         $_SESSION['must_change_password'] = $mustChange;
+    }
+
+    // 14a. "Keep me signed in on this device" (ticked by default). Unticked, a
+    //      token this device held for anyone is retired: the device now
+    //      belongs to whoever just proved their password on it.
+    if (!empty($_POST['remember'])) {
+        auth_remember_issue($pdo, (int) $user['id']);
+    } else {
+        auth_remember_forget_current($pdo);
     }
 
     // 15. A forced password change short-circuits everything else.
@@ -231,20 +207,26 @@ try {
     // Set the final destination based on their access
     $target_redirect = $has_dashboard_access ? '/index.php' : '/modules/member_portal/index.php';
 
-    // A "return to" path stored by auth/login.php?next=… wins (guide §21.4).
-    // It was validated there as a same-origin /e/ or /modules/ path; it is
-    // consumed once, and never applies when a password change is forced
-    // (that branch returns earlier).
-    if (!empty($_SESSION['post_login_next'])) {
-        $target_redirect = (string) $_SESSION['post_login_next'];
-        unset($_SESSION['post_login_next']);
+    // A "return to" path stored by auth/login.php?next=… wins: the page a
+    // tapped notification or a crew console link was opening (guide §21.4).
+    // It is checked again here (auth_safe_next) and consumed once. A forced
+    // password change returns earlier and leaves it in place, so
+    // change_password.php can send the member on afterwards.
+    $returning = false;
+    $stored_next = auth_safe_next($_SESSION['post_login_next'] ?? null);
+    unset($_SESSION['post_login_next']);
+    if ($stored_next !== null) {
+        $target_redirect = $stored_next;
+        $returning = true;
     }
 
-    // 17. Return success payload with dynamic redirect
+    // 17. Return success payload with dynamic redirect. `returning` tells the
+    //     login page to put back the #fragment the server never sees.
     echo json_encode([
         'status' => 'success',
         'message' => 'Login successful! Setting up workspace...',
-        'redirect' => $target_redirect
+        'redirect' => $target_redirect,
+        'returning' => $returning
     ]);
 
 } catch (PDOException $e) {

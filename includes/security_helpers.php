@@ -657,6 +657,12 @@ if (!function_exists('security_revoke_sessions')) {
             $stmt->execute($params);
             $count = $stmt->rowCount();
 
+            // A remembered device would otherwise start a fresh session on its
+            // next request (includes/auth_helpers.php).
+            if (function_exists('auth_remember_forget_user')) {
+                auth_remember_forget_user($pdo, $userId, $exceptHash);
+            }
+
             // Blunt kill-switch for anything not in the registry.
             if ($exceptHash === null || $exceptHash === '') {
                 $pdo->prepare("UPDATE users SET sessions_valid_from = NOW() WHERE id = ?")

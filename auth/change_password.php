@@ -28,6 +28,11 @@ try {
 }
 
 $firstName = htmlspecialchars($_SESSION['first_name'] ?? 'there');
+
+// Where a forced change sends the member afterwards: the page they were
+// opening when they signed in (auth_api.php leaves it in place for this),
+// otherwise the dashboard.
+$afterForced = auth_safe_next($_SESSION['post_login_next'] ?? null) ?? '/index.php';
 $minLength = SECURITY_MIN_PASSWORD_LENGTH;
 ?>
 <!DOCTYPE html>
@@ -148,6 +153,7 @@ $minLength = SECURITY_MIN_PASSWORD_LENGTH;
 
     <script>
         const FORCED = <?= $forced ? 'true' : 'false' ?>;
+        const AFTER_FORCED = <?= json_encode($afterForced, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
         function toast(msg, type) {
             Toastify({
@@ -184,7 +190,7 @@ $minLength = SECURITY_MIN_PASSWORD_LENGTH;
                 if (res.status === 'success') {
                     toast('Password updated. Taking you in...', 'success');
                     setTimeout(function() {
-                        window.location.href = FORCED ? '/index.php' : '/modules/profile/index.php#security';
+                        window.location.href = FORCED ? AFTER_FORCED : '/modules/profile/index.php#security';
                     }, 1200);
                 } else {
                     btn.prop('disabled', false).removeClass('opacity-75 cursor-not-allowed').html(original);

@@ -232,6 +232,23 @@ jobs:
           fi
           php tests/status_ladder_test.php
 
+      - name: Dashboard numbers and sign-in tests
+        run: |
+          set -euo pipefail
+
+          # No MySQL and no network. The dashboard suite runs every card's
+          # number (includes/dashboard_metrics.php) on in-memory SQLite; the
+          # sign-in suite runs "return to" and the 30-day device token
+          # (includes/auth_helpers.php) against SQLite built from the real
+          # migration, through a real PHP session. Both print SKIP and exit 0
+          # without pdo_sqlite, so refuse to run without it.
+          if ! php -m | grep -qix 'pdo_sqlite'; then
+            echo "::error::pdo_sqlite is missing — the dashboard and sign-in tests would be skipped"
+            exit 1
+          fi
+          php tests/dashboard_metrics_test.php
+          php tests/auth_helpers_test.php
+
       - name: SMS Studio helper tests
         # No database, no network: phone normalisation, GSM-7 segment counting,
         # the sender name written into every text, the wallet pre-flight
