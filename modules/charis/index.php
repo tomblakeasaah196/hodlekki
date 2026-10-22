@@ -6,7 +6,7 @@
 require_once '../../includes/db.php';
 require_once '../../includes/charis_helpers.php';
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /auth/login.php');
+    header('Location: ' . auth_login_url_for_request());
     exit;
 }
 

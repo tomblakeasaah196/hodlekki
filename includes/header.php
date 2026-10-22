@@ -4,21 +4,17 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Security: Redirect to login if not authenticated
-if (!isset($_SESSION['user_id'])) {
-    header("Location: /auth/login.php");
-    exit;
-}
-
-// Ensure the database connection is available for department checks.
-// db.php also runs security_enforce_session(), which tears down the session if
-// the account has been suspended, revoked or signed out by an administrator —
-// so the guard above catches it on the very next request.
+// Database first: db.php resumes a remembered device's session (30-day "stay
+// signed in") and runs security_enforce_session(), which tears the session
+// down if the account has been suspended, revoked or signed out by an
+// administrator. Only then is "signed in?" a question worth asking.
 require_once __DIR__ . '/db.php';
 
-// Re-check after the security gate: the session may have just been destroyed.
+// Security: Redirect to login if not authenticated, remembering the page so
+// the member lands back on it (a tapped notification used to end on the
+// dashboard).
 if (!isset($_SESSION['user_id'])) {
-    header("Location: /auth/login.php");
+    header('Location: ' . auth_login_url_for_request());
     exit;
 }
 

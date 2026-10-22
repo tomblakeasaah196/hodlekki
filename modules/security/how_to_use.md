@@ -137,6 +137,16 @@ an email first, filter the roster by **No sign-in email**.
   number, and it may not contain the member's own name or email or an obvious
   word like `password`.
 - **Session fixation** is blocked — the PHP session id is rotated on login.
+- **"Keep me signed in on this device for 30 days"** (ticked by default on the
+  sign-in screen) gives the device a token, so a member tapping a notification
+  hours later lands on the page instead of the login screen. Only a sha256 of
+  the token is stored (`auth_remember_tokens`). It obeys this Centre exactly as
+  a session does: **Suspend**, **Revoke**, **Sign out everywhere**, a password
+  change that signs other devices out, and **Sign out** on a single device in
+  *Live Sessions* all end it, and so does the member signing out. A remembered
+  device keeps **one** row in *Live Sessions* however often its PHP session
+  expires, so revoking that row really is revoking the device. Unused for 30
+  days, it lapses. Members should untick the box on shared or office computers.
 - **`/auth/setup_password.php` is first-time only.** It used to let anyone who
   knew a member's first name and phone number reset their password from the
   open internet. It now refuses any account that already has a password, is
@@ -162,6 +172,12 @@ an email first, filter the roster by **No sign-in email**.
 **"Security tables are not installed yet."**
 The migration has not run. On the server:
 `php db/migrate.php` (or trigger a deploy — `bin/deploy.sh` runs it).
+
+**A member says the app keeps signing them out.**
+Ask whether they untick *Keep me signed in* when they sign in, and whether the
+phone clears cookies or uses private browsing. Otherwise check the Audit Trail
+for a Sign out everywhere, Suspend or password change on their account: each one
+ends every remembered device, by design.
 
 **A revoked member can still see pages.**
 They cannot. The gate runs in `includes/db.php` on every request, page and API

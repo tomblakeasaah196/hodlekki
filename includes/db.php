@@ -74,6 +74,12 @@ try {
 //    header.php bounces the user to /auth/login.php and API endpoints fall
 //    through to their own "Unauthorized" JSON. CLI (cron) is skipped.
 require_once __DIR__ . '/security_helpers.php';
+require_once __DIR__ . '/auth_helpers.php';
+
+// 9a. "Stay signed in": a device with a valid 30-day token and no live
+//     session gets a fresh one here, BEFORE the gate below, so the gate vets
+//     a resumed session exactly as it vets any other.
+auth_remember_boot($pdo);
 security_enforce_session($pdo);
 
 // 10. Web Push dispatcher.

@@ -774,6 +774,10 @@ try {
                  WHERE id = ? AND revoked_at IS NULL
             ")->execute([$admin_id, $session_id]);
 
+            // And its "stay signed in" token, or the device would sign itself
+            // back in on its next request.
+            auth_remember_forget_session($pdo, (string) $session['session_hash']);
+
             security_log($pdo, 'session_revoked', (int) $session['user_id'], "Single device signed out (session #{$session_id}).");
 
             echo json_encode(['status' => 'success', 'message' => 'That device has been signed out.']);

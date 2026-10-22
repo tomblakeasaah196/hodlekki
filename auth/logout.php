@@ -22,10 +22,14 @@ if (!empty($_SESSION['user_id'])) {
     }
 }
 
-// 3. Clear session data, destroy the session cookie and the server-side session
+// 3. Signing out ends "stay signed in" on this device too, or the very next
+//    page would quietly sign it back in.
+auth_remember_forget_current($pdo);
+
+// 4. Clear session data, destroy the session cookie and the server-side session
 security_destroy_current_session();
 
-// 4. Redirect back to the login page securely
+// 5. Redirect back to the login page securely
 header("Location: /auth/login.php");
 exit;
 ?>

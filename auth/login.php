@@ -2,29 +2,35 @@
 // /auth/login.php
 session_start();
 
-// If already logged in, redirect to dashboard using an absolute path
+// Constants and pure helpers only, unless this device is remembered (below).
+require_once __DIR__ . '/../includes/security_helpers.php';
+require_once __DIR__ . '/../includes/auth_helpers.php';
+
+// "Return to". Wherever the member was going when the login wall stopped them:
+// a tapped notification (header.php passes it), a Special Events console link
+// on a fresh device (guide §21.4), or the Library's older ?redirect=.
+// auth_safe_next() only ever accepts a same-origin screen; anything else is
+// ignored silently.
+$next = auth_safe_next($_GET['next'] ?? ($_GET['redirect'] ?? null));
+
+// A remembered device ("Keep me signed in") needs the database to start its
+// session; db.php does that on the way in.
+if (!isset($_SESSION['user_id']) && !empty($_COOKIE[AUTH_REMEMBER_COOKIE])) {
+    require_once __DIR__ . '/../includes/db.php';
+}
+
+// Already signed in: straight on. The browser re-attaches any #fragment.
 if (isset($_SESSION['user_id'])) {
-    header("Location: /index.php");
+    header('Location: ' . ($next ?? '/index.php'));
     exit;
 }
 
-// Constants only — this file has no DB work to do.
-require_once __DIR__ . '/../includes/security_helpers.php';
-
-// "Return to" (guide §21.4). Crew open a console link such as /e/chara/host on
-// a fresh device and must land back there after signing in.
-//
-// Open-redirect safe by construction: the value must be a same-origin path
-// under /e/ or /modules/, with no protocol-relative "//" and no backslash, so
-// it can never point at another host. Anything else is ignored silently.
-if (isset($_GET['next'])) {
-    $next = (string) $_GET['next'];
-    if (strlen($next) <= 200
-        && preg_match('#^/(e|modules)/[A-Za-z0-9/_\-.?=&\#]{0,200}$#', $next)
-        && !str_contains($next, '//')
-        && !str_contains($next, '\\')) {
-        $_SESSION['post_login_next'] = $next;
-    }
+// Remember it for api/auth_api.php, or forget an older one: a destination is
+// only good for the visit to this page that asked for it.
+if ($next !== null) {
+    $_SESSION['post_login_next'] = $next;
+} else {
+    unset($_SESSION['post_login_next']);
 }
 
 // When the security gate tears a session down (suspension, revoke, "sign out
@@ -176,7 +182,16 @@ if (!empty($_COOKIE[SECURITY_SIGNOUT_COOKIE])) {
                                 placeholder="••••••••">
                         </div>
 
-                        <button type="submit" id="submitBtn" 
+                        <label for="remember" class="flex items-start gap-3 cursor-pointer select-none">
+                            <input type="checkbox" id="remember" name="remember" value="1" checked
+                                class="mt-0.5 w-4 h-4 shrink-0 accent-hodRed">
+                            <span class="text-sm text-gray-600 leading-snug">
+                                Keep me signed in on this device for 30 days
+                                <span class="block text-xs text-gray-400">Untick this on a shared or office computer.</span>
+                            </span>
+                        </label>
+
+                        <button type="submit" id="submitBtn"
                             class="w-full bg-hodRed hover:bg-red-700 text-white font-semibold py-3.5 px-4 rounded-xl shadow-lg shadow-red-500/30 hover:shadow-red-500/50 hover:-translate-y-0.5 transition-all flex justify-center items-center gap-2 mt-4">
                             <span>Authenticate</span>
                             <svg id="spinner" class="animate-spin hidden h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -270,9 +285,17 @@ if (!empty($_COOKIE[SECURITY_SIGNOUT_COOKIE])) {
                         btnText.text('Success!');
                         spinner.addClass('hidden');
                         
-                        // Redirect dynamically based on backend matrix
+                        // Redirect dynamically based on backend matrix. When we
+                        // are returning the member to the page they asked for,
+                        // put back the #fragment the browser carried here
+                        // (e.g. a notification's #tab=attendees) — it never
+                        // reaches the server.
+                        let destination = response.redirect;
+                        if (response.returning && window.location.hash && destination.indexOf('#') === -1) {
+                            destination += window.location.hash;
+                        }
                         setTimeout(() => {
-                            window.location.href = response.redirect;
+                            window.location.href = destination;
                         }, 1000);
                     } else {
                         // Error Styling
