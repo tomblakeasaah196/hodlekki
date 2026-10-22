@@ -76,13 +76,29 @@ const ASSIM_DEFAULT_GUIDE_FILE = __DIR__ . '/assimilation_volunteer_guide.md';
 // 'Sunday Service') match. The categories are inlined, so they must be plain
 // words; anything else is refused rather than escaped. $user_ids narrows both
 // halves to those people (cast to int and inlined) so a single member's count
-// does not materialise the whole church's history first.
-function assim_attendance_union_sql(array $event_categories = [], array $user_ids = []): string {
+// does not materialise the whole church's history first. $dates ('Y-m-d')
+// narrows both halves to those calendar days for the same reason — the
+// dashboard's Sunday headcount asks about four days, not every day since the
+// church began; anything that is not a plain date is refused.
+function assim_attendance_union_sql(array $event_categories = [], array $user_ids = [], array $dates = []): string {
     $checkin_join = $attend_join = $checkin_where = $attend_where = '';
     if ($user_ids) {
         $ids = implode(',', array_map('intval', $user_ids));
         $checkin_where = "AND c.user_id IN ($ids)";
         $attend_where  = "AND a.user_id IN ($ids)";
+    }
+    if ($dates) {
+        $quoted_dates = [];
+        foreach ($dates as $date) {
+            $date = (string) $date;
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date)) {
+                throw new InvalidArgumentException('Invalid attendance date: ' . $date);
+            }
+            $quoted_dates[$date] = "'" . $date . "'";
+        }
+        $day_list = implode(', ', $quoted_dates);
+        $checkin_where .= " AND c.checkin_date IN ($day_list)";
+        $attend_where  .= " AND COALESCE(a.attendance_date, DATE(a.check_in_time)) IN ($day_list)";
     }
     if ($event_categories) {
         $quoted = [];

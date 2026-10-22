@@ -38,7 +38,9 @@ follow-up on a plain PHP 8.3 + MySQL stack.
 - **Auth pattern:**
   - Page views (`modules/*/index.php`, root pages) require
     `includes/header.php`, which redirects unauthenticated users to
-    `/auth/login.php`.
+    `auth_login_url_for_request()` — `/auth/login.php?next=<this page>` — so
+    they land back on it after signing in (see "Sign-in" below). A page that
+    gates itself before header.php must redirect the same way.
   - API endpoints (`api/*_api.php`) require `../includes/db.php`, set
     `Content-Type: application/json`, then check `$_SESSION['user_id']`
     and often `$_SESSION['active_role']` + department membership. See
@@ -92,7 +94,11 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   CAN add the step itself now.) The Sunday ladder suite is
   `php tests/status_ladder_test.php` (SQLite, in CI) — run it whenever you touch
   `includes/status_ladder.php`, `embrace_pipeline_sql()`, or anything that
-  writes or reports `users.spiritual_status`. On a machine with no PHP at all,
+  writes or reports `users.spiritual_status`. `php tests/dashboard_metrics_test.php`
+  and `php tests/auth_helpers_test.php` (SQLite, in CI) cover the home
+  dashboard's numbers and the sign-in helpers — run them after touching
+  `includes/dashboard_metrics.php`, `includes/auth_helpers.php`,
+  `api/auth_api.php` or `assim_attendance_union_sql()`. On a machine with no PHP at all,
   `python3 tests/php_structure_check.py <file>` still catches unbalanced
   brackets and unterminated strings. There is no browser/UI test suite, so
   always smoke the page you touched by hand. Touching Charis AWOL Monitoring
@@ -315,6 +321,68 @@ that migration has not been applied yet — the tree is rsynced to prod
 - Security Centre changes should update `modules/security/how_to_use.md`
   (same courtesy as Reach / Assimilation, though CI does not enforce it
   for this module yet).
+
+## Sign-in: "return to" and "stay signed in" (added 2026-10-22)
+
+Helpers: `includes/auth_helpers.php`. Schema:
+`db/migrations/20261124090000_auth_remember_tokens.sql`. Tests:
+`tests/auth_helpers_test.php`. A tapped push notification used to end on the
+dashboard: header.php dropped the page, and PHP's session dies after ~24 idle
+minutes (`php.ini`, which the deploy never copies), so nearly every tap met the
+login screen.
+
+- **"Return to" goes through `auth_safe_next()` and nothing else.** It accepts
+  only a same-origin screen (`/modules/<name>/…`, `/e/<slug>…`, or a root
+  `*.php` other than `/index.php`) and refuses `//`, backslashes, dot segments
+  and anything under `/api/` or `/auth/`. It is the open-redirect guard: never
+  redirect to a `next` that has not been through it. `/index.php` returns null
+  on purpose so the role-based landing in `auth_api.php` still applies.
+  `login.php` stores it in `$_SESSION['post_login_next']` (and clears a stale
+  one when visited without it); `auth_api.php` re-checks and consumes it and
+  answers `returning: true` so the page re-attaches the URL `#fragment`, which
+  the server never sees. A forced password change leaves it for
+  `change_password.php`.
+- **"Keep me signed in on this device for 30 days"** is ticked by default. The
+  cookie `hod_remember` is `selector:validator`; only sha256(validator) is
+  stored. `auth_remember_boot()` runs in `includes/db.php` just BEFORE
+  `security_enforce_session()`, so a resumed session is vetted like any other.
+  That is why `includes/header.php` now requires `db.php` before its "signed
+  in?" check — do not move the check back above it.
+- **The token answers to the Security Centre.** `security_revoke_sessions()`
+  deletes tokens (keeping only the browser `$exceptHash` names); the
+  single-device revoke in `api/security_api.php` deletes that device's token;
+  `auth/logout.php` deletes the current one; and `auth_remember_resume()`
+  re-checks account status, `sessions_valid_from` and whether the device's
+  `user_sessions` row was revoked. Any NEW way of ending a session must end the
+  token too, or the device signs itself straight back in.
+- **One `user_sessions` row per device.** A resume moves the device's row to
+  the new session id instead of inserting another, and `auth_remember_sync()`
+  keeps the token pointed at the live session id. Revoking that row is
+  revoking the device.
+- **Session data is built in one place:** `auth_start_session()`, used by both
+  the password sign-in and a resume. Keep the `is_frozen` filter in
+  `auth_load_roles()`.
+
+## Home dashboard numbers (added 2026-10-22)
+
+`includes/dashboard_metrics.php`, served by `api/dashboard_api.php` (summary,
+plus `?action=detail&card=…` for the card modals; a card outside the member's
+tier is refused). Tests: `tests/dashboard_metrics_test.php`. Each card is the
+SAME number the module it summarises shows, asked the same way:
+
+- **Workforce** = Departments' live headcount (`is_active = 1 AND
+  roster_status = 'Active'`, distinct people) — not the `Worker` label.
+- **New Pipeline** = `embrace_pipeline_sql()`; **Follow-ups Due** = people on
+  it whose LATEST follow-up is not final.
+- **Sunday** = distinct people on the latest `Sunday_Service` day ≤ today:
+  `assim_attendance_union_sql()` for people with a record (the helper grew an
+  optional `$dates` filter for this) plus QR check-ins with no `user_id`, one
+  per phone. On a Sunday it is today's service, refreshed every minute, with
+  no "vs last week" change until the day is over.
+- **Unread Alerts** = `push_unread_count()`, the bell's own count.
+
+`modules/dashboard/index.php` is an older copy of the dashboard that still
+reads the summary's `metrics` keys; keep those keys when changing the API.
 
 ## Special Events module (added 2026-10)
 
