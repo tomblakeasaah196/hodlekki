@@ -92,7 +92,7 @@ foreach ($verseSet as [$ref, $prayer]) {
         $prayers[] = $ref;
     }
 }
-is_same('the joy set is the 22 verses of Appendix G', 22, count($verseSet));
+is_same('the joy set has 150 verses — one per guest before any repeats', 150, count($verseSet));
 is_same('every one of them is bundled, so adding never waits on the Bible service', [], $missing);
 is_same('every prayer line greets the guest by {name}', [], $prayers);
 is_same('no verse is listed twice', count($refs), count(array_unique($refs)));

@@ -691,7 +691,9 @@ voice, to people no flyer reaches.
 ## 14. Checking people in
 
 Check-in is the one part of the night where a queue is unforgivable, so there
-are four ways in and they all work at once.
+are five ways in and they all work at once: the guest's own phone, a walk-in on
+their own phone, a volunteer's phone for a guest without a smartphone, the
+desk, and the posters that start it all.
 
 ### The window
 
@@ -706,15 +708,28 @@ button on the event page says **Check in** (then **Join the games** once they
 are in). They type their phone number, see their name, and tap **Yes, check me
 in**. A number we do not know gets the walk-in questions instead (below).
 
-What happens next, in about a second:
+What happens next, in about a second, full screen on their phone:
 
-- a **verse** appears, picked from the ones you approved, with their name in
-  the prayer line;
-- their **team** sweeps in in its colour, with their **player number**;
-- the lobby screen says "Welcome Ada O. → Team Black".
+- their **team colour** floods the screen over the event's own artwork, with
+  "Welcome, Ada" and **You are on TEAM GOLD**, and a burst of confetti in that
+  colour;
+- their **welcome verse** as a card: the verse, its reference, a prayer line
+  with their name in it, and the signature **Chara** *by Envision* in script at
+  the bottom (Settings → `checkin.welcome_card.signature`, default
+  `{title} by {organizer}`). **Save my verse** turns it into an image;
+- if they ticked karaoke when they registered and karaoke runs on another
+  platform (§18c), one big button in their team colour: **Pick your karaoke
+  song here**. Everybody else gets a quieter *Feel like singing? Pick a song*;
+- a **player number** and **Join the games** only when the games run here
+  (§22) — with the games on another platform there is neither;
+- on the lobby screens their name pops out of the QR and the teams fight over
+  it (§17).
 
-If they have already checked in tonight **on that phone**, they just see their
-card again. If they are already checked in but this is a **different** phone —
+The phone keeps that card. A guest who goes off to pick a song, locks their
+phone or comes back an hour later opens `/e/<your-link>/in` (or the event page,
+whose main button now says **Pick your karaoke song**) and lands straight back
+on their card and the button — no form, no number. If they have already
+checked in tonight **on that phone**, they just see their card again. If they are already checked in but this is a **different** phone —
 a borrowed one, or a new handset — the page opens **read-only**: they can see
 their team and number but cannot play from it. To move the night to the new
 phone, ask the desk for a **transfer code** and type it under **I have a code
@@ -727,10 +742,34 @@ tap and it is explained on screen.
 
 ### Walk-ins
 
-Somebody who never registered taps **I'm not registered**, gives a name and a
-number, and is in. Walk-ins come out of the walk-in allowance you set in
-**Registration**, so they can run out while online seats remain — that is the
-point of having two pools.
+Somebody who never registered types their number, gives a name, and is in.
+Walk-ins come out of the walk-in allowance you set in **Registration**, so they
+can run out while online seats remain — that is the point of having two pools.
+
+### Volunteers: guests without a smartphone
+
+**Live → Screen links → Volunteer check-in** is a link a volunteer opens on
+their own phone — no account, the key in the link is the permission, and
+**Rotate the links** retires it together with the lobby screen's. Share it with
+the door team only. On it:
+
+1. **Their number.** Any phone has one, smart or not. A registered guest is
+   found ("Registered · Emeka A."); anybody else is a walk-in: first name, last
+   name, Male/Female, and the consent line for the volunteer to read out. Tick
+   **They would like to sing karaoke** if they say so.
+2. **Turn the phone round.** "Turn the phone to Emeka" — the guest taps
+   **Emeka, reveal your team** and gets exactly the reveal everybody else gets
+   on their own phone: colour, confetti, verse card. The lobby screens play
+   their contest at the same moment. If they want to sing, **Pick a song
+   together** opens the karaoke platform on the volunteer's phone.
+3. **Done — give the phone back.** The volunteer sees one thing, huge, in the
+   team's colour: **Give Emeka a GOLD wristband**. Then **Wristband given —
+   next guest**.
+
+The header counts how many this volunteer has checked in and how many are
+here. Nothing ties a guest to the volunteer's phone, so one volunteer can do
+five people or fifty, and none of them is sent a text. Have a box of
+wristbands in each team colour at the door.
 
 ### At the desk
 
@@ -781,8 +820,10 @@ Verses you add are approved in the same moment and are marked
 **suggested by AI** in the list; ones you leave ticked-off are dropped.
 Nothing the AI offered is saved until you add it there.
 
-**Pick your verses** is the quickest start: twenty-two verses about joy (the
-Chara set), each with a short prayer line already written. Their KJV text
+**Pick your verses** is the quickest start: 150 verses about joy, gladness and
+the presence of God (the Chara set), each with a short prayer line already
+written. Guests are dealt the least-used verse first, so with all 150 added
+nobody gets the same verse as anyone else until the 151st guest. Their KJV text
 ships with the module, word for word from the same KJV the Bible service
 serves, so they never wait on the internet. Read them, then press **Add** on
 the ones you want, or **Add all**. Adding is the approval: they go straight on
@@ -842,15 +883,44 @@ Two screens, both unattended, both opened with a link that carries a key.
 Find them on **Live → Screen links**, and **Rotate the links** if one has been
 shared too widely.
 
-### Lobby
+### Lobby — "Who claims you?"
 
-A TV by the door. Left: the big QR and a countdown to the start. Right:
-arrivals flying up as people check in, newest biggest. Underneath: a bar per
-team so the room can see the balance. After a quiet minute it shows a tip
-instead.
+The screens by the door. Open the same lobby link on as many displays as you
+like — two TVs run from one laptop is two browser windows, one dragged to each
+screen. They all show the same thing.
+
+- **The middle:** *Scan to enter the Chara Party*, and the check-in QR, big
+  enough to scan from a few steps away, framed by a ring that turns slowly in
+  the team colours. Under it the short address, **how many are here tonight**,
+  and a rotating line ("No smartphone? Our volunteers will check you in.").
+- **The corners:** one team each — its name in its colour, a big live count,
+  and the last three people it claimed.
+- **Behind it all:** the event's hero image, blurred into atmosphere.
+
+**When somebody checks in** their name pops out of the QR. Every corner starts
+to beat and throws a beam of its colour at the name; the name leans towards
+each team in turn, faster and faster, until the team they were really given
+(that was decided the instant they checked in) locks on. The other beams let
+go, the name takes the colour and flies home, the corner swells, confetti
+bursts in that colour and the count goes up. When several people check in at
+once, each gets their own contest side by side (up to four at a time); a long
+queue simply plays faster. Every 50 people there is a full-screen confetti
+rain and "**100 of us are here!**". The beams always pass *behind* the QR, so
+it stays scannable through all of it.
+
+**Sound and full screen:** click once anywhere on each screen. That unlocks
+the milestone fanfare, goes full screen and stops the display sleeping. Without
+the click everything still runs, silently.
+
+**How live is it?** Each screen re-reads a small file once a second (the
+server answers "nothing new" almost every time, so it costs nothing), so a
+name reaches the screens about a second after the guest taps. There is no
+socket connection to drop: if the Wi-Fi blinks, the screen catches up on the
+next read and plays everyone it missed. The dot in the top corner is green
+while it is hearing the server, amber or red if it is not.
 
 If you would rather not show names downstairs, turn off **lobby names** in
-Settings and the cards read "New arrival → Team Black".
+Settings and the names read "New arrival".
 
 ### Stage
 
@@ -1217,6 +1287,15 @@ the Assets tab and choose it here. Long lists are fine: we read up to 400
 songs from one list, and anything past that is left out of the preview rather
 than guessed at.
 
+**Karaoke on another platform.** If the songs are picked somewhere else (for
+example Karena), paste its `https://` link into **Song picker on another
+platform** under *How karaoke runs* and press **Save**. Leave karaoke **on**,
+so the registration form still asks "I'd love to sing". From then on everyone
+who ticked it gets a big **Pick your karaoke song here** button the moment they
+check in (and on the event page afterwards); the volunteer screen offers **Pick
+a song together**. The built-in song list, picker and DJ queue are simply not
+used. Only an `https://` link is accepted.
+
 **Publishing.** Nobody can pick until you press **Publish the list**, under
 the on/off switch. Do it when the list is final; **Unpublish** hides it again.
 The button stays grey until the list has at least one song.
@@ -1465,6 +1544,11 @@ console:
 | **Who Am I?** | Clues one at a time; the earlier the right answer, the more it scores. | Who am I? clues |
 | **Bible Charades** | One player acts out phrases only their phone shows. | Charades phrase |
 | **Family Feud** | Teams guess the most popular answers from the guests' survey. | Feud survey question |
+
+**Games on another platform?** The first panel on **Studio → Games** says
+*Games run here tonight*; press **We are using another platform** and phones
+stop showing a player number and the **Join the games** button. Your lineup and
+question banks are kept in case you switch back.
 
 ### Setting up (Studio → Games)
 

@@ -634,7 +634,7 @@ if (!se_verses_ready($pdo)) {
     $vEvent = se_it_event($pdo);
     $vId    = (int) $vEvent['id'];
     $keys   = array_column(se_chara_verse_catalogue($pdo, $vEvent), 'key');
-    is_same('the picker offers the 22 joy verses', 22, count($keys));
+    is_same('the picker offers the 150 joy verses', 150, count($keys));
 
     $two = se_chara_verses_add($pdo, $vEvent, 1, ['nehemiah 8:10', 'psalms 118:24']);
     is_same('picking two adds two', 2, $two['added']);
@@ -645,7 +645,7 @@ if (!se_verses_ready($pdo)) {
     is_same('…marked as looked up, so no second approval is needed', ['lookup', 'lookup'], array_column($listed, 'text_source'));
 
     $rest = se_chara_verses_add($pdo, $vEvent, 1);
-    is_same('Add all adds the other twenty', 20, $rest['added']);
+    is_same('Add all adds the other 148', 148, $rest['added']);
     is_same('…and pressing it again adds nothing', 0, se_chara_verses_add($pdo, $vEvent, 1)['added']);
     ok('the picker then shows every verse as added', !in_array(false, array_column(se_chara_verse_catalogue($pdo, $vEvent), 'added'), true));
     ok('a guest checking in can be given one', se_pick_verse($pdo, $vId) !== null);

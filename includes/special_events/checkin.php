@@ -509,9 +509,10 @@ function se_checkin_release_karaoke(PDO $pdo, array $event, int $registrationId)
 /** Step 14: the response the reveal animation and the welcome card read. */
 function se_checkin_payload(PDO $pdo, array $event, array $result): array
 {
-    $reg   = $result['registration'];
-    $theme = se_event_theme($event);
-    $self  = !empty($result['device_owns']) && $result['outcome'] !== 'other';
+    $reg      = $result['registration'];
+    $theme    = se_event_theme($event);
+    $self     = !empty($result['device_owns']) && $result['outcome'] !== 'other';
+    $settings = se_event_settings($event);
 
     $payload = [
         'for'           => $self ? 'self' : 'other',
@@ -522,10 +523,15 @@ function se_checkin_payload(PDO $pdo, array $event, array $result): array
         'display_name'  => (string) $reg['display_name'],
         'verse'         => se_verse_for_card($result['verse'] ?? null, (string) $reg['first_name']),
         'karaoke'       => $result['karaoke'] ?? null,
-        'card_signature' => trim((string) $event['title'] . ' ' . (string) ($event['edition_label'] ?? ''))
-            . ' by ' . (string) ($event['organizer_label'] ?? 'Envision'),
+        'card_signature' => se_welcome_signature($event),
+        'first_name'    => (string) $reg['first_name'],
         'walkin'        => !empty($result['walkin']),
-        'test_mode'     => se_bool(se_event_settings($event)['test_mode'] ?? false),
+        'test_mode'     => se_bool($settings['test_mode'] ?? false),
+        // Karaoke and games may run on other platforms: the reveal then ends
+        // with the song picker's link, and the built-in games stay hidden.
+        'karaoke_url'      => se_karaoke_external_url($settings),
+        'karaoke_interest' => se_bool($reg['karaoke_interest'] ?? false),
+        'games'            => se_bool(se_settings_path($settings, 'games.enabled', true)),
     ];
 
     // The display keys are what let a phone watch its own team's private

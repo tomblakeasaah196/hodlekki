@@ -63,8 +63,108 @@ function se_display_key_check(PDO $pdo, array $event, array $state, string $colu
     se_api_error('That screen link is not valid. Ask the Studio for a fresh one.', 'FORBIDDEN');
 }
 
+/**
+ * The event, its live state and a checked volunteer key, for the assist_*
+ * actions. The key is se_assist_key(), derived from the lobby key.
+ */
+function se_assist_context(PDO $pdo, array $body): array
+{
+    $event = se_display_event($pdo, $body);
+
+    if (!se_live_ready($pdo) || !se_checkin_ready($pdo)) {
+        se_api_error('Check-in is not available yet.', 'FEATURE_NOT_READY');
+    }
+
+    $state = se_live_state($pdo, (int) $event['id']);
+    if (!$state) {
+        se_api_error('That event is not live yet.', 'FEATURE_NOT_READY');
+    }
+
+    se_display_key_check($pdo, $event, ['assist_key' => se_assist_key($state)], 'assist_key', se_str($body['key'] ?? '', 32));
+
+    return [$event, $state];
+}
+
 try {
     switch ($action) {
+
+        // ------------------------------------------------------------------
+        // assist_boot / assist_lookup / assist_checkin — a volunteer checks
+        // in a guest who has no smartphone, on the volunteer's own phone.
+        // Nothing here binds a device: the guest's night is never tied to
+        // the volunteer's handset, so one phone can serve fifty guests.
+        // ------------------------------------------------------------------
+        case 'assist_boot': {
+            [$event] = se_assist_context($pdo, $body);
+            $settings = se_event_settings($event);
+            $days     = se_event_days($pdo, (int) $event['id']);
+
+            se_api_success('OK', [
+                'title'        => (string) $event['title'],
+                'window'       => se_checkin_window($event, $days),
+                'consent_mode' => (string) se_settings_path($settings, 'registration.consent_mode', 'required_followup'),
+                'consent_text' => (string) se_settings_path($settings, 'registration.consent_text', ''),
+                'karaoke_url'  => se_karaoke_external_url($settings),
+                'checked_in'   => se_checkin_total($pdo, (int) $event['id'], se_now()->format('Y-m-d')),
+            ]);
+        }
+
+        case 'assist_lookup': {
+            [$event] = se_assist_context($pdo, $body);
+            $phone = se_phone_normalize($body['phone'] ?? '');
+            if ($phone === null) {
+                se_api_error('Please enter a mobile number, e.g. 0803 123 4567.', 'INVALID_PHONE');
+            }
+            se_rate_limit_or_fail($pdo, 'assist_lookup', (int) $event['id'] . ':' . (function_exists('security_client_ip') ? security_client_ip() : ''), 120, 600);
+
+            $days = se_event_days($pdo, (int) $event['id']);
+            se_api_success('OK', se_lookup_phone_checkin($pdo, $event, $days, se_event_settings($event), $phone, null));
+        }
+
+        case 'assist_checkin': {
+            [$event] = se_assist_context($pdo, $body);
+            $phone = se_phone_normalize($body['phone'] ?? '');
+            if ($phone === null) {
+                se_api_error('Please enter a mobile number, e.g. 0803 123 4567.', 'INVALID_PHONE');
+            }
+            se_rate_limit_or_fail($pdo, 'checkin_phone', (int) $event['id'] . ':' . $phone['e164'], 10, 600);
+
+            $days        = se_event_days($pdo, (int) $event['id']);
+            $settings    = se_event_settings($event);
+            $consentMode = (string) se_settings_path($settings, 'registration.consent_mode', 'required_followup');
+            $karaoke     = se_bool($body['karaoke_interest'] ?? false);
+
+            $result = se_checkin($pdo, $event, $days, [
+                'phone'        => $phone,
+                'first_name'   => $body['first_name'] ?? null,
+                'last_name'    => $body['last_name'] ?? null,
+                'gender'       => $body['gender'] ?? null,
+                'consent'      => se_bool($body['consent'] ?? false),
+                'consent_text' => $consentMode === 'off' ? '' : (string) se_settings_path($settings, 'registration.consent_text', ''),
+                'karaoke_interest' => $karaoke,
+            ], [
+                'method'  => 'desk',
+                'device'  => null,
+                'days'    => $days,
+                'ip_hash' => se_ip_hash(),
+            ]);
+
+            $payload = $result['payload'];
+
+            // A registered guest who tells the volunteer they want to sing.
+            if ($karaoke && empty($payload['karaoke_interest']) && !empty($result['registration']['id'])) {
+                $pdo->prepare("UPDATE se_registrations SET karaoke_interest = 1 WHERE id = ? AND event_id = ?")
+                    ->execute([(int) $result['registration']['id'], (int) $event['id']]);
+                $payload['karaoke_interest'] = true;
+            }
+
+            // The reveal is for the guest standing there; the phone is not theirs.
+            unset($payload['room_key'], $payload['team_key']);
+            $payload['outcome']    = $result['outcome'];
+            $payload['checked_in'] = se_checkin_total($pdo, (int) $event['id'], se_now()->format('Y-m-d'));
+
+            se_api_success($result['outcome'] === 'checked_in' ? 'Checked in.' : 'Already checked in.', $payload);
+        }
 
         // ------------------------------------------------------------------
         // display_boot — everything a screen needs once, at startup.
@@ -94,6 +194,9 @@ try {
             // lobby reads only its own, so a lobby key can never show a
             // game answer even if the URL ends up on a church WhatsApp group.
             $snapshots = ['public' => se_live_url($publicId, 'public')];
+
+            $hero = !empty($event['hero_asset_id']) ? se_asset_find($pdo, (int) $event['hero_asset_id']) : null;
+            $heroUrl = $hero && $hero['deleted_at'] === null ? se_asset_url_at_least($hero, 1600) : null;
             if ($kind === 'stage') {
                 $snapshots['room'] = se_live_url($publicId, 'room-' . $state['room_key']);
             } else {
@@ -140,6 +243,7 @@ try {
                     'volume' => (float) se_settings_path($settings, 'stage.volume', 0.8),
                 ],
                 'checkin_url' => se_event_url((string) $event['slug'], 'in'),
+                'hero'        => $heroUrl,
                 'show_names'  => se_bool(se_settings_path($settings, 'lobby.show_names', true)),
                 'test_mode'   => se_bool($settings['test_mode'] ?? false),
                 'tick_ms'     => SE_TICK_MS,

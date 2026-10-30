@@ -107,7 +107,8 @@ function Displays({ displays, onRotated }) {
 
     const labels = {
         stage: ['Stage screen', 'The projector in the hall. Open it, press Start, leave it alone.'],
-        lobby: ['Lobby screen', 'The TV by the door: QR, countdown and arrivals.'],
+        lobby: ['Lobby screen', 'The TV by the door: the big QR, and every arrival claimed by a team colour. Open it on as many screens as you like.'],
+        assist: ['Volunteer check-in', "For volunteers checking in guests who have no smartphone: the guest sees their own reveal on the volunteer's phone. Share it only with your door team."],
         room: ['Room feed', 'The raw data feed. Only needed for debugging.'],
     };
 

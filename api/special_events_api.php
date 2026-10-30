@@ -2398,9 +2398,22 @@ try {
             'defaults'      => SE_GAME_DEFAULTS,
             'charade_categories' => SE_CHARADE_CATEGORIES,
             'test_mode'     => se_bool(se_event_settings($event)['test_mode'] ?? false),
+            'enabled'       => se_bool(se_settings_path(se_event_settings($event), 'games.enabled', true)),
             'ai'            => se_ai_available(),
             'catalogue'     => se_chara_catalogue($pdo, $event),
         ]);
+    }
+
+    case 'games_enabled_save': {
+        // Off when the games run on another platform: phones then show no
+        // player number and no "Join the games" button.
+        $event = se_studio_event($pdo, $body, 'event.edit');
+        $on    = se_bool($body['on'] ?? true);
+
+        se_event_settings_patch($pdo, $event, ['games' => ['enabled' => $on]], $userId);
+        se_live_publish($pdo, (int) $event['id'], true);
+
+        se_api_success($on ? 'Games are on for this event.' : 'Games are off for this event.', ['enabled' => $on]);
     }
 
     case 'decks_list':

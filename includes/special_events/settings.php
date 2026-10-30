@@ -224,7 +224,7 @@ function se_settings_spec(): array
             'ask_missing_gender'   => ['type' => 'bool', 'default' => true],
             'welcome_card' => ['type' => 'obj', 'children' => [
                 'enabled'   => ['type' => 'bool', 'default' => true],
-                'signature' => ['type' => 'str', 'max' => 120, 'default' => '{title} {edition} by {organizer}'],
+                'signature' => ['type' => 'str', 'max' => 120, 'default' => '{title} by {organizer}'],
             ]],
         ]],
 
@@ -250,6 +250,10 @@ function se_settings_spec(): array
             'songs_per_person'        => ['type' => 'int', 'default' => 1, 'min' => 1, 'max' => 5],
             'release_holds_after_min' => ['type' => 'int', 'default' => 30, 'min' => 0, 'max' => 1440],
             'avg_song_min'            => ['type' => 'int', 'default' => 4, 'min' => 1, 'max' => 30],
+            // Karaoke run on another platform (e.g. Karena). When set, the
+            // check-in reveal and the guest's page send singers there to pick
+            // a song instead of opening the built-in picker.
+            'external_url'            => ['type' => 'str', 'max' => 300, 'default' => ''],
         ]],
 
         'games' => ['type' => 'obj', 'children' => [

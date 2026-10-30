@@ -84,6 +84,12 @@ function Settings({ event, settings, onSaved }) {
                         id="k-release" value=${form.release_holds_after_min ?? 30}
                         onInput=${(e) => set('release_holds_after_min', Number(e.currentTarget.value) || 0)} />
                 <//>
+                <${Field} label="Song picker on another platform" name="k-external"
+                    hint="Running karaoke on Karena or similar? Paste the https:// link. After check-in, everyone who ticked karaoke gets a big “Pick your karaoke song here” button that opens it.">
+                    <input type="url" class=${NUMBER} disabled=${readOnly} placeholder="https://karena.live/v/…"
+                        id="k-external" value=${form.external_url ?? ''}
+                        onInput=${(e) => set('external_url', e.currentTarget.value.trim())} />
+                <//>
                 <${Field} label="Minutes per song" name="k-avg"
                     hint="Used for the 'about 40 minutes left' line on the DJ console.">
                     <input type="number" min="1" max="15" class=${NUMBER} disabled=${readOnly}
