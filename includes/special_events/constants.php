@@ -791,6 +791,16 @@ const SE_PRELOAD = [
         '/assets/se/js/core/qr.js',
         '/assets/se/js/core/boot.js',
         '/assets/se/js/core/svg.js',
+        '/assets/se/js/core/confetti.js',
+    ],
+    'assist' => [
+        '/assets/se/js/assist/main.js',
+        '/assets/se/js/core/api.js',
+        '/assets/se/js/core/store.js',
+        '/assets/se/js/core/phone.js',
+        '/assets/se/js/core/motion.js',
+        '/assets/se/js/core/boot.js',
+        '/assets/se/js/core/confetti.js',
     ],
     'host' => [
         '/assets/se/js/host/main.js',

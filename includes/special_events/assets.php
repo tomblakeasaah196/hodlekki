@@ -749,6 +749,25 @@ function se_format_bytes(int $bytes): string
 }
 
 /** A `srcset` string from an asset's stored variants. */
+/**
+ * The URL of the smallest stored width that is at least $minWidth (or the
+ * original), for surfaces that set an image as a CSS background and so
+ * cannot use srcset — the lobby screens blur the hero anyway.
+ */
+function se_asset_url_at_least(array $asset, int $minWidth): string
+{
+    $best = null;
+    $dir  = dirname((string) $asset['path']);
+    foreach (se_json_decode($asset['variants_json'] ?? null) ?: [] as $variant) {
+        $w = (int) ($variant['width'] ?? 0);
+        if (isset($variant['file']) && $w >= $minWidth && ($best === null || $w < $best[0])) {
+            $best = [$w, $dir . '/' . $variant['file']];
+        }
+    }
+
+    return $best[1] ?? (string) $asset['path'];
+}
+
 function se_asset_srcset(array $asset): string
 {
     $variants = se_json_decode($asset['variants_json'] ?? null);

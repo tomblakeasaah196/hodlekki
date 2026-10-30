@@ -544,6 +544,22 @@ function se_song_toggle(PDO $pdo, array $event, int $songId, bool $active, ?int 
 // --------------------------------------------------------------------------
 
 /** Is picking a song open right now? */
+/**
+ * The external song picker (settings karaoke.external_url), or null.
+ *
+ * Only an absolute https:// URL is honoured: it is put behind a button on
+ * every guest's phone, so a typo must not become a javascript: link.
+ */
+function se_karaoke_external_url(array $settings): ?string
+{
+    $url = trim((string) se_settings_path($settings, 'karaoke.external_url', ''));
+    if ($url === '' || !preg_match('#^https://[^\s"<>]+$#i', $url) || filter_var($url, FILTER_VALIDATE_URL) === false) {
+        return null;
+    }
+
+    return $url;
+}
+
 function se_karaoke_open(array $event, array $settings, ?array $phase = null): array
 {
     if (!se_bool($settings['karaoke']['enabled'] ?? false)) {

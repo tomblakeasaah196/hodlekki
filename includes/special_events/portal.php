@@ -183,15 +183,22 @@ function se_portal_topbar(array $event, string $organizer, bool $hasProgram = fa
  */
 function se_portal_cta(array $event, array $phase, string $state, ?array $registration): array
 {
-    $slug = (string) $event['slug'];
+    $slug  = (string) $event['slug'];
+    // Read lazily: most visitors are not checked in on the night.
+    $games = static fn(): bool => se_bool(se_settings_path(se_event_settings($event), 'games.enabled', true));
+    $songs = static fn(): ?string => se_karaoke_external_url(se_event_settings($event));
 
     // On the night a registered guest needs the next step, not a reminder
-    // that they registered: check in at the door, then join the games.
+    // that they registered: check in at the door, then pick a song (when
+    // karaoke runs elsewhere) or join the games.
     if ($registration && (string) $registration['status'] === 'confirmed' && ($phase['phase'] ?? '') === 'live') {
         if (empty($registration['first_checkin_at']) && ($phase['checkin_open'] ?? false)) {
             return ['Check in', se_event_url($slug, 'in', false), "You're registered ✓", null];
         }
-        if (se_bool(se_settings_path(se_event_settings($event), 'games.enabled', true))) {
+        if (!empty($registration['first_checkin_at']) && ($url = $songs()) !== null) {
+            return ['Pick your karaoke song', $url, "You're checked in ✓", null];
+        }
+        if ($games()) {
             return ['Join the games', se_event_url($slug, 'play', false), "You're registered ✓", null];
         }
     }
@@ -216,7 +223,9 @@ function se_portal_cta(array $event, array $phase, string $state, ?array $regist
         },
         'live' => (($phase['checkin_open'] ?? false)
             ? ['Check in', se_event_url($slug, 'in', false), null, null]
-            : ['Join the games', se_event_url($slug, 'play', false), 'Check-in has closed — please see the desk.', null]),
+            : ($games()
+                ? ['Join the games', se_event_url($slug, 'play', false), 'Check-in has closed — please see the desk.', null]
+                : ['Check-in has closed', null, 'Please see the desk.', null])),
         'between_days' => ['See you tomorrow', null, null, null],
         'post'         => ['Relive the night', null, 'The recap is on its way.', null],
         'cancelled'    => ['This event has been cancelled', null, (string) ($event['cancel_reason'] ?? '') ?: null, null],

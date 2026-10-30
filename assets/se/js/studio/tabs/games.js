@@ -20,6 +20,34 @@ const SECTIONS = [
     ['feud', 'Family Feud boards'],
 ];
 
+/** Games here, or on another platform (then phones show no games at all). */
+function OnOff({ eventId, enabled, reload }) {
+    const [busy, setBusy] = useState(false);
+
+    const toggle = async () => {
+        setBusy(true);
+        const res = await act('games_enabled_save', { id: eventId, on: !enabled });
+        setBusy(false);
+        if (res.ok) { toast(res.data.enabled ? 'Games are on for this event.' : 'Games are off for this event.', 'success'); reload(); }
+    };
+
+    return html`
+        <section class="rounded-3xl border border-gray-100 bg-white p-5 flex flex-wrap items-center justify-between gap-4">
+            <div class="max-w-2xl">
+                <p class="font-bold text-gray-900">${enabled ? 'Games run here tonight' : 'Games run on another platform'}</p>
+                <p class="text-sm text-gray-600 mt-0.5">
+                    ${enabled
+                        ? 'Guests join the games from their phone after check-in, with a player number.'
+                        : 'Check-in shows no player number and no “Join the games” button. Everything below is kept in case you switch back.'}
+                </p>
+            </div>
+            ${can('event.edit') ? html`
+                <${Button} variant=${enabled ? 'ghost' : 'primary'} loading=${busy} onClick=${toggle}>
+                    ${enabled ? 'We are using another platform' : 'Run the games here'}
+                </${Button}>` : null}
+        </section>`;
+}
+
 function Rehearsal({ eventId, testMode, reload, hostUrl }) {
     const [busy, setBusy] = useState(null);
 
@@ -86,6 +114,8 @@ export function GamesTab() {
                 <h2 class="text-xl font-display font-bold text-gray-900">Games</h2>
                 <p class="text-sm text-gray-500">Set up the night's games here; run them live from the host console.</p>
             </div>
+
+            <${OnOff} eventId=${event.id} enabled=${overview.enabled !== false} reload=${reload} />
 
             <${Rehearsal} eventId=${event.id} testMode=${overview.test_mode} reload=${reload} hostUrl=${hostUrl} />
 

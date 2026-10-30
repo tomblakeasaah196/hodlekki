@@ -493,17 +493,21 @@ function se_snapshot_lobby(PDO $pdo, array $event, array $state, array $context 
     $arrivals = [];
     if (se_table_exists($pdo, 'se_checkins')) {
         try {
+            // 40 rows: enough for the screen to animate a burst of arrivals
+            // one by one (it plays only ids it has not seen) and to fill each
+            // team's corner with its latest names.
             $stmt = $pdo->prepare(
-                "SELECT c.checked_in_at, r.display_name, r.team_id
+                "SELECT c.id, c.checked_in_at, r.display_name, r.team_id
                  FROM se_checkins c
                  JOIN se_registrations r ON r.id = c.registration_id
                  WHERE c.event_id = ?
                  ORDER BY c.checked_in_at DESC, c.id DESC
-                 LIMIT 20"
+                 LIMIT 40"
             );
             $stmt->execute([$eventId]);
             foreach ($stmt->fetchAll() as $row) {
                 $arrivals[] = [
+                    'id'      => (int) $row['id'],
                     'name'    => $showNames ? (string) $row['display_name'] : null,
                     'team_id' => $row['team_id'] !== null ? (int) $row['team_id'] : null,
                     'at_ms'   => se_epoch_ms(se_parse_datetime($row['checked_in_at'])),
@@ -524,6 +528,7 @@ function se_snapshot_lobby(PDO $pdo, array $event, array $state, array $context 
         'starts_at'  => se_iso($first['starts_at'] ?? ($event['starts_at'] ?? null)),
         'doors_at'   => se_iso($first['doors_open_at'] ?? null),
         'checkin_url' => se_event_url((string) $event['slug'], 'in'),
+        'title'       => (string) $event['title'],
     ];
 }
 
@@ -963,10 +968,26 @@ function se_display_links(array $event, ?array $state): array
     $slug = (string) $event['slug'];
 
     return [
-        'stage' => se_event_url($slug, 'stage') . '?k=' . rawurlencode((string) $state['stage_key']),
-        'lobby' => se_event_url($slug, 'lobby') . '?k=' . rawurlencode((string) $state['lobby_key']),
-        'room'  => se_live_url((string) $event['public_id'], 'room-' . $state['room_key']),
+        'stage'  => se_event_url($slug, 'stage') . '?k=' . rawurlencode((string) $state['stage_key']),
+        'lobby'  => se_event_url($slug, 'lobby') . '?k=' . rawurlencode((string) $state['lobby_key']),
+        'assist' => se_event_url($slug, 'assist') . '?k=' . rawurlencode(se_assist_key($state)),
+        'room'   => se_live_url((string) $event['public_id'], 'room-' . $state['room_key']),
     ];
+}
+
+/**
+ * The volunteer "check in a guest" link's key.
+ *
+ * Derived from the lobby key rather than stored, so it needs no migration
+ * and "Rotate the links" retires it together with the lobby screen's.
+ * Anyone holding it can check people in (never read the guest list), which
+ * is the same trust the lobby link already carries.
+ */
+function se_assist_key(array $state): string
+{
+    $raw = se_hmac('assist', (string) ($state['lobby_key'] ?? ''));
+
+    return rtrim(strtr(base64_encode(substr(hex2bin($raw) ?: $raw, 0, 16)), '+/', '-_'), '=');
 }
 
 // --------------------------------------------------------------------------

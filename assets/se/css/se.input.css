@@ -1563,6 +1563,214 @@
     to   { opacity: 0; transform: scale(2.2); }
   }
 
+  /* --- The check-in reveal (§13.6 item 4) ---------------------------
+   * Full screen, the team's colour over the event's artwork, the verse as a
+   * card signed in the script face. Shared by self check-in and the
+   * volunteer hand-the-phone mode. */
+
+  body.se-reveal-open { overflow: hidden; }
+  .se-reveal {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    color: #fff;
+    background: #0b0910;
+    --team-color: var(--se-primary);
+    --team-on: #fff;
+  }
+  .se-reveal-bg { position: fixed; inset: 0; pointer-events: none; }
+  .se-reveal-bg::before {
+    content: "";
+    position: absolute;
+    inset: -8%;
+    background-image: var(--hero, none);
+    background-size: cover;
+    background-position: center;
+    filter: blur(22px) saturate(1.3) brightness(0.55);
+  }
+  .se-reveal-bg::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(120% 60% at 50% 0%, color-mix(in oklab, var(--team-color) 92%, transparent) 0%, color-mix(in oklab, var(--team-color) 40%, transparent) 45%, transparent 75%),
+      linear-gradient(180deg, transparent 35%, rgb(11 9 16 / 0.92) 80%);
+  }
+  .se-reveal-enter .se-reveal-bg::after { animation: se-reveal-flood 900ms cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes se-reveal-flood {
+    from { clip-path: circle(0% at 50% 30%); filter: brightness(1.8); }
+    to   { clip-path: circle(150% at 50% 30%); filter: none; }
+  }
+  .se-reveal-inner {
+    position: relative;
+    display: grid;
+    gap: 1.25rem;
+    justify-items: center;
+    width: min(100%, 30rem);
+    margin-inline: auto;
+    padding: max(2.25rem, env(safe-area-inset-top)) 1.25rem max(2.5rem, env(safe-area-inset-bottom));
+    text-align: center;
+  }
+  .se-reveal-enter .se-reveal-inner > * { animation: se-reveal-up 640ms cubic-bezier(.2,.9,.3,1.1) both; }
+  .se-reveal-enter .se-reveal-inner > :nth-child(2) { animation-delay: 80ms; }
+  .se-reveal-enter .se-reveal-inner > :nth-child(3) { animation-delay: 200ms; }
+  .se-reveal-enter .se-reveal-inner > :nth-child(4) { animation-delay: 360ms; }
+  .se-reveal-enter .se-reveal-inner > :nth-child(5) { animation-delay: 480ms; }
+  @keyframes se-reveal-up { from { opacity: 0; translate: 0 18px; } to { opacity: 1; translate: 0 0; } }
+
+  .se-reveal-eyebrow {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: color-mix(in oklab, var(--team-on) 85%, transparent);
+  }
+  .se-reveal-hello { display: grid; line-height: 0.95; }
+  .se-reveal-hello-pre { font-size: 1.25rem; font-weight: 500; opacity: 0.9; margin-block-end: 0.35rem; }
+  .se-reveal-hello-name {
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: clamp(3rem, 17vw, 5rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+    text-shadow: 0 0.2em 1.4em rgb(0 0 0 / 0.35);
+  }
+  .se-reveal-team { display: grid; gap: 0.5rem; justify-items: center; }
+  .se-reveal-team-label { font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.08em; opacity: 0.85; }
+  .se-reveal-team-name {
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: clamp(1.75rem, 9vw, 2.6rem);
+    font-weight: 800;
+    text-transform: uppercase;
+    line-height: 1;
+    padding: 0.55rem 1.6rem 0.6rem;
+    border-radius: 999px;
+    background: var(--team-color);
+    color: var(--team-on);
+    box-shadow: 0 0 0 4px rgb(255 255 255 / 0.18), 0 0.6rem 2.6rem color-mix(in oklab, var(--team-color) 80%, transparent);
+  }
+  .se-reveal-team-ring .se-reveal-team-name { box-shadow: 0 0 0 3px #fff, 0 0.6rem 2.6rem color-mix(in oklab, var(--team-color) 80%, transparent); }
+  .se-reveal-player { font-size: 0.9375rem; font-weight: 700; opacity: 0.85; }
+  .se-reveal-note { font-size: 0.875rem; opacity: 0.9; }
+
+  .se-verse-card {
+    position: relative;
+    width: 100%;
+    display: grid;
+    gap: 0.6rem;
+    padding: 1.5rem 1.35rem 1.1rem;
+    border-radius: 1.5rem;
+    text-align: start;
+    background: rgb(14 11 22 / 0.74);
+    border: 1px solid color-mix(in oklab, var(--team-color) 45%, transparent);
+    box-shadow: 0 1.5rem 3rem rgb(0 0 0 / 0.35);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    overflow: hidden;
+  }
+  .se-verse-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, var(--team-color), transparent);
+  }
+  .se-verse-card-eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: color-mix(in oklab, var(--team-color) 60%, #fff);
+  }
+  .se-verse-card-text {
+    font-family: "Playfair Display", Georgia, serif;
+    font-style: italic;
+    font-size: 1.3rem;
+    line-height: 1.45;
+  }
+  .se-verse-card-ref { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.7; }
+  .se-verse-card-prayer {
+    margin-block-start: 0.35rem;
+    padding-block-start: 0.85rem;
+    border-block-start: 1px dashed rgb(255 255 255 / 0.18);
+    font-size: 1rem;
+    line-height: 1.5;
+    opacity: 0.92;
+  }
+  .se-verse-card-sign {
+    justify-self: end;
+    font-family: var(--font-script, "Great Vibes", cursive);
+    font-size: 1.6rem;
+    line-height: 1.1;
+    color: color-mix(in oklab, var(--team-color) 35%, #fff);
+  }
+  .se-verse-card-sign-by { font-size: 0.95rem; opacity: 0.75; }
+
+  .se-reveal-actions { display: grid; gap: 0.6rem; width: 100%; }
+  .se-reveal-actions .se-btn-ghost { color: #fff; border-color: rgb(255 255 255 / 0.28); }
+  .se-reveal-actions .se-btn-secondary { background: rgb(255 255 255 / 0.94); color: #14111c; border-color: transparent; }
+  .se-reveal-cta {
+    min-height: 3.6rem;
+    font-size: 1.0625rem;
+    font-weight: 800;
+    background: var(--team-color);
+    color: var(--team-on);
+    border: 0;
+    box-shadow: 0 0 0 4px rgb(255 255 255 / 0.16), 0 0.8rem 2.4rem color-mix(in oklab, var(--team-color) 75%, transparent);
+    animation: se-cta-glow 2.4s ease-in-out infinite;
+  }
+  @keyframes se-cta-glow { 0%, 100% { scale: 1; } 50% { scale: 1.025; } }
+
+  /* --- Volunteer check-in (hand the phone) --------------------------- */
+
+  .se-assist { padding-block: 1.25rem 3rem; max-width: 30rem; }
+  .se-assist-head { display: grid; gap: 0.25rem; margin-block-end: 0.5rem; }
+  .se-assist-stats { font-size: 0.875rem; color: var(--se-text-muted); }
+  .se-assist-stats strong { color: var(--se-text); font-size: 1rem; }
+  .se-assist-toast {
+    position: fixed;
+    inset-inline: 1rem;
+    inset-block-end: max(1rem, env(safe-area-inset-bottom));
+    z-index: 90;
+    padding: 0.9rem 1rem;
+    border-radius: var(--radius-card, 1rem);
+    background: var(--se-danger, #c0392b);
+    color: #fff;
+    font-weight: 600;
+    text-align: center;
+  }
+  .se-assist-handover { display: grid; gap: 1rem; justify-items: center; text-align: center; padding-block: 2.5rem 1rem; }
+  .se-assist-handover-title {
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: clamp(2rem, 10vw, 2.75rem);
+    font-weight: 800;
+    line-height: 1;
+  }
+  .se-assist-reveal-btn { min-height: 4rem; font-size: 1.15rem; margin-block-start: 1rem; }
+  .se-assist-band {
+    display: grid;
+    gap: 0.35rem;
+    justify-items: center;
+    padding: 2.5rem 1rem 2.75rem;
+    border-radius: 1.75rem;
+    text-align: center;
+    background: var(--team-color, var(--se-surface));
+    color: var(--team-on, var(--se-text));
+    box-shadow: 0 1.2rem 3rem color-mix(in oklab, var(--team-color, #000) 55%, transparent);
+  }
+  .se-assist-band-ring { box-shadow: inset 0 0 0 4px #fff, 0 1.2rem 3rem rgb(0 0 0 / 0.4); }
+  .se-assist-band-pre, .se-assist-band-post { font-size: 1.25rem; font-weight: 600; }
+  .se-assist-band-colour {
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: clamp(3rem, 18vw, 5rem);
+    font-weight: 800;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .se-assist-foot { text-align: center; }
+
   /* --- Displays (§13.8, §13.9) -------------------------------------- */
 
   .se-display {
@@ -1641,34 +1849,301 @@
   .se-team-panel-name { font-size: 4cqw; font-weight: 800; line-height: 1; }
   .se-team-panel-n { font-size: 2.4cqw; opacity: 0.9; }
 
-  .se-lobby { display: grid; grid-template-columns: 45fr 55fr; gap: 4cqw; height: 100%; padding: 5cqw; }
-  /* The right column fits the frame: count on top, team bars at the
-   * bottom, and the arrivals take what is left (older cards are clipped,
-   * never pushed off the screen with the count and the bars). */
-  .se-lobby-right { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 2cqh; min-height: 0; }
-  .se-bar-row { display: grid; gap: 0.4cqh; }
-  .se-bar-row .se-scene-body { font-size: 1.9cqw; font-weight: 700; }
   .se-lobby-qr { display: grid; gap: 2cqh; justify-items: center; align-content: center; }
   .se-lobby-qr svg { width: 25cqw; height: 25cqw; background: #fff; padding: 1cqw; border-radius: 1.5cqw; }
-  .se-arrivals { display: grid; align-content: start; gap: 1.2cqh; overflow: hidden; }
-  .se-arrival {
-    display: flex;
-    align-items: center;
-    gap: 1.5cqw;
-    padding: 1.6cqh 2cqw;
-    border-radius: 1.5cqw;
-    background: var(--se-surface);
-    border-inline-start: 0.8cqw solid var(--team-color, var(--se-primary));
-    font-size: 2.6cqw;
-    font-weight: 700;
-    animation: se-arrive 600ms ease-out both;
-  }
-  .se-arrival[data-rank="0"] { font-size: 3.6cqw; }
-  .se-arrival[data-rank="3"], .se-arrival[data-rank="4"], .se-arrival[data-rank="5"] { opacity: 0.6; font-size: 2.1cqw; }
-  @keyframes se-arrive { from { opacity: 0; transform: translateY(2cqh); } to { opacity: 1; transform: none; } }
 
-  .se-bars { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2cqh 2.4cqw; }
-  .se-bar { height: 1.6cqh; border-radius: 999px; background: var(--team-color, var(--se-primary)); min-width: 0.6cqw; }
+  /* --- The lobby arena: "Who claims you?" (§13.9) ---------------------
+   * The QR in the middle, a team in each corner. Everything is sized in
+   * cqw/cqh of the 16:9 frame so two different TVs show the same picture. */
+
+  @property --se-ring-angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+  }
+  .se-arena { background: #07060c; }
+  .se-arena-bg {
+    position: fixed;
+    inset: -6%;
+    background-image: var(--hero, none);
+    background-size: cover;
+    background-position: center;
+    filter: blur(26px) saturate(1.35) brightness(0.5);
+    transform: scale(1.08);
+    animation: se-arena-drift 48s ease-in-out infinite alternate;
+  }
+  .se-arena-bg[data-empty="1"] {
+    background-image: radial-gradient(ellipse at 30% 20%, color-mix(in oklab, var(--se-primary) 55%, transparent), transparent 60%),
+                      radial-gradient(ellipse at 75% 80%, color-mix(in oklab, var(--se-secondary, var(--se-primary)) 45%, transparent), transparent 55%);
+    filter: none;
+  }
+  @keyframes se-arena-drift {
+    from { transform: scale(1.08) translate3d(-1.5%, -1%, 0); }
+    to   { transform: scale(1.16) translate3d(1.5%, 1%, 0); }
+  }
+  .se-arena-vignette {
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 42% 60% at 50% 50%, rgb(5 4 10 / 0.25), transparent 70%),
+      radial-gradient(ellipse at center, transparent 35%, rgb(4 3 8 / 0.78) 100%);
+  }
+  .se-arena-frame { z-index: 1; color: #fff; }
+
+  /* Under the centre column, so a beam never crosses the QR a phone is reading. */
+  .se-arena-beams { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 0; }
+  .se-arena-beam {
+    stroke: var(--team-color, #fff);
+    stroke-linecap: round;
+    opacity: 0;
+    filter: drop-shadow(0 0 0.6cqw var(--team-color, #fff));
+  }
+  .se-arena-beam-won { stroke-dasharray: none; }
+
+  /* Centre column */
+  .se-arena-centre {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 50%;
+    width: 40cqw;
+    translate: -50% 0;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 1.6cqh;
+    text-align: center;
+    z-index: 1;
+  }
+  .se-arena-eyebrow {
+    font-size: 1.15cqw;
+    font-weight: 700;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: rgb(255 255 255 / 0.62);
+  }
+  .se-arena-title { display: grid; gap: 0.4cqh; line-height: 1; }
+  .se-arena-title-pre {
+    font-size: 1.9cqw;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: rgb(255 255 255 / 0.82);
+  }
+  .se-arena-title-main {
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: 3.5cqw;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    text-shadow: 0 0 3cqw rgb(255 255 255 / 0.25);
+  }
+  .se-arena-qr { position: relative; width: 41cqh; height: 41cqh; margin-block: 1.4cqh; }
+  .se-arena-qr-ring,
+  .se-arena-qr-ring::after {
+    position: absolute;
+    inset: -1.3cqh;
+    border-radius: 3.4cqh;
+    background: conic-gradient(from var(--se-ring-angle), var(--arena-stops, #fff, #fff));
+    animation: se-ring-turn 9s linear infinite;
+  }
+  .se-arena-qr-ring::after { content: ""; inset: -0.4cqh; filter: blur(2.6cqh); opacity: 0.85; z-index: -1; }
+  .se-arena-qr-tile {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1.6cqh;
+    border-radius: 2.4cqh;
+    background: #fff;
+    box-shadow: 0 2cqh 6cqh rgb(0 0 0 / 0.45);
+  }
+  .se-arena-qr-tile svg { width: 100%; height: 100%; }
+  @keyframes se-ring-turn { to { --se-ring-angle: 360deg; } }
+  .se-arena-url { font-size: 1.35cqw; font-weight: 600; letter-spacing: 0.03em; color: rgb(255 255 255 / 0.7); }
+  .se-arena-total { font-size: 1.7cqw; font-weight: 600; color: rgb(255 255 255 / 0.85); }
+  .se-arena-total-n {
+    display: inline-block;
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: 3.6cqw;
+    font-weight: 800;
+    color: #fff;
+    margin-inline-end: 0.4cqw;
+  }
+  .se-arena-total-bump { animation: se-bump 520ms cubic-bezier(.2,.9,.3,1.4); }
+  .se-arena-tip { min-height: 2cqh; font-size: 1.25cqw; color: rgb(255 255 255 / 0.6); }
+  .se-arena-tip-in { animation: se-arrive 600ms ease-out both; }
+
+  /* The corners */
+  .se-corner {
+    position: absolute;
+    width: 27cqw;
+    display: grid;
+    gap: 0.6cqh;
+    z-index: 1;
+    --beat: 560ms;
+  }
+  .se-corner[data-pos="tl"] { inset-block-start: 6cqh; inset-inline-start: 3.5cqw; }
+  .se-corner[data-pos="tr"] { inset-block-start: 6cqh; inset-inline-end: 3.5cqw; text-align: end; justify-items: end; }
+  .se-corner[data-pos="bl"] { inset-block-end: 6cqh; inset-inline-start: 3.5cqw; }
+  .se-corner[data-pos="br"] { inset-block-end: 6cqh; inset-inline-end: 3.5cqw; text-align: end; justify-items: end; }
+  .se-corner[data-pos="ml"] { inset-block-start: 50%; translate: 0 -50%; inset-inline-start: 3.5cqw; }
+  .se-corner[data-pos="mr"] { inset-block-start: 50%; translate: 0 -50%; inset-inline-end: 3.5cqw; text-align: end; justify-items: end; }
+  .se-arena-frame[data-count="5"] .se-corner,
+  .se-arena-frame[data-count="6"] .se-corner { width: 24cqw; }
+  .se-arena-frame[data-count="5"] .se-corner-count,
+  .se-arena-frame[data-count="6"] .se-corner-count { font-size: 5.5cqw; }
+
+  .se-corner-glow {
+    position: absolute;
+    inset: -14cqh -9cqw;
+    z-index: -1;
+    border-radius: 999px;
+    background: radial-gradient(closest-side, color-mix(in oklab, var(--team-color) 72%, transparent), transparent 78%);
+    opacity: 0.85;
+    animation: se-breathe 5.5s ease-in-out infinite;
+  }
+  .se-corner-label {
+    font-size: 1.05cqw;
+    font-weight: 700;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: color-mix(in oklab, var(--team-color) 55%, #fff);
+  }
+  .se-corner-name {
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: 3.4cqw;
+    font-weight: 800;
+    line-height: 0.95;
+    text-transform: uppercase;
+    color: var(--team-color);
+    text-shadow: 0 0 2.4cqw color-mix(in oklab, var(--team-color) 70%, transparent);
+  }
+  .se-corner[data-ring="1"] .se-corner-name { -webkit-text-stroke: 0.08cqw rgb(255 255 255 / 0.85); }
+  .se-corner-count {
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: 7.5cqw;
+    font-weight: 800;
+    line-height: 0.9;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 3cqw color-mix(in oklab, var(--team-color) 85%, transparent);
+  }
+  .se-corner-count-bump { animation: se-bump 640ms cubic-bezier(.2,.9,.3,1.5); }
+  .se-corner-names { display: grid; gap: 0.5cqh; margin-block-start: 0.8cqh; min-height: 13cqh; align-content: start; }
+  .se-corner-person {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7cqw;
+    font-size: 1.8cqw;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .se-corner[data-pos$="r"] .se-corner-person { flex-direction: row-reverse; }
+  .se-corner-person::before {
+    content: "";
+    width: 0.8cqw;
+    height: 0.8cqw;
+    border-radius: 999px;
+    background: var(--team-color);
+    box-shadow: 0 0 0.8cqw var(--team-color);
+  }
+  .se-corner-person[data-rank="1"] { opacity: 0.72; font-size: 1.55cqw; }
+  .se-corner-person[data-rank="2"] { opacity: 0.45; font-size: 1.4cqw; }
+  .se-corner-person-new { animation: se-person-in 700ms cubic-bezier(.2,.9,.3,1.3) both; }
+
+  /* Beating while a name is being fought over; faster with every contest. */
+  .se-arena-frame[data-beating]:not([data-beating="0"]) .se-corner-glow { animation: se-heartbeat var(--beat) ease-in-out infinite; opacity: 1; }
+  .se-arena-frame[data-beating]:not([data-beating="0"]) .se-corner-count { animation: se-heartbeat-text var(--beat) ease-in-out infinite; }
+  .se-arena-frame[data-beating="2"] .se-corner { --beat: 440ms; }
+  .se-arena-frame[data-beating="3"] .se-corner,
+  .se-arena-frame[data-beating="4"] .se-corner { --beat: 340ms; }
+  .se-corner-claim .se-corner-glow { animation: se-claim 1100ms ease-out !important; }
+  .se-corner-claim .se-corner-name { animation: se-bump 700ms cubic-bezier(.2,.9,.3,1.5); }
+
+  @keyframes se-breathe { 0%, 100% { opacity: 0.7; scale: 1; } 50% { opacity: 0.95; scale: 1.06; } }
+  @keyframes se-heartbeat {
+    0%   { scale: 1;    opacity: 0.75; }
+    14%  { scale: 1.16; opacity: 1; }
+    28%  { scale: 1.02; opacity: 0.8; }
+    42%  { scale: 1.12; opacity: 1; }
+    70%  { scale: 1;    opacity: 0.75; }
+  }
+  @keyframes se-heartbeat-text { 0%, 70%, 100% { scale: 1; } 14% { scale: 1.07; } 42% { scale: 1.04; } }
+  @keyframes se-claim { 0% { scale: 1; opacity: 1; } 30% { scale: 1.5; opacity: 1; filter: brightness(1.6); } 100% { scale: 1; opacity: 0.7; } }
+  @keyframes se-bump { 0% { scale: 1; } 35% { scale: 1.35; } 100% { scale: 1; } }
+  @keyframes se-person-in { from { opacity: 0; translate: 0 -1.5cqh; scale: 0.8; } to { opacity: 1; translate: 0 0; scale: 1; } }
+
+  /* A name in flight */
+  .se-arena-chips { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+  .se-arena-chip {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    padding: 1.1cqh 1.8cqw;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.96);
+    color: #12101a;
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: 2.3cqw;
+    font-weight: 800;
+    white-space: nowrap;
+    box-shadow: 0 0 0 0.25vw rgb(255 255 255 / 0.6), 0 0 4vw rgb(255 255 255 / 0.55);
+    transition: background-color 180ms ease, color 180ms ease;
+    will-change: transform;
+  }
+  .se-arena-chip-won { background: var(--team-color); color: var(--team-on, #fff); }
+
+  /* Every 50 */
+  .se-arena-milestone {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 1cqh;
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 1.2cqw;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 4;
+  }
+  .se-arena-milestone-on { animation: se-milestone 4.2s cubic-bezier(.2,.9,.3,1) both; }
+  .se-arena-milestone-n {
+    font-family: var(--se-font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: 9cqw;
+    font-weight: 800;
+    line-height: 1;
+    background: linear-gradient(90deg, var(--arena-stops, #fff, #ffd76a));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 2cqw rgb(255 255 255 / 0.35));
+  }
+  .se-arena-milestone-words { font-size: 3cqw; font-weight: 800; }
+  .se-arena-frame:has(.se-arena-milestone-on) .se-arena-eyebrow,
+  .se-arena-frame:has(.se-arena-milestone-on) .se-arena-title { animation: se-hide-briefly 4.2s both; }
+  @keyframes se-milestone {
+    0%   { opacity: 0; scale: 0.6; }
+    12%  { opacity: 1; scale: 1.08; }
+    20%  { scale: 1; }
+    85%  { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  @keyframes se-hide-briefly { 0%, 100% { opacity: 1; } 8%, 88% { opacity: 0; } }
+
+  .se-arena-hint {
+    position: fixed;
+    inset-block-end: 1.4vh;
+    inset-inline-start: 50%;
+    translate: -50% 0;
+    z-index: 5;
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    border: 1px solid rgb(255 255 255 / 0.18);
+    background: rgb(0 0 0 / 0.45);
+    color: rgb(255 255 255 / 0.7);
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  .se-confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 80; }
 
   /* --- Crew consoles (§13.10, §13.11) -------------------------------- */
 
@@ -1919,7 +2394,8 @@
 
   /* The team wipe is pure celebration; reduced motion gets the words only. */
   .se-team-wipe { display: none !important; }
-  .se-arrival { animation: none !important; }
+  .se-arena-bg, .se-arena-qr-ring, .se-arena-qr-ring::after, .se-corner-glow { animation: none !important; }
+  .se-reveal-cta, .se-reveal-enter .se-reveal-inner > *, .se-reveal-enter .se-reveal-bg::after { animation: none !important; }
 
   /* The music still plays if it is asked for — a motion preference is not
    * a sound preference — but the ring stops breathing and holds a steady

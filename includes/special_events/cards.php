@@ -91,6 +91,23 @@ function se_card_registration_for_phone(PDO $pdo, int $eventId, string $e164): ?
  *
  * @throws SeRuleException FEATURE_DISABLED | NOT_CHECKED_IN | NOT_REGISTERED
  */
+/**
+ * The line that signs the welcome and team cards ("Chara by Envision"),
+ * from checkin.welcome_card.signature with {title}, {edition} and
+ * {organizer} filled in. Doubled spaces left by an empty edition collapse.
+ */
+function se_welcome_signature(array $event): string
+{
+    $template = (string) se_settings_path(se_event_settings($event), 'checkin.welcome_card.signature', '{title} by {organizer}');
+    $line = strtr($template !== '' ? $template : '{title} by {organizer}', [
+        '{title}'     => (string) $event['title'],
+        '{edition}'   => (string) ($event['edition_label'] ?? ''),
+        '{organizer}' => (string) ($event['organizer_label'] ?? 'Envision'),
+    ]);
+
+    return trim((string) preg_replace('/\s{2,}/', ' ', $line));
+}
+
 function se_card_payload(PDO $pdo, array $event, array $days, array $settings, string $kind, array $registration): array
 {
     if (!in_array($kind, SE_CARD_KINDS_READY, true)) {
@@ -112,8 +129,7 @@ function se_card_payload(PDO $pdo, array $event, array $days, array $settings, s
 
     $refUrl = se_event_url((string) $event['slug']) . '?r=' . rawurlencode((string) $registration['ref_code']);
 
-    $signature = trim((string) $event['title'] . ' ' . (string) ($event['edition_label'] ?? ''))
-        . ' by ' . (string) ($event['organizer_label'] ?? 'Envision');
+    $signature = se_welcome_signature($event);
 
     // The welcome and team cards are about tonight, not about the invitation,
     // so they are built separately rather than bent out of the "I'm going"

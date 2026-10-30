@@ -132,7 +132,8 @@ if ($path === '') {
     // cookie identifies it): walk-ins, moved phones and anyone who lost the
     // texted link still reach their place and the karaoke picker.
     $view = 'manage';
-} elseif ($path === 'stage' || $path === 'lobby') {
+} elseif ($path === 'stage' || $path === 'lobby' || $path === 'assist') {
+    // Keyed links, no sign-in: the key in ?k= is checked by the display API.
     $surface = $path;
     $view    = $path;
 } elseif (in_array($path, ['host', 'desk', 'dj'], true)) {
@@ -209,6 +210,7 @@ function se_render_shell(
         'play'    => 'Games — ' . $fullTitle,
         'privacy' => 'Privacy — ' . $fullTitle,
         'manage'  => 'Your place at ' . $fullTitle,
+        'assist'  => 'Volunteer check-in — ' . $fullTitle,
         'stage', 'lobby', 'host', 'desk', 'dj' => ucfirst($view) . ' — ' . $fullTitle,
         default   => $fullTitle . ($tagline !== '' ? ' — ' . $tagline : ''),
     };
@@ -243,7 +245,9 @@ function se_render_shell(
     $fontsHref   = 'https://fonts.googleapis.com/css2'
         . '?family=' . $fontDisplay . ':wght@600;700;800'
         . '&family=' . $fontBody . ':wght@400;500;700'
-        . '&family=Playfair+Display:wght@500;700;900'
+        . '&family=Playfair+Display:ital,wght@0,500;0,700;0,900;1,500'
+        // The welcome card's signature ("Chara by Envision") is set in it.
+        . '&family=Great+Vibes'
         . '&display=swap';
 
     ?>
@@ -338,7 +342,7 @@ require_once __DIR__ . '/../includes/pwa_head.php';
         se_portal_manage($event, $days, $settings);
     } elseif ($view === 'checkin') {
         se_portal_checkin($event, $days, $settings, se_checkin_window($event, $days));
-    } elseif (in_array($view, ['stage', 'lobby', 'host', 'desk', 'dj'], true)) {
+    } elseif (in_array($view, ['stage', 'lobby', 'assist', 'host', 'desk', 'dj'], true)) {
         se_render_crew_frame($event, $view);
     } elseif ($view === 'home') {
         se_portal_render(
@@ -378,7 +382,7 @@ if (!(HTMLScriptElement.supports && HTMLScriptElement.supports('importmap'))) {
     document.head.appendChild(s);
 }
 </script>
-<?php if (in_array($surface, ['portal', 'stage', 'lobby'], true)): ?>
+<?php if (in_array($surface, ['portal', 'stage', 'lobby', 'assist'], true)): ?>
 <?php foreach (SE_GSAP_SCRIPTS as $gsapScript): ?>
 <script src="<?= se_h($gsapScript) ?>" defer nonce="<?= se_h($nonce) ?>"></script>
 <?php endforeach; ?>
@@ -445,6 +449,8 @@ function se_boot_payload(
             'privacy'  => se_event_url($slug, 'privacy', false),
             'calendar' => se_event_url($slug, 'calendar.ics', false),
             'live'     => '/live/' . $event['public_id'] . '/',
+            // Karaoke on another platform: where a singer picks their song.
+            'karaoke_external' => se_karaoke_external_url($settings),
         ],
         'texts'   => [
             'min_age_note' => se_settings_path($settings, 'registration.min_age_note', ''),
@@ -549,13 +555,25 @@ function se_boot_payload(
         // "Check in as Ada O." instead of an empty number field (§13.6).
         $mine = se_shell_registration($pdo, $event);
         $payload['me'] = $mine
-            ? ['registration' => ['display_name' => (string) $mine['display_name']]]
+            ? ['registration' => [
+                'display_name' => (string) $mine['display_name'],
+                // Checked in already: the page re-opens their welcome card
+                // (kept on the phone) with the song picker, not a form.
+                'checked_in'   => !empty($mine['first_checkin_at']),
+            ]]
             : null;
+    }
+
+    // The reveal and the volunteer screen paint the team colour over the
+    // event's own artwork.
+    if ($view === 'checkin' || $view === 'assist') {
+        $hero = se_shell_asset($pdo, $event, 'hero');
+        $payload['hero'] = $hero ? se_asset_url_at_least($hero, 960) : null;
     }
 
     // Displays authenticate with the key in their own URL (§12.3). It is a
     // secret the crew pasted in, so it never leaves this page.
-    if (in_array($surface, ['stage', 'lobby'], true)) {
+    if (in_array($surface, ['stage', 'lobby', 'assist'], true)) {
         $key = (string) ($_GET['k'] ?? '');
         $payload['display_key'] = preg_match('/^[A-Za-z0-9_-]{1,32}$/', $key) ? $key : null;
     }
@@ -733,6 +751,7 @@ function se_render_crew_frame(array $event, string $view): void
     $labels = [
         'stage' => ['Stage display', 'Starting the show…'],
         'lobby' => ['Lobby display', 'Waking up the welcome screen…'],
+        'assist' => ['Volunteer check-in', 'Getting the door ready…'],
         'host'  => ['Host console', 'Loading tonight…'],
         'desk'  => ['Desk', 'Loading the guest list…'],
         'dj'    => ['Karaoke DJ', 'Loading the queue…'],

@@ -11,11 +11,12 @@
 // Loaded on demand by portal/main.js, so the portal's own critical path
 // never carries it.
 
-import { call, SeApiError } from '@se/core/api.js';
+import { call } from '@se/core/api.js';
 import { toast } from '@se/core/store.js';
-import { motionEnabled, popIn, haptic, HAPTIC } from '@se/core/motion.js';
 import { normalizePhone, displayPhone } from '@se/core/phone.js';
 import { el, qs } from './dom.js';
+import { buildReveal, showReveal, closeReveal } from './reveal.js';
+import { readLocal, saveLocal } from './storage.js';
 
 let config = {};
 let root = null;
@@ -283,82 +284,49 @@ async function doCheckin(extra) {
 // Step 4 — the reveal (§13.6 item 4)
 // --------------------------------------------------------------------------
 
-function stepReveal(data) {
+/**
+ * Team colour, welcome verse and the next step, full screen (portal/reveal.js).
+ *
+ * The phone keeps the reveal, so a guest who goes out to pick a song (or
+ * just locks their phone) comes back to the same card and the same button
+ * instead of a form.
+ */
+function stepReveal(data, { celebrate = !data.already } = {}) {
     busy(false);
 
-    const team = data.team;
-    const nodes = [];
+    const actions = [];
 
     if (data.already_elsewhere) {
-        nodes.push(el('p', { class: 'se-glass se-pad se-small' },
-            "You're already checked in on another phone. To play here, ask the desk for a transfer code."));
-        nodes.push(button('I have a code from the desk', () => stepTransfer(), 'secondary'));
-    } else if (data.for === 'other') {
-        nodes.push(el('p', { class: 'se-label' }, 'Already checked in'));
+        actions.push(el('p', { class: 'se-reveal-note' },
+            "You're already checked in on another phone. To use this one, ask the desk for a transfer code."));
+        actions.push(button('I have a code from the desk', () => { closeReveal(); stepTransfer(); }, 'secondary'));
     }
 
-    nodes.push(el('p', { class: 'se-label' }, data.already ? 'You are already in' : "You're on"));
-    nodes.push(el('p', { class: 'se-display-lg' }, data.display_name));
+    if (data.verse && data.for !== 'other') {
+        actions.push(button('Save my verse', () => openCard('welcome'), 'secondary'));
+    }
+    if (data.games) {
+        actions.push(el('a', { class: 'se-btn se-btn-ghost se-btn-wide', href: config.urls?.play || '#' }, 'Join the games'));
+    }
+    actions.push(button(data.for === 'other' ? 'Done' : 'Check in someone else', () => {
+        closeReveal();
+        stepPhone('');
+    }, 'ghost'));
 
-    if (team) {
-        const badge = el('span', {
-            class: 'se-team-badge' + (team.ring ? ' se-team-badge-ring' : ''),
-            'data-team-hex': team.hex,
-        }, team.name || ('Team ' + team.label));
-        // The team colour is a per-render value, so it rides on a CSS
-        // variable in the style property rather than an inline declaration
-        // in server HTML (§19.7 allows neither style attributes server-side).
-        badge.style.setProperty('--team-color', team.hex);
-        badge.style.setProperty('--team-on', team.on);
-        nodes.push(el('p', { class: 'se-h1' }, badge));
+    showReveal(buildReveal(data, { config, mode: 'self', actions }), { celebrate });
+
+    // Only the guest's own phone remembers its card.
+    if (data.for === 'self' && config.event?.public_id) {
+        const { room_key: _r, team_key: _t, ...keep } = data;
+        saveLocal(config.event.public_id, { reveal: keep });
     }
 
-    if (data.player_no) {
-        nodes.push(el('p', { class: 'se-player-no' }, '#' + data.player_no));
-    }
-
-    if (data.verse) {
-        const verse = el('blockquote', { class: 'se-verse se-stack' },
-            el('p', { class: 'se-h2' }, data.verse.text),
-            el('cite', { class: 'se-small se-muted' }, data.verse.ref));
-        if (data.verse.prayer) {
-            verse.appendChild(el('p', { class: 'se-script' }, data.verse.prayer));
-        }
-        nodes.push(verse);
-        nodes.push(el('p', { class: 'se-script se-small se-muted' }, data.card_signature || ''));
-    }
-
-    const actions = el('div', { class: 'se-stack' });
-    if (data.verse) {
-        actions.appendChild(button('Save your welcome card', () => openCard('welcome'), 'secondary'));
-    }
-    if (team) {
-        actions.appendChild(button('Make your team card', () => openCard('team'), 'ghost'));
-    }
-    actions.appendChild(el('a', {
-        class: 'se-btn se-btn-ghost se-btn-wide',
-        href: config.urls?.play || '#',
-    }, 'Join the games'));
-    nodes.push(actions);
-
-    const panel = card(...nodes);
-    show(panel);
-
-    if (!data.already) {
-        haptic(HAPTIC.teamReveal);
-        if (motionEnabled()) {
-            popIn(panel);
-            if (team) wipe(team.hex);
-        }
-    }
-}
-
-/** A circle wipe in the team colour, expanding from the middle of the page. */
-function wipe(hex) {
-    const layer = el('div', { class: 'se-team-wipe', 'aria-hidden': 'true' });
-    layer.style.setProperty('--team-color', hex);
-    document.body.appendChild(layer);
-    setTimeout(() => layer.remove(), 1200);
+    // Behind the overlay, a plain summary for when it is closed.
+    show(card(
+        el('p', { class: 'se-label' }, data.already ? 'Already checked in' : "You're in"),
+        el('p', { class: 'se-display-lg' }, data.display_name),
+        button('Show my card again', () => stepReveal(data, { celebrate: false }), 'secondary'),
+        button('Check in someone else', () => stepPhone(''), 'ghost')));
 }
 
 async function openCard(kind) {
@@ -416,6 +384,14 @@ export function startCheckin(bootConfig) {
     }
 
     if (root.dataset.open !== '1') return;
+
+    // This phone already checked in tonight and kept its card: open it, with
+    // the song picker, instead of asking again.
+    const kept = readLocal(config.event?.public_id)?.reveal;
+    if (config.me?.registration?.checked_in && kept && kept.display_name === config.me.registration.display_name) {
+        stepReveal({ ...kept, already: true, returning: true, for: 'self' }, { celebrate: false });
+        return;
+    }
 
     // A device we already know can skip straight to "Is this you?".
     const known = config.me?.registration?.display_name;
