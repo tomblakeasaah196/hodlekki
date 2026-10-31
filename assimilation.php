@@ -364,6 +364,16 @@ function dueLabel(c) {
     return null;
 }
 
+// A blank number still renders a "tel:" link that dials nothing, so the
+// Call/WhatsApp buttons only appear when there is at least one digit.
+function hasPhone(c) {
+    return /\d/.test(String(c.phone || ''));
+}
+
+function noPhoneNote(widthClass) {
+    return `<p class="${widthClass} min-h-[44px] flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 text-sm font-semibold text-gray-500">${icon(ICON_PHONE, 'w-4 h-4')} No phone number on file</p>`;
+}
+
 function personCard(c, inPool) {
     const due = inPool ? null : dueLabel(c);
     const note = c.last_note && c.last_note.note ? String(c.last_note.note).split('\n')[0] : '';
@@ -408,8 +418,10 @@ function personCard(c, inPool) {
             <button type="button" onclick="claim(${c.case_id})" class="w-full min-h-[48px] bg-hodHome hover:bg-emerald-800 text-white rounded-xl font-bold text-sm transition-all">I&rsquo;ll call ${escapeHtml(c.first_name)}</button>`
         : `
             <div class="flex gap-2">
-                <a href="tel:${escapeHtml(c.phone || '')}" class="tap-btn bg-hodBlue hover:bg-hodBlue/90 text-white">${icon(ICON_PHONE)} Call</a>
-                <a href="https://wa.me/${escapeHtml(c.whatsapp || '')}" target="_blank" rel="noopener" class="tap-btn bg-[#25D366] hover:bg-[#128C7E] text-white">${icon(ICON_CHAT)} WhatsApp</a>
+                ${hasPhone(c) ? `
+                <a href="tel:${escapeHtml(c.phone)}" class="tap-btn bg-hodBlue hover:bg-hodBlue/90 text-white">${icon(ICON_PHONE)} Call</a>
+                <a href="https://wa.me/${escapeHtml(c.whatsapp || '')}" target="_blank" rel="noopener" class="tap-btn bg-[#25D366] hover:bg-[#128C7E] text-white">${icon(ICON_CHAT)} WhatsApp</a>`
+                : noPhoneNote('flex-[2]')}
                 <button type="button" onclick="openSheet(${c.case_id})" class="tap-btn bg-gray-100 hover:bg-gray-200 text-gray-800">Log</button>
             </div>`}
     </article>`;
@@ -545,8 +557,10 @@ function sheetForm(c) {
         <button type="button" id="lineBtn" onclick="suggestLine()" class="w-full min-h-[44px] bg-white border border-hodBlue/20 hover:border-hodBlue/40 text-hodBlue rounded-xl font-semibold text-xs transition-all">Suggest a gentle opening line</button>
         <p id="lineOut" class="hidden text-sm text-gray-800 bg-white border border-hodBlue/10 rounded-xl px-3 py-2.5 italic leading-relaxed"></p>
         <div class="flex gap-2 pt-1">
-            <a href="tel:${escapeHtml(c.phone || '')}" class="tap-btn bg-hodBlue hover:bg-hodBlue/90 text-white">${icon(ICON_PHONE)} Call ${escapeHtml(c.phone || '')}</a>
-            <a href="https://wa.me/${escapeHtml(c.whatsapp || '')}" target="_blank" rel="noopener" class="tap-btn bg-[#25D366] hover:bg-[#128C7E] text-white px-4 flex-none">${icon(ICON_CHAT)}</a>
+            ${hasPhone(c) ? `
+            <a href="tel:${escapeHtml(c.phone)}" class="tap-btn bg-hodBlue hover:bg-hodBlue/90 text-white">${icon(ICON_PHONE)} Call ${escapeHtml(c.phone)}</a>
+            <a href="https://wa.me/${escapeHtml(c.whatsapp || '')}" target="_blank" rel="noopener" class="tap-btn bg-[#25D366] hover:bg-[#128C7E] text-white px-4 flex-none">${icon(ICON_CHAT)}</a>`
+            : noPhoneNote('flex-1')}
         </div>
     </section>
 
