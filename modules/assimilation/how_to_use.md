@@ -261,6 +261,17 @@ see **Your people to call** — sorted by overdue first, then due today, then
 nobody-has-called-yet. Each card has tap-to-call, WhatsApp, their attendance
 trend, when they were last in church, and the last note.
 
+**Copy** sits next to each phone number (and next to Call on the logging
+sheet). It copies the number so the volunteer can paste it into their Phone
+app. Use it when the phone won't start the call from the page. On iPhone,
+Safari sometimes says *"This website has been blocked from automatically
+starting a call"*, and **Allow Call** does not always fix it. Pressing and
+holding **Call** also usually works.
+
+If the church has **no number on file** for someone, their card says so and
+the Call and WhatsApp buttons are hidden. **Log** still works, so a visit or
+a message passed on through someone else can be recorded.
+
 Tapping a card opens the logging sheet: channel chips, outcome chips, notes
 with a **microphone** and **Clean up with AI**, prayer points, and quick
 next-touch pills (Tomorrow, In 3 days, Next Sunday, In a week).
