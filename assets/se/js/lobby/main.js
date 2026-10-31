@@ -67,7 +67,7 @@ let beamsSvg = null;
 let chipsLayer = null;
 let totalNode = null;
 let tipNode = null;
-let startsNode = null;
+let titleNode = null;
 let milestoneNode = null;
 let dot = null;
 
@@ -148,12 +148,11 @@ function build() {
     beamsSvg = svgNode('svg', { class: 'se-arena-beams', 'aria-hidden': 'true' });
     frame.appendChild(beamsSvg);
 
-    // The centre: what this screen is for.
+    // The centre: what this screen is for. "SCAN TO ENTER" over the
+    // event's own name, in the event's own face; nothing else in it.
     const centre = node('div', 'se-arena-centre');
-    startsNode = node('p', 'se-arena-eyebrow', '');
-    const title = node('h1', 'se-arena-title');
-    title.append(node('span', 'se-arena-title-pre', 'Scan to enter'),
-        node('span', 'se-arena-title-main', 'the ' + (display.event?.title || 'Party') + ' Party'));
+    const kicker = node('p', 'se-arena-kicker', 'Scan to enter');
+    titleNode = node('h1', 'se-arena-title', display.event?.title || '');
 
     const qr = node('div', 'se-arena-qr');
     const ring = node('div', 'se-arena-qr-ring');
@@ -164,10 +163,10 @@ function build() {
     const url = node('p', 'se-arena-url', shortUrl(display.checkin_url));
     const total = node('p', 'se-arena-total');
     totalNode = node('strong', 'se-arena-total-n', '0');
-    total.append(totalNode, node('span', null, ' here tonight'));
+    total.append(totalNode, node('span', null, 'here tonight'));
     tipNode = node('p', 'se-arena-tip', TIPS[0]);
 
-    centre.append(startsNode, title, qr, url, total, tipNode);
+    centre.append(kicker, titleNode, qr, url, total, tipNode);
     frame.appendChild(centre);
 
     chipsLayer = node('div', 'se-arena-chips');
@@ -192,7 +191,19 @@ function build() {
     document.getElementById('se-crew-frame')?.remove();
 
     setInterval(rotateTip, TIP_EVERY_MS);
-    setInterval(renderStarts, 15000);
+    document.fonts?.ready.then(fitTitle);
+    window.addEventListener('resize', fitTitle);
+}
+
+/** A long event name shrinks to the centre column instead of reaching a team. */
+function fitTitle() {
+    if (!titleNode) return;
+    titleNode.style.removeProperty('--arena-title-size');
+    const room = titleNode.parentElement.clientWidth * 0.96;
+    const width = titleNode.scrollWidth;
+    if (width > room && width > 0) {
+        titleNode.style.setProperty('--arena-title-size', Math.max(1.8, 3.6 * room / width).toFixed(2) + 'cqw');
+    }
 }
 
 /** Paint (or repaint) the corners from the snapshot's team list. */
@@ -213,14 +224,17 @@ function buildCorners(list) {
         corner.style.setProperty('--team-color', team.hex);
         corner.style.setProperty('--team-on', team.on || '#fff');
 
-        const glow = node('div', 'se-corner-glow');
+        // TEAM / RED on the left, the count on the right, on one baseline;
+        // the last three names underneath in rows of a fixed height.
+        const row = node('div', 'se-corner-row');
         const head = node('div', 'se-corner-head');
         const label = node('p', 'se-corner-label', 'Team');
         const name = node('p', 'se-corner-name', teamTitle(team));
         head.append(label, name);
         const count = node('p', 'se-corner-count', String(team.n || 0));
+        row.append(head, count);
         const names = node('ol', 'se-corner-names');
-        corner.append(glow, head, count, names);
+        corner.append(row, names);
         frame.insertBefore(corner, chipsLayer);
 
         const existing = teams.get(team.id) || { names: [] };
@@ -230,7 +244,7 @@ function buildCorners(list) {
             pos,
             index,
             n: team.n || 0,
-            el: { corner, glow, count, names, name },
+            el: { corner, count, names, name },
         });
         renderNames(teams.get(team.id));
     });
@@ -246,6 +260,12 @@ function renderNames(team) {
         li.dataset.rank = String(i);
         return li;
     });
+    // Empty rows keep every panel the same height before anyone arrives.
+    while (items.length < NAMES_PER_CORNER) {
+        const li = node('li', 'se-corner-person se-corner-person-empty', items.length ? '—' : 'Waiting for the first…');
+        li.dataset.rank = String(items.length);
+        items.push(li);
+    }
     team.el.names.replaceChildren(...items);
 }
 
@@ -279,7 +299,7 @@ function render(envelope) {
         totalNode.textContent = String(shownTotal);
         lastMilestone = Math.floor(shownTotal / MILESTONE_EVERY) * MILESTONE_EVERY;
         firstPaint = false;
-        renderStarts();
+        fitTitle();
         return;
     }
 
@@ -535,9 +555,13 @@ function milestone(count) {
     rain({ colors: colors.length ? colors.concat(['#ffffff']) : ['#ffffff', '#ffd76a'] });
     fanfare();
 
+    // It takes the headline's exact place and size for four seconds, so it
+    // can never reach the QR or a team.
     milestoneNode.replaceChildren(
-        node('span', 'se-arena-milestone-n', String(count)),
-        node('span', 'se-arena-milestone-words', 'of us are here!'));
+        node('span', 'se-arena-milestone-words', 'Welcome, everyone'),
+        node('span', 'se-arena-milestone-n', count + ' of us!'));
+    const kicker = frame.querySelector('.se-arena-kicker');
+    if (kicker) milestoneNode.style.setProperty('top', kicker.offsetTop + 'px');
     milestoneNode.classList.remove('se-arena-milestone-on');
     void milestoneNode.offsetWidth;
     milestoneNode.classList.add('se-arena-milestone-on');
@@ -598,27 +622,26 @@ async function wake(hint) {
 
 let tipIndex = 0;
 function rotateTip() {
-    tipIndex = (tipIndex + 1) % TIPS.length;
+    // Before the start, every other line is the countdown.
+    const lines = TIPS.slice();
+    const when = startsLine();
+    if (when) lines.splice(1, 0, when);
+
+    tipIndex = (tipIndex + 1) % lines.length;
     tipNode.classList.remove('se-arena-tip-in');
     void tipNode.offsetWidth;
-    tipNode.textContent = TIPS[tipIndex];
+    tipNode.textContent = lines[tipIndex];
     tipNode.classList.add('se-arena-tip-in');
 }
 
-function renderStarts() {
-    const title = [display.event?.title, display.event?.edition].filter(Boolean).join(' ');
+function startsLine() {
     const startsAt = Number(display.event?.starts_ms || Date.parse(latest?.starts_at || ''));
-    let when = '';
-    if (Number.isFinite(startsAt) && startsAt > 0) {
-        const left = startsAt - serverNow();
-        if (left <= 0) when = 'Happening now';
-        else {
-            const h = Math.floor(left / 3600000);
-            const m = Math.max(1, Math.round((left % 3600000) / 60000));
-            when = 'Starts in ' + (h ? h + 'h ' : '') + m + ' min';
-        }
-    }
-    startsNode.textContent = [title, when].filter(Boolean).join('  ·  ');
+    if (!Number.isFinite(startsAt) || startsAt <= 0) return '';
+    const left = startsAt - serverNow();
+    if (left <= 0) return '';
+    const h = Math.floor(left / 3600000);
+    const m = Math.max(1, Math.round((left % 3600000) / 60000));
+    return 'We start in ' + (h ? h + ' h ' : '') + m + ' min.';
 }
 
 // --------------------------------------------------------------------------
