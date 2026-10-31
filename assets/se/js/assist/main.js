@@ -36,7 +36,7 @@ function button(label, onClick, kind = 'primary', extra = {}) {
 }
 
 function show(...nodes) {
-    root.replaceChildren(header(), ...nodes);
+    root.replaceChildren(header(), ...nodes.filter(Boolean));
     const input = root.querySelector('input:not([type=checkbox])');
     if (input) input.focus();
 }
@@ -331,12 +331,31 @@ async function start() {
     host.replaceChildren(root);
 
     if (info.window && info.window.open === false) {
-        show(card(el('p', { class: 'se-h2' }, 'Check-in is not open yet.'),
-            el('p', { class: 'se-small se-muted' }, 'This page will work the moment the doors open. Keep it handy.')));
+        waitForDoors();
         return;
     }
 
     stepPhone();
+}
+
+/** Opened before the doors: check again every 15 seconds and open by itself. */
+function waitForDoors() {
+    const recheck = async () => {
+        try {
+            info = await api('assist_boot');
+        } catch (error) {
+            return;
+        }
+        if (!info.window || info.window.open !== false) {
+            clearInterval(timer);
+            stepPhone();
+        }
+    };
+    const timer = setInterval(recheck, 15000);
+
+    show(card(el('p', { class: 'se-h2' }, 'Check-in is not open yet.'),
+        el('p', { class: 'se-small se-muted' }, 'This page opens by itself the moment the doors open. Keep it handy.'),
+        button('Check again now', recheck, 'secondary')));
 }
 
 start();

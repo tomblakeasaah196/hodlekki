@@ -11,7 +11,9 @@
 //
 //   * adaptive intervals — 1 s only while something is actually happening,
 //     2.5 s when the room is just live, 30 s on the portal, nothing at all
-//     when the page is hidden or there is nothing to watch;
+//     when the page is hidden or there is nothing to watch. The one faster
+//     rate, ½ s, belongs to the lobby screens alone: there are only one or
+//     two of them, and an arrival should land on them the moment it happens;
 //   * jitter — without it 150 phones that loaded the page together would
 //     poll in lockstep and arrive as a spike every second;
 //   * backoff — 2, 4, 8, 15 s after an error, with a "Reconnecting…" pill
@@ -24,6 +26,9 @@ import { net } from './store.js';
 
 /** Interval table (§8.5.3). `jitter` is the ± spread in milliseconds. */
 const INTERVALS = {
+    // The lobby displays only — never a phone. Two screens at 2 Hz are four
+    // static-file requests a second; 150 phones at this rate would not be.
+    lobby:    { ms: 500,   jitter: 75 },
     hot:      { ms: 1000,  jitter: 150 },
     live:     { ms: 2500,  jitter: 300 },
     upcoming: { ms: 30000, jitter: 3000 },
@@ -37,6 +42,11 @@ function jittered(pace) {
     const spec = INTERVALS[pace] || INTERVALS.live;
     if (!spec.ms) return 0;
     return spec.ms + (Math.random() * 2 - 1) * spec.jitter;
+}
+
+/** The delay before the next poll at a pace, in milliseconds (0 = paused). */
+export function pollDelay(pace) {
+    return jittered(pace);
 }
 
 /**

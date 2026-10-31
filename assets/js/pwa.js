@@ -395,8 +395,17 @@
         return swReady;
     }
 
+    // A page's first service worker also "takes control" of it. Nothing on
+    // the page is stale then, and a reload would wipe whatever the visitor is
+    // typing (a phone number at the check-in door), so only an UPDATE to an
+    // already-controlling worker reloads.
+    var hadController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
     var reloading = false;
     navigator.serviceWorker && navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!hadController) {
+            hadController = true;
+            return;
+        }
         if (reloading) return;
         reloading = true;
         location.reload();

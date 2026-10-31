@@ -678,10 +678,11 @@ async function start() {
     new PollDriver({
         base: '/live/' + config.event.public_id + '/',
         channels: { [channel]: render },
-        // Once a second: the file is static and answered with a 304 almost
-        // every time, and an arrival should reach the screen while the guest
-        // is still looking up from their phone.
-        pace: () => 'hot',
+        // Twice a second, the lobby's own rate: the file is static and is
+        // answered with a 304 almost every time, and an arrival should reach
+        // the screen while the guest is still looking up from their phone.
+        // Phones never use this rate (core/realtime.js).
+        pace: () => 'lobby',
         onStatus: ({ state }) => { if (dot) dot.dataset.health = state === 'ok' ? 'ok' : (state === 'retrying' ? 'warn' : 'bad'); },
     });
 }

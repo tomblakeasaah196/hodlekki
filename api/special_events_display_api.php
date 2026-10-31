@@ -115,7 +115,9 @@ try {
             if ($phone === null) {
                 se_api_error('Please enter a mobile number, e.g. 0803 123 4567.', 'INVALID_PHONE');
             }
-            se_rate_limit_or_fail($pdo, 'assist_lookup', (int) $event['id'] . ':' . (function_exists('security_client_ip') ? security_client_ip() : ''), 120, 600);
+            // Every volunteer at the door shares the venue's IP, so this is
+            // sized for all of them together during a rush.
+            se_rate_limit_or_fail($pdo, 'assist_lookup', (int) $event['id'] . ':' . (function_exists('security_client_ip') ? security_client_ip() : ''), 600, 600);
 
             $days = se_event_days($pdo, (int) $event['id']);
             se_api_success('OK', se_lookup_phone_checkin($pdo, $event, $days, se_event_settings($event), $phone, null));

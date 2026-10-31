@@ -69,6 +69,10 @@ function explain(error) {
 // --------------------------------------------------------------------------
 
 function stepPhone(prefill = '') {
+    // A new person: nothing from whoever used this phone before (their
+    // name, gender or consent) may ride along with this check-in.
+    state = {};
+
     const input = el('input', {
         type: 'tel',
         inputmode: 'tel',
@@ -296,14 +300,18 @@ function stepReveal(data, { celebrate = !data.already } = {}) {
 
     const actions = [];
 
-    if (data.already_elsewhere) {
+    // Only the games care which phone is "theirs"; with the games elsewhere
+    // the guest has everything they need on this screen already.
+    if (data.already_elsewhere && data.games) {
         actions.push(el('p', { class: 'se-reveal-note' },
             "You're already checked in on another phone. To use this one, ask the desk for a transfer code."));
         actions.push(button('I have a code from the desk', () => { closeReveal(); stepTransfer(); }, 'secondary'));
     }
 
     if (data.verse && data.for !== 'other') {
-        actions.push(button('Save my verse', () => openCard('welcome'), 'secondary'));
+        // The card builder is a sheet on the page, so the full-screen reveal
+        // has to step aside or the sheet opens out of sight behind it.
+        actions.push(button('Save my verse', () => { closeReveal(); openCard('welcome'); }, 'secondary'));
     }
     if (data.games) {
         actions.push(el('a', { class: 'se-btn se-btn-ghost se-btn-wide', href: config.urls?.play || '#' }, 'Join the games'));

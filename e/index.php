@@ -284,7 +284,7 @@ function se_render_shell(
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="<?= se_h($fontsHref) ?>">
-<link rel="stylesheet" href="/assets/se/css/se.css">
+<link rel="stylesheet" href="<?= se_h(se_css_url()) ?>">
 <link rel="icon" href="/favicon.ico" sizes="any">
 
 <?php foreach ($preload as $module): ?>
@@ -917,7 +917,7 @@ function se_render_hub(PDO $pdo): void
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800&family=Inter:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="/assets/se/css/se.css">
+<link rel="stylesheet" href="<?= se_h(se_css_url()) ?>">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <style nonce="<?= se_h($nonce) ?>"><?= se_theme_css_vars($theme) ?></style>
 <?php
@@ -1006,7 +1006,7 @@ function se_render_404(PDO $pdo, string $message): void
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800&family=Inter:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="/assets/se/css/se.css">
+<link rel="stylesheet" href="<?= se_h(se_css_url()) ?>">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <style nonce="<?= se_h($nonce) ?>"><?= se_theme_css_vars($theme) ?></style>
 </head>
