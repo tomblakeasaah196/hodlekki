@@ -248,6 +248,9 @@ function se_render_shell(
         . '&family=Playfair+Display:ital,wght@0,500;0,700;0,900;1,500'
         // The welcome card's signature ("Chara by Envision") is set in it.
         . '&family=Great+Vibes'
+        // The lobby screens set team names and counts in a condensed face
+        // so every team takes the same width, with Inter for small text.
+        . ($surface === 'lobby' ? '&family=Anton&family=Inter:wght@400;500;600;700' : '')
         . '&display=swap';
 
     ?>

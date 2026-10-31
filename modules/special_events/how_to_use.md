@@ -889,24 +889,33 @@ The screens by the door. Open the same lobby link on as many displays as you
 like — two TVs run from one laptop is two browser windows, one dragged to each
 screen. They all show the same thing.
 
-- **The middle:** *Scan to enter the Chara Party*, and the check-in QR, big
-  enough to scan from a few steps away, framed by a ring that turns slowly in
-  the team colours. Under it the short address, **how many are here tonight**,
-  and a rotating line ("No smartphone? Our volunteers will check you in.").
-- **The corners:** one team each — its name in its colour, a big live count,
-  and the last three people it claimed.
-- **Behind it all:** the event's hero image, blurred into atmosphere.
+- **The middle:** a small *SCAN TO ENTER* over the event's name (*CHARA
+  NIGHT*) in the event's own font, and the check-in QR, big enough to scan
+  from a few steps away, framed by a ring that turns slowly in the team
+  colours. Under it the short address, **how many are here tonight**, and a
+  rotating line ("No smartphone? Our volunteers will check you in.", and the
+  countdown before the start). A long event name shrinks to fit the middle
+  column; it never reaches a team.
+- **The corners:** four equal glass panels, the same size and the same
+  distance from the edges, each with a strip of its team's colour along the
+  top: *TEAM* and the name (RED) on the left, the live count on the right, and
+  the last three people it claimed underneath. Team names and counts are set
+  in a tall condensed face, so RED and PURPLE take the same width and the
+  numbers read from the back of the room.
+- **Behind it all:** the event's hero image, kept visible: dark at the edges
+  where the panels sit, lighter in the middle.
 
 **When somebody checks in** their name pops out of the QR. Every corner starts
 to beat and throws a beam of its colour at the name; the name leans towards
 each team in turn, faster and faster, until the team they were really given
 (that was decided the instant they checked in) locks on. The other beams let
-go, the name takes the colour and flies home, the corner swells, confetti
+go, the name takes the colour and flies home, the panel glows, confetti
 bursts in that colour and the count goes up. When several people check in at
 once, each gets their own contest side by side (up to four at a time); a long
 queue simply plays faster. Every 50 people there is a full-screen confetti
-rain and "**100 of us are here!**". The beams always pass *behind* the QR, so
-it stays scannable through all of it.
+rain, and for four seconds the headline becomes "WELCOME, EVERYONE /
+**100 OF US!**" in the same place and size. The beams always pass *behind*
+the QR, so it stays scannable through all of it.
 
 **Sound and full screen:** click once anywhere on each screen. That unlocks
 the milestone fanfare, goes full screen and stops the display sleeping. Without
