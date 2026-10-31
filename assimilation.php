@@ -286,6 +286,7 @@ function escapeHtml(s) {
 const icon = (d, cls = 'w-4 h-4') =>
     `<svg class="${cls}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${d}"/></svg>`;
 const ICON_PHONE = 'M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z';
+const ICON_COPY  = 'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z';
 const ICON_CHAT  = 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z';
 
 /* ------------------------------ storage ------------------------------ */
@@ -371,8 +372,38 @@ function hasPhone(c) {
 }
 
 function noPhoneNote(widthClass) {
-    return `<p class="${widthClass} min-h-[44px] flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 text-sm font-semibold text-gray-500">${icon(ICON_PHONE, 'w-4 h-4')} No phone number on file</p>`;
+    return `<p class="${widthClass} min-h-[44px] flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 text-sm font-semibold text-gray-500">${icon(ICON_PHONE, 'w-4 h-4')} No number on file</p>`;
 }
+
+// Fallback for when the phone won't start a call from the page (iPhone
+// Safari sometimes blocks tel: links): copy the number so the volunteer
+// can paste it into their Phone app.
+function copyPhone(phone) {
+    const done = () => toast('Number copied. Open your Phone app and paste it.');
+    const legacy = () => {
+        const ta = document.createElement('textarea');
+        ta.value = phone;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, phone.length);
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) {}
+        ta.remove();
+        ok ? done() : toast('Could not copy. Press and hold the number to copy it.', 'warn');
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(phone).then(done, legacy);
+    } else {
+        legacy();
+    }
+}
+
+$(document).on('click', '[data-copy-phone]', function() {
+    copyPhone(String($(this).attr('data-copy-phone') || ''));
+});
 
 function personCard(c, inPool) {
     const due = inPool ? null : dueLabel(c);
@@ -383,7 +414,12 @@ function personCard(c, inPool) {
         <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
                 <h3 class="font-display font-bold text-gray-900 leading-tight">${escapeHtml(c.name)}</h3>
-                <p class="text-xs font-semibold text-gray-500 mt-0.5">${escapeHtml(c.phone || '')}</p>
+                ${!inPool && hasPhone(c) ? `
+                <div class="flex items-center gap-2 mt-0.5">
+                    <p class="text-xs font-semibold text-gray-500">${escapeHtml(c.phone)}</p>
+                    <button type="button" data-copy-phone="${escapeHtml(c.phone)}" class="min-h-[32px] inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 px-2.5 text-[11px] font-bold text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-hodBlue">${icon(ICON_COPY, 'w-3.5 h-3.5')} Copy</button>
+                </div>`
+                : `<p class="text-xs font-semibold text-gray-500 mt-0.5">${escapeHtml(c.phone || '')}</p>`}
                 <p class="text-xs text-gray-500 mt-0.5 truncate">${escapeHtml(meta || 'Household of David')}</p>
             </div>
             ${due ? `<span class="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${due[1]}">${due[0]}</span>` : ''}
@@ -559,7 +595,8 @@ function sheetForm(c) {
         <div class="flex gap-2 pt-1">
             ${hasPhone(c) ? `
             <a href="tel:${escapeHtml(c.phone)}" class="tap-btn bg-hodBlue hover:bg-hodBlue/90 text-white">${icon(ICON_PHONE)} Call ${escapeHtml(c.phone)}</a>
-            <a href="https://wa.me/${escapeHtml(c.whatsapp || '')}" target="_blank" rel="noopener" class="tap-btn bg-[#25D366] hover:bg-[#128C7E] text-white px-4 flex-none">${icon(ICON_CHAT)}</a>`
+            <a href="https://wa.me/${escapeHtml(c.whatsapp || '')}" target="_blank" rel="noopener" class="tap-btn bg-[#25D366] hover:bg-[#128C7E] text-white px-4 flex-none" aria-label="WhatsApp ${escapeHtml(c.first_name)}">${icon(ICON_CHAT)}</a>
+            <button type="button" data-copy-phone="${escapeHtml(c.phone)}" class="tap-btn bg-white border border-gray-200 hover:bg-gray-50 text-gray-800 px-4 flex-none" aria-label="Copy ${escapeHtml(c.phone)}" title="Copy number">${icon(ICON_COPY)}</button>`
             : noPhoneNote('flex-1')}
         </div>
     </section>
