@@ -634,6 +634,26 @@ function se_event_url(string $slug, string $path = '', bool $absolute = true): s
  *
  * @param bool $withConfetti false for the Studio, which never fires confetti.
  */
+/**
+ * The stylesheet's URL with a fingerprint of its bytes.
+ *
+ * The site's service worker serves /assets/se/ stale-while-revalidate, so a
+ * phone that loaded the module before a deploy is handed the OLD se.css on
+ * its next visit, and new markup (the check-in reveal, the volunteer page)
+ * arrives unstyled. A new URL is never in that cache.
+ */
+function se_css_url(): string
+{
+    static $url = null;
+    if ($url !== null) {
+        return $url;
+    }
+
+    $hash = @md5_file(dirname(__DIR__, 2) . '/assets/se/css/se.css');
+
+    return $url = '/assets/se/css/se.css' . ($hash ? '?v=' . substr($hash, 0, 10) : '');
+}
+
 function se_import_map(bool $withConfetti = true): array
 {
     $imports = [

@@ -104,10 +104,22 @@ function se_public_subject(array $event): string
     return 'anon:' . (string) ($_SERVER['REMOTE_ADDR'] ?? '') . '|' . (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
 }
 
-/** The two limits every bucket has: per device (or anon) and per IP. */
+/**
+ * The two limits every bucket has: per device and per IP.
+ *
+ * A phone with no device cookie yet is known only by IP + user agent, and on
+ * a venue's Wi-Fi every iPhone on the same iOS version is that one subject:
+ * the per-device limit (10 check-ins, 20 lookups in ten minutes) would turn
+ * away the next guest in a rush at the door. Those callers are held to the
+ * per-IP limit alone; the per-phone-number buckets on lookup and check-in
+ * still stop anyone working through numbers.
+ */
 function se_public_limit(PDO $pdo, array $event, string $bucket, int $perDevice, int $perIp, int $window): void
 {
-    se_rate_limit_or_fail($pdo, $bucket, se_public_subject($event), $perDevice, $window);
+    $subject = se_public_subject($event);
+    if (!str_starts_with($subject, 'anon:')) {
+        se_rate_limit_or_fail($pdo, $bucket, $subject, $perDevice, $window);
+    }
 
     if (function_exists('security_client_ip')) {
         se_rate_limit_or_fail($pdo, $bucket . '_ip', security_client_ip(), $perIp, $window);
