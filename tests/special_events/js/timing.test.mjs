@@ -32,7 +32,7 @@ globalThis.addEventListener ??= () => {};
 globalThis.fetch ??= async () => { throw new Error('no network in tests'); };
 
 const { elapsedSince, serverNow, clockOffset, clockSynced } = await import('@se/core/clock.js');
-const { paceFor, snapshotAge } = await import('@se/core/realtime.js');
+const { paceFor, snapshotAge, pollDelay } = await import('@se/core/realtime.js');
 
 // --------------------------------------------------------------------------
 // The clamp (§11.1)
@@ -124,6 +124,37 @@ test('an idle upcoming page does not poll at all unless it is watching seats', (
 
 test('after the event there is nothing left to poll for', () => {
     assert.equal(paceFor(envelope({ event: { phase: 'post' } }), {}), 'off');
+});
+
+test('the lobby screens poll twice a second, with a small spread', () => {
+    for (let i = 0; i < 500; i++) {
+        const ms = pollDelay('lobby');
+        assert.ok(ms >= 425 && ms <= 575, 'lobby delay ' + ms);
+    }
+});
+
+test('phones keep their own rates: the lobby rate is never chosen for them', () => {
+    // Every state paceFor can see on a phone maps to a slower pace.
+    const states = [null, 'armed', 'open', 'buzz', 'charades', 'closed'];
+    for (const phase of ['upcoming', 'live', 'post', 'between_days']) {
+        for (const state of states) {
+            const snapshot = envelope({ event: { phase }, game: state ? { state } : null });
+            assert.notEqual(paceFor(snapshot, {}), 'lobby', phase + '/' + state);
+            assert.notEqual(paceFor(snapshot, { watchingSeats: true }), 'lobby', phase + '/' + state);
+        }
+    }
+    for (let i = 0; i < 200; i++) {
+        const ms = pollDelay('hot');
+        assert.ok(ms >= 850 && ms <= 1150, 'hot delay ' + ms);
+    }
+});
+
+test('an unknown pace falls back to the live rate, never to a fast one', () => {
+    for (let i = 0; i < 100; i++) {
+        const ms = pollDelay('no-such-pace');
+        assert.ok(ms >= 2200 && ms <= 2800, 'fallback delay ' + ms);
+    }
+    assert.equal(pollDelay('off'), 0);
 });
 
 test('with no snapshot yet the pace comes from the boot payload', () => {

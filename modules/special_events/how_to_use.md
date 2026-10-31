@@ -921,11 +921,14 @@ the QR, so it stays scannable through all of it.
 the milestone fanfare, goes full screen and stops the display sleeping. Without
 the click everything still runs, silently.
 
-**How live is it?** Each screen re-reads a small file once a second (the
-server answers "nothing new" almost every time, so it costs nothing), so a
-name reaches the screens about a second after the guest taps. There is no
-socket connection to drop: if the Wi-Fi blinks, the screen catches up on the
-next read and plays everyone it missed. The dot in the top corner is green
+**How live is it?** Each lobby screen re-reads a small file twice a second
+(the server answers "nothing new" almost every time, so it costs nothing):
+a name pops out of the QR about half a second after the guest taps (at most
+about 0.6 s plus the Wi-Fi's own delay), and lands in its team panel about
+3 seconds after that. Only the lobby screens use this rate; phones are never
+asked to poll this fast. There is no socket connection to drop: if the Wi-Fi
+blinks, the screen retries after 2, 4, 8 and then 15 seconds, catches up on
+the next read and plays everyone it missed. The dot in the top corner is green
 while it is hearing the server, amber or red if it is not.
 
 If you would rather not show names downstairs, turn off **lobby names** in
