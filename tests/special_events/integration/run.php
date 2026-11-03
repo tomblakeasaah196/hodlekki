@@ -41,7 +41,7 @@ require_once $root . '/includes/sms_functions.php';
 foreach (['constants', 'util', 'db', 'theme', 'settings', 'security', 'events', 'assets', 'ai',
           'identity', 'capacity', 'registration', 'realtime', 'live', 'kjv_bundle', 'bible', 'verses',
           'teams', 'checkin', 'program', 'karaoke', 'messages', 'attendees', 'cards', 'export',
-          'portal', 'games', 'games_engine', 'scoring', 'party_games', 'after_event'] as $lib) {
+          'portal', 'games', 'games_engine', 'scoring', 'party_games', 'after_event', 'turnout'] as $lib) {
     require_once $root . '/includes/special_events/' . $lib . '.php';
 }
 
@@ -1334,6 +1334,49 @@ if (!se_game_ready($pdo) || !se_teams_ready($pdo)) {
     $stmt->execute([$gId]);
     is_same('…while real awards stay', 1, (int) $stmt->fetchColumn());
 }
+
+// ==========================================================================
+// Turnout — members shown under their system name, guests as typed
+// ==========================================================================
+
+echo "\n  turnout member names\n";
+
+$pdo = se_it_pdo();
+$tEvent = se_it_event($pdo);
+$tDays  = se_event_days($pdo, (int) $tEvent['id']);
+$tSet   = se_event_settings($tEvent);
+$tReg = static function (string $phone, string $first, string $last) use ($pdo, $tEvent, $tSet, $tDays): int {
+    $r = se_register($pdo, $tEvent, $tSet, $tDays, [
+        'phone' => se_phone_normalize($phone), 'first_name' => $first, 'last_name' => $last,
+        'consent' => true, 'consent_text' => 'Test consent', 'answers' => [], 'channel' => 'portal',
+    ], ['now' => se_now(), 'ip_hash' => null, 'device' => null]);
+
+    return (int) $r['registration']['id'];
+};
+
+// Ada Obi is 08030000004 in the seeded users table. She typed her name badly.
+$adaReg   = $tReg('0803 000 0004', 'adda', 'obbi');
+$guestReg = $tReg('08077770001', 'Kemi', 'Ade');
+// The registration keeps what was typed; Turnout must not depend on it.
+$pdo->prepare("UPDATE se_registrations SET first_name = 'adda', last_name = 'obbi' WHERE id = ?")->execute([$adaReg]);
+$pdo->prepare(
+    "INSERT INTO se_checkins (event_id, registration_id, day_date, method) VALUES (?, ?, ?, 'desk'), (?, ?, ?, 'desk')"
+)->execute([(int) $tEvent['id'], $adaReg, $tDays[0]['day_date'], (int) $tEvent['id'], $guestReg, $tDays[0]['day_date']]);
+
+$turnout = se_turnout($pdo, $tEvent, true);
+$byId = [];
+foreach ($turnout['lists']['checked_in'] as $person) {
+    $byId[$person['id']] = $person;
+}
+is_same('both check-ins are listed', 2, $turnout['counts']['checked_in']);
+is_same('a checked-in member shows their exact system name', 'Ada Obi', $byId[$adaReg]['name'] ?? null);
+is_same('…with what they typed alongside', 'adda obbi', $byId[$adaReg]['typed_name'] ?? null);
+ok('…and is a member', ($byId[$adaReg]['is_member'] ?? null) === true);
+is_same('a guest keeps the name they typed', 'Kemi Ade', $byId[$guestReg]['name'] ?? null);
+ok('…and is a guest', ($byId[$guestReg]['is_member'] ?? null) === false);
+$stmt = $pdo->prepare("SELECT CONCAT(first_name, ' ', last_name) FROM se_registrations WHERE id = ?");
+$stmt->execute([$adaReg]);
+is_same('Turnout never rewrites the registration', 'adda obbi', (string) $stmt->fetchColumn());
 
 // ==========================================================================
 

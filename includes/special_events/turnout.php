@@ -9,6 +9,13 @@
 //                walk-in channel, or created on/after the event's first day.
 //   no_show    — signed up (confirmed or waitlisted) and never checked in.
 //
+// Every person's phone is checked against the ERP `users` table each time
+// the tab loads. A match is a MEMBER and is shown under their exact system
+// name (what they typed is kept alongside, never overwritten); no match is a
+// GUEST and keeps the name they typed. Nothing is written: the module never
+// writes `users`, and a guest's own registration is the record of what they
+// told us.
+//
 // Rehearsal (is_test) and deleted registrations are left out of every list,
 // the same way Insights leaves them out of its totals. Names and numbers
 // are personal data: phones come back in full only to a caller holding
@@ -120,10 +127,21 @@ function se_turnout(PDO $pdo, array $event, bool $withPii): array
            ) ck ON ck.registration_id = r.id
           WHERE r.event_id = ? AND r.is_test = 0 AND r.deleted_at IS NULL
             AND (r.status IN ('confirmed','waitlisted') OR ck.checked_in_at IS NOT NULL)
-          ORDER BY r.first_name ASC, r.last_name ASC, r.id ASC"
+          ORDER BY r.id ASC"
     );
     $stmt->execute([$eventId, $eventId]);
     $rows = $stmt->fetchAll() ?: [];
+
+    $index = se_turnout_member_index($pdo);
+    foreach ($rows as &$row) {
+        $row['member'] = se_turnout_match_member($index, (string) ($row['phone_e164'] ?? ''));
+    }
+    unset($row);
+
+    // Alphabetical by the name the list actually shows.
+    usort($rows, static fn(array $a, array $b): int =>
+        [mb_strtolower(se_turnout_shown_name($a)), (int) $a['id']]
+        <=> [mb_strtolower(se_turnout_shown_name($b)), (int) $b['id']]);
 
     $buckets = se_turnout_classify($rows, $firstDay);
     $out     = $empty;
@@ -142,17 +160,135 @@ function se_turnout(PDO $pdo, array $event, bool $withPii): array
 /** One person as a card's modal shows them. */
 function se_turnout_person(array $row, bool $withPii): array
 {
-    $phone = (string) ($row['phone_e164'] ?? '');
-    $name  = trim((string) $row['first_name'] . ' ' . (string) $row['last_name']);
+    $phone  = (string) ($row['phone_e164'] ?? '');
+    $typed  = se_turnout_typed_name($row);
+    $member = $row['member'] ?? null;
+    $shown  = se_turnout_shown_name($row);
 
     return [
-        'id'            => (int) $row['id'],
-        'name'          => $name,
-        'phone'         => $phone === '' ? null : ($withPii ? se_phone_display($phone) : se_mask_phone($phone)),
-        'phone_e164'    => $withPii && $phone !== '' ? $phone : null,
-        'status'        => (string) $row['status'],
-        'channel'       => (string) $row['channel'],
-        'registered_at' => se_iso($row['created_at'] ?? null),
-        'checked_in_at' => se_iso($row['checked_in_at'] ?? null),
+        'id'               => (int) $row['id'],
+        'name'             => $shown,
+        // What they typed, only when it differs from the system name shown.
+        'typed_name'       => $member !== null && se_turnout_name_key($typed) !== se_turnout_name_key($shown) ? $typed : null,
+        'is_member'        => $member !== null,
+        'member_ambiguous' => $member !== null && !empty($member['ambiguous']),
+        'phone'            => $phone === '' ? null : ($withPii ? se_phone_display($phone) : se_mask_phone($phone)),
+        'phone_e164'       => $withPii && $phone !== '' ? $phone : null,
+        'status'           => (string) $row['status'],
+        'channel'          => (string) $row['channel'],
+        'registered_at'    => se_iso($row['created_at'] ?? null),
+        'checked_in_at'    => se_iso($row['checked_in_at'] ?? null),
+    ];
+}
+
+// --------------------------------------------------------------------------
+// Member names from the ERP directory
+// --------------------------------------------------------------------------
+
+/** The name the guest typed on their registration. */
+function se_turnout_typed_name(array $row): string
+{
+    return trim(preg_replace('/\s+/u', ' ', (string) ($row['first_name'] ?? '') . ' ' . (string) ($row['last_name'] ?? '')) ?? '');
+}
+
+/** The system name for a member (when the directory has one), else the typed name. */
+function se_turnout_shown_name(array $row): string
+{
+    $system = (string) ($row['member']['name'] ?? '');
+
+    return $system !== '' ? $system : se_turnout_typed_name($row);
+}
+
+/** Case- and spacing-insensitive form of a name, for "did they type it right?". */
+function se_turnout_name_key(string $name): string
+{
+    return mb_strtolower(trim(preg_replace('/\s+/u', ' ', $name) ?? ''));
+}
+
+/**
+ * The last ten digits of a phone number written in any form, or null.
+ * "0803 123 4567", "+234 803-123-4567" and "2348031234567" all give
+ * "8031234567" — the same fallback se_find_member() uses.
+ */
+function se_turnout_phone_key(string $phone): ?string
+{
+    $digits = preg_replace('/\D+/', '', $phone) ?? '';
+
+    return strlen($digits) >= 10 ? substr($digits, -10) : null;
+}
+
+/**
+ * Directory rows (id, first_name, last_name, phone) grouped by phone key.
+ * Pure, so the matching rules can be tested without a database.
+ *
+ * @return array<string, array<int, array>>
+ */
+function se_turnout_member_index_build(array $users): array
+{
+    $index = [];
+    foreach ($users as $user) {
+        $key = se_turnout_phone_key((string) ($user['phone'] ?? ''));
+        if ($key !== null) {
+            $index[$key][] = $user;
+        }
+    }
+
+    return $index;
+}
+
+/**
+ * Every user with a phone, in one query, rather than se_find_member()'s two
+ * queries per person (its fallback scans `users` each time — 300 guests would
+ * be 300 scans). Same table, same columns, same matching rules.
+ */
+function se_turnout_member_index(PDO $pdo): array
+{
+    try {
+        $stmt = $pdo->query(
+            "SELECT id, first_name, last_name, phone FROM users
+              WHERE phone IS NOT NULL AND phone <> '' ORDER BY id ASC"
+        );
+
+        return se_turnout_member_index_build($stmt ? ($stmt->fetchAll() ?: []) : []);
+    } catch (Throwable $e) {
+        error_log('SE turnout/member_index: ' . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * The member behind a registration's phone, or null for a guest.
+ *
+ * Mirrors se_find_member(): Nigerian mobiles only (a ten-digit tail means
+ * nothing across country codes), an exact stored format wins over a
+ * punctuation-insensitive match, and two users on one number still count as
+ * a member, flagged `ambiguous` for IDI to tidy.
+ *
+ * @return array{id:int, name:string, ambiguous:bool}|null
+ */
+function se_turnout_match_member(array $index, string $e164): ?array
+{
+    if ($e164 === '' || !se_phone_sms_capable($e164)) {
+        return null;
+    }
+
+    $candidates = $index[substr($e164, -10)] ?? [];
+    if (!$candidates) {
+        return null;
+    }
+
+    $exact = [$e164, '+' . $e164, '0' . substr($e164, 3)];
+    $pick  = $candidates[0];
+    foreach ($candidates as $user) {
+        if (in_array(trim((string) ($user['phone'] ?? '')), $exact, true)) {
+            $pick = $user;
+            break;
+        }
+    }
+
+    return [
+        'id'        => (int) $pick['id'],
+        'name'      => trim(preg_replace('/\s+/u', ' ', (string) ($pick['first_name'] ?? '') . ' ' . (string) ($pick['last_name'] ?? '')) ?? ''),
+        'ambiguous' => count($candidates) > 1,
     ];
 }

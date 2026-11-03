@@ -33,3 +33,46 @@ is_same('empty input gives four empty lists', ['registered' => [], 'checked_in' 
 $api = (string) file_get_contents(__DIR__ . '/../../api/special_events_api.php');
 ok('turnout_get is gated on attendee.search', (bool) preg_match("/case 'turnout_get'.*?se_studio_event\\(\\\$pdo, \\\$body, 'attendee\\.search'\\)/s", $api));
 ok('turnout_get masks phones without attendee.pii', (bool) preg_match("/case 'turnout_get'.*?'attendee\\.pii'/s", $api));
+
+// --- Member names from the directory -------------------------------------
+
+is_same('phone key from local format', '8031234567', se_turnout_phone_key('0803 123 4567'));
+is_same('phone key from +234 with dashes', '8031234567', se_turnout_phone_key('+234 803-123-4567'));
+is_same('phone key from bare E.164', '8031234567', se_turnout_phone_key('2348031234567'));
+is_same('too-short phone has no key', null, se_turnout_phone_key('12345'));
+
+$index = se_turnout_member_index_build([
+    ['id' => 4, 'first_name' => 'Ada', 'last_name' => 'Obi', 'phone' => '0803 000 0004'],
+    ['id' => 7, 'first_name' => 'Emeka', 'last_name' => 'Nwosu', 'phone' => '+234-805-555-0007'],
+    ['id' => 8, 'first_name' => 'Twin', 'last_name' => 'One', 'phone' => '0809-999-0000'],
+    ['id' => 9, 'first_name' => 'Twin', 'last_name' => 'Two', 'phone' => '2348099990000'],
+    ['id' => 10, 'first_name' => 'No', 'last_name' => 'Phone', 'phone' => ''],
+]);
+
+$ada = se_turnout_match_member($index, '2348030000004');
+is_same('a number in users is a member, with the exact system name', ['id' => 4, 'name' => 'Ada Obi', 'ambiguous' => false], $ada);
+is_same('punctuation in the stored phone does not stop a match', 7, se_turnout_match_member($index, '2348055550007')['id'] ?? null);
+is_same('a number not in users is a guest', null, se_turnout_match_member($index, '2348012345678'));
+is_same('a foreign number is never matched on its last ten digits', null, se_turnout_match_member($index, '448030000004'));
+is_same('no phone is a guest', null, se_turnout_match_member($index, ''));
+$twin = se_turnout_match_member($index, '2348099990000');
+is_same('two users on one number: the exact stored format wins', 9, $twin['id'] ?? null);
+ok('…and the match is flagged ambiguous', !empty($twin['ambiguous']));
+
+$poor = ['id' => 1, 'first_name' => 'adda', 'last_name' => ' obbi', 'phone_e164' => '2348030000004', 'status' => 'confirmed',
+         'channel' => 'portal', 'created_at' => '2026-11-01 10:00:00', 'checked_in_at' => '2026-11-07 19:00:00', 'member' => $ada];
+$p = se_turnout_person($poor, true);
+is_same('a member is shown under the system name', 'Ada Obi', $p['name']);
+is_same('…with what they typed kept alongside', 'adda obbi', $p['typed_name']);
+ok('…and flagged a member', $p['is_member'] === true);
+
+$same = ['first_name' => 'ADA', 'last_name' => 'obi'] + $poor;
+is_same('a typed name that only differs in case is not repeated', null, se_turnout_person($same, true)['typed_name']);
+
+$guest = ['member' => null, 'first_name' => 'Kemi', 'last_name' => 'Ade', 'phone_e164' => '2348012345678'] + $poor;
+$g = se_turnout_person($guest, false);
+is_same('a guest keeps the name they typed', 'Kemi Ade', $g['name']);
+ok('…is flagged a guest, with no typed-name line', $g['is_member'] === false && $g['typed_name'] === null);
+
+$blank = ['member' => ['id' => 11, 'name' => '', 'ambiguous' => false]] + $poor;
+is_same('a member with a blank directory name falls back to the typed name', 'adda obbi', se_turnout_person($blank, true)['name']);

@@ -5,6 +5,11 @@
 // a modal listing the people behind the number, with search, tap-to-call
 // and a CSV download.
 //
+// Members and guests: the server checks every phone against the ERP users
+// table. A member is listed under their exact system name with a Member pill
+// (and what they typed underneath when it differs); a guest keeps the name
+// they typed and gets a Guest pill.
+//
 // The server decides what a phone number looks like: full for a caller with
 // `attendee.pii`, masked otherwise — so tap-to-call only appears when the
 // full number is there (`phone_e164`). Rehearsal records are never listed.
@@ -68,11 +73,13 @@ function csvCell(value) {
 }
 
 function downloadCsv(filename, people) {
-    const header = ['Full name', 'Phone', 'Registered via', 'Registered at', 'Checked in at'];
+    const header = ['Full name', 'Member or guest', 'Name as typed', 'Phone', 'Registered via', 'Registered at', 'Checked in at'];
     const lines = [header.map(csvCell).join(',')];
     for (const p of people) {
         lines.push([
             p.name,
+            p.is_member ? 'Member' : 'Guest',
+            p.typed_name || '',
             p.phone || '',
             CHANNEL_LABEL[p.channel] || p.channel,
             formatDateTime(p.registered_at),
@@ -89,6 +96,14 @@ function downloadCsv(filename, people) {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function KindPill({ member, ambiguous }) {
+    return member
+        ? html`<span class="inline-block px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700"
+                   title=${ambiguous ? 'This number belongs to more than one member record' : 'This number is in the church directory'}>Member</span>`
+        : html`<span class="inline-block px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600"
+                   title="This number is not in the church directory">Guest</span>`;
 }
 
 function StatCard({ card, count, total, onOpen }) {
@@ -132,6 +147,7 @@ function PeopleModal({ card, people, pii, canExport, eventSlug, onClose }) {
         const digits = needle.replace(/\D/g, '');
         return people.filter((p) => {
             if (p.name.toLowerCase().includes(needle)) return true;
+            if (p.typed_name && p.typed_name.toLowerCase().includes(needle)) return true;
             if (!digits) return false;
             const phone = String(p.phone_e164 || p.phone || '').replace(/\D/g, '');
             // Match 0803… against +234803… as well.
@@ -156,6 +172,7 @@ function PeopleModal({ card, people, pii, canExport, eventSlug, onClose }) {
                             ${card.title} · ${nf.format(people.length)}
                         </h3>
                         <p class="text-sm text-gray-500 mt-1">${card.note}</p>
+                        <p class="text-xs text-gray-500 mt-1">Members are listed by their name in the church directory; guests by the name they typed.</p>
                         ${!pii ? html`<p class="text-xs text-amber-700 mt-1">Phone numbers are partly hidden for your crew role.</p>` : null}
                     </div>
                     <button type="button" onClick=${onClose} aria-label="Close"
@@ -190,7 +207,11 @@ function PeopleModal({ card, people, pii, canExport, eventSlug, onClose }) {
                                 ${filtered.map((p) => html`
                                     <tr key=${p.id} class="border-t border-gray-100 align-top">
                                         <td class="py-2 pr-3">
-                                            <span class="font-semibold text-gray-900">${p.name || '—'}</span>
+                                            <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                <span class="font-semibold text-gray-900">${p.name || '—'}</span>
+                                                <${KindPill} member=${p.is_member} ambiguous=${p.member_ambiguous} />
+                                            </span>
+                                            ${p.typed_name ? html`<span class="block text-[11px] text-gray-500">Typed: ${p.typed_name}</span>` : null}
                                             <span class="block text-[11px] text-gray-500">
                                                 ${CHANNEL_LABEL[p.channel] || p.channel}${p.status === 'waitlisted' ? ' · waitlist' : ''}
                                             </span>
