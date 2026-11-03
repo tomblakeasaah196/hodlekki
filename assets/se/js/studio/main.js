@@ -29,6 +29,7 @@ import { KaraokeTab } from './tabs/karaoke.js';
 import { MessagesTab } from './tabs/messages.js';
 import { LiveTab } from './tabs/live.js';
 import { AttendeesTab } from './tabs/attendees.js';
+import { TurnoutTab } from './tabs/turnout.js';
 import { AssetsTab } from './tabs/assets.js';
 import { CrewTab } from './tabs/crew.js';
 import { SettingsTab } from './tabs/settings.js';
@@ -51,6 +52,7 @@ const TABS = {
     messages: MessagesTab,
     live: LiveTab,
     attendees: AttendeesTab,
+    turnout: TurnoutTab,
     assets: AssetsTab,
     crew: CrewTab,
     insights: InsightsTab,
@@ -67,7 +69,7 @@ const TABS = {
 const GROUPS = [
     ['Set up', ['overview', 'details', 'brand', 'registration', 'program', 'chapters', 'music', 'teams']],
     ['The night', ['checkin', 'karaoke', 'games', 'live', 'crew', 'assets']],
-    ['People', ['attendees', 'messages']],
+    ['People', ['attendees', 'turnout', 'messages']],
     ['Afterwards', ['insights', 'handoff']],
     ['', ['settings']],
 ];

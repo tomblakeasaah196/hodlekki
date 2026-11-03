@@ -32,7 +32,7 @@ the server. Hiding a button is never the lock.
 **Finding your way around an event.** The sections sit down the left, grouped
 in the order you meet them: **Set up** (Overview, Details, Brand,
 Registration, Programme, Chapters, Music, Teams), **The night** (Check-in,
-Karaoke, Games, Live, Crew, Assets), **People** (Attendees, Messages),
+Karaoke, Games, Live, Crew, Assets), **People** (Attendees, Turnout, Messages),
 **Afterwards** (Insights, Hand-off) and **Settings**. On a phone they are in
 the **Section** list at the top.
 
@@ -582,6 +582,31 @@ for the door list, for the caterer's count, and for the follow-up meeting.
 - People who **opted out** are in the count but their details are withheld.
 - The file holds real phone numbers. Treat it like the offering: do not leave
   it in a WhatsApp group, and delete your copy when the follow-up is done.
+
+### Turnout — who came and who didn't
+
+**People → Turnout** shows four cards. Tap any card to see the people behind
+the number: full name, phone number, when they registered and when they
+checked in.
+
+| Card | Who is in it |
+| --- | --- |
+| **Registered** | Everyone still signed up — confirmed or on the waitlist. |
+| **Checked in** | Everyone who checked in, on any day. |
+| **Came and registered on the day** | Checked in, **and** either signed up at the door (walk-in at the desk or on their own phone) or registered on or after the first event day. |
+| **Registered, did not come** | Signed up and never checked in. Before the event, that is everyone. |
+
+Cancelled, removed, deleted and rehearsal (test) registrations are left out.
+
+In the list:
+
+- **Search** by name or by number — `0803…` and `+234803…` both work.
+- **Tap a number** to call it.
+- **Download CSV** saves the list you are looking at (only what matches your
+  search, if you searched). Only a Producer or a Follow-up liaison sees it.
+- Desk crew can open the cards, but see phone numbers partly hidden and
+  cannot call from here.
+- Press **Refresh** during the night to pull in the latest check-ins.
 
 ---
 

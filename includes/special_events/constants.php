@@ -674,6 +674,7 @@ const SE_STUDIO_TABS = [
     'crew'         => ['label' => 'Crew',         'requires' => 'se_crew'],
     'messages'     => ['label' => 'Messages',     'requires' => 'se_message_runs'],
     'attendees'    => ['label' => 'Attendees',    'requires' => 'se_registrations'],
+    'turnout'      => ['label' => 'Turnout',      'requires' => 'se_checkins'],
     'live'         => ['label' => 'Live',         'requires' => 'se_live_state'],
     'insights'     => ['label' => 'Insights',     'requires' => 'se_metrics_daily'],
     'handoff'      => ['label' => 'Hand-off',     'requires' => 'se_handoffs'],
@@ -687,7 +688,7 @@ const SE_STUDIO_TABS = [
  */
 const SE_STUDIO_TABS_READY = [
     'overview', 'details', 'brand', 'registration', 'checkin', 'program', 'chapters', 'music', 'teams',
-    'karaoke', 'games', 'messages', 'live', 'attendees', 'insights', 'handoff', 'assets', 'crew', 'settings',
+    'karaoke', 'games', 'messages', 'live', 'attendees', 'turnout', 'insights', 'handoff', 'assets', 'crew', 'settings',
 ];
 
 /**

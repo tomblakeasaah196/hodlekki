@@ -29,6 +29,15 @@
   --radius-input: 12px; --radius-card: 20px; --radius-sheet: 28px;
 }
 
+/* The Studio's fixed HOD brand colours. The ERP header defines these only in
+ * its Tailwind CDN config, so without them here `text-hodBlue` / `bg-hodRed`
+ * in Studio markup compiled to nothing and fell back to the light --se-text —
+ * white numbers on white cards. */
+@theme {
+  --color-hodBlue: #1D356A;
+  --color-hodRed: #D11920;
+}
+
 /* ---------------------------------------------------------------------- *
  * Fallback token values.
  *
