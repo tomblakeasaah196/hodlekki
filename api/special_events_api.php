@@ -2354,6 +2354,17 @@ try {
         se_api_success('OK', se_insights($pdo, $event));
     }
 
+    case 'turnout_get': {
+        // Names behind the four Turnout cards. attendee.search is the same
+        // gate as the Attendees list; phones are masked without attendee.pii.
+        $event = se_studio_event($pdo, $body, 'attendee.search');
+        $pii   = se_has_capability($pdo, (int) $event['id'], 'attendee.pii', $userId);
+
+        se_api_success('OK', se_turnout($pdo, $event, $pii) + [
+            'can_export' => se_has_capability($pdo, (int) $event['id'], 'attendee.export', $userId),
+        ]);
+    }
+
     case 'handoff_preview': {
         $event = se_studio_event($pdo, $body, 'handoff.run');
         se_api_success('Preview ready.', se_handoff_preview($pdo, $event, se_bool($body['include_no_shows'] ?? false)));
