@@ -609,7 +609,8 @@ directory each time you open the tab:
 
 Nothing is overwritten: the registration still holds what the person typed,
 and the directory is never changed from here. Only Nigerian mobile numbers are
-matched, the same rule the rest of Special Events uses. Hover a Member pill to
+matched, the same rule the rest of Special Events uses. Each card shows its
+own split under the number (for example "180 members" and "132 guests"). Hover a Member pill to
 see if the number belongs to more than one directory record — that is a
 duplicate for IDI to tidy.
 

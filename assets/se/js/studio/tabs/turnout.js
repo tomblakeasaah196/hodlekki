@@ -106,14 +106,19 @@ function KindPill({ member, ambiguous }) {
                    title="This number is not in the church directory">Guest</span>`;
 }
 
-function StatCard({ card, count, total, onOpen }) {
+function StatCard({ card, count, total, members, onOpen }) {
     const share = card.key === 'registered' ? null : pct(count, total);
+    const guests = Math.max(0, count - members);
 
     return html`
         <button type="button" onClick=${onOpen}
                 class="group text-left bg-white rounded-2xl border border-gray-100 p-5 hover:border-gray-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-hodBlue transition-colors">
             <p class="text-sm font-semibold text-gray-600">${card.title}</p>
             <p class=${'text-4xl font-display font-bold tabular-nums mt-1 ' + card.tone}>${nf.format(count)}</p>
+            <p class="flex flex-wrap gap-1.5 mt-2">
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 tabular-nums">${nf.format(members)} ${members === 1 ? 'member' : 'members'}</span>
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600 tabular-nums">${nf.format(guests)} ${guests === 1 ? 'guest' : 'guests'}</span>
+            </p>
             <p class="text-xs text-gray-500 mt-1 min-h-[2rem]">${card.note}</p>
             ${share !== null ? html`
                 <div class="mt-3">
@@ -281,7 +286,9 @@ export function TurnoutTab() {
             <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 ${CARDS.map((card) => html`
                     <${StatCard} key=${card.key} card=${card} count=${counts[card.key] || 0}
-                        total=${counts.registered || 0} onOpen=${() => setOpen(card.key)} />`)}
+                        total=${counts.registered || 0}
+                        members=${(data.lists?.[card.key] || []).filter((p) => p.is_member).length}
+                        onOpen=${() => setOpen(card.key)} />`)}
             </div>
 
             ${openCard ? html`
