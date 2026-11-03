@@ -61,6 +61,14 @@ const CHANNEL_LABEL = {
     studio: 'Added by crew',
 };
 
+/** "20 Oct, 10:00" — the phone layout's one-line version of a timestamp. */
+function shortDateTime(iso) {
+    return formatDateTime(iso, {
+        dateStyle: undefined, timeStyle: undefined,
+        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    });
+}
+
 function pct(part, whole) {
     return whole ? Math.round((100 * part) / whole) : 0;
 }
@@ -131,13 +139,23 @@ function StatCard({ card, count, total, members, onOpen }) {
         </button>`;
 }
 
+const KIND_FILTERS = [
+    { key: 'all', label: 'All' },
+    { key: 'member', label: 'Members' },
+    { key: 'guest', label: 'Guests' },
+];
+
 function PeopleModal({ card, people, pii, canExport, eventSlug, onClose }) {
     const [q, setQ] = useState('');
-    const searchRef = useRef(null);
+    const [kind, setKind] = useState('all');
+    const dialogRef = useRef(null);
     const returnFocus = useRef(document.activeElement);
 
+    // Focus goes to the dialog itself, not the search box: on a phone a
+    // focused input throws the keyboard up over the list before anyone has
+    // asked to search. Keyboard and screen-reader users still land inside.
     useEffect(() => {
-        searchRef.current?.focus();
+        dialogRef.current?.focus({ preventScroll: true });
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
         document.addEventListener('keydown', onKey);
         return () => {
@@ -146,11 +164,20 @@ function PeopleModal({ card, people, pii, canExport, eventSlug, onClose }) {
         };
     }, []);
 
+    const kindCounts = useMemo(() => {
+        const member = people.filter((p) => p.is_member).length;
+        return { all: people.length, member, guest: people.length - member };
+    }, [people]);
+
+    const ofKind = useMemo(() => (kind === 'all'
+        ? people
+        : people.filter((p) => (kind === 'member') === !!p.is_member)), [kind, people]);
+
     const filtered = useMemo(() => {
         const needle = q.trim().toLowerCase();
-        if (!needle) return people;
+        if (!needle) return ofKind;
         const digits = needle.replace(/\D/g, '');
-        return people.filter((p) => {
+        return ofKind.filter((p) => {
             if (p.name.toLowerCase().includes(needle)) return true;
             if (p.typed_name && p.typed_name.toLowerCase().includes(needle)) return true;
             if (!digits) return false;
@@ -159,48 +186,68 @@ function PeopleModal({ card, people, pii, canExport, eventSlug, onClose }) {
             const local = phone.startsWith('234') ? '0' + phone.slice(3) : phone;
             return phone.includes(digits) || local.includes(digits);
         });
-    }, [q, people]);
+    }, [q, ofKind]);
 
     const download = () => {
         const stamp = new Date().toISOString().slice(0, 10);
-        downloadCsv(`${eventSlug || 'event'}-${card.key.replace('_', '-')}-${stamp}.csv`, filtered);
+        const suffix = kind === 'all' ? '' : '-' + kind + 's';
+        downloadCsv(`${eventSlug || 'event'}-${card.key.replace('_', '-')}${suffix}-${stamp}.csv`, filtered);
     };
 
+    let empty = 'Nobody in this list yet.';
+    if (people.length && !ofKind.length) empty = kind === 'member' ? 'No members in this list.' : 'No guests in this list.';
+    else if (ofKind.length && !filtered.length) empty = 'Nobody matches that search.';
+
+    // On a phone the modal is a near-full-height sheet, and the search and
+    // filter scroll away with the list, so the names get the screen. Only the
+    // title bar and the column headings stay put.
     return html`
-        <div class="fixed inset-0 z-50 flex items-center justify-center p-4" data-app-modal data-modal-ignore>
+        <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4"
+             data-app-modal data-modal-ignore data-no-pull>
             <button type="button" aria-label="Close" tabindex="-1" class="absolute inset-0 bg-gray-900/40" onClick=${onClose}></button>
-            <div role="dialog" aria-modal="true" aria-labelledby="se-turnout-title"
-                 class="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-                <header class="flex items-start justify-between gap-3 px-6 pt-6 pb-4 border-b border-gray-100">
-                    <div>
+            <div role="dialog" aria-modal="true" aria-labelledby="se-turnout-title" tabindex="-1" ref=${dialogRef}
+                 class="relative bg-white shadow-2xl w-full sm:max-w-3xl h-[92dvh] sm:h-auto sm:max-h-[90vh] rounded-t-3xl sm:rounded-3xl flex flex-col focus:outline-none">
+                <header class="flex items-start justify-between gap-3 px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b border-gray-100">
+                    <div class="min-w-0">
                         <h3 id="se-turnout-title" class="font-display font-bold text-gray-900">
                             ${card.title} · ${nf.format(people.length)}
                         </h3>
-                        <p class="text-sm text-gray-500 mt-1">${card.note}</p>
-                        <p class="text-xs text-gray-500 mt-1">Members are listed by their name in the church directory; guests by the name they typed.</p>
+                        <p class="text-xs sm:text-sm text-gray-500 mt-1">${card.note}</p>
+                        <p class="hidden sm:block text-xs text-gray-500 mt-1">Members are listed by their name in the church directory; guests by the name they typed.</p>
                         ${!pii ? html`<p class="text-xs text-amber-700 mt-1">Phone numbers are partly hidden for your crew role.</p>` : null}
                     </div>
                     <button type="button" onClick=${onClose} aria-label="Close"
-                            class="text-gray-400 hover:text-gray-900 p-2 shrink-0">✕</button>
+                            class="text-gray-400 hover:text-gray-900 p-2.5 -mr-2 -mt-1 shrink-0">✕</button>
                 </header>
 
-                <div class="px-6 pt-4 flex flex-wrap items-end gap-3">
-                    <div class="flex-1 min-w-[12rem]">
-                        <label for="se-turnout-q" class="block text-xs font-semibold text-gray-500 mb-1">Search name or number</label>
-                        <input id="se-turnout-q" ref=${searchRef} type="search" value=${q}
-                               onInput=${(e) => setQ(e.currentTarget.value)}
-                               class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hodBlue" />
+                <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-6 pb-6">
+                    <div class="pt-4 pb-2 space-y-3">
+                        <div role="group" aria-label="Show members or guests" class="flex sm:inline-flex rounded-xl bg-gray-100 p-1">
+                            ${KIND_FILTERS.map((f) => html`
+                                <button key=${f.key} type="button" aria-pressed=${kind === f.key} onClick=${() => setKind(f.key)}
+                                        class=${'flex-1 sm:flex-none min-h-[40px] px-3 rounded-lg text-sm font-semibold transition-colors '
+                                            + (kind === f.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900')}>
+                                    ${f.label} <span class="tabular-nums text-gray-500 font-normal">${nf.format(kindCounts[f.key])}</span>
+                                </button>`)}
+                        </div>
+                        <div class="flex items-end gap-2 sm:gap-3">
+                            <div class="flex-1 min-w-0">
+                                <label for="se-turnout-q" class="block text-xs font-semibold text-gray-500 mb-1">Search name or number</label>
+                                <input id="se-turnout-q" type="search" value=${q}
+                                       onInput=${(e) => setQ(e.currentTarget.value)}
+                                       class="w-full min-h-[44px] rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hodBlue" />
+                            </div>
+                            ${canExport ? html`
+                                <${Button} variant="secondary" onClick=${download} disabled=${!filtered.length}
+                                    title=${'Download these ' + nf.format(filtered.length) + ' as a CSV file'}>
+                                    <span class="sm:hidden">CSV</span><span class="hidden sm:inline">Download CSV</span>${filtered.length !== people.length ? ` (${nf.format(filtered.length)})` : ''}
+                                </${Button}>` : null}
+                        </div>
                     </div>
-                    ${canExport ? html`
-                        <${Button} variant="secondary" onClick=${download} disabled=${!filtered.length}>
-                            Download CSV${q.trim() ? ` (${nf.format(filtered.length)})` : ''}
-                        </${Button}>` : null}
-                </div>
 
-                <div class="flex-1 overflow-y-auto px-6 py-4">
                     ${filtered.length ? html`
                         <table class="w-full text-sm">
-                            <thead class="sticky top-0 bg-white">
+                            <thead class="sticky top-0 z-10 bg-white">
                                 <tr class="text-left text-gray-500">
                                     <th class="py-2 pr-3 font-semibold">Full name</th>
                                     <th class="py-2 pr-3 font-semibold">Phone</th>
@@ -221,7 +268,7 @@ function PeopleModal({ card, people, pii, canExport, eventSlug, onClose }) {
                                                 ${CHANNEL_LABEL[p.channel] || p.channel}${p.status === 'waitlisted' ? ' · waitlist' : ''}
                                             </span>
                                             <span class="block sm:hidden text-[11px] text-gray-500">
-                                                Reg. ${formatDateTime(p.registered_at)}${p.checked_in_at ? ' · In ' + formatDateTime(p.checked_in_at) : ''}
+                                                Reg. ${shortDateTime(p.registered_at)}${p.checked_in_at ? ' · In ' + shortDateTime(p.checked_in_at) : ''}
                                             </span>
                                         </td>
                                         <td class="py-2 pr-3 tabular-nums whitespace-nowrap">
@@ -234,9 +281,7 @@ function PeopleModal({ card, people, pii, canExport, eventSlug, onClose }) {
                                     </tr>`)}
                             </tbody>
                         </table>` : html`
-                        <p class="text-sm text-gray-500 py-6 text-center">
-                            ${people.length ? 'Nobody matches that search.' : 'Nobody in this list yet.'}
-                        </p>`}
+                        <p class="text-sm text-gray-500 py-6 text-center">${empty}</p>`}
                 </div>
             </div>
         </div>`;

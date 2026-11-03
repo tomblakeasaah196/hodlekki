@@ -616,14 +616,20 @@ duplicate for IDI to tidy.
 
 In the list:
 
+- **All / Members / Guests** at the top narrows the list, with the count of
+  each. It works together with the search.
 - **Search** by name or by number — `0803…` and `+234803…` both work. A
   member can be found by their directory name or by what they typed.
 - **Tap a number** to call it.
-- **Download CSV** saves the list you are looking at (only what matches your
-  search, if you searched), with a Member/Guest column and the name as typed. Only a Producer or a Follow-up liaison sees it.
+- **Download CSV** saves the list you are looking at (only Members or Guests
+  if you picked one, and only what matches your search, if you searched), with a Member/Guest column and the name as typed. Only a Producer or a Follow-up liaison sees it.
 - Desk crew can open the cards, but see phone numbers partly hidden and
   cannot call from here.
 - Press **Refresh** during the night to pull in the latest check-ins.
+- On a phone the list opens as a tall sheet from the bottom. The search box
+  does not grab the keyboard when it opens; tap it when you want to search.
+  The filter and search scroll away with the names, so swipe down to get back
+  to them.
 
 ---
 
