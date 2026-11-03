@@ -598,12 +598,28 @@ checked in.
 
 Cancelled, removed, deleted and rehearsal (test) registrations are left out.
 
+**Member or Guest.** Every phone number is checked against the church
+directory each time you open the tab:
+
+- **Member** — the number belongs to someone in the directory. They are listed
+  under their **exact name in the directory**, however they typed it, with
+  what they typed shown underneath ("Typed: adda obbi") when it differs.
+- **Guest** — the number is not in the directory. They keep the name they
+  typed.
+
+Nothing is overwritten: the registration still holds what the person typed,
+and the directory is never changed from here. Only Nigerian mobile numbers are
+matched, the same rule the rest of Special Events uses. Hover a Member pill to
+see if the number belongs to more than one directory record — that is a
+duplicate for IDI to tidy.
+
 In the list:
 
-- **Search** by name or by number — `0803…` and `+234803…` both work.
+- **Search** by name or by number — `0803…` and `+234803…` both work. A
+  member can be found by their directory name or by what they typed.
 - **Tap a number** to call it.
 - **Download CSV** saves the list you are looking at (only what matches your
-  search, if you searched). Only a Producer or a Follow-up liaison sees it.
+  search, if you searched), with a Member/Guest column and the name as typed. Only a Producer or a Follow-up liaison sees it.
 - Desk crew can open the cards, but see phone numbers partly hidden and
   cannot call from here.
 - Press **Refresh** during the night to pull in the latest check-ins.
