@@ -2386,6 +2386,67 @@
         color: var(--ui-nav-section);
         white-space: nowrap;
     }
+    /* On a light surface (the public bar). */
+    .ui-brand--light { flex: 0 1 auto; color: var(--ui-heading); }
+    .ui-brand--light .ui-brand__mark { box-shadow: 0 0 0 1px var(--ui-border); }
+    .ui-brand--light .ui-brand__sub { color: var(--ui-text-subtle); }
+
+    /* ---------- Public layout (includes/ui/public.php) ---------- */
+
+    body.ui-public {
+        min-height: 100dvh;
+        background: var(--ui-canvas);
+    }
+    .ui-public-bar {
+        position: sticky;
+        top: 0;
+        z-index: var(--ui-z-sticky, 20);
+        padding-top: var(--ui-safe-top);
+        border-bottom: 1px solid var(--ui-border);
+        background: var(--ui-surface);
+    }
+    .ui-public-bar__inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        max-width: 1200px;
+        height: 64px;
+        margin: 0 auto;
+        padding: 0 16px;
+    }
+    .ui-public-bar__actions { display: flex; flex: none; align-items: center; gap: 8px; }
+    .ui-public-main {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px 16px calc(48px + var(--ui-safe-bottom));
+        outline: none;
+    }
+    @media (min-width: 640px) {
+        .ui-public-bar__inner { padding: 0 24px; }
+        .ui-public-main { padding: 32px 24px 64px; }
+    }
+    @media (max-width: 479px) {
+        .ui-public .ui-brand__sub { display: none; }
+    }
+
+    /* A dialog that fills the screen (a document reader). */
+    .ui-dialog.ui-dialog--full {
+        width: 100vw;
+        height: 100dvh;
+        max-height: none;
+        margin: 0;
+        border-radius: 0;
+        background: var(--grey-900, #0A0E17);
+        color: #FFFFFF;
+    }
+    .ui-dialog--full .ui-dialog__header { padding: calc(10px + var(--ui-safe-top)) 12px 10px 20px; }
+    .ui-dialog--full .ui-dialog__title,
+    .ui-dialog--full .ui-dialog__description { color: inherit; }
+    .ui-dialog--full .ui-dialog__description { opacity: .7; }
+    .ui-dialog--full .ui-dialog__close { color: #FFFFFF; }
+    .ui-dialog--full .ui-dialog__body { flex: 1 1 auto; padding: 0; overflow: hidden; }
+    .ui-dialog--full[open]::before { content: none; }
     .ui-sidebar__iconbtn {
         display: grid;
         flex: none;

@@ -327,6 +327,24 @@ if (!extension_loaded('pdo_sqlite')) {
     ok('closing again prints nothing', true);
     ok('no inline event handler in the shell', !preg_match('/\son[a-z]+="/i', $html));
     ok('no style attribute in the shell', strpos($html, ' style="') === false);
+
+    // The public layout (signed-out pages such as the Library).
+    $_SESSION = ['_csrf' => $_SESSION['_csrf']];
+    require_once $root . '/includes/ui/public.php';
+    ob_start();
+    ui_public_open(['title' => 'Charis Library', 'mode' => 'strict', 'actions' => '<a href="/auth/login.php">Sign in</a>', 'head' => '<meta property="og:title" content="X">']);
+    echo '<p>content</p>';
+    ui_public_close();
+    $pub = (string) ob_get_clean();
+    ui_public_close();
+    ok('the public layout renders a titled page with its head tags and bar actions',
+        strpos($pub, '<title>Charis Library · HOD Lekki</title>') !== false
+        && strpos($pub, '<meta property="og:title" content="X">') !== false
+        && strpos($pub, 'class="ui-public-bar__actions"><a href="/auth/login.php">Sign in</a>') !== false);
+    ok('the public layout has no members\' navigation', strpos($pub, 'ui-sidebar') === false && strpos($pub, 'ui-bottombar') === false);
+    ok('the public layout carries the CSRF token, the toasts and the boot data once',
+        strpos($pub, 'name="csrf-token"') !== false && substr_count($pub, 'id="ui-toasts"') === 1 && substr_count($pub, 'id="hod-ui"') === 1);
+    ok('the public layout has no inline handler or style attribute', !preg_match('/\son[a-z]+="/i', $pub) && strpos($pub, ' style="') === false);
 }
 
 /* ---------------------------------------------------------------------- */
