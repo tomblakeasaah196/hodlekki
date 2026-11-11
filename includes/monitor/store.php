@@ -512,7 +512,8 @@ function monitor_record(PDO $db, array $ev): array
 
     if ($occurrences % 10 === 0) {
         monitor_prune_events($db, $groupId);
-        if ($group['status'] !== 'ignored') {
+        // Only what is happening now can spike: a burst in an old log line is history.
+        if ($group['status'] !== 'ignored' && $ev['at'] >= monitor_time() - 3600) {
             monitor_spike_check($db, $groupId, $ev['at'], $group['spiked_at'] ?? null);
         }
     }

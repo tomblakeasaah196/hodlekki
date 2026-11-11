@@ -58,6 +58,17 @@ ok('a problem first found in a line over an hour old is not announced', is_strin
 $fresh = $db->query("SELECT alerted_at FROM monitor_error_groups WHERE title LIKE '[push]%'")->fetchColumn();
 ok('a recent one is left for the alerts', $fresh === null);
 
+// The first scan of a fresh install lists its finds, recent ones included, and announces none.
+$db3 = monitor_test_db();
+monitor_test_clock('2026-11-11 10:30:00');
+$first = $GLOBALS['mt_dir'] . '/first_error_log';
+file_put_contents($first, "[11-Nov-2026 09:25:00 UTC] [push] could not reach FCM\n");
+eq('the first scan records what it finds', 1, monitor_log_scan_all($db3, [$first])['recorded']);
+eq('…and announces none of it', 0, (int) $db3->query('SELECT COUNT(*) FROM monitor_error_groups WHERE alerted_at IS NULL')->fetchColumn());
+file_put_contents($first, "[11-Nov-2026 09:29:00 UTC] [sms] BulkSMS refused the token\n", FILE_APPEND);
+monitor_log_scan_all($db3, [$first]);
+eq('the scans after it announce as usual', 1, (int) $db3->query("SELECT COUNT(*) FROM monitor_error_groups WHERE alerted_at IS NULL AND title LIKE '[sms]%'")->fetchColumn());
+
 // ---- The UI foundation's CSRF reports: kept quietly, one problem per endpoint and reason
 $csrf = monitor_log_entry_event(['ts' => '11-Nov-2026 09:00:00 UTC', 'text' => 'CSRF report-only: POST /api/events_api.php?id=4 (no token)'], 'api/error_log');
 eq('a CSRF report-only line is a quiet report, not a server error', ['log', 'notice', 'CSRF report-only'], [$csrf['kind'], $csrf['level'], $csrf['exception_class']]);
