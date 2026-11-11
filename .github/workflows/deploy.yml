@@ -312,6 +312,11 @@ jobs:
         # includes/mailer.php, and bin/edge_lock.sh against a scratch folder.
         run: php tests/site_url_mailer_test.php
 
+      - name: Upload safety tests (allow-list, random names, uploads guard)
+        # includes/upload_guard.php, and bin/uploads_guard.sh run for real
+        # against a scratch docroot: no script file may ever be served from uploads.
+        run: php tests/upload_guard/run.php
+
       - name: UI foundation tests (navigation parity, CSRF, CSP, components, ratchet)
         run: |
           set -euo pipefail

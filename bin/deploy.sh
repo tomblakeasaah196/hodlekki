@@ -104,6 +104,10 @@ fi
 #     repo checkout, so the script itself is always the version just pulled.
 bash "$REPO/bin/edge_lock.sh" "$DEPLOYPATH"
 
+# 2c. Uploaded files are data, never code: uploads/ and assets/uploads/ get a
+#     marked .htaccess block refusing any script file (bin/uploads_guard.sh).
+bash "$REPO/bin/uploads_guard.sh" "$DEPLOYPATH" || echo "[deploy] WARNING: uploads guard failed (not fatal)"
+
 # 3. Refresh Composer dependencies. -d allow_url_fopen=On because this host's
 #    CLI php.ini disables it and Composer needs it to reach packagist.
 cd "$DEPLOYPATH"
