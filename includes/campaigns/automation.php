@@ -124,6 +124,9 @@ function automation_rule_save(PDO $pdo, string $module, array $config, int $byUs
     if ($kind === null) {
         return ['ok' => false, 'errors' => ['Unknown module.']];
     }
+    if (!campaigns_ready($pdo)) {
+        return ['ok' => false, 'errors' => ['Automations are being set up. Please try again later.'], 'code' => 'FEATURE_NOT_READY'];
+    }
     $check = automation_config_validate($kind, $config);
     if (!$check['ok']) {
         return ['ok' => false, 'errors' => $check['errors']];
@@ -152,6 +155,9 @@ function automation_rule_save(PDO $pdo, string $module, array $config, int $byUs
  */
 function automation_rule_set_enabled(PDO $pdo, int $ruleId, bool $on, int $byUserId, string $start = 'fresh'): array
 {
+    if (!campaigns_ready($pdo)) {
+        return ['ok' => false, 'errors' => ['Automations are being set up. Please try again later.'], 'code' => 'FEATURE_NOT_READY'];
+    }
     $rule = automation_rule_by_id($pdo, $ruleId);
     if ($rule === null) {
         return ['ok' => false, 'errors' => ['Unknown rule.']];
@@ -436,15 +442,24 @@ function automation_tick(PDO $pdo, array $opts = []): array
             $rules = automation_rules_enabled($pdo);
         }
         foreach ($rules as $rule) {
-            foreach (automation_due_occasions($rule, $now, $dry && !$rule['is_enabled']) as $occasion) {
-                $result = automation_run_occasion($pdo, $rule, $occasion, ['dry_run' => $dry, 'now' => $now]);
-                if ($result !== null) {
-                    $out['runs'][] = $result;
+            // One rule's trouble never stops the others.
+            try {
+                foreach (automation_due_occasions($rule, $now, $dry && !$rule['is_enabled']) as $occasion) {
+                    $result = automation_run_occasion($pdo, $rule, $occasion, ['dry_run' => $dry, 'now' => $now]);
+                    if ($result !== null) {
+                        $out['runs'][] = $result;
+                    }
                 }
+            } catch (Throwable $e) {
+                error_log('[automation] rule ' . $rule['id'] . ' could not run: ' . $e->getMessage());
             }
         }
         if (!$dry) {
-            $out['retried'] = automation_retry_deferred($pdo, $now);
+            try {
+                $out['retried'] = automation_retry_deferred($pdo, $now);
+            } catch (Throwable $e) {
+                error_log('[automation] deferred retry failed: ' . $e->getMessage());
+            }
         }
         $out['message'] = count($out['runs']) . ' occasion(s) run' . ($dry ? ' (dry run: nothing written)' : '');
     } finally {
@@ -470,10 +485,21 @@ function automation_run_occasion(PDO $pdo, array $rule, array $occasion, array $
                 ->execute([$rule['id'], $occasion['key'], campaigns_sql_dt($occasion['at']), campaigns_sql_dt($now)]);
             $runId = (int) $pdo->lastInsertId();
         } catch (PDOException $e) {
-            if (campaigns_is_duplicate_key($e)) {
+            if (!campaigns_is_duplicate_key($e)) {
+                throw $e;
+            }
+            // Already claimed. A run that FAILED may be picked up again (at most
+            // every 30 minutes, while the occasion is still due): the ledger
+            // makes sure nobody it already reached hears twice.
+            $again = $pdo->prepare("UPDATE automation_runs SET status = 'running', started_at = ?
+                                     WHERE rule_id = ? AND occasion_key = ? AND status = 'failed' AND started_at <= ?");
+            $again->execute([campaigns_sql_dt($now), $rule['id'], $occasion['key'], campaigns_sql_dt($now->modify('-30 minutes'))]);
+            if ($again->rowCount() !== 1) {
                 return null;
             }
-            throw $e;
+            $find = $pdo->prepare('SELECT id FROM automation_runs WHERE rule_id = ? AND occasion_key = ?');
+            $find->execute([$rule['id'], $occasion['key']]);
+            $runId = (int) $find->fetchColumn();
         }
     }
 
@@ -489,11 +515,7 @@ function automation_run_occasion(PDO $pdo, array $rule, array $occasion, array $
         error_log('[automation] rule ' . $rule['id'] . ' occasion ' . $occasion['key'] . ' failed: ' . $e->getMessage());
         $status = 'failed';
         $detail = campaigns_cut($e->getMessage(), 500);
-        try {
-            automation_flush_sms($pdo, $rule, $ctx); // whoever was already claimed still gets their text
-        } catch (Throwable $e2) {
-            error_log('[automation] SMS hand-off after a failure also failed: ' . $e2->getMessage());
-        }
+        automation_flush_sms($pdo, $rule, $ctx); // whoever was already claimed still gets their text (never twice)
     }
 
     if (!$dry) {
@@ -710,7 +732,9 @@ function automation_deliver(PDO $pdo, array $rule, array $cand, array &$ctx, ?in
             'reply_to'           => $cfg['reply_to'] !== '' ? $cfg['reply_to'] : null,
             'vars'               => (array) ($cand['vars'] ?? []),
             'track'              => true,
-            'track_opens'        => false,
+            'track_opens'        => false,   // opens are counted for campaigns only (lead, 11 Nov)
+            // A date-bound reminder is dropped rather than arriving after its day.
+            'send_by'            => !empty($cand['date_bound']) ? campaigns_dt($ctx['day'] . ' 23:59:59') : null,
             'automation_send_id' => $sendId,
         ]);
         if (!$sent['ok']) {
@@ -785,7 +809,9 @@ function automation_choose_channel(PDO $pdo, array $user, array $cand): array
     if ($may['ok']) {
         return ['channel' => 'email', 'email' => $may['email']];
     }
-    if ($may['reason'] === 'withdrawn') {
+    // Asked first, whatever the address: someone who said no to church news by
+    // email (even with no confirmed address on file) is skipped, never texted.
+    if ($may['reason'] === 'withdrawn' || email_consent_state($pdo, $uid, 'news', 'email') === 'withdrawn') {
         return ['channel' => 'none', 'outcome' => 'skipped_consent', 'detail' => 'Unsubscribed from church news by email'];
     }
     if (email_consent_state($pdo, $uid, 'news', 'sms') === 'withdrawn') {
@@ -845,23 +871,49 @@ function automation_flush_sms(PDO $pdo, array $rule, array &$ctx): void
     }
     $label = AUTOMATION_MODULE_LABELS[$rule['module']] ?? $rule['module'];
     $insertQueue = $pdo->prepare("INSERT INTO sms_queue (campaign_id, recipient_json, status) VALUES (?, ?, 'queued')");
-    foreach ($ctx['sms'] as $key => $people) {
+    foreach (array_keys($ctx['sms']) as $key) {
+        // Each text is taken off the batch BEFORE it is written, and written in
+        // one transaction: a failure can lose a group (recorded as failed) but
+        // can never queue the same people twice.
+        $people = $ctx['sms'][$key];
+        unset($ctx['sms'][$key]);
         [$stepKey, $text] = explode("\n", $key, 2);
         $step = automation_step($rule, $stepKey);
         $title = 'Automation · ' . $label . ' · ' . ($step['label'] ?? $stepKey) . ' · ' . $ctx['now']->format('j M Y');
-        $pdo->prepare("INSERT INTO sms_campaigns (title, audience, event_id, filters_json, body_template, total, status, created_by, created_at)
-                       VALUES (?, 'automation', NULL, ?, ?, ?, 'queued', NULL, ?)")
-            ->execute([campaigns_cut($title, 255), campaigns_json(['rule_id' => $rule['id'], 'run_id' => $ctx['run_id'], 'step' => $stepKey]),
-                       $text, count($people), campaigns_sql_dt(campaigns_now())]);
-        $campaignId = (int) $pdo->lastInsertId();
-        $ctx['sms_campaign_id'] ??= $campaignId;
-        foreach ($people as $p) {
-            $insertQueue->execute([$campaignId, campaigns_json($p['recipient'])]);
-            $queueId = (int) $pdo->lastInsertId();
-            $pdo->prepare('UPDATE automation_sends SET sms_queue_id = ? WHERE id = ?')->execute([$queueId, $p['send_id']]);
+        $own = !$pdo->inTransaction();
+        try {
+            if ($own) {
+                $pdo->beginTransaction();
+            }
+            $pdo->prepare("INSERT INTO sms_campaigns (title, audience, event_id, filters_json, body_template, total, status, created_by, created_at)
+                           VALUES (?, 'automation', NULL, ?, ?, ?, 'queued', NULL, ?)")
+                ->execute([campaigns_cut($title, 255), campaigns_json(['rule_id' => $rule['id'], 'run_id' => $ctx['run_id'], 'step' => $stepKey]),
+                           $text, count($people), campaigns_sql_dt(campaigns_now())]);
+            $campaignId = (int) $pdo->lastInsertId();
+            foreach ($people as $p) {
+                $insertQueue->execute([$campaignId, campaigns_json($p['recipient'])]);
+                $queueId = (int) $pdo->lastInsertId();
+                $pdo->prepare('UPDATE automation_sends SET sms_queue_id = ? WHERE id = ?')->execute([$queueId, $p['send_id']]);
+            }
+            if ($own) {
+                $pdo->commit();
+            }
+            $ctx['sms_campaign_id'] ??= $campaignId;
+        } catch (Throwable $e) {
+            if ($own && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('[automation] SMS hand-off for rule ' . $rule['id'] . ' step ' . $stepKey . ' failed: ' . $e->getMessage());
+            foreach ($people as $p) {
+                try {
+                    automation_ledger_finish($pdo, (int) $p['send_id'], 'failed', 'sms', ['detail' => 'Could not hand the text to SMS Studio']);
+                    automation_person_day_release($pdo, (int) $p['recipient']['source_id'], $ctx['day'], (int) $rule['id']);
+                } catch (Throwable $e2) {
+                    error_log('[automation] could not record the failed hand-off: ' . $e2->getMessage());
+                }
+            }
         }
     }
-    $ctx['sms'] = [];
 }
 
 /** One bell (= a push) per recipient, naming the person and the streak. */
@@ -954,10 +1006,22 @@ function automation_retry_deferred(PDO $pdo, DateTimeImmutable $now): array
     $today = $now->format('Y-m-d') . ' 00:00:00';
     $pdo->prepare("UPDATE automation_sends SET outcome = 'expired' WHERE outcome = 'deferred' AND created_at < ?")
         ->execute([campaigns_sql_dt($now->modify('-' . AUTOMATION_DEFER_DAYS . ' days'))]);
-    $stmt = $pdo->prepare("SELECT s.* FROM automation_sends s WHERE s.outcome = 'deferred' AND s.created_at < ? ORDER BY s.id");
+    // Never at night (SMS Studio has no quiet hours), and not before the time of
+    // day the message was first meant to go: a retry just after midnight would
+    // also take the person's one message of the day from that day's own steps.
+    if (!email_in_send_window($pdo, $now)) {
+        return $out;
+    }
+    $stmt = $pdo->prepare("SELECT s.*, r.occasion_at FROM automation_sends s
+                             LEFT JOIN automation_runs r ON r.id = s.run_id
+                            WHERE s.outcome = 'deferred' AND s.created_at < ? ORDER BY s.id");
     $stmt->execute([$today]);
     $byRule = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $slot = $row['occasion_at'] !== null ? substr((string) $row['occasion_at'], 11, 5) : '09:00';
+        if ($now->format('H:i') < $slot) {
+            continue;
+        }
         $byRule[(int) $row['rule_id']][] = $row;
     }
     foreach ($byRule as $ruleId => $rows) {
@@ -987,9 +1051,14 @@ function automation_retry_deferred(PDO $pdo, DateTimeImmutable $now): array
                 continue;
             }
             $cand['superseded'] = [];
-            $outcome = automation_deliver($pdo, $rule, $cand, $ctx, (int) $row['id']);
+            try {
+                $outcome = automation_deliver($pdo, $rule, $cand, $ctx, (int) $row['id']);
+            } catch (Throwable $e) {
+                error_log('[automation] retrying deferred send ' . $row['id'] . ' failed: ' . $e->getMessage());
+                $outcome = 'deferred';
+            }
             if ($outcome === 'deferred') {
-                // lost the race for today after all: back to waiting
+                // lost the race for today after all (or failed): back to waiting
                 $pdo->prepare("UPDATE automation_sends SET outcome = 'deferred' WHERE id = ?")->execute([(int) $row['id']]);
             }
             $out['retried']++;

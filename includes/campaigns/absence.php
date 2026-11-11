@@ -15,9 +15,12 @@
 //   threshold = the rule's lowest step, statuses = the rule's audience,
 //   service_rules = Charis's own (so both modules count Sundays the same way).
 //
-// A streak is identified by its first missed Sunday (missed_service_dates[0]),
+// A streak is identified by the last day the person was present at a service
+// that clears it (over all their history, through assim_attendance_union_sql()),
 // so each step fires once per absence and again if the person comes back and
-// later drifts away. If someone passed several steps for the same audience at
+// later drifts away. (Not the first missed date: the engine looks back a fixed
+// number of weeks, so for someone away longer than that the first missed date
+// it reports moves forward every week.) If someone passed several steps for the same audience at
 // once (the rule was off, or the cron was), only the highest fires; the lower
 // ones are recorded as superseded.
 
@@ -40,14 +43,20 @@ function absence_candidates(PDO $pdo, array $rule, array $occasion): array
         'archive_weeks'         => max((int) ($charis['archive_weeks'] ?? CHARIS_AWOL_DEFAULT_ARCHIVE_WEEKS), max($thresholds) + 2),
     ];
     $awol = charis_compute_awol_list($pdo, $engineConfig, $occasion['at']);
+    $lastReset = absence_last_reset_presence($pdo, $engineConfig['service_rules'], $awol['awol_checks'], $occasion['at']);
 
     $out = [];
     foreach ($awol['awol_checks'] as $check) {
         $streak = (int) $check['consecutive_missed'];
-        $streakStart = (string) ($check['missed_service_dates'][0] ?? '');
-        if ($streakStart === '') {
+        if ($streak <= 0) {
             continue;
         }
+        // The streak's identity: the last day they were present at a service
+        // that clears the counter, over ALL their history. Not the first missed
+        // date: for someone away longer than the engine's look-back window that
+        // date slides forward every week and every step would fire again.
+        $uid = (int) $check['target_user_id'];
+        $streakStart = isset($lastReset[$uid]) ? 'after:' . $lastReset[$uid] : 'never';
         $user = [
             'id'                => (int) $check['target_user_id'],
             'first_name'        => $check['first_name'],
@@ -82,6 +91,31 @@ function absence_candidates(PDO $pdo, array $rule, array $occasion): array
                 'vars'       => $vars,
                 'superseded' => array_column($reached, 'key'),
             ];
+        }
+    }
+    return $out;
+}
+
+/**
+ * Each flagged person's last day present at a service whose rule clears the
+ * streak (Charis's own rules), up to $at, through the shared attendance helper.
+ *
+ * @return array<int,string> user id => 'Y-m-d'
+ */
+function absence_last_reset_presence(PDO $pdo, $serviceRules, array $checks, DateTimeImmutable $at): array
+{
+    $reset = charis_awol_reset_services(charis_awol_service_rules(['service_rules' => $serviceRules]));
+    $ids = array_values(array_unique(array_map(static fn (array $c): int => (int) $c['target_user_id'], $checks)));
+    $out = [];
+    if ($reset === [] || $ids === []) {
+        return $out;
+    }
+    foreach (array_chunk($ids, 500) as $chunk) {
+        $union = assim_attendance_union_sql($reset, $chunk);
+        $stmt = $pdo->prepare("SELECT x.user_id, MAX(x.attended_on) AS last_day FROM {$union} x WHERE x.attended_on <= ? GROUP BY x.user_id");
+        $stmt->execute([$at->format('Y-m-d')]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[(int) $row['user_id']] = substr((string) $row['last_day'], 0, 10);
         }
     }
     return $out;

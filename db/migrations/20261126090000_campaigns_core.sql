@@ -1,4 +1,4 @@
--- /db/migrations/20261201090000_campaigns_core.sql
+-- /db/migrations/20261126090000_campaigns_core.sql
 --
 -- Email: personal addresses, consent, the domain's sending queue and hourly
 -- budget, campaigns, and the automation engine (Embrace, Assimilation, Charis).
@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS email_outbox (
     status VARCHAR(12) NOT NULL DEFAULT 'queued',
     attempts INT NOT NULL DEFAULT 0,
     not_before DATETIME NULL DEFAULT NULL,
+    send_by DATETIME NULL DEFAULT NULL,
     locked_at DATETIME NULL DEFAULT NULL,
     sent_at DATETIME NULL DEFAULT NULL,
     last_error VARCHAR(500) NULL DEFAULT NULL,
@@ -245,7 +246,7 @@ CREATE TABLE IF NOT EXISTS automation_rules (
 CREATE TABLE IF NOT EXISTS automation_runs (
     id INT NOT NULL AUTO_INCREMENT,
     rule_id INT NOT NULL,
-    occasion_key VARCHAR(40) NOT NULL,
+    occasion_key VARCHAR(64) NOT NULL,
     occasion_at DATETIME NOT NULL,
     status VARCHAR(12) NOT NULL DEFAULT 'running',
     people INT NOT NULL DEFAULT 0,

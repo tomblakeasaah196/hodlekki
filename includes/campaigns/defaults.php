@@ -63,7 +63,7 @@ function automation_default_journey(): array
                 [
                     'Hi {{first_name}},',
                     'Thank you for worshipping with us at ' . CAMPAIGNS_CHURCH_NAME . '. Whether it was your very first visit or you had been meaning to come for a while, it was a joy to have you, and we would love to see you again.',
-                    'Join us again this Sunday, {{next_sunday}}, and at our Thursday midweek service.',
+                    'Join us again on {{next_sunday}}, and at our Thursday midweek service.',
                     $reply,
                 ],
                 'Psalm 122:1',

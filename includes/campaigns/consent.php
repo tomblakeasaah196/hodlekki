@@ -67,6 +67,9 @@ function email_consent_record(PDO $pdo, int $userId, string $action, string $met
     if ($userId <= 0) {
         throw new InvalidArgumentException('Consent belongs to a person.');
     }
+    if (!campaigns_ready($pdo)) {
+        return 0; // before the migration there is nowhere to record it, and nothing sends
+    }
     $textId = null;
     if (isset($opts['text']) && trim((string) $opts['text']) !== '') {
         $textId = email_consent_text_id($pdo, $purpose, (string) $opts['text']);

@@ -27,6 +27,7 @@ const EMAIL_SETTING_DEFAULTS = [
     'postal_line'    => 'Household of David Lekki Centre, Lekki, Lagos, Nigeria',
     'paused'         => '0',     // kill switch for the worker
     'learned_cap'    => '',      // read from the host's own refusal, if it ever refuses
+    'learned_cap_at' => '',      // when; a learnt cap lapses after 7 days
 ];
 
 /** Now, in Lagos. Tests pin it with campaigns_set_clock(). */

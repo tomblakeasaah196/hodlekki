@@ -45,12 +45,27 @@ function email_hour_key(?DateTimeImmutable $at = null): string
     return ($at ?? campaigns_now())->setTimezone(new DateTimeZone(CAMPAIGNS_TZ))->format('Y-m-d H');
 }
 
+const EMAIL_LEARNED_CAP_MIN  = 10;
+const EMAIL_LEARNED_CAP_DAYS = 7;
+
+/** The cap the host named in a refusal, while it is still fresh (7 days). */
+function email_learned_cap(PDO $pdo): ?int
+{
+    $cap = (int) email_setting($pdo, 'learned_cap');
+    $at = email_setting($pdo, 'learned_cap_at');
+    if ($cap < EMAIL_LEARNED_CAP_MIN || $at === ''
+        || campaigns_dt($at) < campaigns_now()->modify('-' . EMAIL_LEARNED_CAP_DAYS . ' days')) {
+        return null;
+    }
+    return $cap;
+}
+
 /** @return array{cap:int, usable:int, bulk:int} */
 function email_budget_limits(PDO $pdo): array
 {
     $cap = max(1, (int) email_setting($pdo, 'hourly_cap'));
-    $learned = (int) email_setting($pdo, 'learned_cap');
-    if ($learned > 0 && $learned < $cap) {
+    $learned = email_learned_cap($pdo);
+    if ($learned !== null && $learned < $cap) {
         $cap = $learned;
     }
     $safety = min(1.0, max(0.1, (float) email_setting($pdo, 'safety')));
@@ -137,11 +152,15 @@ function email_budget_refused(PDO $pdo, ?int $hostCap = null, ?DateTimeImmutable
     email_budget_bucket($pdo, $hour);
     $pdo->prepare('UPDATE email_rate_buckets SET refused_at = ?, learned_cap = ? WHERE hour_key = ?')
         ->execute([campaigns_sql_dt($at), $hostCap, $hour]);
-    if ($hostCap !== null && $hostCap > 0) {
-        $known = (int) email_setting($pdo, 'learned_cap');
-        if ($known <= 0 || $hostCap < $known) {
+    // Only the server's own SMTP answer reaches here. A figure under 10 is not
+    // believable for a church domain; anything learnt lapses after 7 days, so a
+    // raised host limit is picked up again.
+    if ($hostCap !== null && $hostCap >= EMAIL_LEARNED_CAP_MIN) {
+        $known = email_learned_cap($pdo);
+        if ($known === null || $hostCap < $known) {
             email_setting_set($pdo, 'learned_cap', (string) $hostCap);
         }
+        email_setting_set($pdo, 'learned_cap_at', campaigns_sql_dt($at));
     }
     error_log('[email] the host refused for its hourly cap' . ($hostCap ? " ({$hostCap}/hour)" : '') . '; sending resumes next hour');
 }
@@ -154,11 +173,14 @@ function email_budget_refused(PDO $pdo, ?int $hostCap = null, ?DateTimeImmutable
  */
 function email_parse_cap_refusal(string $error): ?array
 {
-    if (!preg_match('/exceeded the max (?:emails|messages) per hour/i', $error)) {
+    // "max defers and failures per hour" is the host's limit on bounces: also
+    // not the recipient's fault, also "stop for this hour", but its number is
+    // not a sending cap, so nothing is learnt from it.
+    if (!preg_match('/exceeded the max (emails|messages|defers and failures) per hour/i', $error, $kind)) {
         return null;
     }
     $cap = null;
-    if (preg_match('/\((\d+)\s*\/\s*(\d+)/', $error, $m)) {
+    if (strtolower($kind[1]) !== 'defers and failures' && preg_match('/\((\d+)\s*\/\s*(\d+)/', $error, $m)) {
         $cap = (int) $m[2] > 0 ? (int) $m[2] : null;
     }
     return ['cap' => $cap];

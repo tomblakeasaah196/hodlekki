@@ -46,6 +46,8 @@ ct_eq('enqueue says FEATURE_NOT_READY', 'FEATURE_NOT_READY', email_enqueue($bare
 ct_eq('capture says FEATURE_NOT_READY', 'FEATURE_NOT_READY', email_capture_start($bare, 1, 'a@gmail.com', 'profile')['code'] ?? null);
 ct_eq('the worker does nothing', false, email_worker_run($bare)['ran']);
 ct_eq('the tick does nothing', false, automation_tick($bare)['ran']);
+ct_eq('saving a rule says FEATURE_NOT_READY', 'FEATURE_NOT_READY', automation_rule_save($bare, 'embrace', [], 1)['code'] ?? null);
+ct_eq('recording consent is a no-op', 0, email_consent_record($bare, 1, 'withdrawn', 'profile'));
 ct_eq('the budget meters nothing (and refuses nothing)', true, email_budget_take($bare, 'campaign', 500));
 
 $pdo = ct_db();
@@ -212,10 +214,12 @@ ct_eq('a slot handed back can be used', true, email_budget_take($b, 'alert', 1, 
 ct_eq('the next hour starts fresh', true, email_budget_take($b, 'campaign', 5, $h->modify('+1 hour')));
 ct_eq('Exim\'s refusal is understood', ['cap' => 60], email_parse_cap_refusal('550 Domain hodlekki.org has exceeded the max emails per hour (60/60 (100%)) allowed. Message discarded.'));
 ct_eq('other errors are not', null, email_parse_cap_refusal('550 5.1.1 user unknown'));
+ct_eq("the host's bounce limit stops the hour but teaches no cap", ['cap' => null],
+    email_parse_cap_refusal('550 Domain hodlekki.org has exceeded the max defers and failures per hour (5/5 (100%)) allowed.'));
 $h2 = $h->modify('+2 hours');
 email_budget_refused($b, 8, $h2);
 ct_eq('after a refusal nothing more goes this hour', false, email_budget_take($b, 'transactional', 1, $h2));
-ct_eq('and the learned cap applies from now on', 8, email_budget_limits($b)['cap']);
+ct_eq('an unbelievable figure (under 10) is not learnt', 10, email_budget_limits($b)['cap']);
 $st = email_budget_status($b, $h->modify('+1 hour'));
 ct_ok('status shows what is left', $st['sent_bulk'] === 5 && $st['left_bulk'] === 0 && $st['refused'] === false);
 
@@ -258,7 +262,11 @@ ct_eq('a delivered row is sent', 'sent', $rowCampaign['status']);
 ct_at('2026-11-16 09:10');
 $tmp = email_enqueue($o, ['lane' => 'automation', 'purpose' => 'news', 'flow' => 'embrace.welcome', 'user_id' => 30,
     'to_email' => 'uche@gmail.com', 'subject' => 'Hi', 'html' => '<p>hi</p>']);
-email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport([['ok' => false, 'error' => 'SMTP connect() failed.']]), 'now' => campaigns_now()]);
+$down = email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport([['ok' => false, 'error' => 'SMTP Error: Could not connect to SMTP host. Failed to connect to server']]), 'now' => campaigns_now()]);
+$r = $o->query('SELECT * FROM email_outbox WHERE id = ' . $tmp['id'])->fetch();
+ct_ok('our mail server being down stops the run and costs the message no attempt',
+    $down['stopped'] === 'unavailable' && $r['status'] === 'queued' && (int) $r['attempts'] === 0 && $r['not_before'] === null);
+email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport([['ok' => false, 'error' => '451 4.3.0 Temporary local problem']]), 'now' => campaigns_now()]);
 $r = $o->query('SELECT * FROM email_outbox WHERE id = ' . $tmp['id'])->fetch();
 ct_ok('a temporary failure retries in a minute', $r['status'] === 'queued' && (int) $r['attempts'] === 1 && $r['not_before'] === '2026-11-16 09:11:00');
 ct_eq('not before then', 0, email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport(), 'now' => campaigns_now()])['sent']);
@@ -280,8 +288,13 @@ $capRun = email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_tra
 $cr = $o->query('SELECT * FROM email_outbox WHERE id = ' . $capped['id'])->fetch();
 ct_ok('the host\'s cap puts the email back untouched', $cr['status'] === 'queued' && (int) $cr['attempts'] === 0);
 ct_eq('stops the run', 'cap', $capRun['stopped']);
-ct_eq('and learns the cap', '40', email_setting($o, 'learned_cap'));
+ct_eq('and learns the cap', 40, email_budget_limits($o)['cap']);
 ct_eq('the address is NOT blamed', false, email_is_suppressed($o, 'ife@gmail.com'));
+ct_at('2026-11-24 09:21');
+ct_eq('a learnt cap lapses after 7 days', 100, email_budget_limits($o)['cap']);
+ct_at('2026-11-16 09:21');
+ct_eq("the bounce limit is not the recipient's fault either", 'cap', email_classify_failure('550 Domain hodlekki.org has exceeded the max defers and failures per hour (5/5 (100%)) allowed.'));
+ct_eq('a full mailbox at SMTP time is temporary, not a hard bounce', 'temporary', email_classify_failure('552 5.2.2 Mailbox full'));
 
 // Orphans, last-moment checks, the window, the limit, the kill switch
 $o->exec("UPDATE email_outbox SET status = 'sending', locked_at = '2026-11-16 09:00:00' WHERE id = " . (int) $capped['id']);
@@ -472,6 +485,14 @@ $appliedCap = email_record_bounce($u, $pc);
 ct_ok('…the email goes back in the queue for next hour', $appliedCap['requeued']
     && $u->query('SELECT status FROM email_outbox WHERE id = ' . $q['id'])->fetchColumn() === 'queued');
 ct_eq('an ordinary email is not a report', null, email_dsn_parse("From: a@b.com\nSubject: Hello\n\nJust saying hi"));
+$forged = str_replace($ref, str_repeat('F', 22), $arf);
+email_consent_record($u, 40, 'granted', 'profile', ['text' => EMAIL_CONSENT_NEWS_TEXT]);
+email_suppression_release($u, 'seyi@gmail.com', 900);
+ct_eq('a forged complaint naming no email we sent is ignored', 'unmatched', email_record_bounce($u, email_dsn_parse($forged))['kind']);
+ct_ok('…nothing suppressed, consent untouched', !email_is_suppressed($u, 'seyi@gmail.com') && email_consent_state($u, 40) === 'granted');
+$forgedCap = "From: x@evil.example\nX-Failed-Recipients: a@b.com\n\nexceeded the max emails per hour (1/1 (100%))\nX-HOD-Ref: " . str_repeat('G', 22) . "\n";
+email_record_bounce($u, email_dsn_parse($forgedCap));
+ct_eq('a forged "cap" report teaches nothing', '', email_setting($u, 'learned_cap'));
 
 // ===========================================================================
 ct_section('11. Default rules');
@@ -517,6 +538,8 @@ ct_user($j, 13, 'Dupe', '3rd_Timer', ['created_at' => '2026-11-01 10:00:00', 'ph
 ct_user($j, 14, 'Emeka', '1st_Timer', ['created_at' => '2026-11-17 18:00:00', 'phone' => '08033333333']);
 ct_user($j, 15, 'Funke', '1st_Timer', ['created_at' => '2026-09-01 10:00:00', 'phone' => '08034444444']);
 ct_user($j, 16, 'Gbenga', '1st_Timer', ['created_at' => '2026-11-15 10:00:00', 'phone' => '08035555555', 'attendance_status' => 'Relocated']);
+ct_user($j, 18, 'Ijeoma', '1st_Timer', ['created_at' => '2026-11-15 10:00:00', 'phone' => '08037777770']);
+email_consent_record($j, 18, 'withdrawn', 'staff');   // said no to church news, has no confirmed email
 ct_user($j, 17, 'Halima', '2nd_Timer', ['created_at' => '2026-11-08 10:00:00', 'phone' => '08036666666']);
 ct_confirm($j, 17, 'halima@gmail.com');
 email_consent_record($j, 17, 'withdrawn', 'one_click');
@@ -538,6 +561,7 @@ ct_eq('Ada (confirmed + yes) gets an email', 'email:queued', $dec[10] ?? null);
 ct_eq('Bayo (no email, a mobile) gets an SMS', 'sms:queued', $dec[11] ?? null);
 ct_eq('Chika (neither) is skipped', 'none:skipped_no_contact', $dec[12] ?? null);
 ct_eq('Halima (unsubscribed) is skipped, not texted', 'none:skipped_consent', $dec[17] ?? null);
+ct_eq('Ijeoma (said no, no email on file) is skipped, not texted', 'none:skipped_consent', $dec[18] ?? null);
 ct_ok('3rd Timers, people who joined later, finished journeys and departed people are left out',
     !isset($dec[13]) && !isset($dec[14]) && !isset($dec[15]) && !isset($dec[16]));
 $adaMail = $j->query("SELECT * FROM email_outbox WHERE user_id = 10 AND lane = 'automation'")->fetch();
@@ -558,6 +582,7 @@ ct_at('2026-11-18 12:05');
 $wed = automation_tick($j, ['now' => campaigns_now()]);
 ct_eq('Wednesday 12:05: the midweek reminder', 'midweek', $wed['runs'][0]['decisions'][0]['step'] ?? null);
 ct_eq('Ada, Bayo and Emeka (who joined on Tuesday) get it', 3, $wed['runs'][0]['counts']['emailed'] + $wed['runs'][0]['counts']['texted']);
+ct_ok('a date-bound reminder must leave the same day', $j->query("SELECT send_by FROM email_outbox WHERE flow = 'embrace.midweek'")->fetchColumn() === '2026-11-18 23:59:59');
 
 ct_at('2026-11-23 10:05');
 $mon2 = automation_tick($j, ['now' => campaigns_now()]);
@@ -691,6 +716,26 @@ ct_eq('"include": 7 away in one go → only the highest step per audience fires'
 ct_eq('…the lower one is recorded as superseded', 'superseded',
     $g2->query("SELECT outcome FROM automation_sends WHERE user_id = 60 AND step_key = 'miss_note'")->fetchColumn());
 
+// Away longer than the engine looks back (archive 12 + 8 + 4 weeks): the
+// streak must keep ONE identity, or every step would fire again every week.
+$lng = ct_db();
+ct_at('2026-01-01 08:00');
+for ($day = campaigns_dt('2026-01-04'); $day <= campaigns_dt('2026-12-27'); $day = $day->modify('+7 days')) {
+    $sid = ct_service($lng, $day->format('Y-m-d'));
+    if ($day->format('Y-m-d') <= '2026-02-01') {
+        ct_present($lng, 80, $day->format('Y-m-d'), $sid);
+    }
+}
+ct_user($lng, 80, 'Sola', 'Member', ['phone' => '08030000080', 'created_at' => '2025-06-01 10:00:00']);
+ct_user($lng, 81, 'Taiwo', 'Member', ['phone' => '08030000081', 'created_at' => '2025-06-01 10:00:00']);  // never in church
+automation_ensure_defaults($lng);
+ct_at('2026-11-01 08:00');
+automation_rule_set_enabled($lng, automation_rule_get($lng, 'charis')['id'], true, 900, 'include');
+$firstWeek = $weekly($lng, '2026-11-02');
+ct_eq('long-absent people get each step once…', 6, count($firstWeek));
+ct_eq('…and nothing the next week', [], $weekly($lng, '2026-11-09'));
+ct_eq('…or the week after', [], $weekly($lng, '2026-11-16'));
+
 // ===========================================================================
 ct_section('14. One member-facing message a day, across modules');
 // ===========================================================================
@@ -717,9 +762,13 @@ ct_at('2026-11-16 10:05');
 $welRun = automation_tick($x, ['now' => campaigns_now()]);
 ct_eq('10:05 the Embrace welcome is deferred, not sent the same day', 'deferred', $welRun['runs'][0]['decisions'][0]['outcome'] ?? null);
 ct_eq('one email that day', 1, ct_count($x, 'email_outbox', "user_id = 70 AND lane = 'automation'"));
+ct_at('2026-11-17 00:05');
+ct_eq('not just after midnight', 0, automation_tick($x, ['now' => campaigns_now()])['retried']['retried'] ?? 0);
 ct_at('2026-11-17 08:00');
+ct_eq('nor before the time it was first meant to go (10:00)', 0, automation_tick($x, ['now' => campaigns_now()])['retried']['retried'] ?? 0);
+ct_at('2026-11-17 10:05');
 $retry = automation_tick($x, ['now' => campaigns_now()]);
-ct_eq('the next day the deferred welcome goes', 1, $retry['retried']['retried']);
+ct_eq('the next day at 10:05 the deferred welcome goes', 1, $retry['retried']['retried']);
 ct_eq('…as the series\' next email', 2, ct_count($x, 'email_outbox', "user_id = 70 AND lane = 'automation'"));
 ct_eq('…and the ledger says so', 'queued', $x->query("SELECT outcome FROM automation_sends WHERE user_id = 70 AND step_key = 'welcome'")->fetchColumn());
 $x->prepare('INSERT INTO automation_person_day (user_id, day, rule_id, step_key, created_at) VALUES (70, ?, 99, ?, ?)')
@@ -744,10 +793,10 @@ ct_ok('the tab preview lists people and channels', isset($preview['counts'], $pr
 ct_section('16. Coverage');
 // ===========================================================================
 $cov = email_coverage($j);
-ct_eq('first timers counted from the Embrace pipeline', 8, $cov['first_timers']['total']);
+ct_eq('first timers counted from the Embrace pipeline', 9, $cov['first_timers']['total']);
 ct_eq('confirmed addresses among them', 2, $cov['first_timers']['confirmed']);
 ct_eq('reached by email (Ada: confirmed + yes; a 3rd Timer is still in the pipeline)', 1, $cov['first_timers']['news']);
-ct_eq('unsubscribed', 1, $cov['first_timers']['unsubscribed']);
+ct_eq('unsubscribed (Halima, and Ijeoma who has no address)', 2, $cov['first_timers']['unsubscribed']);
 ct_ok('the rest split into SMS-only and unreachable', $cov['first_timers']['sms_only'] + $cov['first_timers']['unreachable']
     + $cov['first_timers']['news'] + $cov['first_timers']['unsubscribed'] === $cov['first_timers']['total']);
 

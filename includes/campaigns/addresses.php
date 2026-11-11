@@ -23,6 +23,11 @@ const EMAIL_LINKS_PER_PERSON_DAY  = 5;
 const EMAIL_LINKS_PER_ADDRESS_DAY = 3;
 const EMAIL_RESEND_GAP_SECONDS  = 60;
 const EMAIL_SOURCES = ['connect', 'embrace', 'signin_prompt', 'profile', 'staff', 'import'];
+// The consent method each place records when it asks in the same form.
+const EMAIL_SOURCE_CONSENT_METHOD = [
+    'connect' => 'connect_form', 'embrace' => 'embrace_entry', 'signin_prompt' => 'signin_prompt',
+    'profile' => 'profile', 'staff' => 'staff', 'import' => 'import',
+];
 
 // Common slips on the domains people actually use here. Shown as a hint, never
 // applied silently.
@@ -233,7 +238,8 @@ function email_capture_start(PDO $pdo, int $userId, string $rawEmail, string $so
     $nowSql = campaigns_sql_dt($now);
 
     if (!empty($opts['consent']) && is_array($opts['consent']) && !empty($opts['consent']['granted'])) {
-        email_consent_record($pdo, $userId, 'granted', (string) ($opts['consent']['method'] ?? $source), [
+        $method = (string) ($opts['consent']['method'] ?? (EMAIL_SOURCE_CONSENT_METHOD[$source] ?? 'profile'));
+        email_consent_record($pdo, $userId, 'granted', $method, [
             'email'       => $email,
             'text'        => (string) ($opts['consent']['text'] ?? EMAIL_CONSENT_NEWS_TEXT),
             'recorded_by' => $opts['consent']['recorded_by'] ?? null,
@@ -386,7 +392,15 @@ function email_capture_confirm(PDO $pdo, string $token, ?string $ip = null): arr
                                WHERE id = ? AND status = 'pending'");
         $upd->execute([$userId, $email, $nowSql, $ip !== null ? campaigns_cut($ip, 45) : null, (int) $row['id']]);
         if ($upd->rowCount() !== 1) {
-            throw new RuntimeException('email_capture_confirm: the row moved under us');
+            // A double click: the other request confirmed it a moment ago.
+            if ($own && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $again = $pdo->prepare('SELECT status FROM email_addresses WHERE id = ?');
+            $again->execute([(int) $row['id']]);
+            return $again->fetchColumn() === 'confirmed'
+                ? ['ok' => true, 'already' => true, 'user_id' => $userId, 'email' => $email]
+                : ['ok' => false, 'code' => 'USED', 'user_id' => $userId, 'email' => $email];
         }
         $pdo->prepare("UPDATE email_addresses SET status = 'cancelled', token_hash = NULL, ended_at = ?
                         WHERE user_id = ? AND status = 'pending' AND id <> ?")
@@ -416,10 +430,10 @@ function email_capture_confirm(PDO $pdo, string $token, ?string $ip = null): arr
 
 /**
  * Copy a newly confirmed address into users.email, as a convenience for the
- * screens that show it — but ONLY when users.email is empty or already a
- * personal address. A members' sign-in name (@hodlc.com) is never touched
- * here: changing it would change how they sign in, which is the sign-in
- * change's job (docs/EMAIL.md, "Sign-in"). Nothing depends on this copy.
+ * screens that show it — but ONLY when users.email is empty. Whatever is there
+ * may be what the person signs in with (a @hodlc.com name, or a personal
+ * address); changing it would change how they sign in, which is the sign-in
+ * change's job (docs/EMAIL.md). Nothing depends on this copy.
  */
 function email_sync_users_email(PDO $pdo, int $userId, string $email): void
 {
@@ -427,7 +441,9 @@ function email_sync_users_email(PDO $pdo, int $userId, string $email): void
         $stmt = $pdo->prepare('SELECT email FROM users WHERE id = ?');
         $stmt->execute([$userId]);
         $current = email_normalize((string) ($stmt->fetchColumn() ?: ''));
-        if ($current === $email || ($current !== '' && !email_looks_personal($current))) {
+        // Only ever fill an EMPTY users.email: whatever is there may be the
+        // address someone signs in with (a personal one included).
+        if ($current !== '') {
             return;
         }
         $stmt = $pdo->prepare('SELECT 1 FROM users WHERE LOWER(email) = ? AND id <> ?');

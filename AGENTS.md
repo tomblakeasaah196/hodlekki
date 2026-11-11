@@ -982,7 +982,7 @@ budget, block-document emails, and one automation engine for Embrace
 (first-timer journey), Assimilation and Charis (absence ladders). Guide and
 contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
 `bootstrap.php`, after `includes/db.php`). Schema:
-`db/migrations/20261201090000_campaigns_core.sql`. Crons:
+`db/migrations/20261126090000_campaigns_core.sql`. Crons:
 `cron/email_worker.php`, `cron/automation_tick.php`.
 
 - **A personal email is never `users.email`.** It lives in `email_addresses`,

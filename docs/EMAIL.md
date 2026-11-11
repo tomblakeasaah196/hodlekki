@@ -17,7 +17,7 @@ lead (screens, the sign-in prompt and sign-in by personal email are later PRs).
 | Path | What |
 | ---- | ---- |
 | `includes/campaigns/bootstrap.php` | The only entry point, after `includes/db.php`. Map of the module at the top. |
-| `db/migrations/20261201090000_campaigns_core.sql` | Every table (`email_*`, `automation_*`). |
+| `db/migrations/20261126090000_campaigns_core.sql` | Every table (`email_*`, `automation_*`). |
 | `cron/email_worker.php` | Every minute: sends the queue under the budget. `--status`, `--dry-run`, `--prune`. |
 | `cron/automation_tick.php` | Every 5 minutes: runs due automations. `--status`, `--dry-run`, `--rule=ID`, `--at="…"`. |
 | `includes/mailer.php` | `hod_send_mail()`: SMTP from `.env` (system@), now also with custom headers, a given Message-ID and one shared connection. |
@@ -57,8 +57,8 @@ here builds SMTP settings in code.
   members' sign-in name (`grace@hodlc.com`) and the address first timers typed
   on Connect, and Embrace, Congregation and Profile all overwrite it. On
   confirmation the address is copied into `users.email` only when that column
-  is empty or already a personal address — a sign-in name is never replaced
-  here (that is the sign-in PR's job). Nothing reads that copy back.
+  is EMPTY — whatever is there may be what the person signs in with, and
+  changing it is the sign-in PR's job. Nothing reads that copy back.
 - **Never `@hodlekki.org`** (or a subdomain) and never `@hodlc.com`:
   `email_address_problem()` is the only validator; every screen calls it.
   Reset links must reach someone who is locked out of the ERP.
@@ -90,9 +90,18 @@ here builds SMTP settings in code.
   first. Bulk lanes (automation, campaign) may only use `bulk_share` of the
   usable budget, so resets, alerts and people's replies always get through.
 - A send that died mid-way becomes `unknown` and is **never sent again**.
-- A host cap refusal is never the recipient's fault: the email goes back in
-  the queue untouched and nothing more is sent that hour.
-- Church news is released only inside the send window (07:00–20:00 Lagos).
+- A host refusal ("exceeded the max emails per hour", or "max defers and
+  failures per hour") is never the recipient's fault: the email goes back in
+  the queue untouched and nothing more is sent that hour. Only the server's own
+  SMTP answer may teach a cap (10 or more, forgotten after 7 days); a bounce
+  report never does. Our mail server being unreachable stops the run without
+  spending anyone's attempts.
+- **Bounce and complaint reports are believed only when they name an email we
+  sent** (our `X-HOD-Ref` or its Message-ID), and act only on the address we
+  sent it to — anyone can write to system@.
+- Church news is released only inside the send window (07:00–20:00 Lagos), and
+  is held entirely until the public `/email/` pages exist. A date-bound
+  reminder carries `send_by` and is dropped rather than arriving after its day.
 
 **Emails are block documents, never HTML**
 - `email_doc_validate()` is the sanitiser: known block types and fields only,
@@ -114,8 +123,13 @@ here builds SMTP settings in code.
   once per week/streak (`automation_sends` unique, claimed **before** anything
   is queued), and a person gets **one member-facing automation message a day**
   across all modules (`automation_person_day`). A date-bound reminder that
-  loses the day is skipped; anything else is deferred and retried the next day
-  while the person is still due.
+  loses the day is skipped; anything else is deferred and retried on a later
+  day — inside the send window and not before its original time of day — while
+  the person is still due. A failed occasion is picked up again (at most every
+  30 minutes, within its 24 hours); the ledger keeps that from double-sending.
+- An absence streak's identity is the person's last day present at a service
+  that clears it (any time in their history), never the first missed date the
+  engine reports, which slides forward for people away longer than its window.
 - **Absence streaks come only from `charis_compute_awol_list()`**, called with
   Charis's own `service_rules`. Never count absences here; the AWOL contract in
   AGENTS.md applies unchanged (Sunday counts, midweek clears, skipped services,

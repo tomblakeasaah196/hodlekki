@@ -26,7 +26,7 @@ const EMAIL_ORPHAN_MINUTES    = 10;
 const EMAIL_RETRY_MINUTES     = [1, 5, 15, 60];   // after attempts 1, 2, 3, 4; the 5th failure is final
 const EMAIL_PRUNE_DAYS        = 90;
 const EMAIL_PURPOSES          = ['account', 'news'];
-const EMAIL_OUTBOX_STATUSES   = ['queued', 'sending', 'sent', 'failed', 'cancelled', 'suppressed', 'unknown'];
+const EMAIL_OUTBOX_STATUSES   = ['queued', 'sending', 'sent', 'failed', 'cancelled', 'suppressed', 'unknown', 'expired'];
 
 /** The domain our Message-IDs end in: the sender's own (spam filters check). */
 function email_message_domain(): string
@@ -137,8 +137,8 @@ function email_enqueue(PDO $pdo, array $msg): array
     $pdo->prepare('INSERT INTO email_outbox
             (ref, lane, priority, purpose, flow, user_id, to_email, to_name, from_name, reply_to, reply_to_name,
              subject, html, text_body, headers_json, links_json, campaign_id, automation_send_id,
-             message_id, message_id_hash, status, attempts, not_before, created_by, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \'queued\', 0, ?, ?, ?)')
+             message_id, message_id_hash, status, attempts, not_before, send_by, created_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \'queued\', 0, ?, ?, ?, ?)')
         ->execute([
             $ref,
             $lane,
@@ -161,6 +161,7 @@ function email_enqueue(PDO $pdo, array $msg): array
             $messageId,
             email_message_id_hash($messageId),
             $notBefore,
+            ($msg['send_by'] ?? null) instanceof DateTimeImmutable ? campaigns_sql_dt($msg['send_by']) : null,
             isset($msg['created_by']) ? (int) $msg['created_by'] : null,
             campaigns_sql_dt(campaigns_now()),
         ]);
@@ -305,9 +306,10 @@ function email_build_headers(array $row): array
  * What kind of failure is this send error?
  *   cap        the host's hourly cap: stop for the hour, requeue, learn the cap
  *   config     our own setup (no password, no PHPMailer, login refused): stop the run
+ *   unavailable our mail server cannot be reached: stop the run, attempts not counted
  *   recipient  permanent, about this address (550 user unknown…): fail + suppress
  *   permanent  permanent, not about the address: fail
- *   temporary  anything else (4xx, timeouts, connection): retry later
+ *   temporary  anything else (4xx, a full mailbox): retry later
  */
 function email_classify_failure(string $error): string
 {
@@ -317,7 +319,16 @@ function email_classify_failure(string $error): string
     if (preg_match('/not set up|not installed|could not authenticate|authentication failed|535[ -]/i', $error)) {
         return 'config';
     }
-    if (preg_match('/\b55[0-3]\b|\b5\.1\.\d\b|\b5\.2\.[12]\b|user unknown|no such user|unknown user|mailbox (?:unavailable|not found|does not exist)|recipient address rejected|does not exist|invalid recipient|address rejected/i', $error)) {
+    // Our own mail server cannot be reached: nobody's message is at fault, so
+    // stop the run and spend nobody's attempts (an outage must not fail the queue).
+    if (preg_match('/connect\(\) failed|could not connect|failed to connect|connection (?:refused|timed out|reset)|unable to connect|network is unreachable/i', $error)) {
+        return 'unavailable';
+    }
+    // A full mailbox is temporary (and counted as a soft bounce by the DSN path).
+    if (preg_match('/\b552\b|\b5\.2\.2\b|mailbox (?:is )?full|over quota/i', $error)) {
+        return 'temporary';
+    }
+    if (preg_match('/\b55[0-3]\b|\b5\.1\.\d\b|\b5\.2\.1\b|user unknown|no such user|unknown user|mailbox (?:unavailable|not found|does not exist)|recipient address rejected|does not exist|invalid recipient|address rejected/i', $error)) {
         return 'recipient';
     }
     if (preg_match('/\b5\d\d\b|\b5\.\d\.\d+\b/', $error)) {
@@ -391,7 +402,7 @@ function email_recover_orphans(PDO $pdo, ?DateTimeImmutable $now = null): int
  */
 function email_worker_run(PDO $pdo, array $opts = []): array
 {
-    $out = ['ran' => false, 'locked' => false, 'recovered' => 0, 'sent' => 0, 'failed' => 0,
+    $out = ['ran' => false, 'locked' => false, 'recovered' => 0, 'expired' => 0, 'sent' => 0, 'failed' => 0,
             'retried' => 0, 'suppressed' => 0, 'waiting_budget' => 0, 'outside_window' => 0,
             'stopped' => null, 'message' => ''];
     if (!campaigns_ready($pdo)) {
@@ -418,6 +429,12 @@ function email_worker_run(PDO $pdo, array $opts = []): array
         $out['ran'] = true;
         $now = ($opts['now'] ?? null) instanceof DateTimeImmutable ? $opts['now'] : campaigns_now();
         $out['recovered'] = email_recover_orphans($pdo, $now);
+        // A date-bound message ("see you tomorrow") that could not leave in
+        // time is dropped rather than arriving days late.
+        $expire = $pdo->prepare("UPDATE email_outbox SET status = 'expired', last_error = 'Not sent in time; dropped.'
+                                  WHERE status = 'queued' AND send_by IS NOT NULL AND send_by < ?");
+        $expire->execute([campaigns_sql_dt($now)]);
+        $out['expired'] = $expire->rowCount();
         $limit = max(1, (int) ($opts['limit'] ?? email_setting($pdo, 'per_minute')));
         // Church news carries links to the public unsubscribe and click URLs;
         // until those pages are deployed it waits in the queue rather than
@@ -529,7 +546,7 @@ function email_worker_run(PDO $pdo, array $opts = []): array
 
             $error = campaigns_cut((string) ($result['error'] ?? 'Unknown send error'), 500);
             $kind = email_classify_failure($error);
-            if ($kind === 'cap' || $kind === 'config') {
+            if ($kind === 'cap' || $kind === 'config' || $kind === 'unavailable') {
                 // Not this message's fault: put it back untouched (the attempt does not count).
                 $pdo->prepare("UPDATE email_outbox SET status = 'queued', locked_at = NULL, attempts = attempts - 1, last_error = ? WHERE id = ?")
                     ->execute([$error, (int) $row['id']]);

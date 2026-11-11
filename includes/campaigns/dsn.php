@@ -227,12 +227,19 @@ function email_record_bounce(PDO $pdo, array $report): array
         $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
     $now = campaigns_now();
-    if ($row !== null) {
-        $out['outbox_id'] = (int) $row['id'];
+    // Anyone can write to system@. A report is only believed when it names an
+    // email we actually sent (our random X-HOD-Ref, or its Message-ID), and it
+    // only ever acts on the address WE sent that email to.
+    if ($row === null || $row['to_email'] === 'erased') {
+        $out['kind'] = 'unmatched';
+        return $out;
     }
+    $out['outbox_id'] = (int) $row['id'];
 
     if ($report['kind'] === 'cap') {
-        if ($row !== null && $row['status'] === 'sent') {
+        // Re-queue our email, but learn nothing from it: only the server's own
+        // SMTP answer (in the worker) may change the budget.
+        if ($row['status'] === 'sent') {
             $next = campaigns_dt($now->format('Y-m-d H:00:00'))->modify('+1 hour');
             $pdo->prepare("UPDATE email_outbox SET status = 'queued', not_before = ?, sent_at = NULL,
                                   last_error = 'The host dropped it for its hourly limit; sending again next hour.'
@@ -241,53 +248,39 @@ function email_record_bounce(PDO $pdo, array $report): array
             email_event($pdo, (int) $row['id'], 'deferred', null, 'hourly cap');
             $out['requeued'] = true;
         }
-        email_budget_refused($pdo, $report['cap'] ?? null, $now);
         return $out;
     }
 
-    // With the outbox row in hand, act on the address WE sent to (a forwarded
-    // final recipient is someone else's business); otherwise on the report's.
-    $addresses = [];
-    foreach ((array) ($report['recipients'] ?? []) as $r) {
-        $addr = $row !== null ? (string) $row['to_email'] : (string) $r['email'];
-        if ($addr === '' || $addr === 'erased' || email_is_church_domain($addr)) {
-            continue;
-        }
-        $addresses[$addr] = $r;
-    }
-    if ($report['kind'] === 'complaint' && $row !== null && !$addresses && $row['to_email'] !== 'erased') {
-        $addresses[(string) $row['to_email']] = ['hard' => true, 'diagnostic' => 'abuse', 'status' => 'complaint'];
-    }
-
-    foreach ($addresses as $addr => $r) {
+    // Act on the address WE sent to (a forwarded final recipient is someone
+    // else's business), with the report's verdict.
+    $addr = (string) $row['to_email'];
+    $r = $report['recipients'][0] ?? ['hard' => $report['kind'] === 'complaint', 'status' => '', 'diagnostic' => ''];
+    $why = trim(($r['status'] ?? '') . ' ' . ($r['diagnostic'] ?? ''));
+    if (!email_is_church_domain($addr)) {
         if ($report['kind'] === 'complaint') {
             email_suppress($pdo, $addr, 'complaint', 'Marked as spam');
             $out['suppressed']++;
-            $userId = $row !== null && $row['user_id'] !== null ? (int) $row['user_id'] : member_by_confirmed_email($pdo, $addr);
-            if ($userId !== null && email_consent_state($pdo, $userId, 'news', 'email') !== 'withdrawn') {
-                email_consent_record($pdo, $userId, 'withdrawn', 'complaint', [
-                    'email' => $addr, 'outbox_id' => $row !== null ? (int) $row['id'] : null,
+            if ($row['user_id'] !== null && email_consent_state($pdo, (int) $row['user_id'], 'news', 'email') !== 'withdrawn') {
+                email_consent_record($pdo, (int) $row['user_id'], 'withdrawn', 'complaint', [
+                    'email' => $addr, 'outbox_id' => (int) $row['id'],
                 ]);
             }
         } elseif ($report['kind'] === 'delay') {
             // Still trying; nothing to do but note it.
         } elseif (!empty($r['hard'])) {
-            email_suppress($pdo, $addr, 'hard_bounce', trim(($r['status'] ?? '') . ' ' . ($r['diagnostic'] ?? '')));
+            email_suppress($pdo, $addr, 'hard_bounce', $why);
             $out['suppressed']++;
         } else {
-            email_note_soft_bounce($pdo, $addr, trim(($r['status'] ?? '') . ' ' . ($r['diagnostic'] ?? '')));
+            email_note_soft_bounce($pdo, $addr, $why);
             $out['soft']++;
         }
     }
 
-    if ($row !== null) {
-        $kind = $report['kind'] === 'complaint' ? 'complaint' : ($report['kind'] === 'delay' ? 'deferred' : 'bounce');
-        $first = reset($addresses) ?: [];
-        email_event($pdo, (int) $row['id'], $kind, null, trim(($first['status'] ?? '') . ' ' . ($first['diagnostic'] ?? '')) ?: null);
-        if ($kind === 'bounce') {
-            $pdo->prepare('UPDATE email_outbox SET bounced_at = ? WHERE id = ? AND bounced_at IS NULL')
-                ->execute([campaigns_sql_dt($now), (int) $row['id']]);
-        }
+    $kind = $report['kind'] === 'complaint' ? 'complaint' : ($report['kind'] === 'delay' ? 'deferred' : 'bounce');
+    email_event($pdo, (int) $row['id'], $kind, null, $why !== '' ? $why : null);
+    if ($kind === 'bounce') {
+        $pdo->prepare('UPDATE email_outbox SET bounced_at = ? WHERE id = ? AND bounced_at IS NULL')
+            ->execute([campaigns_sql_dt($now), (int) $row['id']]);
     }
     return $out;
 }
