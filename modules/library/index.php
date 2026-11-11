@@ -53,7 +53,7 @@ $loginUrl = '/auth/login.php?next=' . rawurlencode('/modules/library/index.php' 
 $actions = $isLoggedIn
     ? ui_button('My library', ['variant' => 'secondary', 'size' => 'sm', 'icon' => 'book-open', 'attrs' => ['data-action' => 'library.mine', 'aria-expanded' => 'false', 'aria-controls' => 'library-mine']])
       . ui_button('My portal', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'house', 'icon_only' => true, 'href' => '/modules/member_portal/index.php'])
-    : ui_button('Sign in to borrow', ['variant' => 'primary', 'size' => 'sm', 'href' => $loginUrl]);
+    : ui_button('Sign in', ['variant' => 'primary', 'size' => 'sm', 'href' => $loginUrl]);
 
 $page = [
     'title' => $book_id && !empty($bookInfo) ? $bookInfo['title'] . ' · Charis Library' : 'Charis Library',

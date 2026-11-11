@@ -122,9 +122,9 @@ $portalGivingTypes = ['Tithe' => 'Tithe', 'Offering' => 'Offering', 'First_Fruit
                         <span class="ui-list__icon"><?= ui_icon('heart-handshake') ?></span>
                         <h2 class="ui-card__title" id="portal-prayer-title">Zoe Prayer Team</h2>
                     </div>
-                    <p class="text-sm text-ink-muted">Need agreement in prayer? Our intercessors are standing by to pray with you.</p>
+                    <p class="text-sm text-ink-muted">Our intercessors will pray with you.</p>
                     <div class="mt-4">
-                        <?= ui_button('Send a prayer request', ['variant' => 'soft', 'block' => true, 'attrs' => ['data-dialog-open' => 'portal-prayer']]) ?>
+                        <?= ui_button('Request prayer', ['variant' => 'soft', 'block' => true, 'attrs' => ['data-dialog-open' => 'portal-prayer']]) ?>
                     </div>
                 </div>
             </section>
@@ -173,7 +173,7 @@ $portalGivingTypes = ['Tithe' => 'Tithe', 'Offering' => 'Offering', 'First_Fruit
     </div>
 </div>
 
-<?= ui_dialog_start('portal-give', ['title' => 'Record your giving', 'description' => 'For giving you have already made. Add the receipt if you have one.']) ?>
+<?= ui_dialog_start('portal-give', ['title' => 'Record your giving', 'description' => 'For giving you have already made.']) ?>
     <form class="ui-form" id="portal-give-form" data-action="portal.give" data-ui-validate novalidate>
         <input type="hidden" name="action" value="submit_contribution">
         <?= ui_field('number', ['name' => 'amount', 'id' => 'portal-amount', 'label' => 'Amount (₦)', 'required' => true, 'inputmode' => 'decimal', 'attrs' => ['min' => '0.01', 'step' => '0.01', 'data-error' => 'Enter the amount you gave, in naira.']]) ?>
@@ -195,7 +195,7 @@ $portalGivingTypes = ['Tithe' => 'Tithe', 'Offering' => 'Offering', 'First_Fruit
     </form>
 <?= ui_dialog_end(
     ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
-    . ui_button('Send to the Zoe team', ['variant' => 'primary', 'type' => 'submit', 'attrs' => ['form' => 'portal-prayer-form']])
+    . ui_button('Send request', ['variant' => 'primary', 'type' => 'submit', 'attrs' => ['form' => 'portal-prayer-form']])
 ) ?>
 
 <?= ui_dialog_start('portal-testimony', ['title' => "Testify of God's goodness", 'description' => 'Write it, record a voice note, or both.', 'size' => 'lg']) ?>

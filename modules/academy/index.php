@@ -213,7 +213,7 @@ function academy_select(string $form, string $name, string $label, string $sourc
             <div class="ui-card__header ui-card__header--divided">
                 <div>
                     <h2 class="ui-card__title">Publishing</h2>
-                    <p class="ui-card__description">Show a course to its students, and open its exam when they are ready.</p>
+                    <p class="ui-card__description">Show courses to students and open their exams.</p>
                 </div>
             </div>
             <div class="ui-card__body ui-card__body--flush">
@@ -269,7 +269,7 @@ function academy_select(string $form, string $name, string $label, string $sourc
             <div class="ui-card__header ui-card__header--divided">
                 <div>
                     <h2 class="ui-card__title">Apply to HOD Academy</h2>
-                    <p class="ui-card__description">The first step to serving as a worker. It takes about ten minutes.</p>
+                    <p class="ui-card__description">The first step to serving as a worker.</p>
                 </div>
             </div>
             <div class="ui-card__body ui-stack">
@@ -334,13 +334,13 @@ for ($i = 0; $i < 12; $i++) {
 
     <div data-academy-state="pending" hidden>
         <div class="ui-card">
-            <?= ui_empty(['icon' => 'clock', 'title' => 'Your application is being reviewed', 'text' => 'The Academy team will let you know when you have been placed in a cohort.']) ?>
+            <?= ui_empty(['icon' => 'clock', 'title' => 'Application under review', 'text' => 'We will tell you when you are placed in a cohort.']) ?>
         </div>
     </div>
 
     <div data-academy-state="missing" hidden>
         <div class="ui-card">
-            <?= ui_empty(['icon' => 'circle-help', 'title' => 'You are approved, but not in a cohort yet', 'text' => 'Please ask the Academy team to add you to a cohort.']) ?>
+            <?= ui_empty(['icon' => 'circle-help', 'title' => 'Waiting for a cohort', 'text' => 'Ask the Academy team to add you to one.']) ?>
         </div>
     </div>
 

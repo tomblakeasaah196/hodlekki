@@ -167,7 +167,7 @@
             var mine = (u.active_borrows || []).some(function (x) { return Number(x.book_id) === Number(b.id); });
             var waiting = (u.waitlist || []).some(function (x) { return Number(x.book_id) === Number(b.id); });
             if (!state.loggedIn) {
-                out.push('<a class="ui-btn ui-btn--' + (ebook ? 'secondary' : 'primary') + ' ui-btn--block" href="' + esc(cfg.loginUrl || '/auth/login.php') + '">Sign in to borrow a copy</a>');
+                out.push('<a class="ui-btn ui-btn--' + (ebook ? 'secondary' : 'primary') + ' ui-btn--block" href="' + esc(cfg.loginUrl || '/auth/login.php') + '">Borrow a copy</a>');
             } else if (mine) {
                 out.push('<div class="ui-banner ui-banner--success"><div class="ui-banner__body"><p class="ui-banner__text">You have a copy of this book.</p></div></div>');
             } else if (waiting) {

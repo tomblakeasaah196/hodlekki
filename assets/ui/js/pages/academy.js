@@ -401,7 +401,7 @@
         var minutes = Number(btn.getAttribute('data-minutes')) || 30;
         HOD.confirm({
             title: 'Start the ' + name + ' exam?',
-            message: 'You have ' + minutes + ' minutes and one attempt. Stay on this page until you submit; your answers are sent when time runs out.',
+            message: minutes + ' minutes, one attempt. Stay on this page until you submit.',
             confirmLabel: 'Start exam'
         }).then(function (ok) {
             if (!ok) return;

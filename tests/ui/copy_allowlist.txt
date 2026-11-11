@@ -18,7 +18,6 @@ connect.php | paragraph | Tell us a little more so we can serve and celebrate yo
 connect.php | paragraph | To bring people into an experience of God’s unconditional love that transforms them into men and women passionate about influencing their world through the principles of the Kingdom.
 connect.php | paragraph | To raise a people after God’s heart in every nation of the earth.
 connect.php | paragraph | Welcome to the family. A member of our Embrace Team will reach out to you shortly. We pray this marks the beginning of an incredible journey in your walk with God.
-modules/library/index.php | paragraph | Browse our collection of physical books, e-books, and audiobooks designed to build your faith, leadership, and purpose.
 modules/monitor/index.php | banner-text | The monitor's cron job runs the health checks every five minutes; the first appear within five minutes. "Run the checks now" on the Health tab runs them at once.
 modules/monitor/index.php | button | Make a new link
 modules/monitor/index.php | button | Run the checks now

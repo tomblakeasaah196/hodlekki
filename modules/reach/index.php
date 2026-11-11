@@ -57,7 +57,7 @@ $headerActions = ($reach_can_assign
 <div class="ui-page ui-page--wide">
     <?= ui_page_header([
         'title' => 'Reach & Evangelism',
-        'description' => 'Run outreach campaigns, share public capture links, and follow up everyone you meet.',
+        'description' => 'Outreach campaigns, capture links and follow-up.',
         'actions' => $headerActions,
     ]) ?>
 
@@ -170,7 +170,7 @@ $headerActions = ($reach_can_assign
                 <div class="min-w-0 flex-1">
                     <label class="sr-only" for="reach-flyer">Flyer image</label>
                     <input class="ui-input" type="file" id="reach-flyer" name="flyer" accept="image/jpeg,image/png,image/webp" data-action-change="reach.flyer">
-                    <p class="ui-hint">The link preview and capture-page background. No flyer? The default image is used. JPG, PNG or WebP, up to 5 MB.</p>
+                    <p class="ui-hint">JPG, PNG or WebP, up to 5 MB. <?= ui_info('The flyer is the link preview and the capture-page background. No flyer? The default image is used.', 'About the flyer') ?></p>
                     <label class="ui-check mt-2" data-reach-remove-flyer hidden><input type="checkbox" name="remove_flyer" value="1" data-action-change="reach.remove-flyer"><span>Remove the current flyer</span></label>
                 </div>
             </div>
@@ -195,7 +195,7 @@ $headerActions = ($reach_can_assign
 
         <div class="ui-card ui-card--sunken p-4">
             <div class="flex flex-wrap items-center justify-between gap-2">
-                <p class="text-sm text-ink-muted">Enter the title and location, and AI can write the description and scripture.</p>
+                <p class="text-sm text-ink-muted">AI can write the description and scripture.</p>
                 <div class="flex gap-2">
                     <?= ui_button('Another option', ['variant' => 'ghost', 'size' => 'sm', 'attrs' => ['data-action' => 'reach.ai-next', 'data-reach-ai-next' => true, 'hidden' => true]]) ?>
                     <?= ui_button('Write with AI', ['variant' => 'soft', 'size' => 'sm', 'icon' => 'sparkles', 'attrs' => ['data-action' => 'reach.ai', 'data-reach-ai' => true]]) ?>
@@ -254,7 +254,7 @@ $headerActions = ($reach_can_assign
     <div class="ui-stack">
         <section>
             <h3 class="ui-h3">Event types</h3>
-            <p class="ui-meta mt-0.5">The choices in the Event type list. Removing one keeps it on campaigns that already use it.</p>
+            <p class="ui-meta mt-0.5">Removing one keeps it on past campaigns.</p>
             <div class="mt-3 flex flex-wrap gap-2" data-reach-types></div>
             <form class="mt-3 flex gap-2" data-action="reach.add-type" novalidate>
                 <label class="sr-only" for="reach-new-type">New event type</label>
@@ -270,19 +270,19 @@ $headerActions = ($reach_can_assign
             <div class="mt-3 flex flex-wrap gap-2">
                 <label class="ui-btn ui-btn--secondary cursor-pointer" for="reach-default-upload"><?= ui_icon('upload') ?><span>Upload new image</span></label>
                 <input class="sr-only" type="file" id="reach-default-upload" accept="image/jpeg,image/png,image/webp" data-action-change="reach.default-upload">
-                <?= ui_button('Use the church photo', ['variant' => 'ghost', 'attrs' => ['data-action' => 'reach.default-reset']]) ?>
+                <?= ui_button('Use church photo', ['variant' => 'ghost', 'attrs' => ['data-action' => 'reach.default-reset']]) ?>
             </div>
         </section>
         <hr class="ui-divider">
         <form class="ui-form" id="reach-settings-form" data-action="reach.save-settings" data-ui-validate novalidate>
             <input type="hidden" name="action" value="save_reach_settings">
             <h3 class="ui-h3">Follow-up</h3>
-            <?= ui_field('number', ['name' => 'overdue_days', 'id' => 'reach-overdue-days', 'label' => 'Mark a lead overdue after (days)', 'required' => true, 'inputmode' => 'numeric', 'hint' => 'Counted from when the lead was assigned without any follow-up. A daily alert goes to the whole Reach team.', 'attrs' => ['min' => '1', 'max' => '60']]) ?>
+            <?= ui_field('number', ['name' => 'overdue_days', 'id' => 'reach-overdue-days', 'label' => 'Mark a lead overdue after (days)', 'required' => true, 'inputmode' => 'numeric', 'info' => 'Counted from when the lead was assigned without any follow-up. A daily alert goes to the whole Reach team.', 'attrs' => ['min' => '1', 'max' => '60']]) ?>
             <div class="flex items-center justify-between gap-2">
                 <h3 class="ui-h3">Evangelism guide</h3>
                 <?= ui_button('Restore default', ['variant' => 'ghost', 'size' => 'sm', 'attrs' => ['data-action' => 'reach.restore-guide']]) ?>
             </div>
-            <?= ui_field('textarea', ['name' => 'guide', 'id' => 'reach-guide', 'label' => 'Guide text', 'hint' => 'Shown to volunteers on every campaign page. Use ## for headings, - for lists, **bold**, *italic*.', 'attrs' => ['rows' => '10']]) ?>
+            <?= ui_field('textarea', ['name' => 'guide', 'id' => 'reach-guide', 'label' => 'Guide text', 'info' => 'Shown to volunteers on every campaign page. Use ## for headings, - for lists, **bold**, *italic*.', 'attrs' => ['rows' => '10']]) ?>
             <div class="flex justify-end"><?= ui_button('Save settings', ['variant' => 'primary', 'type' => 'submit']) ?></div>
         </form>
     </div>

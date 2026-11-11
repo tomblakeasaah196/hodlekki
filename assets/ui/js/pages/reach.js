@@ -540,7 +540,7 @@
         HOD.actions.on('reach.delete', function (btn) {
             var c = campaigns[Number(btn.getAttribute('data-index'))];
             if (!c) return;
-            HOD.confirm({ title: 'Delete “' + c.title + '”?', message: 'If any souls were captured, it is marked Cancelled instead so the record stays.', confirmLabel: 'Delete campaign', tone: 'danger' }).then(function (ok) {
+            HOD.confirm({ title: 'Delete “' + c.title + '”?', message: 'With souls captured, it is marked Cancelled instead.', confirmLabel: 'Delete campaign', tone: 'danger' }).then(function (ok) {
                 if (!ok) return;
                 HOD.api(API, { action: 'delete_campaign', data: { id: c.id } }).then(function (res) { HOD.toast(res.message || 'Deleted.', 'success'); loadCampaigns(); }).catch(function () {});
             });

@@ -78,7 +78,7 @@ $embraceVisit = ['None' => 'Does not want a visit', 'In-Person' => 'In person', 
             <div class="ui-card__header ui-card__header--divided">
                 <div>
                     <h2 class="ui-card__title">Congregation archive</h2>
-                    <p class="ui-card__description">First timers who have been pushed to the congregation, with their follow-up notes.</p>
+                    <p class="ui-card__description">Pushed to the congregation, with their notes.</p>
                 </div>
             </div>
             <div class="ui-table-wrap border-0">
@@ -158,14 +158,13 @@ $embraceVisit = ['None' => 'Does not want a visit', 'In-Person' => 'In person', 
         <input type="hidden" name="note_id" value="">
         <?= ui_field('textarea', ['name' => 'note_text', 'id' => 'emb-note-text', 'label' => 'Add a note', 'required' => true, 'attrs' => ['rows' => '3']]) ?>
         <fieldset class="ui-fieldset">
-            <legend class="ui-label">Intended for</legend>
+            <legend class="ui-label">Intended for <?= ui_info('Every note is visible to everyone with Embrace access, and in the Excel register. This records who you meant it for.', 'About note visibility') ?></legend>
             <div class="flex flex-wrap gap-4">
                 <label class="ui-check"><input type="checkbox" name="vis_all" value="1" checked data-action-change="emb.vis"><span>Everyone</span></label>
                 <label class="ui-check"><input type="checkbox" name="vis_pastor" value="1" data-action-change="emb.vis"><span>Pastors only</span></label>
             </div>
             <input type="hidden" name="vis_director" value="">
             <input type="hidden" name="vis_worker" value="">
-            <p class="ui-hint mt-2">Every note is visible to everyone with Embrace access, and in the Excel register. This records who you meant it for.</p>
         </fieldset>
         <div class="flex justify-end gap-2">
             <?= ui_button('Cancel edit', ['variant' => 'ghost', 'attrs' => ['data-action' => 'emb.note-reset', 'data-emb-note-cancel' => true, 'hidden' => true]]) ?>
@@ -230,7 +229,7 @@ $embraceVisit = ['None' => 'Does not want a visit', 'In-Person' => 'In person', 
     . ui_button('Push to congregation', ['variant' => 'primary', 'type' => 'submit', 'attrs' => ['form' => 'emb-promote-form']])
 ) ?>
 
-<?= ui_dialog_start('emb-export', ['title' => 'Export first timers', 'description' => 'Choose the dates, then a quick image summary or the full Excel list.', 'size' => 'sm']) ?>
+<?= ui_dialog_start('emb-export', ['title' => 'Export first timers', 'description' => 'Pick the dates, then the format.', 'size' => 'sm']) ?>
     <div class="ui-form-grid">
         <?= ui_field('date', ['name' => 'start', 'id' => 'emb-export-start', 'label' => 'From', 'required' => true, 'value' => date('Y-m-d', strtotime('-1 week'))]) ?>
         <?= ui_field('date', ['name' => 'end', 'id' => 'emb-export-end', 'label' => 'To', 'required' => true, 'value' => date('Y-m-d')]) ?>
