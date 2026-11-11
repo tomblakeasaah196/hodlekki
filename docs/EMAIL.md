@@ -179,6 +179,22 @@ plain POST forms with the CSRF field (no page script).
 - Schema: `db/migrations/20261129090000_campaigns_identity.sql`
   (`auth_reset_tokens`, `auth_reset_requests`, `email_prompt_skips`).
 
+**Capture from forms** (`email_capture_after_save()`): the Connect card and
+Embrace add/edit start confirmation for a new or changed address (saving again
+never re-sends) and record a "yes" to church news only when the box was ticked
+(Connect: the person's own, with IP and user agent; Embrace: the spoken yes,
+with the worker's id and `EMAIL_CONSENT_NEWS_SPOKEN_TEXT`).
+
+**The Connect card cannot be used to mail strangers.** Confirmation links are
+limited to 3 a day per address (whoever the "person" is), and links started
+from Connect to 5 an hour per requester (hashed IP) and 20 an hour in all
+(`email_link_throttle`, `db/migrations/20261130090000_campaigns_throttle.sql`;
+it fails closed). Over a limit the card is still saved and nothing is queued.
+The card also carries a honeypot and a signed render time
+(`includes/campaigns/formguard.php`, key `CONNECT_FORM_KEY` or derived one-way
+from `.env`): a bot gets an ordinary success and nothing is saved; a page left
+open for 3+ days is asked to reload.
+
 ## 3. For other modules
 
 ```php

@@ -7,6 +7,7 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 // connect.hodlekki.org would leave the session on the wrong host.
 require_once __DIR__ . '/includes/site_url.php';
 require_once __DIR__ . '/includes/campaigns/consent.php';   // EMAIL_CONSENT_NEWS_TEXT: the wording shown is the wording recorded
+require_once __DIR__ . '/includes/campaigns/formguard.php'; // signed render time + honeypot for the card
 $site = static fn (string $path): string => htmlspecialchars(site_url($path), ENT_QUOTES, 'UTF-8');
 ?>
 <!DOCTYPE html>
@@ -217,6 +218,11 @@ $site = static fn (string $path): string => htmlspecialchars(site_url($path), EN
                  validateStep() and the API do the checking instead. -->
             <form id="connectForm" novalidate class="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 bg-white">
                 <input type="hidden" name="action" value="submit_connect_card">
+                <input type="hidden" name="form_ts" value="<?= htmlspecialchars(campaigns_form_token(), ENT_QUOTES, 'UTF-8') ?>">
+                <!-- Left empty by people (it is off-screen); bots fill it in. -->
+                <div class="absolute -left-[10000px] top-auto w-px h-px overflow-hidden" aria-hidden="true">
+                    <label>Leave this field empty <input type="text" name="<?= CAMPAIGNS_FORM_HONEYPOT ?>" value="" tabindex="-1" autocomplete="off"></label>
+                </div>
                 
                 <!-- STEP 1: The Handshake -->
                 <div id="step1" class="space-y-6 animate-fade-in-up">

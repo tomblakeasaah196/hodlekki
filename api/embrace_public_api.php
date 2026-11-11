@@ -153,6 +153,21 @@ try {
         // ACTION 1: PUBLIC VISITOR REGISTRATION
         // =====================================================================================
         case 'submit_connect_card':
+            // A script that fills the hidden field, posts faster than a person
+            // can, or invents the page's signed time gets an ordinary success
+            // and nothing is saved or sent. A page left open for days is asked
+            // to reload.
+            require_once __DIR__ . '/../includes/campaigns/formguard.php';
+            $verdict = campaigns_form_verdict(connect_input('form_ts'), connect_input(CAMPAIGNS_FORM_HONEYPOT));
+            if ($verdict === 'bot') {
+                error_log('Embrace Public API: Connect card refused as automated (honeypot/timing).');
+                echo json_encode(['status' => 'success', 'message' => 'Welcome home! Your details have been received with love.']);
+                exit;
+            }
+            if ($verdict === 'expired') {
+                connect_fail('This page has been open a long time. Please reload it and fill in the card again.');
+            }
+
             [$fname, $lname, $phone, $email] = connect_identity($pdo);
 
             // Step 2: optional details. ENUM and DATE columns reject anything else in strict mode.
