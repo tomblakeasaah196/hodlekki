@@ -1,0 +1,162 @@
+# The system monitor's outside view (docs/monitor.md, "Outside probe").
+#
+# A server cannot see itself the way members do, so once an hour this job looks
+# at hodlekki.org from GitHub's machines and reports to the site, signed:
+#   - hodlekki.org and connect.hodlekki.org answer (status, first byte, total time);
+#   - the certificates: Cloudflare's, and the server's own origin certificate;
+#   - DNS: the site's address, MX, SPF, DKIM and DMARC are still published;
+#   - the origin lock: a request straight to the server, around Cloudflare, is refused.
+#
+# Settings (GitHub → Settings → Secrets and variables → Actions):
+#   secret   MONITOR_PROBE_SECRET  the same 64-character value as MONITOR_PROBE_SECRET in the
+#                                  server's .env (without it the probe still runs, but cannot report)
+#   secret   ORIGIN_IP             the server's own IP address (optional: enables the origin-lock
+#                                  and origin-certificate checks; kept secret, masked in the log)
+#   variable MONITOR_SITE_HOST     default hodlekki.org
+#   variable MONITOR_CONNECT_HOST  default connect.hodlekki.org
+#   variable MONITOR_DKIM_SELECTOR default "default" (cPanel's)
+#   variable MONITOR_PROBE_ENABLED  set to 1 to run the hourly schedule. Until then the
+#                                  scheduled job is skipped (and costs no minutes);
+#                                  "Run workflow" by hand always runs.
+#
+# Cost: one short job (about 20 s, billed as one minute) an hour = ~720 Actions
+# minutes a month on this private repository. "*/30" doubles that. A server that is
+# down cannot receive this report, so this job also FAILS when either site is down
+# (GitHub emails a failed scheduled run), and the monitor says "reports stopped".
+# For minute-by-minute outage emails, Cloudflare → Notifications → passive origin
+# monitoring is free and independent of this server.
+
+name: Outside probe
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monitor-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: Check hodlekki.org from outside
+    # Off until the owner switches it on (the secret above must be set first).
+    if: ${{ vars.MONITOR_PROBE_ENABLED == '1' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Look at the site and report to the monitor
+        env:
+          PROBE_SECRET: ${{ secrets.MONITOR_PROBE_SECRET }}
+          ORIGIN_IP: ${{ secrets.ORIGIN_IP }}
+          SITE: ${{ vars.MONITOR_SITE_HOST || 'hodlekki.org' }}
+          CONNECT: ${{ vars.MONITOR_CONNECT_HOST || 'connect.hodlekki.org' }}
+          DKIM_SELECTOR: ${{ vars.MONITOR_DKIM_SELECTOR || 'default' }}
+          MAIN_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          EVERY_MIN: '60'
+        run: |
+          set -uo pipefail
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          UA='hodlekki-outside-probe/1.0 (+https://github.com/tomblakeasaah196/hodlekki)'
+
+          # One site: status, first byte and total time in ms; up = 2xx/3xx and not the
+          # database-down page.
+          check_site() {
+            local host=$1 out code ttfb total ok=false
+            out=$(curl -sS -o "$work/body" -A "$UA" --max-time 25 \
+                  -w '%{http_code} %{time_starttransfer} %{time_total}' "https://${host}/" 2>/dev/null) || true
+            read -r code ttfb total <<< "${out:-000 0 0}"
+            [[ "$code" =~ ^[0-9]{3}$ ]] || code=000
+            if [[ "$code" =~ ^[23] ]] && ! grep -q 'Database Connection Failed' "$work/body" 2>/dev/null; then ok=true; fi
+            jq -n --argjson ok "$ok" --argjson status "$((10#${code}))" \
+                  --argjson ttfb "$(awk -v t="${ttfb:-0}" 'BEGIN{printf "%d", t*1000}')" \
+                  --argjson total "$(awk -v t="${total:-0}" 'BEGIN{printf "%d", t*1000}')" \
+                  --arg host "$host" '{ok:$ok, status:$status, ttfb_ms:$ttfb, total_ms:$total, host:$host}'
+            echo "  ${host}: HTTP ${code}, first byte ${ttfb}s, total ${total}s" >&2
+          }
+
+          # Days until a certificate expires, as served for $SITE by $connect (host or IP).
+          cert_days() {
+            local connect=$1 end
+            end=$(echo | timeout 15 openssl s_client -servername "$SITE" -connect "${connect}:443" 2>/dev/null \
+                  | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+            [ -n "$end" ] || { echo null; return; }
+            echo $(( ( $(date -d "$end" +%s) - $(date +%s) ) / 86400 ))
+          }
+
+          # Does a DNS answer contain $2? (Cloudflare's resolver, then Google's.)
+          has_record() {
+            local name=$1 type=$2 needle=$3 answer
+            answer=$(dig +short +time=5 +tries=2 "$name" "$type" @1.1.1.1 2>/dev/null)
+            [ -n "$answer" ] || answer=$(dig +short +time=5 +tries=2 "$name" "$type" @8.8.8.8 2>/dev/null)
+            if [ -z "$needle" ]; then [ -n "$answer" ] && echo true || echo false; return; fi
+            grep -qi -- "$needle" <<< "$answer" && echo true || echo false
+          }
+
+          echo "Sites:"
+          site=$(check_site "$SITE")
+          connect=$(check_site "$CONNECT")
+
+          edge_days=$(cert_days "$SITE")
+          origin_days=null
+          lock='{"tested":false,"ok":false}'
+          if [ -n "${ORIGIN_IP:-}" ]; then
+            origin_days=$(cert_days "$ORIGIN_IP")
+            # Straight to the server with the right name, skipping Cloudflare: the
+            # lock must refuse it (403). No answer at all also keeps people out.
+            code=$(curl -sS -k -o /dev/null -A "$UA" --max-time 20 -w '%{http_code}' \
+                   --resolve "${SITE}:443:${ORIGIN_IP}" "https://${SITE}/" 2>/dev/null || true)
+            [[ "${code:-}" =~ ^[0-9]{3}$ ]] || code=000
+            locked=false
+            if [ "$code" = "403" ] || [ "$code" = "000" ]; then locked=true; fi
+            lock=$(jq -n --argjson ok "$locked" --argjson status "$((10#${code}))" '{tested:true, ok:$ok, status:$status}')
+            echo "  origin lock: straight to the server answered ${code} (want 403)"
+          fi
+          tls_ok=true
+          for d in $edge_days $origin_days; do
+            if [ "$d" != "null" ] && [ "$d" -lt 14 ]; then tls_ok=false; fi
+          done
+          echo "  certificates: Cloudflare ${edge_days} days, origin ${origin_days} days"
+
+          dns=$(jq -n \
+            --argjson a "$(has_record "$SITE" A '')" \
+            --argjson mx "$(has_record "$SITE" MX '')" \
+            --argjson spf "$(has_record "$SITE" TXT 'v=spf1')" \
+            --argjson dkim "$(has_record "${DKIM_SELECTOR}._domainkey.${SITE}" TXT 'v=DKIM1')" \
+            --argjson dmarc "$(has_record "_dmarc.${SITE}" TXT 'v=DMARC1')" \
+            '{a:$a, mx:$mx, spf:$spf, dkim:$dkim, dmarc:$dmarc} | . + {ok: (.a and .mx and .spf and .dkim and .dmarc)}')
+          echo "  dns: $(jq -c . <<< "$dns")"
+
+          jq -n --argjson site "$site" --argjson connect "$connect" --argjson dns "$dns" --argjson lock "$lock" \
+                --argjson edge "$edge_days" --argjson origin "$origin_days" --argjson tls_ok "$tls_ok" \
+                --arg sha "$MAIN_SHA" --arg run "$RUN_ID" --argjson every "$EVERY_MIN" --argjson at "$(date +%s)" \
+                '{v:1, at:$at, run_id:$run, main_sha:$sha, every_min:$every,
+                  targets:{site:$site, connect:$connect, dns:$dns, origin_lock:$lock,
+                           tls:{ok:$tls_ok, edge_days:$edge, origin_days:$origin}}}' > "$work/report.json"
+
+          if [ -z "${PROBE_SECRET:-}" ]; then
+            echo "::warning::MONITOR_PROBE_SECRET is not set, so the result was not reported to the site (docs/monitor.md)."
+          else
+            ts=$(date +%s)
+            sig=$({ printf '%s\n' "$ts"; cat "$work/report.json"; } | openssl dgst -sha256 -hmac "$PROBE_SECRET" -r | cut -d' ' -f1)
+            reply=$(curl -sS -A "$UA" --max-time 30 -X POST "https://${SITE}/api/monitor_probe.php" \
+                    -H 'Content-Type: application/json' -H "X-Monitor-Timestamp: ${ts}" -H "X-Monitor-Signature: sha256=${sig}" \
+                    --data-binary @"$work/report.json" -w ' HTTP %{http_code}' 2>&1 || true)
+            echo "Report: ${reply}"
+            if ! grep -q 'HTTP 200' <<< "$reply"; then
+              echo "::warning::The site did not accept the report (${reply##* })."
+            fi
+          fi
+
+          down=""
+          [ "$(jq -r .ok <<< "$site")" = "true" ] || down="$down $SITE"
+          [ "$(jq -r .ok <<< "$connect")" = "true" ] || down="$down $CONNECT"
+          if [ -n "$down" ]; then
+            echo "::error::Down from outside:${down}"
+            exit 1
+          fi

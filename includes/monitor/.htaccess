@@ -1,0 +1,7 @@
+# /includes/monitor/.htaccess — nothing in this directory is ever served.
+#
+# These files are only ever required by PHP (includes/db.php, the monitor's
+# API and cron, and optionally auto_prepend_file), which reads them from the
+# disk and is not affected by this file. None of them is a web entry point.
+Options -Indexes
+Require all denied

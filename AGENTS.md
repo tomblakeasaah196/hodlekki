@@ -917,6 +917,61 @@ status: someone clocked in three times still read "1st Timer".
   be edited once applied, so add a marker only if you ship a new migration for
   this table.
 
+## The system monitor (added 2026-11-11)
+
+Errors, health checks, alerts, real-user speed and "Fix with AI" for the whole
+site. Full guide: `docs/monitor.md`. Code: `includes/monitor/` (`bootstrap.php`
+loads all of it after `db.php`). Schema: `db/migrations/20261125090000_monitor_core.sql`.
+Tests: `php tests/monitor/run.php` (CI: lint job on SQLite, integration job on
+MySQL 8 and MariaDB 10.11).
+
+**Rules that are not negotiable**
+
+- **`includes/db.php` installs the capture on its first lines** (`hod_monitor_install()`),
+  before the session starts. Keep it first. Nothing in `capture.php` may do I/O
+  when installing or throw out of a handler: it runs on every request. Writing
+  happens after the response, on the monitor's own connection.
+- **Caught something worth knowing? Report it** — `hod_monitor_report($e)` for an
+  exception, `hod_monitor_note('error', 'BulkSMS refused the token', ['campaign' => $id])`
+  otherwise. Both return a reference code a person can quote. Do not
+  `error_log()` personal data; every `error_log()` line is read into the monitor,
+  and a line containing failure words (error, failed, could not, refused, …) is
+  recorded as a problem — keep progress chatter free of them.
+- **Never send CSP reports or other high-volume noise to `error_log`.** CSP
+  reports go to `monitor_csp_report_uri()` / `monitor_intake_csp()`.
+- **A new cron job must be added to `monitor_cron_jobs()`** in
+  `includes/monitor/checks.php` with its schedule and crontab line, or Health
+  will not know when it is late. Its heartbeat is automatic (any `cron/*.php`
+  that loads db.php).
+- **A deliberately long request** (an export, a big PDF) calls
+  `hod_monitor_context(['not_slow' => true])` so it is not reported as a slow page.
+- **Privacy.** Everything stored goes through `monitor_redact()` /
+  `monitor_clean_url()`. Events keep the role and a keyed hash, never a user id,
+  name, phone, email, IP or full user agent. Do not add a column that does.
+- **Alerts only through `monitor_notify_admins()` (a `system_notifications` row
+  each) and `monitor_email_recipients()` (confirmed addresses only, each with a
+  stop link).** Never email an address that has not clicked its confirmation.
+  Every email goes through `monitor_mail()` (the one switch point to the
+  campaigns outbox).
+- **Text a browser sent is hostile** (anyone can post a report). It never goes
+  into a bell, an email subject or body: use `monitor_safe_title()`, and
+  `monitor_plain()` for anything else written to the bell (it has rendered
+  notification text as HTML). In a "Fix with AI" brief it goes inside
+  `monitor_md_fence()`. Screens show it with `textContent` / `htmlspecialchars`.
+- **Access goes through `monitor_user_can($pdo, 'monitor.view' | 'monitor.manage')`**,
+  the single swap point for the permissions module (Super_Admin from live roles
+  until `can()` exists). Never gate on `$_SESSION['active_role']`.
+- SQL stays portable to MySQL, MariaDB and SQLite: times are passed from PHP
+  (`monitor_fmt()`), upserts go through `monitor_upsert()` / `monitor_insert_ignore()`.
+- The live wall's snapshot (`live/monitor/<key>.json`) and alert emails carry
+  counts, states and redacted titles only.
+
+**Operations.** Cron every minute: `cron/monitor.php` (README). `bin/monitor.php
+status | brief <id> | export | recipient-add <email> | test-alert` from cPanel →
+Terminal. `MONITOR_ENABLED=0` in `.env` switches recording off without a deploy.
+The outside probe is `.github/workflows/monitor-probe.yml` (hourly; needs the
+`MONITOR_PROBE_SECRET` secret, the same value as in `.env`).
+
 ## Departments module (ministry years)
 
 `modules/departments/` is ministry-year aware, and its rules are worth knowing
