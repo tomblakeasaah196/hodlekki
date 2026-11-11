@@ -1,0 +1,303 @@
+/* /assets/css/monitor_wall.css
+ *
+ * The live wall (modules/monitor/wall.php): a dark, quiet screen readable from
+ * across a room. Loaded after assets/ui/app.css, whose fonts and colour
+ * primitives it uses. Sizes follow the screen (clamp + vw), from a laptop to a
+ * TV. A display surface of its own, like the Special Events stage screens:
+ * these mw-* classes are used nowhere else.
+ */
+
+.mw {
+    --mw-bg: var(--navy-950, #0A0E17);
+    --mw-panel: #111A2C;
+    --mw-line: rgba(166, 184, 221, 0.16);
+    --mw-text: #EEF2F9;
+    --mw-muted: #A6B8DD;
+    --mw-ok: #3FBF7F;
+    --mw-warn: #F2B544;
+    --mw-bad: var(--red-500, #E23A40);
+    --mw-accent: var(--red-600, #D11920);
+    --mw-unknown: #7690C6;
+
+    margin: 0;
+    min-height: 100vh;
+    background: var(--mw-bg);
+    color: var(--mw-text);
+    font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+    font-size: clamp(14px, 1.15vw, 26px);
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+}
+
+.mw-frame {
+    box-sizing: border-box;
+    min-height: 100vh;
+    padding: clamp(16px, 2.2vw, 48px);
+    display: grid;
+    grid-template-rows: auto auto auto 1fr auto;
+    gap: clamp(12px, 1.6vw, 32px);
+}
+
+/* ── Top bar ─────────────────────────────────────── */
+.mw-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1em;
+}
+
+.mw-brand {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.6em;
+}
+
+.mw-brand__dot {
+    width: 0.7em;
+    height: 0.7em;
+    border-radius: 50%;
+    background: var(--mw-accent);
+    align-self: center;
+}
+
+.mw-brand__name {
+    font-family: Montserrat, Inter, sans-serif;
+    font-weight: 700;
+    font-size: 1.5em;
+    letter-spacing: 0.01em;
+}
+
+.mw-brand__sub {
+    color: var(--mw-muted);
+}
+
+.mw-state {
+    font-weight: 700;
+    font-size: 1.6em;
+    padding: 0.25em 0.9em;
+    border-radius: 999px;
+    border: 2px solid currentColor;
+    color: var(--mw-unknown);
+}
+
+.mw-state[data-state="ok"] { color: var(--mw-ok); }
+.mw-state[data-state="warn"] { color: var(--mw-warn); }
+.mw-state[data-state="bad"] {
+    color: #fff;
+    background: var(--mw-bad);
+    border-color: var(--mw-bad);
+}
+
+.mw-clock {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.mw-clock__time {
+    font-size: 2em;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.mw-clock__fresh {
+    color: var(--mw-muted);
+    font-size: 0.85em;
+}
+
+.mw-notice {
+    margin: 0;
+    padding: 0.7em 1em;
+    border-radius: 12px;
+    background: rgba(242, 181, 68, 0.14);
+    border: 1px solid rgba(242, 181, 68, 0.5);
+    color: #FFE3A8;
+}
+
+/* ── Tiles ───────────────────────────────────────── */
+.mw-tiles {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: clamp(10px, 1.2vw, 24px);
+}
+
+.mw-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2em;
+    min-width: 0;
+    padding: 1em 1.1em;
+    border-radius: 16px;
+    background: var(--mw-panel);
+    border: 1px solid var(--mw-line);
+}
+
+.mw-tile--wide { grid-column: span 2; }
+
+.mw-tile__label {
+    color: var(--mw-muted);
+    font-size: 0.95em;
+}
+
+.mw-tile__value {
+    font-size: 2.6em;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.mw-tile__meta {
+    color: var(--mw-muted);
+    font-size: 0.9em;
+}
+
+.mw-spark {
+    display: block;
+    height: 2.4em;
+    margin-top: 0.3em;
+}
+
+.mw-spark svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.mw-spark__bar { fill: var(--mw-bad); }
+.mw-spark__bar--zero { fill: var(--mw-line); }
+
+/* ── Columns ─────────────────────────────────────── */
+.mw-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: clamp(10px, 1.2vw, 24px);
+    min-height: 0;
+}
+
+.mw-panel {
+    padding: 1em 1.1em;
+    border-radius: 16px;
+    background: var(--mw-panel);
+    border: 1px solid var(--mw-line);
+    min-width: 0;
+    overflow: hidden;
+}
+
+.mw-panel__title {
+    margin: 0 0 0.6em;
+    font-size: 1.05em;
+    font-weight: 600;
+    color: var(--mw-muted);
+}
+
+.mw-problems,
+.mw-checks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.mw-problem {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15em;
+    padding: 0.6em 0 0.6em 0.9em;
+    border-left: 4px solid var(--mw-warn);
+    border-bottom: 1px solid var(--mw-line);
+}
+
+.mw-problem:last-child { border-bottom: 0; }
+.mw-problem--bad { border-left-color: var(--mw-bad); }
+
+.mw-problem--fresh {
+    animation: mw-fresh 4s ease-out 1;
+}
+
+@keyframes mw-fresh {
+    from { background: rgba(226, 58, 64, 0.22); }
+    to { background: transparent; }
+}
+
+.mw-problem__title {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.mw-problem__meta {
+    color: var(--mw-muted);
+    font-size: 0.85em;
+    overflow-wrap: anywhere;
+}
+
+.mw-empty {
+    margin: 0;
+    color: var(--mw-muted);
+}
+
+.mw-checks {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45em;
+}
+
+.mw-check {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.6em;
+    padding: 0.45em 0.7em;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 4px solid var(--mw-unknown);
+    font-size: 0.9em;
+    min-width: 0;
+}
+
+.mw-check__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mw-check__state {
+    flex: none;
+    font-weight: 600;
+    color: var(--mw-unknown);
+}
+
+.mw-check--ok { border-left-color: var(--mw-ok); }
+.mw-check--ok .mw-check__state { color: var(--mw-ok); }
+.mw-check--warn { border-left-color: var(--mw-warn); }
+.mw-check--warn .mw-check__state { color: var(--mw-warn); }
+.mw-check--bad {
+    border-left-color: var(--mw-bad);
+    background: rgba(226, 58, 64, 0.14);
+}
+.mw-check--bad .mw-check__state { color: #FF9EA2; }
+
+.mw-foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1em;
+    color: var(--mw-muted);
+    font-size: 0.85em;
+}
+
+/* ── Smaller screens: a phone or a laptop window ─── */
+@media (max-width: 900px) {
+    .mw-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mw-columns { grid-template-columns: minmax(0, 1fr); }
+    .mw-checks { grid-template-columns: minmax(0, 1fr); }
+    .mw-clock { align-items: flex-start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mw-problem--fresh { animation: none; }
+}

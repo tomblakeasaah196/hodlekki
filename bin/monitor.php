@@ -145,7 +145,7 @@ switch ($cmd) {
         $key = monitor_wall_key($pdo);
         monitor_wall_publish($pdo, true);
         $out('Snapshot: ' . site_url('/live/monitor/' . $key . '.json'));
-        $out('TV link:  ' . site_url('/monitor_wall.php#k=' . $key) . ' (the wall screen arrives with the monitor\'s second pull request)');
+        $out('TV link:  ' . site_url('/modules/monitor/wall.php#k=' . $key) . ' (no sign-in: the link is the key)');
         break;
 
     default:

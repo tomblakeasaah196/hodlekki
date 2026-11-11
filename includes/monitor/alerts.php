@@ -345,7 +345,7 @@ function monitor_alert_new_errors(PDO $pdo, PDO $db): int
     }
     $mailed = monitor_email_recipients($db, 'errors', 'HOD Lekki: ' . $subject, $subject, $intro, ['Problems' => $list]);
     $belled = monitor_notify_admins($pdo, $db, 'errors', $n === 1 ? 'New error on the site' : $n . ' new errors on the site',
-        monitor_safe_title($due[0], 120) . ($n > 1 ? ' (+' . ($n - 1) . ' more)' : '') . '. Open the monitor.', monitor_screen_link('#errors'));
+        monitor_safe_title($due[0], 120) . ($n > 1 ? ' (+' . ($n - 1) . ' more)' : '') . '. Open the monitor.', monitor_screen_link('#tab=errors'));
     if (monitor_alert_delivered($ch, $mailed, $belled)) {
         $ids = array_map(fn ($g) => (int) $g['id'], $due);
         $db->prepare('UPDATE monitor_error_groups SET alerted_at = ? WHERE id IN (' . implode(',', $ids) . ')')->execute([monitor_fmt()]);
@@ -371,7 +371,7 @@ function monitor_alert_spikes(PDO $pdo, PDO $db): int
     $mailed = monitor_email_recipients($db, 'spike', 'HOD Lekki: ' . $subject, $subject,
         'These problems are suddenly happening far more often than usual (at least 20 in the last hour and five times their normal rate).',
         ['Spiking' => array_map(fn ($g) => monitor_alert_row($db, $g), $rows)]);
-    $belled = monitor_notify_admins($pdo, $db, 'spike', 'An error is spiking', monitor_safe_title($rows[0], 120) . '. Open the monitor.', monitor_screen_link('#errors'));
+    $belled = monitor_notify_admins($pdo, $db, 'spike', 'An error is spiking', monitor_safe_title($rows[0], 120) . '. Open the monitor.', monitor_screen_link('#tab=errors'));
     if (monitor_alert_delivered($ch, $mailed, $belled)) {
         $stmt = $db->prepare('UPDATE monitor_error_groups SET spike_alerted_at = ? WHERE id = ?');
         foreach ($rows as $g) {
@@ -426,7 +426,7 @@ function monitor_alert_health(PDO $pdo, PDO $db, ?array $checks = null): int
     }
     $mailed = monitor_email_recipients($db, 'health', 'HOD Lekki: ' . $subject, $subject,
         $red ? 'A health check of the site turned red. Each item says what is wrong and what to do.' : 'Checks that were red are fine again.', $sections);
-    $belled = $red ? monitor_notify_admins($pdo, $db, 'health', $subject, mb_substr($red[0]['detail'], 0, 200) . ' See the monitor.', monitor_screen_link('#health')) : 0;
+    $belled = $red ? monitor_notify_admins($pdo, $db, 'health', $subject, mb_substr($red[0]['detail'], 0, 200) . ' See the monitor.', monitor_screen_link('#tab=health')) : 0;
     if (!$red || monitor_alert_delivered($ch, $mailed, $belled)) {
         $stmt = $db->prepare('UPDATE monitor_checks SET alerted_at = ?, alerted_state = ? WHERE check_key = ?');
         foreach ($red as $c) {
@@ -514,7 +514,7 @@ function monitor_watchdog(string $dir): void
     $line = monitor_cron_jobs()['monitor']['line'];
     monitor_email_recipients($db, 'watchdog', 'HOD Lekki: the system monitor has stopped', 'The system monitor has stopped', $detail,
         ['What to do' => [['tone' => 'bad', 'title' => 'cPanel → Cron Jobs', 'detail' => 'It needs: ' . $line . ' — then run "php cron/monitor.php" once in cPanel → Terminal to see any error.']]], false);
-    monitor_notify_admins($db, $db, 'watchdog', 'The system monitor has stopped', $detail, monitor_screen_link('#health'), false);
+    monitor_notify_admins($db, $db, 'watchdog', 'The system monitor has stopped', $detail, monitor_screen_link('#tab=health'), false);
 }
 
 /* ───────────────────────────── recipients ───────────────────────────── */

@@ -64,7 +64,7 @@ function monitor_wall_snapshot(PDO $db, ?int $now = null): array
     $stmt->execute([monitor_fmt($now - 86400)]);
     $counts = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
-    $stmt = $db->prepare("SELECT g.id, g.title, g.kind, g.level, g.status, g.occurrences, g.regressions, g.last_seen_at, g.route
+    $stmt = $db->prepare("SELECT g.id, g.title, g.kind, g.level, g.source, g.status, g.occurrences, g.regressions, g.last_seen_at, g.route
                             FROM monitor_error_groups g WHERE g.status IN ('new', 'investigating') AND g.last_seen_at >= ? AND {$noisy}
                            ORDER BY g.last_seen_at DESC LIMIT 10");
     $stmt->execute([monitor_fmt($now - 7 * 86400)]);
@@ -73,7 +73,7 @@ function monitor_wall_snapshot(PDO $db, ?int $now = null): array
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $g) {
         $people->execute([$g['id'], monitor_fmt($now - 86400, 'Y-m-d')]);
         $latest[] = [
-            'id' => (int) $g['id'], 'title' => mb_substr((string) $g['title'], 0, 140), 'kind' => $g['kind'], 'level' => $g['level'],
+            'id' => (int) $g['id'], 'title' => mb_substr((string) $g['title'], 0, 140), 'kind' => $g['kind'], 'level' => $g['level'], 'source' => $g['source'],
             'status' => $g['status'], 'count' => (int) $g['occurrences'], 'people_24h' => (int) $people->fetchColumn(),
             'back' => (int) $g['regressions'] > 0, 'where' => mb_substr((string) $g['route'], 0, 80), 'last_seen' => monitor_ts($g['last_seen_at']),
         ];

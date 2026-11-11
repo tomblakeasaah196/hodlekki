@@ -49,6 +49,8 @@ $singles = [
     '/assets/js/global-search.js',
     '/assets/js/modal-manager.js',
     '/assets/js/tab-deeplink.js',
+    '/assets/js/monitor_wall.js',      // System Health's live wall (modules/monitor/wall.php)
+    '/assets/css/monitor_wall.css',
 ];
 
 $files = [];
