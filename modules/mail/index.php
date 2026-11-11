@@ -22,20 +22,20 @@ use HOD\Mail\Store;
 
 $uid = (int) ($_SESSION['user_id'] ?? 0);
 if (!mail_ready()) {
-    echo '<div class="ui-page">' . ui_empty(['icon' => 'mail', 'title' => 'Mail is being set up', 'text' => 'The mail tables arrive with the next update. Come back in a few minutes.']) . '</div>';
+    echo '<div class="ui-page">' . ui_empty(['icon' => 'mail', 'title' => 'Mail not ready', 'text' => 'Try again after the next update.']) . '</div>';
     require_once __DIR__ . '/../../includes/footer.php';
     exit;
 }
 
 $boxes = MailAccess::accounts($uid);
-$isAdmin = mail_can('admin');
-$adminLink = $isAdmin ? ui_button('Mailboxes', ['variant' => 'secondary', 'icon' => 'inbox', 'href' => MailNotices::mailboxesUrl()]) : '';
+$isAdmin = mail_can('admin') || mail_can('export_admin') || mail_can('export_pastoral');
+$adminLink = $isAdmin ? ui_button('Manage mailboxes', ['variant' => 'secondary', 'icon' => 'inbox', 'href' => MailNotices::mailboxesUrl()]) : '';
 
 if (!$boxes) {
     echo '<div class="ui-page">' . ui_page_header(['title' => 'Mail', 'actions' => $adminLink])
-        . ui_empty(['icon' => 'mail', 'title' => 'You do not work from a mailbox yet',
-            'text' => 'Mailboxes are given by the mail admins, for a department, the church office or a personal address. Ask one of them if you need one.',
-            'actions' => $adminLink]) . '</div>';
+        . ui_empty(['icon' => 'mail', 'title' => 'No mailbox yet',
+            'text' => 'Ask a mail admin for one.',
+            'actions' => mail_info('Mail admins give mailboxes: a department\'s, a church-wide one such as info@, or a personal firstname.lastname@ address.') . $adminLink]) . '</div>';
     require_once __DIR__ . '/../../includes/footer.php';
     exit;
 }
@@ -66,7 +66,7 @@ $fmt = static fn (?string $at): string => $at ? (substr($at, 0, 10) === date('Y-
     <?= ui_page_header([
         'title' => 'Mail',
         'description' => $box['display_name'] . ' · ' . $box['email'],
-        'actions' => ui_button('Check for new mail', ['variant' => 'secondary', 'icon' => 'refresh-cw', 'attrs' => ['data-action' => 'mail.refresh', 'data-box' => $box['id']]]) . $adminLink,
+        'actions' => ui_button('Check mail', ['variant' => 'secondary', 'icon' => 'refresh-cw', 'attrs' => ['data-action' => 'mail.refresh', 'data-box' => $box['id']]]) . $adminLink,
     ]) ?>
 
     <?php if (count($boxes) > 1): ?>
@@ -78,15 +78,15 @@ $fmt = static fn (?string $at): string => $at ? (substr($at, 0, 10) === date('Y-
     <?php endif; ?>
 
     <?php if ($box['status'] === 'needs_reset'): ?>
-        <?= ui_banner('warning', ['title' => 'This mailbox is not updating', 'text' => 'The server refused its stored password. A mail admin can reset it on the Mailboxes screen.']) ?>
+        <?= ui_banner('warning', ['title' => 'Mailbox not updating', 'text' => 'Ask a mail admin to reset its password.']) ?>
     <?php endif; ?>
 
     <div class="ui-card">
         <div class="ui-card__header ui-card__header--divided"><h2 class="ui-h3">Inbox</h2>
             <span class="ui-hint"><?= $box['last_synced_at'] ? 'Updated ' . ui_e($fmt($box['last_synced_at'])) : 'First copy on its way' ?></span></div>
         <?php if (!$threads): ?>
-            <div class="ui-card__body"><?= ui_empty(['icon' => 'inbox', 'title' => $box['last_synced_at'] ? 'Nothing in the Inbox' : 'Copying this mailbox',
-                'text' => $box['last_synced_at'] ? 'New mail shows here within a minute of arriving.' : 'The first copy takes a minute or two. This page shows it once it is in.', 'compact' => true]) ?></div>
+            <div class="ui-card__body"><?= ui_empty(['icon' => 'inbox', 'title' => $box['last_synced_at'] ? 'Inbox empty' : 'Copying this mailbox',
+                'text' => $box['last_synced_at'] ? 'New mail shows here within a minute.' : 'This takes a minute or two.', 'compact' => true]) ?></div>
         <?php else: ?>
         <ul class="ui-list">
             <?php foreach ($threads as $t):
@@ -106,7 +106,6 @@ $fmt = static fn (?string $at): string => $at ? (substr($at, 0, 10) === date('Y-
         </ul>
         <?php endif; ?>
     </div>
-    <p class="ui-hint">Opening and answering conversations arrive with the next Mail update.</p>
 </div>
 <?= ui_json_script('mail-page', ['api' => '/api/mail_api.php']) ?>
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

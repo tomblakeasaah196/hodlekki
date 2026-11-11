@@ -19,7 +19,7 @@
 
     // Wait for a queued job (the minute cron), then reload so the table shows the new state.
     function waitForJob(jobId, label) {
-        HOD.toast(label + ': waiting for the server (up to a minute).', 'info');
+        HOD.toast(label + ': within a minute.', 'info');
         var tries = 0;
         (function poll() {
             tries++;
@@ -84,7 +84,7 @@
                 title.textContent = p.name;
                 var meta = document.createElement('span');
                 meta.className = 'ui-list__meta';
-                meta.textContent = p.eligible ? p.suggested : 'Their role or seat does not allow a personal mailbox.';
+                meta.textContent = p.eligible ? p.suggested : 'Not allowed a personal mailbox.';
                 main.appendChild(title);
                 main.appendChild(meta);
                 item.appendChild(main);
@@ -109,9 +109,9 @@
     HOD.actions.on('mb.act', function (button) {
         var what = button.dataset.what;
         var words = {
-            reset: ['Set a new password for ' + button.dataset.email + '?', 'Nobody sees it; the ERP keeps reading the mailbox.', 'Reset password', null],
-            suspend: ['Suspend ' + button.dataset.email + '?', 'Mail keeps arriving, but nobody can read it until it is resumed.', 'Suspend mailbox', 'danger'],
-            resume: ['Resume ' + button.dataset.email + '?', 'People who work from it can read it again.', 'Resume mailbox', null]
+            reset: ['Reset this password?', button.dataset.email, 'Reset password', null],
+            suspend: ['Suspend this mailbox?', 'Mail still arrives; nobody can read it.', 'Suspend mailbox', 'danger'],
+            resume: ['Resume this mailbox?', button.dataset.email, 'Resume mailbox', null]
         }[what];
         HOD.confirm({ title: words[0], message: words[1], confirmLabel: words[2], tone: words[3] || undefined }).then(function (yes) {
             if (yes) act(button.dataset.id, what, words[2]).catch(function () {});
@@ -122,7 +122,7 @@
         var email = button.dataset.email;
         HOD.confirm({
             title: 'Remove ' + email + '?',
-            message: 'Its mail is deleted on the server and the slot is freed. This cannot be undone. Type the address to confirm.',
+            message: 'This deletes its mail. Type the address to confirm.',
             confirmLabel: 'Remove mailbox', tone: 'danger', requireText: email
         }).then(function (yes) {
             if (yes) act(button.dataset.id, 'remove', 'Remove mailbox', { confirm: email }).catch(function () {});
@@ -130,7 +130,7 @@
     });
 
     HOD.actions.on('mb.quota', function (button) {
-        HOD.prompt({ title: 'Storage limit', label: 'Limit in MB (250 to 10240)', required: true }).then(function (value) {
+        HOD.prompt({ title: 'Set storage', label: 'Limit in MB (250 to 10240)', required: true }).then(function (value) {
             if (value) act(button.dataset.id, 'set_quota', 'Storage limit', { quota_mb: value }).catch(function () {});
         });
     });
@@ -178,14 +178,14 @@
         if (!grants.rows.length) {
             var p = document.createElement('p');
             p.className = 'ui-hint';
-            p.textContent = 'Nobody works from this mailbox yet. Add a line.';
+            p.textContent = 'Nobody yet. Add a line.';
             box.appendChild(p);
         }
         var o = grants.options;
         grants.rows.forEach(function (g, i) {
             var row = document.createElement('div');
             row.className = 'ui-toolbar';
-            var type = select('Who', [['seat', 'A seat in a department'], ['department', 'Everyone in a department'], ['role', 'A role'], ['user', 'A person (user id)']], g.subject_type);
+            var type = select('Who', [['seat', 'Department seat'], ['department', 'Whole department'], ['role', 'Role'], ['user', 'Person (user id)']], g.subject_type);
             var which;
             if (g.subject_type === 'role') which = select('Role', o.roles.map(function (r) { return [r.id, r.label]; }), g.subject_id);
             else if (g.subject_type === 'user') { which = document.createElement('input'); which.className = 'ui-input'; which.type = 'number'; which.value = g.subject_id || ''; which.setAttribute('aria-label', 'User id'); }
@@ -226,32 +226,32 @@
     HOD.actions.on('mb.grants.save', function (button) {
         HOD.busy(button, true);
         post('grants_save', { id: grants.id, grants: JSON.stringify(grants.rows) })
-            .then(function () { HOD.toast('Saved. It applies on the next page load.', 'success'); HOD.dialog.close('mb-grants'); window.location.reload(); })
+            .then(function () { HOD.toast('Access saved.', 'success'); HOD.dialog.close('mb-grants'); window.location.reload(); })
             .catch(function () {})
             .finally(function () { HOD.busy(button, false); });
     });
 
     // Exports
     HOD.actions.on('mb.export', function (button) {
-        HOD.prompt({ title: 'Ask to export ' + button.dataset.email, label: 'Why is this mail needed? Both approvers will read it.', required: true, multiline: true })
+        HOD.prompt({ title: 'Request export', label: 'Why is this mail needed?', required: true, multiline: true })
             .then(function (reason) {
                 if (!reason) return;
                 post('export_request', { id: button.dataset.id, reason: reason })
-                    .then(function () { HOD.toast('Request sent to the approvers.', 'success'); window.location.reload(); })
+                    .then(function () { HOD.toast('Request sent.', 'success'); window.location.reload(); })
                     .catch(function () {});
             });
     });
     HOD.actions.on('mb.approve', function (button) {
-        HOD.confirm({ title: 'Approve this export?', message: 'Two different people must approve. Your approval is recorded.', confirmLabel: 'Approve export' })
+        HOD.confirm({ title: 'Approve this export?', message: 'Your approval is recorded.', confirmLabel: 'Approve export' })
             .then(function (yes) {
                 if (!yes) return;
                 post('export_approve', { request_id: button.dataset.request, side: button.dataset.side })
-                    .then(function () { HOD.toast('Approval recorded.', 'success'); window.location.reload(); })
+                    .then(function () { HOD.toast('Approval saved.', 'success'); window.location.reload(); })
                     .catch(function () {});
             });
     });
     HOD.actions.on('mb.refuse', function (button) {
-        HOD.confirm({ title: 'Refuse this export?', message: 'The request ends and the mail stays unread.', confirmLabel: 'Refuse export', tone: 'danger' })
+        HOD.confirm({ title: 'Refuse this export?', message: 'The mail stays unread.', confirmLabel: 'Refuse export', tone: 'danger' })
             .then(function (yes) {
                 if (!yes) return;
                 post('export_refuse', { request_id: button.dataset.request })

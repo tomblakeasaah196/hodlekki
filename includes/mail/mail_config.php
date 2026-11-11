@@ -97,7 +97,7 @@ return [
 
     // On the server but never brought into the ERP, with what the Mailboxes screen says about them
     'outside' => [
-        'system' => 'Used by the ERP to send its own email (its password is in .env).',
-        'dmarc'  => 'Receives DMARC reports. Stays outside the Mail page.',
+        'system' => 'Sends the ERP\'s own email.',
+        'dmarc'  => 'Receives DMARC reports.',
     ],
 ];
