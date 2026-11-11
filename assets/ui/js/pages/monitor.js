@@ -763,6 +763,17 @@
         }).catch(function () {}).finally(function () { HOD.busy(button, false); });
     });
 
+    HOD.actions.on('monitor.copy', function (button) {
+        var input = document.getElementById(button.getAttribute('data-copy-target'));
+        if (!input) return;
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(input.value).then(function () { HOD.toast('Copied.', 'success'); });
+        } else {
+            input.select();
+            HOD.toast('Select the line and copy it.', 'info');
+        }
+    });
+
     HOD.actions.on('monitor.copy-wall', function () {
         var input = document.getElementById('monitor-wall-link');
         if (!input) return;
