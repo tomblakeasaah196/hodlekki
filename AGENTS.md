@@ -212,8 +212,11 @@ never treat it as proof the engine behaves.
   `includes/site_url.php` — never `$_SERVER['HTTP_HOST']` and never a
   hard-coded domain. The site is hodlekki.org; connect.hodlekki.org is only
   the public Connect page.
-- **Sending email:** `hod_send_mail()` in `includes/mailer.php` (system@ sends,
-  replies go to embrace@). Never build SMTP settings in code.
+- **Sending email:** through the outbox in `includes/campaigns/` —
+  `email_send_doc()` / `email_enqueue()` / `email_send_now()` — never by calling
+  `hod_send_mail()` from a feature (it is the transport underneath: system@
+  sends, replies go to embrace@). Never build SMTP settings in code. See
+  "Email and automation" below.
 
 ## Deployment (agents: know this before you push)
 
@@ -971,6 +974,44 @@ status | brief <id> | export | recipient-add <email> | test-alert` from cPanel �
 Terminal. `MONITOR_ENABLED=0` in `.env` switches recording off without a deploy.
 The outside probe is `.github/workflows/monitor-probe.yml` (hourly; needs the
 `MONITOR_PROBE_SECRET` secret, the same value as in `.env`).
+
+## Email and automation (added 2026-11-11)
+
+Personal addresses, NDPA consent, the domain's sending queue and hourly
+budget, block-document emails, and one automation engine for Embrace
+(first-timer journey), Assimilation and Charis (absence ladders). Guide and
+contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
+`bootstrap.php`, after `includes/db.php`). Schema:
+`db/migrations/20261201090000_campaigns_core.sql`. Crons:
+`cron/email_worker.php`, `cron/automation_tick.php`.
+
+- **A personal email is never `users.email`.** It lives in `email_addresses`,
+  confirmed by a link; `users.email` is the sign-in name and is overwritten by
+  several screens. Never `@hodlekki.org` or `@hodlc.com`
+  (`email_address_problem()` is the only validator). One confirmed address per
+  person and per address is the UNIQUE keys, never check-then-insert.
+- **Church news needs consent; account mail does not.** `email_may_send_news()`
+  decides; consent is the append-only `email_consents` log with the wording
+  shown. Someone who unsubscribed is skipped, never texted instead.
+- **Every email goes through the outbox and one hourly budget**
+  (`email_budget_take()`), shared with the ERP mailboxes. A send that died
+  mid-way is never resent; a host cap refusal is never blamed on the recipient.
+- **Emails are block documents, never HTML.** `email_doc_validate()` is the
+  sanitiser; scripture blocks hold a reference and the words come from the
+  Bible module's KJV.
+- **Absence streaks come only from `charis_compute_awol_list()`** (the AWOL
+  contract above applies unchanged); the first-timer audience is
+  `embrace_pipeline_sql()`. An occasion runs once, a step reaches a person once
+  per week/streak, and a person gets one member-facing automation message a day
+  across modules — all unique keys claimed before anything is queued.
+- SMS fallback only through SMS Studio's queue (`sms_campaigns` audience
+  `automation` + `sms_queue`), never `sms_log`.
+- Degrade before the migration: `campaigns_ready()` first, `FEATURE_NOT_READY`
+  or nothing — never a fatal.
+- Tests: `php tests/campaigns/run.php` (SQLite, CI lint job) and
+  `php tests/campaigns/integration.php` (MySQL 8 + MariaDB 10.11, CI
+  integration job; `_campaigns_` is a required migration marker). Run both
+  after touching `includes/campaigns/`, `includes/mailer.php` or the crons.
 
 ## Departments module (ministry years)
 

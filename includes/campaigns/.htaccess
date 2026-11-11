@@ -1,0 +1,5 @@
+# /includes/campaigns/.htaccess — nothing in this directory is ever served.
+# Library code only (functions and constants); the public email URLs live in
+# /email/ and the screens in /modules/.
+Options -Indexes
+Require all denied

@@ -191,7 +191,20 @@ GitHub Secrets / Variables), and rollback instructions live in
 */5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/special_events.php >/dev/null 2>&1
 * * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/push_worker.php >/dev/null 2>&1
 * * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/monitor.php >/dev/null 2>&1
+* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/email_worker.php >> /home/smartqaq/logs/hod-email.log 2>&1
+*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/automation_tick.php >> /home/smartqaq/logs/hod-email.log 2>&1
+30 3 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/email_worker.php --prune >> /home/smartqaq/logs/hod-email.log 2>&1
 ```
+
+`email_worker.php` sends what is due in the email outbox (confirm links and
+password resets first, then alerts, automations and campaigns) under the
+domain's hourly sending budget, which it shares with the ERP mailboxes;
+church news waits for the 07:00–20:00 window. `automation_tick.php` runs the
+Embrace / Assimilation / Charis automations that are switched on (each
+occasion once, each person once per step). Both are safe to overlap and do
+nothing until `db/migrate.php` has created their tables. `--status` on either
+prints where things stand; `automation_tick.php --dry-run` lists who would get
+what without sending anything. Guide: [docs/EMAIL.md](docs/EMAIL.md).
 
 `monitor.php` is the system monitor ([docs/monitor.md](docs/monitor.md)): it
 reads the error logs, runs the health checks (including whether every job
