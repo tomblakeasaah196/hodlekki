@@ -58,6 +58,17 @@ ok('a problem first found in a line over an hour old is not announced', is_strin
 $fresh = $db->query("SELECT alerted_at FROM monitor_error_groups WHERE title LIKE '[push]%'")->fetchColumn();
 ok('a recent one is left for the alerts', $fresh === null);
 
+// ---- The UI foundation's CSRF reports: kept quietly, one problem per endpoint and reason
+$csrf = monitor_log_entry_event(['ts' => '11-Nov-2026 09:00:00 UTC', 'text' => 'CSRF report-only: POST /api/events_api.php?id=4 (no token)'], 'api/error_log');
+eq('a CSRF report-only line is a quiet report, not a server error', ['log', 'notice', 'CSRF report-only'], [$csrf['kind'], $csrf['level'], $csrf['exception_class']]);
+eq('…grouped by endpoint and reason, without the query', 'CSRF report-only: POST /api/events_api.php (no token)', $csrf['message']);
+$ce = monitor_prepare_event($csrf);
+eq('…on its endpoint\'s route', '/api/events_api.php', $ce['route']);
+has('…with its own hint', (string) monitor_explain($ce), 'CSRF_EXEMPT_PREFIXES');
+$db2 = monitor_test_db();
+monitor_record($db2, $ce);
+eq('…and never announced', 0, monitor_alert_new_errors($db2, $db2));
+
 // ---- Sources: the docroot and three levels below, never vendor/ or uploads/
 $tree = $GLOBALS['mt_dir'] . '/tree';
 foreach (['', '/api', '/modules/events', '/vendor/x', '/uploads/se'] as $d) {

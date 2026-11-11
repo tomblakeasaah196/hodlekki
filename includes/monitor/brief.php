@@ -130,6 +130,7 @@ function monitor_explain(array $g): ?string
         '/\$ is not defined|jQuery is not defined/i'         => 'The page used jQuery before it loaded, or on a page that no longer loads it (strict pages of the new UI do not).',
         '/Failed to fetch|NetworkError|Load failed|network error/i' => 'The browser could not reach the server: usually a phone losing its connection, not a code error. Worth handling only if a screen breaks instead of retrying.',
         '/Unexpected token \'?<|is not valid JSON|JSON\.parse|JSON Parse error/i' => 'An API answered with HTML (a PHP error page or a sign-in redirect) where the page expected JSON. Look for a server error on the same endpoint at the same time.',
+        '/CSRF report-only/'                                 => 'The CSRF check (includes/csrf.php) saw a write to this endpoint without the page\'s token. Nothing was blocked: it only reports, ahead of CSRF being enforced. Make the page send the token (HOD.api does it by itself), or, for a caller from outside the site (a webhook, a beacon, a public link), add the path to CSRF_EXEMPT_PREFIXES.',
         '/Could not load /i'                                 => 'A file the page asked for did not arrive: removed or renamed in a deploy (the deploy never deletes, but a new name breaks old links), a typo, or an ad blocker on the visitor\'s phone.',
         '/CSRF|token mismatch|Invalid request token/i'       => 'A form was sent after its page had expired. Usually harmless: the person reloads.',
     ];

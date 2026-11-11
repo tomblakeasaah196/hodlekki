@@ -231,6 +231,20 @@ function monitor_log_entry_event(array $entry, string $where): ?array
     // A line the code wrote itself. Only problems are worth a record; the rest
     // of what scripts log (progress, counts) is skipped.
     $first = strtok($text, "\n") ?: $text;
+
+    // The UI foundation's CSRF observer (includes/csrf.php, csrf_observe() from
+    // db.php) notes, once per endpoint per session, a write that arrived without
+    // the page's token: "CSRF report-only: POST /api/x_api.php (no token)". A
+    // report for the move to enforced CSRF, not a server error: kept quietly
+    // (never announced, not in the morning summary), one problem per endpoint and reason.
+    if (preg_match('/^CSRF report-only:\s*([A-Z]{3,7})\s+(\S+)\s*\(([^)]{1,40})\)/', $first, $c)) {
+        return [
+            'kind' => 'log', 'level' => 'notice', 'exception_class' => 'CSRF report-only',
+            'message' => 'CSRF report-only: ' . $c[1] . ' ' . monitor_clean_url($c[2])[1] . ' (' . $c[3] . ')',
+            'file' => null, 'line' => null, 'at' => $at, 'context' => $context, 'bulk' => true,
+            'request' => ['source' => 'log', 'method' => $c[1], 'uri' => $c[2], 'role' => null],
+        ];
+    }
     if (!preg_match('/error|fail|exception|could ?n[o\']t|unable|denied|refus|timed? ?out|invalid|missing|not found|gave up|corrupt|mismatch/i', $first)) {
         return null;
     }

@@ -102,6 +102,26 @@ function monitor_notify_admins(PDO $pdo, PDO $db, string $kind, string $title, s
 
 /* ───────────────────────────── email ───────────────────────────── */
 
+/**
+ * The monitor's ONE way to send an email. Returns ['ok' => bool, 'error' => ?string].
+ *
+ * Today: hod_send_mail() (includes/mailer.php). When the campaigns outbox lands
+ * (includes/campaigns/outbox.php: one queue and one hourly budget for the whole
+ * domain, with lanes so alerts always get through), this is the only place to
+ * change: send with email_send_now($db, …, ['lane' => $kind === 'confirm' ?
+ * 'transactional' : 'alert']) so the monitor's mail counts in that budget. The
+ * monitor's own caps (6 alert emails an hour) stay as they are.
+ */
+function monitor_mail(PDO $db, string $to, string $subject, string $html, string $text, string $kind): array
+{
+    require_once dirname(__DIR__) . '/mailer.php';
+    if (!function_exists('hod_send_mail')) {
+        return ['ok' => false, 'error' => 'includes/mailer.php is missing'];
+    }
+
+    return hod_send_mail($to, $subject, $html, $text);
+}
+
 function monitor_recipients_active(PDO $db): array
 {
     return $db->query("SELECT id, email, added_at FROM monitor_recipients WHERE status = 'active' ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
@@ -184,16 +204,14 @@ function monitor_email_recipients(PDO $db, string $kind, string $subject, string
     if (!$recipients) {
         return 0;
     }
-    require_once dirname(__DIR__) . '/mailer.php';
     $sent = 0;
     $error = null;
     $button = monitor_screen_link('', true);
     foreach ($recipients as $r) {
         $stop = site_url('/monitor_confirm.php?stop=' . rawurlencode(monitor_stop_token($r)));
-        $res = function_exists('hod_send_mail')
-            ? hod_send_mail($r['email'], $subject, monitor_email_html($heading, $intro, $sections, $button, 'Open the monitor', $stop),
-                            monitor_email_text($heading, $intro, $sections, $button, $stop))
-            : ['ok' => false, 'error' => 'mailer missing'];
+        $res = monitor_mail($db, (string) $r['email'], $subject,
+            monitor_email_html($heading, $intro, $sections, $button, 'Open the monitor', $stop),
+            monitor_email_text($heading, $intro, $sections, $button, $stop), $kind);
         if ($res['ok']) {
             $sent++;
             $db->prepare('UPDATE monitor_recipients SET last_sent_at = ? WHERE id = ?')->execute([monitor_fmt(), $r['id']]);
@@ -461,14 +479,12 @@ function monitor_recipient_add(PDO $db, string $email, ?int $by): array
         $id = (int) $db->lastInsertId();
     }
     $link = site_url('/monitor_confirm.php?t=' . $id . '.' . $secret);
-    require_once dirname(__DIR__) . '/mailer.php';
     $heading = 'Confirm the system alerts';
     $intro = 'Someone with admin access to ' . site_host() . ' asked for this address to receive the site\'s system alerts: new errors, health problems, and a short summary each morning. '
         . 'Nothing is sent until you confirm. If you did not expect this, ignore this email.';
-    $res = function_exists('hod_send_mail')
-        ? hod_send_mail($email, 'Confirm HOD Lekki system alerts', monitor_email_html($heading, $intro, [], $link, 'Confirm this address', null),
-                        monitor_email_text($heading, $intro, [], $link, null) . "\nConfirm: " . $link . "\n")
-        : ['ok' => false, 'error' => 'mailer missing'];
+    $res = monitor_mail($db, $email, 'Confirm HOD Lekki system alerts',
+        monitor_email_html($heading, $intro, [], $link, 'Confirm this address', null),
+        monitor_email_text($heading, $intro, [], $link, null) . "\nConfirm: " . $link . "\n", 'confirm');
     monitor_alert_log($db, 'email', 'confirm', 'Confirm HOD Lekki system alerts', $res['ok'] ? 1 : 0, (bool) $res['ok'], $res['ok'] ? null : monitor_redact((string) $res['error']));
     if (!$res['ok']) {
         return ['ok' => false, 'status' => 'pending', 'error' => 'Saved, but the confirmation email could not be sent: ' . monitor_redact((string) $res['error'])];
