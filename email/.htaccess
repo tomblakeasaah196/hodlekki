@@ -4,7 +4,7 @@
 # backup, a test file left by a deploy that never deletes) is refused.
 Options -Indexes
 
-<FilesMatch "^(?!confirm\.php$).*">
+<FilesMatch "^(?!(confirm|unsubscribe|c|o)\.php$).*">
     Require all denied
 </FilesMatch>
 

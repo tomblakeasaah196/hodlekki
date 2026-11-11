@@ -34,6 +34,7 @@ require_once __DIR__ . '/../../includes/security_helpers.php';   // the one pass
 require_once __DIR__ . '/../../includes/auth_helpers.php';
 require_once __DIR__ . '/../../includes/ui/bootstrap.php';
 require_once __DIR__ . '/../../includes/ui/components.php';
+require_once __DIR__ . '/../../includes/csrf.php';
 require_once __DIR__ . '/../../includes/sms_functions.php';
 require_once __DIR__ . '/../../includes/campaigns/bootstrap.php';
 require_once __DIR__ . '/lib.php';
@@ -331,7 +332,10 @@ ct_at('2026-11-17 07:00');
 $held = email_worker_run($o, ['endpoints_ready' => false, 'transport' => ct_transport(), 'now' => campaigns_now()]);
 ct_ok('until the public unsubscribe/click pages are deployed, church news is held', $held['sent'] === 0 && $held['outside_window'] === 1
     && str_contains($held['message'], 'not deployed'));
-ct_eq('…and this checkout has none yet (they arrive with the screens)', false, email_public_endpoints_ready());
+ct_eq('…and this checkout has them (unsubscribe and click pages exist)', true, email_public_endpoints_ready());
+$htEmail = (string) file_get_contents(dirname(__DIR__, 2) . '/email/.htaccess');
+ct_ok('email/.htaccess serves exactly the four email pages', str_contains($htEmail, '<FilesMatch "^(?!(confirm|unsubscribe|c|o)\.php$).*">'));
+ct_ok('the RFC 8058 one-click POST is exempt from the CSRF check', in_array('/email/unsubscribe.php', CSRF_EXEMPT_PREFIXES, true));
 ct_eq('in the morning it goes', 1, email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport(), 'now' => campaigns_now()])['sent']);
 
 for ($i = 0; $i < 25; $i++) {

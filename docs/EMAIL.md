@@ -151,6 +151,9 @@ here builds SMTP settings in code.
 | `auth/add_email.php` | The required prompt. `includes/header.php` sends a signed-in person here while `email_prompt_state()` says `required`; it never includes header.php (it would loop), like `change_password.php`. |
 | `email/confirm.php` | The link in the confirmation email. GET shows the address and one button; the POST confirms (mail scanners open links, they do not press buttons). `email/.htaccess` serves only the listed pages. |
 | `auth/forgot_password.php` | "Forgot your password?" (linked from the login page). Always the same answer. |
+| `email/unsubscribe.php` | Stop church emails. The RFC 8058 one-click POST (`List-Unsubscribe=One-Click`, from the mail app, no cookies or token; exempt in `includes/csrf.php`) unsubscribes at once; the page (GET) has one button and an Undo, both CSRF-checked. Only church news stops. |
+| `email/c.php` | A tracked link: records the click and redirects only to a target stored with that email (never an open redirect); anything unknown goes home. |
+| `email/o.php` | The open pixel (campaigns that ask for it only): counted once, always a 1×1 GIF. |
 | `auth/reset_password.php` | The reset link's page: new password, the one policy, every session signed out. |
 
 All four are **standalone strict pages** (`includes/ui/standalone.php`): the

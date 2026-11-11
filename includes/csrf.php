@@ -55,6 +55,10 @@ const CSRF_EXEMPT_PREFIXES = [
     '/monitor_confirm.php',
     '/api/monitor_intake.php',
     '/api/monitor_probe.php',
+    // RFC 8058 one-click unsubscribe: mail providers POST it with no cookies
+    // or token; the unguessable per-email ref in the URL is its credential.
+    // The page's own buttons still check the token themselves.
+    '/email/unsubscribe.php',
 ];
 
 /** The session's token, created on first use. */
