@@ -247,6 +247,14 @@ ok('violations are reported to one configurable path', strpos($cspSource, "'repo
     && strpos($cspSource, 'report-to hod-csp') !== false);
 $reportSource = (string) file_get_contents($root . '/api/csp_report.php');
 ok('CSP reports never go to error_log (the monitor imports every error_log line)', strpos($reportSource, 'error_log(') === false);
+ok('CSP reports are limited per IP and in total', strpos($reportSource, "csp_report_take('ip_'") !== false && strpos($reportSource, "csp_report_take('all'") !== false);
+ok('CSP report URLs lose their query string and fragment', strpos($reportSource, "preg_replace('/[?#].*\$/s', ''") !== false);
+ok('the monitor\'s public endpoints are exempt from CSRF',
+    csrf_is_exempt('/monitor_confirm.php') && csrf_is_exempt('/api/monitor_intake.php') && csrf_is_exempt('/api/monitor_probe.php'));
+$csrfSource = (string) file_get_contents($root . '/includes/csrf.php');
+ok('a missing token is logged at most once per endpoint per hour site-wide',
+    strpos($csrfSource, "'/hod_csrf_' . date('YmdH')") !== false && strpos($csrfSource, "@fopen(\$marker, 'x')") !== false);
+ok('the CSRF log line keeps the prefix the monitor files as a notice', strpos($csrfSource, "'CSRF report-only: %s %s (%s)'") !== false);
 
 /* ---------------------------------------------------------------------- */
 suite('5. component helpers');

@@ -50,6 +50,11 @@ const CSRF_EXEMPT_PREFIXES = [
     '/api/csp_report.php',
     '/api/push_api.php',
     '/webhook/',
+    // The error and health monitor: an emailed confirmation form (its own
+    // secret link), browser beacons, and an HMAC-signed outside probe.
+    '/monitor_confirm.php',
+    '/api/monitor_intake.php',
+    '/api/monitor_probe.php',
 ];
 
 /** The session's token, created on first use. */
@@ -180,6 +185,7 @@ function csrf_observe(): void
         return;
     }
 
+    // Once per endpoint per session…
     $seen = (array) ($_SESSION['_csrf_observed'] ?? []);
     if (isset($seen[$path]) || count($seen) > 200) {
         return;
@@ -187,6 +193,17 @@ function csrf_observe(): void
     $seen[$path] = 1;
     $_SESSION['_csrf_observed'] = $seen;
 
+    // …and once per endpoint per hour for the whole site, so a busy endpoint
+    // used by a hundred members writes one line, not a hundred.
+    $marker = sys_get_temp_dir() . '/hod_csrf_' . date('YmdH') . '_' . substr(sha1($path), 0, 16);
+    $fh = @fopen($marker, 'x');
+    if ($fh === false) {
+        return;
+    }
+    fclose($fh);
+
+    // The prefix is the contract with the error and health monitor, which
+    // files these as quiet security notices, never as errors. Keep it.
     $why = csrf_request_token() === '' ? 'no token' : (csrf_same_origin() ? 'wrong token' : 'cross-site');
     error_log(sprintf('CSRF report-only: %s %s (%s)', $_SERVER['REQUEST_METHOD'] ?? '?', $path, $why));
 }
