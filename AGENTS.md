@@ -73,6 +73,14 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   `#D11920`, Inter + Montserrat, all self-hosted. No new Toastify, `confirm()`,
   hand-built modal, inline handler or CDN. Do not introduce React / Vue /
   Alpine unless asked.
+- **Short copy (owner rule, 11 Nov 2026; enforced in CI):** every visible
+  text follows `docs/UI.md` §12 "Writing: short copy": a title of 2-4 words
+  (a greeting such as "Hi Tom-Blake" is fine), at most ONE short line
+  (about 12 words) under it, and everything else behind an (i) from
+  `ui_info()` (hover on desktop, tap on phone). Buttons are a verb and an
+  object, 1-3 words; errors say what to do in one line.
+  `tests/ui/copy_lint.php` fails new offenders, and
+  `tests/ui/copy_allowlist.txt` may only shrink.
 - **Timezone:** `Africa/Lagos` at PHP level, `+01:00` at MySQL level,
   both set in `includes/db.php`.
 

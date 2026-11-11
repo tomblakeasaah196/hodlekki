@@ -329,5 +329,77 @@ $gone = array_diff($allowedCdn, $tailwindCdn);
 ok('no new page loads the Tailwind CDN', $newCdn === [], implode(', ', $newCdn));
 ok('the allow-list names only pages that still use it (remove the ones you rebuilt)', $gone === [], implode(', ', $gone));
 
+/* ---------------------------------------------------------------------- */
+suite('8. view transitions never leak "AbortError: Transition was skipped"');
+
+// Page-to-page transitions are opted into by @view-transition in pwa.css,
+// which only includes/pwa_head.php loads. A skipped transition rejects the
+// ViewTransition's promises; unhandled, the error monitor logged one per
+// page view. pwa_head.php handles them on pageswap and pagereveal.
+$pwaHead = (string) file_get_contents($root . '/includes/pwa_head.php');
+ok('pwa_head.php handles skipped page transitions on pageswap and pagereveal',
+    strpos($pwaHead, "addEventListener('pageswap'") !== false
+    && strpos($pwaHead, "addEventListener('pagereveal'") !== false
+    && (bool) preg_match("/\\['ready', 'finished', 'updateCallbackDone'\\][\\s\\S]{0,200}\\.catch\\(/", $pwaHead));
+$vtCss = [];
+$vtJs = [];
+$it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+foreach ($it as $file) {
+    $path = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
+    if (preg_match('#^(vendor|node_modules|\.git|\.tailwind|tests)/#', $path) || strpos($path, '/vendor/') !== false) {
+        continue;
+    }
+    if (preg_match('/\.(css|php)$/', $path) && strpos((string) file_get_contents($file->getPathname()), '@view-transition') !== false) {
+        $vtCss[] = $path;
+    }
+    if (preg_match('/\.(js|php)$/', $path)) {
+        $src = (string) file_get_contents($file->getPathname());
+        // Every script-started transition handles its promises within the same statement.
+        if (preg_match_all('/startViewTransition\s*\(/', $src, $calls, PREG_OFFSET_CAPTURE)) {
+            foreach ($calls[0] as [$call, $at]) {
+                if (!preg_match('/\.catch\s*\(/', substr($src, $at, 600))) {
+                    $vtJs[] = $path;
+                }
+            }
+        }
+    }
+}
+ok('only pwa.css (loaded with the pwa_head.php guard) opts pages into view transitions',
+    array_diff($vtCss, ['assets/css/pwa.css']) === [], implode(', ', array_diff($vtCss, ['assets/css/pwa.css'])));
+ok('every document.startViewTransition() call handles its promises (.catch)', $vtJs === [], implode(', ', array_unique($vtJs)));
+
+/* ---------------------------------------------------------------------- */
+suite('9. short copy (docs/UI.md "Writing: short copy")');
+
+require_once __DIR__ . '/copy_lint.php';
+ok('a greeting is not counted in a title', copy_words('Hi Tom-Blake, set your password', true) === 3);
+ok('a leading welcome is not counted either', copy_words('Welcome, Ada', true) === 0);
+ok('dashes and ampersands are not words', copy_words('Reach & Evangelism — new') === 3);
+ok('the linter finds a long subtitle', (static function (): bool {
+    $args = copy_calls("<?= ui_page_header(['title' => 'Giving', 'description' => 'One. Two.', 'actions' => ui_button('Save gift', [])]) ?>", 'ui_page_header');
+    return count($args) === 1 && copy_option($args[0], 'description') === 'One. Two.' && copy_sentences('One. Two.') === 2;
+})());
+$copyFound = array_values(array_unique(array_map('copy_line', copy_findings($root))));
+$copyAllowed = array_values(array_filter(array_map('rtrim', file(__DIR__ . '/copy_allowlist.txt') ?: []),
+    static fn ($l) => $l !== '' && $l[0] !== '#'));
+$copyNew = array_diff($copyFound, $copyAllowed);
+$copyFixed = array_diff($copyAllowed, $copyFound);
+ok('no new copy breaks the short-copy rule (title 2–4 words, one line, details behind ui_info())',
+    $copyNew === [], "\n      " . implode("\n      ", array_slice($copyNew, 0, 12)));
+ok('the copy allow-list only names copy that is still too long (delete the lines you fixed)',
+    $copyFixed === [], "\n      " . implode("\n      ", array_slice($copyFixed, 0, 12)));
+$infoHtml = ui_info('Counted from when it was assigned.', 'About overdue leads', ['id' => 'x-info']);
+ok('ui_info() is a labelled button described by its text, in a manual popover',
+    strpos($infoHtml, 'class="ui-info__btn" aria-label="About overdue leads" aria-describedby="x-info"') !== false
+    && strpos($infoHtml, 'id="x-info" role="tooltip" popover="manual">Counted from when it was assigned.</span>') !== false
+    && strpos($infoHtml, 'type="button"') !== false);
+ok('ui_info() escapes its text unless told it is trusted markup',
+    strpos(ui_info('<b>x</b>'), '&lt;b&gt;x&lt;/b&gt;') !== false && strpos(ui_info('<b>x</b>', 'i', ['html' => true]), '<b>x</b>') !== false);
+$fieldHtml = ui_field('number', ['name' => 'days', 'id' => 'f-days', 'label' => 'Overdue after', 'info' => 'Counted in days.']);
+ok('ui_field info sits beside the label (not inside it) and describes the control',
+    strpos($fieldHtml, '<div class="ui-label-row"><label') !== false
+    && strpos($fieldHtml, '</label><span class="ui-info"') !== false
+    && strpos($fieldHtml, 'aria-describedby="f-days-info f-days-error"') !== false);
+
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed === 0 ? 0 : 1);

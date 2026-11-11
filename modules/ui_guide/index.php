@@ -39,7 +39,8 @@ $people = [
 <div class="ui-page">
     <?= ui_page_header([
         'title' => 'Design System',
-        'description' => 'The shared components every screen is built from — the same colours, type, spacing and behaviour on every module. The written rules are in docs/UI.md.',
+        'description' => 'The parts every screen is built from.',
+        'info' => 'The same colours, type, spacing and behaviour on every module. The written rules are in docs/UI.md.',
         'actions' => ui_button('Show a toast', ['icon' => 'bell', 'attrs' => ['data-action' => 'guide.toast', 'data-tone' => 'success']])
             . ui_button('Open a dialog', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-dialog-open' => 'guide-dialog']]),
     ]) ?>
@@ -57,7 +58,7 @@ $people = [
             <div class="ui-card__header">
                 <div>
                     <h2 class="ui-card__title">Colour</h2>
-                    <p class="ui-card__description">Pages use the semantic names only. Navy carries the app; red is the accent and the alarm, used sparingly.</p>
+                    <p class="ui-card__description">Semantic names only. <?= ui_info('Navy carries the app; red is the accent and the alarm, used sparingly.', 'About colour') ?></p>
                 </div>
             </div>
             <div class="ui-card__body">
@@ -97,7 +98,7 @@ foreach ($swatches as [$cls, $name, $token]): ?>
                     <p class="ui-h1">Page title · Montserrat 700</p>
                     <p class="ui-h2">Section title · Inter 600, 17 px</p>
                     <p class="ui-h3">Card title · Inter 600, 15 px</p>
-                    <p>Body text is Inter at 15 px with a line height of 1.55, so a paragraph of pastoral notes reads comfortably on a phone.</p>
+                    <p>Body text: Inter, 15 px, line height 1.55. <?= ui_info('So a paragraph of pastoral notes reads comfortably on a phone.', 'About body text') ?></p>
                     <p class="ui-meta">Meta and captions · 13 px, never smaller than 12 px</p>
                     <p class="ui-stat__value">₦1,284,500</p>
                 </div>
@@ -105,7 +106,7 @@ foreach ($swatches as [$cls, $name, $token]): ?>
             <div class="ui-card">
                 <div class="ui-card__header"><h2 class="ui-card__title">Shape and space</h2></div>
                 <div class="ui-card__body ui-stack ui-stack--md">
-                    <p class="text-sm text-ink-muted">Spacing moves in steps of 4 and 8 px. Corners: 6 (badges), 10 (controls), 14 (cards), 20 (dialogs).</p>
+                    <p class="text-sm text-ink-muted">Spacing in steps of 4 and 8 px. <?= ui_info('Corners: 6 px badges, 10 px controls, 14 px cards, 20 px dialogs.', 'About corners') ?></p>
                     <div class="flex flex-wrap items-end gap-3">
                         <div class="h-12 w-12 rounded-ui-sm bg-primary-soft"></div>
                         <div class="h-12 w-12 rounded-ui bg-primary-soft"></div>
@@ -313,9 +314,9 @@ foreach ($swatches as [$cls, $name, $token]): ?>
         <div class="ui-card">
             <?= ui_empty([
                 'icon' => 'users',
-                'title' => 'No first timers this Sunday yet',
-                'text' => 'People added at the welcome desk appear here as they arrive. You can also add someone yourself.',
-                'actions' => ui_button('Add a first timer', ['variant' => 'primary', 'icon' => 'plus']),
+                'title' => 'No first timers yet',
+                'text' => 'People added at the welcome desk appear here.',
+                'actions' => ui_button('Add first timer', ['variant' => 'primary', 'icon' => 'plus']),
             ]) ?>
         </div>
     </section>
@@ -326,14 +327,14 @@ foreach ($swatches as [$cls, $name, $token]): ?>
             <div class="ui-card__header ui-card__header--divided">
                 <div>
                     <h2 class="ui-card__title">Add a first timer</h2>
-                    <p class="ui-card__description">Labels above every field, errors when you leave a field, cleared as soon as it is right.</p>
+                    <p class="ui-card__description">Errors show when you leave a field. <?= ui_info('Labels sit above every field. An error clears as soon as the value is right. Details live behind (i), like this one.', 'About forms') ?></p>
                 </div>
             </div>
             <div class="ui-card__body ui-form">
                 <div class="ui-form-grid">
                     <?= ui_field('text', ['name' => 'first_name', 'label' => 'First name', 'required' => true, 'autocomplete' => 'given-name']) ?>
                     <?= ui_field('text', ['name' => 'last_name', 'label' => 'Last name', 'required' => true, 'autocomplete' => 'family-name']) ?>
-                    <?= ui_field('tel', ['name' => 'phone', 'label' => 'Phone number', 'required' => true, 'inputmode' => 'tel', 'placeholder' => '0803 123 4567', 'hint' => 'We send one welcome text, nothing else.', 'attrs' => ['pattern' => '[0-9 +]{10,16}']]) ?>
+                    <?= ui_field('tel', ['name' => 'phone', 'label' => 'Phone number', 'required' => true, 'inputmode' => 'tel', 'placeholder' => '0803 123 4567', 'info' => 'We send one welcome text, nothing else.', 'attrs' => ['pattern' => '[0-9 +]{10,16}']]) ?>
                     <?= ui_field('email', ['name' => 'email', 'label' => 'Email', 'optional' => true, 'autocomplete' => 'email']) ?>
                     <?= ui_field('select', ['name' => 'service', 'label' => 'Service attended', 'required' => true, 'options' => ['' => 'Choose a service', '1' => 'Sunday — 1st service', '2' => 'Sunday — 2nd service', '3' => 'Midweek']]) ?>
                     <div class="ui-field">
@@ -374,7 +375,7 @@ foreach ($swatches as [$cls, $name, $token]): ?>
         <?= ui_banner('info', ['title' => 'Sunday register opens at 6:30 am', 'text' => 'Ushers can start checking people in from the welcome desk.']) ?>
         <?= ui_banner('success', ['title' => 'Roster published', 'text' => 'Everyone on the duty roster has been sent their slots.']) ?>
         <?= ui_banner('warning', ['title' => '3 follow-ups are overdue', 'text' => 'Call them today, or hand them to another worker.', 'actions' => ui_button('See follow-ups', ['size' => 'sm'])]) ?>
-        <?= ui_banner('danger', ['title' => 'SMS wallet is empty', 'text' => 'Texts are paused until the wallet is topped up. Nothing has been lost.']) ?>
+        <?= ui_banner('danger', ['title' => 'SMS wallet is empty', 'text' => 'Top up the wallet to send texts.', 'info' => 'Texts are paused until the wallet is topped up. Nothing has been lost.']) ?>
 
         <div class="ui-card">
             <div class="ui-card__header"><h2 class="ui-card__title">Toasts, confirmations, dialogs</h2></div>
@@ -383,7 +384,7 @@ foreach ($swatches as [$cls, $name, $token]): ?>
                 <?= ui_button('Error toast', ['attrs' => ['data-action' => 'guide.toast', 'data-tone' => 'danger']]) ?>
                 <?= ui_button('Toast with undo', ['attrs' => ['data-action' => 'guide.toast', 'data-tone' => 'undo']]) ?>
                 <?= ui_button('Confirm a deletion', ['variant' => 'danger-ghost', 'attrs' => ['data-action' => 'guide.confirm']]) ?>
-                <?= ui_button('Ask for a reason', ['attrs' => ['data-action' => 'guide.prompt']]) ?>
+                <?= ui_button('Ask why', ['attrs' => ['data-action' => 'guide.prompt']]) ?>
                 <?= ui_button('Open a drawer', ['attrs' => ['data-dialog-open' => 'guide-drawer']]) ?>
             </div>
         </div>

@@ -135,8 +135,31 @@ function ui_avatar(string $name, ?string $imageUrl = null, string $size = 'md', 
 }
 
 /**
- * The page's title block. Options: title (required), description, actions
- * (HTML, usually ui_button() calls), back => ['href' => …, 'label' => …].
+ * An (i) button that holds the detail a screen should not spell out
+ * (docs/UI.md "Writing: short copy"): hover or keyboard focus shows it on a
+ * computer, a tap toggles it on a phone, Escape or a tap elsewhere closes it.
+ * The text is the button's description, so a screen reader hears it on focus.
+ *   ui_info('Counted from when the lead was assigned.', 'About overdue leads')
+ * Options: id (of the text, to add to a control's aria-describedby), class,
+ * html (true: $text is trusted markup, e.g. a link; otherwise it is escaped).
+ */
+function ui_info(string $text, string $label = 'More information', array $o = []): string
+{
+    static $seq = 0;
+    $id = (string) ($o['id'] ?? ('ui-info-' . (++$seq)));
+    $body = !empty($o['html']) ? $text : ui_e($text);
+
+    return '<span class="' . ui_e(trim('ui-info ' . ($o['class'] ?? ''))) . '" data-ui-info>'
+        . '<button type="button" class="ui-info__btn" aria-label="' . ui_e($label) . '" aria-describedby="' . ui_e($id) . '"'
+        . ' aria-expanded="false" aria-controls="' . ui_e($id) . '">' . ui_icon('info') . '</button>'
+        . '<span class="ui-info__pop" id="' . ui_e($id) . '" role="tooltip" popover="manual">' . $body . '</span>'
+        . '</span>';
+}
+
+/**
+ * The page's title block. Options: title (required, 2–4 words), description
+ * (one short line at most), info (the rest, behind an (i) by the title),
+ * actions (HTML, usually ui_button() calls), back => ['href' => …, 'label' => …].
  * The phone app bar shows the title only once this block scrolls away.
  */
 function ui_page_header(array $o): string
@@ -146,7 +169,10 @@ function ui_page_header(array $o): string
         $html .= '<a class="ui-backlink" href="' . ui_e($o['back']['href']) . '">' . ui_icon('chevron-left')
             . '<span>' . ui_e($o['back']['label'] ?? 'Back') . '</span></a>';
     }
-    $html .= '<h1 class="ui-h1">' . ui_e($o['title'] ?? '') . '</h1>';
+    $title = '<h1 class="ui-h1">' . ui_e($o['title'] ?? '') . '</h1>';
+    $html .= !empty($o['info'])
+        ? '<div class="ui-title-row">' . $title . ui_info((string) $o['info'], 'About this page') . '</div>'
+        : $title;
     if (!empty($o['description'])) {
         $html .= '<p class="ui-page-header__description">' . ui_e($o['description']) . '</p>';
     }
@@ -211,7 +237,7 @@ function ui_stat(array $o): string
     return '<div class="ui-card ui-stat">' . $inner . '</div>';
 }
 
-/** An inline message. Tones: info|success|warning|danger|neutral. Options: title, text, actions (HTML). */
+/** An inline message. Tones: info|success|warning|danger|neutral. Options: title, text (one line: what to do), info (details behind (i)), actions (HTML). */
 function ui_banner(string $tone, array $o): string
 {
     $map = [
@@ -228,8 +254,9 @@ function ui_banner(string $tone, array $o): string
     if (!empty($o['title'])) {
         $html .= '<p class="ui-banner__title">' . ui_e($o['title']) . '</p>';
     }
-    if (!empty($o['text'])) {
-        $html .= '<p class="ui-banner__text">' . ui_e($o['text']) . '</p>';
+    if (!empty($o['text']) || !empty($o['info'])) {
+        $html .= '<p class="ui-banner__text">' . ui_e($o['text'] ?? '')
+            . (!empty($o['info']) ? ' ' . ui_info((string) $o['info'], 'More about this') : '') . '</p>';
     }
     if (!empty($o['actions'])) {
         $html .= '<div class="ui-banner__actions">' . $o['actions'] . '</div>';
@@ -241,7 +268,8 @@ function ui_banner(string $tone, array $o): string
 /**
  * A labelled form control. Types: text, email, tel, number, date, time,
  * password, search, url, textarea, select. Options: name (required), label
- * (required), id, value, hint, error, required, placeholder (a format hint,
+ * (required), id, value, hint (only when essential), info (the detail, behind
+ * an (i) beside the label), error, required, placeholder (a format hint,
  * never the label), options (select: value => label), attrs (on the control),
  * class (on the field wrapper), autocomplete, inputmode.
  */
@@ -258,10 +286,18 @@ function ui_field(string $type, array $o): string
         . ($required ? '<span class="ui-label__req" aria-hidden="true">*</span>' : '')
         . (!empty($o['optional']) ? '<span class="ui-label__opt">(optional)</span>' : '')
         . '</label>';
+    $infoId = $id . '-info';
+    if (!empty($o['info'])) {
+        $label = '<div class="ui-label-row">' . $label
+            . ui_info((string) $o['info'], 'About ' . mb_strtolower((string) ($o['label'] ?? $name)), ['id' => $infoId]) . '</div>';
+    }
 
     $describedBy = [];
     if (!empty($o['hint'])) {
         $describedBy[] = $hintId;
+    }
+    if (!empty($o['info'])) {
+        $describedBy[] = $infoId;
     }
     $describedBy[] = $errorId;
 

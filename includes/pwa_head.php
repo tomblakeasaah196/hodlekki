@@ -221,6 +221,26 @@ if (!defined('PWA_HEAD_RENDERED')) {
             } catch (e) {
                 /* private mode: skip the splash rather than break the page */
             }
+
+            /*
+             * Page-to-page view transitions (the opt-in rule in pwa.css): the
+             * browser hands each page a ViewTransition on pageswap (the page
+             * leaving) and pagereveal (the page arriving). When it skips one —
+             * a fast click, a page without the opt-in, a hidden tab — those
+             * promises reject with "AbortError: Transition was skipped", and
+             * unhandled they land in the console and in the error monitor on
+             * every page view. Skipping is normal, so the rejection is handled
+             * here. Registered before first render, or pagereveal is missed.
+             */
+            var quietTransition = function (e) {
+                var vt = e && e.viewTransition;
+                if (!vt) return;
+                ['ready', 'finished', 'updateCallbackDone'].forEach(function (k) {
+                    if (vt[k] && typeof vt[k].catch === 'function') vt[k].catch(function () {});
+                });
+            };
+            window.addEventListener('pageswap', quietTransition);
+            window.addEventListener('pagereveal', quietTransition);
         })();
 
         window.HOD_PWA = {

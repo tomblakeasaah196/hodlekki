@@ -2101,6 +2101,66 @@
     }
     .ui-tooltip.is-open { opacity: 1; }
 
+    /* ---------- Info (i): the detail behind short copy (ui_info) ---------- */
+
+    .ui-info {
+        display: inline-flex;
+        vertical-align: middle;
+        line-height: 1;
+    }
+    .ui-info__btn {
+        position: relative;
+        display: inline-grid;
+        place-items: center;
+        flex: none;
+        width: 24px;
+        height: 24px;
+        margin: -4px 0;
+        padding: 0;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--ui-text-subtle);
+        cursor: pointer;
+        transition: color var(--ui-dur-fast) var(--ui-ease), background-color var(--ui-dur-fast) var(--ui-ease);
+    }
+    /* A slightly larger target than it looks, without covering its neighbours. */
+    .ui-info__btn::after { content: ""; position: absolute; inset: -4px; }
+    .ui-info__btn .ui-icon { width: 16px; height: 16px; }
+    .ui-info__btn:hover,
+    .ui-info__btn[aria-expanded="true"] { color: var(--ui-primary); background: var(--ui-primary-soft); }
+    .ui-info__btn:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+    .ui-info__pop {
+        position: fixed;
+        inset: auto;
+        z-index: calc(var(--ui-z-toast) + 1);
+        width: max-content;
+        max-width: min(300px, calc(100vw - 16px));
+        margin: 0;
+        padding: 10px 12px;
+        overflow: visible;
+        border: 0;
+        border-radius: var(--ui-radius);
+        background: var(--ui-inverse);
+        color: var(--ui-on-inverse);
+        box-shadow: var(--ui-shadow-lg);
+        font: 400 var(--ui-text-sm)/1.45 var(--ui-font-sans);
+        letter-spacing: normal;
+        text-align: left;
+        text-transform: none;
+        white-space: pre-line;
+    }
+    /* Hidden until opened — also where the Popover API is missing. */
+    .ui-info__pop:not(.is-open) { display: none; }
+    .ui-info__pop a { color: inherit; text-decoration: underline; }
+    .ui-label-row,
+    .ui-title-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+    }
+
     /* ---------- Prose (rendered guides) ---------- */
 
     .ui-prose {
