@@ -10,5 +10,9 @@ Options -Indexes
 
 # These pages carry personal tokens in their links: never index them, and
 # never leak the link to another site through the Referer header.
+# "same-origin", NOT "no-referrer": with no-referrer, browsers send
+# "Origin: null" on the page's own form POST, csrf_same_origin() rightly
+# refuses it, and every Confirm button failed as "page open too long"
+# (11 Nov 2026). same-origin still sends nothing to other sites.
 Header set X-Robots-Tag "noindex, nofollow, noarchive"
-Header set Referrer-Policy "no-referrer"
+Header set Referrer-Policy "same-origin"
