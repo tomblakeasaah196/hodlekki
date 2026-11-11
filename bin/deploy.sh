@@ -132,6 +132,18 @@ echo "[deploy] composer install done"
 #    table is not there yet.
 "$PHP" db/backfill_status_ladder.php || echo "[deploy] WARNING: status ladder catch-up failed (not fatal) — see output above"
 
+# 7. Clear the host's NGINX cache. cPanel runs NGINX in front of LiteSpeed
+#    and keeps its own copy of static files, so without this a new sw.js or
+#    asset can be served stale for hours after a deploy. Never fatal.
+UAPI=/usr/local/cpanel/bin/uapi
+if [ -x "$UAPI" ]; then
+    if "$UAPI" NginxCaching clear_cache 2>&1 | grep -q '^ *status: 1'; then
+        echo "[deploy] nginx cache cleared"
+    else
+        echo "[deploy] WARNING: nginx cache clear failed (not fatal)"
+    fi
+fi
+
 echo "============================================================"
 echo "[deploy] $(date -Iseconds) OK"
 echo "============================================================"
