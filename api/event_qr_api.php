@@ -37,10 +37,10 @@ if (!$is_authorized) {
 
 /** Resolve the public base URL of the site (for building the registration link). */
 function qr_base_url() {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    if (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') $scheme = 'https';
-    $host = $_SERVER['HTTP_HOST'] ?? 'hodlc.lpc.cm';
-    return $scheme . '://' . $host;
+    // SITE_URL, not the request's host: a QR printed from connect.hodlekki.org or
+    // the old address must still point at the real site.
+    require_once __DIR__ . '/../includes/site_url.php';
+    return site_origin();
 }
 
 try {

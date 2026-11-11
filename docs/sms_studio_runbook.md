@@ -13,22 +13,22 @@ keeps its output in a log file on purpose — with `>/dev/null` a worker that
 dies every minute leaves no trace anywhere):
 
 ```
-* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1
-* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php >/dev/null 2>&1
-*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/special_events.php >/dev/null 2>&1
-0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/reach_lost_souls.php >/dev/null 2>&1
-15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/assimilation_watchlists.php >/dev/null 2>&1
+* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1
+* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/push_worker.php >/dev/null 2>&1
+*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/special_events.php >/dev/null 2>&1
+0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/reach_lost_souls.php >/dev/null 2>&1
+15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/assimilation_watchlists.php >/dev/null 2>&1
 ```
 
 To add any that are missing without touching the others:
 
 ```
 cd ~ && crontab -l 2>/dev/null > cron.tmp; for L in \
-"* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1" \
-"* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php >/dev/null 2>&1" \
-"*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/special_events.php >/dev/null 2>&1" \
-"0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/reach_lost_souls.php >/dev/null 2>&1" \
-"15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/assimilation_watchlists.php >/dev/null 2>&1"; \
+"* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1" \
+"* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/push_worker.php >/dev/null 2>&1" \
+"*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/special_events.php >/dev/null 2>&1" \
+"0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/reach_lost_souls.php >/dev/null 2>&1" \
+"15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/assimilation_watchlists.php >/dev/null 2>&1"; \
 do grep -qF "$L" cron.tmp || echo "$L" >> cron.tmp; done; crontab cron.tmp && rm cron.tmp && crontab -l
 ```
 
@@ -36,7 +36,7 @@ Proof that it works, in this order:
 
 | Check | Command | Expect |
 | --- | --- | --- |
-| Worker runs by hand | `cd /home/smartqaq/public_html/hodlc.lpc.cm && /usr/local/bin/ea-php83 -d display_errors=1 cron/sms_queue_worker.php; echo exit=$?` | `[time] Worker: N sent, … still queued.` and `exit=0` |
+| Worker runs by hand | `cd /home/smartqaq/public_html/hodlekki && /usr/local/bin/ea-php83 -d display_errors=1 cron/sms_queue_worker.php; echo exit=$?` | `[time] Worker: N sent, … still queued.` and `exit=0` |
 | Cron fires | `tail -n 5 /home/smartqaq/sms_worker.log` | one `Worker:` line per minute |
 | Studio agrees | SMS Studio status bar | green **Background sender running · Ns ago** |
 | Migrations applied | `/usr/local/bin/ea-php83 db/migrate.php --status \| tail -n 8` | `Pending: (none)` |

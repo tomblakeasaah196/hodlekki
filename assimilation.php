@@ -19,7 +19,8 @@ try {
 
 $e = fn($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 
-$host     = $_SERVER['HTTP_HOST'] ?? 'hodlc.lpc.cm';
+require_once __DIR__ . '/includes/site_url.php';
+$host     = site_host();
 $bg_image = '/assets/images/hod_lekki.jpeg';
 $og_title = 'Assimilation — Household of David Lekki Centre';
 $og_desc  = 'Going after the one. Call the people who have drifted, and walk them home.';

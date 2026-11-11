@@ -139,8 +139,8 @@ All of these:
 
 **PR description must include, for the owner:**
 - the before/after list of copied paths from a local tar dry run;
-- manual cleanup after merge (tar never deletes): in cPanel File Manager, delete these from `public_html/hodlc.lpc.cm/` if present: `.git/`, `.github/`, `tests/`, `docs/`, `AGENTS.md`, `DEPLOY.md`;
-- a check that `https://hodlc.lpc.cm/.git/config` returns 403 or 404;
+- manual cleanup after merge (tar never deletes): in cPanel File Manager, delete these from `public_html/hodlekki/` if present: `.git/`, `.github/`, `tests/`, `docs/`, `AGENTS.md`, `DEPLOY.md`;
+- a check that `https://hodlekki.org/.git/config` returns 403 or 404;
 - a behaviour note: with `./php.ini` excluded, edits to the repo's `php.ini` no longer deploy (the docroot copy is authoritative, as the file intends). Ask the owner to confirm.
 
 **Acceptance.** The tar dry run excludes all of the paths above. The CI guard fails on a deliberately broken pattern and passes on the real file. CI is green.

@@ -431,7 +431,8 @@ $page_text = "Page {PAGE_NUM}";
 $canvas->page_text($w - $margin_x - 40, $footer_y + 8, $page_text, $font, 6.5, array(0.39, 0.45, 0.54));
 
 // 5. Inject Verification Link block at the very bottom
-$verify_text = "SECURE DOCUMENT — Verify authenticity instantly at: hodlc.lpc.cm/verify";
+require_once __DIR__ . '/site_url.php';
+$verify_text = "SECURE DOCUMENT — Verify authenticity instantly at: " . site_host() . "/verify";
 $verify_width = $dompdf->getFontMetrics()->getTextWidth($verify_text, $bold_font, 7);
 $canvas->page_text(($w / 2) - ($verify_width / 2), $footer_y + 22, $verify_text, $bold_font, 7, array(0.11, 0.20, 0.41)); // #1D356A
 

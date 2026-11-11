@@ -1,6 +1,12 @@
 <?php
 // /connect.php
 if (session_status() === PHP_SESSION_NONE) session_start();
+
+// This page is also served at the root of connect.hodlekki.org (index.php), so
+// its links to the rest of the site go to the main address: signing in on
+// connect.hodlekki.org would leave the session on the wrong host.
+require_once __DIR__ . '/includes/site_url.php';
+$site = static fn (string $path): string => htmlspecialchars(site_url($path), ENT_QUOTES, 'UTF-8');
 ?>
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
@@ -146,20 +152,20 @@ if (session_status() === PHP_SESSION_NONE) session_start();
                 </button>
                 
                 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 pt-2">
-                    <a href="/auth/login.php" class="bg-white/80 hover:bg-white text-gray-800 border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-wider text-xs transition-all text-center flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5">
+                    <a href="<?= $site('/auth/login.php') ?>" class="bg-white/80 hover:bg-white text-gray-800 border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-wider text-xs transition-all text-center flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5">
                         <svg class="w-4 h-4 text-hodBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg> Already Family
                     </a>
-                    <a href="/parent_portal.php" class="bg-white/80 hover:bg-white text-gray-800 border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-wider text-xs transition-all text-center flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5">
+                    <a href="<?= $site('/parent_portal.php') ?>" class="bg-white/80 hover:bg-white text-gray-800 border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-wider text-xs transition-all text-center flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5">
                         <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg> Parent Portal
                     </a>
                     <!-- NEW LIBRARY BUTTON -->
-                    <a href="/modules/library/index.php" class="bg-white/80 hover:bg-white text-gray-800 border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-wider text-xs transition-all text-center flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5">
+                    <a href="<?= $site('/modules/library/index.php') ?>" class="bg-white/80 hover:bg-white text-gray-800 border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-wider text-xs transition-all text-center flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5">
                         <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg> Library
                     </a>
-                    <a href="/testimonies.php" class="bg-white/80 hover:bg-white text-gray-800 border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-wider text-xs transition-all text-center flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5">
+                    <a href="<?= $site('/testimonies.php') ?>" class="bg-white/80 hover:bg-white text-gray-800 border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-wider text-xs transition-all text-center flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5">
                         <svg class="w-4 h-4 text-hodRed" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg> Testimonies
                     </a>
-                    <a href="/sermons.php" class="bg-white/80 hover:bg-white text-gray-800 border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-wider text-xs transition-all text-center flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5">
+                    <a href="<?= $site('/sermons.php') ?>" class="bg-white/80 hover:bg-white text-gray-800 border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-wider text-xs transition-all text-center flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5">
                         <svg class="w-4 h-4 text-hodBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Sermons
                     </a>
                 </div>
@@ -195,8 +201,8 @@ if (session_status() === PHP_SESSION_NONE) session_start();
                         <p class="text-[10px] font-black text-hodRed uppercase tracking-widest mb-1">Please check this</p>
                         <p id="wizardErrorText" class="text-sm font-bold text-gray-900 leading-snug"></p>
                         <div id="wizardErrorLogin" class="hidden flex flex-wrap gap-2 mt-3">
-                            <a href="/auth/login.php" class="bg-hodRed hover:bg-hodBlue text-white px-4 py-2 rounded-lg font-black uppercase tracking-wider text-[10px] shadow-sm transition-colors">Log in as Family</a>
-                            <a href="/auth/setup_password.php" class="bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 px-4 py-2 rounded-lg font-bold uppercase tracking-wider text-[10px] shadow-sm transition-colors">Find my login email</a>
+                            <a href="<?= $site('/auth/login.php') ?>" class="bg-hodRed hover:bg-hodBlue text-white px-4 py-2 rounded-lg font-black uppercase tracking-wider text-[10px] shadow-sm transition-colors">Log in as Family</a>
+                            <a href="<?= $site('/auth/setup_password.php') ?>" class="bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 px-4 py-2 rounded-lg font-bold uppercase tracking-wider text-[10px] shadow-sm transition-colors">Find my login email</a>
                         </div>
                     </div>
                     <button type="button" onclick="dismissError()" class="text-gray-400 hover:text-hodRed p-1 -m-1 transition-colors" aria-label="Dismiss">
@@ -320,8 +326,8 @@ if (session_status() === PHP_SESSION_NONE) session_start();
                 Welcome to the family. A member of our Embrace Team will reach out to you shortly. We pray this marks the beginning of an incredible journey in your walk with God.
             </p>
             <div class="space-y-3">
-                <a href="/testimonies.php" class="block w-full bg-hodBlue hover:bg-gray-900 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-xs transition-all shadow-md">Read Testimonies on the Wall</a>
-                <a href="/index.php" class="block w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-widest text-xs transition-all shadow-sm">Return Home</a>
+                <a href="<?= $site('/testimonies.php') ?>" class="block w-full bg-hodBlue hover:bg-gray-900 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-xs transition-all shadow-md">Read Testimonies on the Wall</a>
+                <a href="<?= $site('/index.php') ?>" class="block w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 py-4 rounded-xl font-bold uppercase tracking-widest text-xs transition-all shadow-sm">Return Home</a>
             </div>
         </div>
     </div>

@@ -1,6 +1,14 @@
 <?php
 // /index.php (Main Entry Point)
 
+// connect.hodlekki.org shows the public Connect page at its root; everything
+// else on this site is the members' app behind the sign-in.
+require_once __DIR__ . '/includes/site_url.php';
+if (is_connect_host()) {
+    require __DIR__ . '/connect.php';
+    exit;
+}
+
 // 1. Pull in the centralized Header
 require_once 'includes/header.php'; 
 ?>

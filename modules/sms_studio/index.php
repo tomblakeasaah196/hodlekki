@@ -419,8 +419,8 @@ if ($CAN_ASSIM) {
       <h3 class="text-lg font-bold text-gray-900 mb-3">Delivery setup checklist</h3>
       <ul id="setupChecklist" class="space-y-2 text-sm"></ul>
       <p class="text-[11px] text-gray-500 mt-3">Background sender cron (cPanel → Cron Jobs, every minute). Keep its output in a log file — a worker that dies every minute is invisible with <code>&gt;/dev/null</code>:</p>
-      <pre class="bg-gray-900 text-green-300 text-[11px] rounded-xl p-3 mt-1 overflow-x-auto sms-scroll">* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1</pre>
-      <p class="text-[11px] text-gray-500 mt-2">To check it from cPanel → Terminal: <code>tail -n 30 /home/smartqaq/sms_worker.log</code> (one line per minute) and <code>tail -n 50 /home/smartqaq/public_html/hodlc.lpc.cm/includes/error_log</code> (errors).</p>
+      <pre class="bg-gray-900 text-green-300 text-[11px] rounded-xl p-3 mt-1 overflow-x-auto sms-scroll">* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1</pre>
+      <p class="text-[11px] text-gray-500 mt-2">To check it from cPanel → Terminal: <code>tail -n 30 /home/smartqaq/sms_worker.log</code> (one line per minute) and <code>tail -n 50 /home/smartqaq/public_html/hodlekki/includes/error_log</code> (errors).</p>
     </div>
   </section>
 </div>

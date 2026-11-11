@@ -270,7 +270,7 @@ if (!empty($opts['seed'])) {
         ON DUPLICATE KEY UPDATE role_in_dept = VALUES(role_in_dept)");
 
     $pdo->exec("INSERT INTO se_settings (setting_key, setting_value) VALUES
-                    ('privacy_contact_email', 'privacy@hodlc.lpc.cm')
+                    ('privacy_contact_email', 'info@hodlekki.org')
                 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
 
     echo "[se-test] seeded 5 users (1 Super_Admin, 1 Envision Director, 1 Envision member)\n";

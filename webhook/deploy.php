@@ -2,12 +2,12 @@
 /**
  * Deploy webhook — receives an authenticated POST from GitHub Actions and
  * runs bin/deploy.sh. Lives inside the docroot at webhook/deploy.php, so
- * it's reachable at https://hodlc.lpc.cm/webhook/deploy.php.
+ * it's reachable at https://hodlekki.org/webhook/deploy.php.
  *
  * Security model:
  *   - POST only (method whitelist).
  *   - Requires an X-Deploy-Token request header whose value matches the
- *     DEPLOY_WEBHOOK_SECRET line in /home/smartqaq/public_html/hodlc.lpc.cm/.env.
+ *     DEPLOY_WEBHOOK_SECRET line in /home/smartqaq/public_html/hodlekki/.env.
  *   - Constant-time comparison via hash_equals() to defeat timing attacks.
  *   - Every rejected call is written to error_log with the client IP and
  *     truncated user-agent for later review.

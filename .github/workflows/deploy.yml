@@ -99,6 +99,9 @@ jobs:
         with:
           php-version: '8.3'
           coverage: none
+          # Named, not assumed: a runner image update (Nov 2026) stopped
+          # shipping pdo_sqlite by default and the SQLite suites failed.
+          extensions: pdo_sqlite, sqlite3, mbstring, intl, gd, zip, sodium
 
       - name: PHP syntax check (php -l over the tree)
         run: |
@@ -254,6 +257,11 @@ jobs:
         # the sender name written into every text, the wallet pre-flight
         # arithmetic and delivery-status mapping (includes/sms_functions.php).
         run: php tests/sms/run.php
+
+      - name: Site address, email settings and origin lock tests
+        # No database, no network: includes/site_url.php, the settings half of
+        # includes/mailer.php, and bin/edge_lock.sh against a scratch folder.
+        run: php tests/site_url_mailer_test.php
 
       - name: Secret sweep (block obvious leaks)
         run: |

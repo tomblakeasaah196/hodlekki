@@ -5,8 +5,8 @@ require_once __DIR__ . '/includes/db.php';
 // 2. Set strict defaults FIRST
 $og_title = "The Word Library | HOD Lekki Centre";
 $og_desc = "Stream and download life-transforming messages.";
-$og_image = "https://hodlc.lpc.cm/assets/images/hod_logo.svg";
-$og_url = "https://hodlc.lpc.cm/sermons";
+$og_image = site_url('/assets/images/hod_logo.svg');
+$og_url = site_url('/sermons');
 $autoOpenScript = "";
 
 // 3. Safe Database Query
@@ -22,9 +22,9 @@ if (isset($_GET['sermon'])) {
             $og_desc = htmlspecialchars((string)$sharedSermon['summary']);
             
             $cover = !empty($sharedSermon['cover_image_path']) ? $sharedSermon['cover_image_path'] : '/assets/images/hod_logo.svg';
-            $og_image = "https://hodlc.lpc.cm" . $cover;
+            $og_image = site_url($cover);
             
-            $og_url = "https://hodlc.lpc.cm/sermons?sermon=" . $sharedSermon['slug'];
+            $og_url = site_url('/sermons?sermon=' . rawurlencode((string) $sharedSermon['slug']));
             
             // Store the script to safely inject it inside the <head> below
             $autoOpenScript = "<script>const autoOpenSlug = '" . $sharedSermon['slug'] . "';</script>";

@@ -209,7 +209,7 @@
   <rect id="se__box__doors--fit" x="80" y="1742" width="440" height="40" fill="none"/>
   <circle cx="540" cy="1760" r="3" fill="#FFFFFF" fill-opacity="0.35"/>
   <text id="se__text__url" x="770" y="1770" font-size="24" font-weight="500" letter-spacing="2"
-        text-anchor="middle" fill="#FFFFFF" fill-opacity="0.5">hodlc.lpc.cm/e/chara</text>
+        text-anchor="middle" fill="#FFFFFF" fill-opacity="0.5">hodlekki.org/e/chara</text>
   <rect id="se__box__url--fit" x="560" y="1742" width="440" height="40" fill="none"/>
 
   <text id="se__text__signature" x="540" y="1850" font-size="19" font-weight="500" letter-spacing="3"

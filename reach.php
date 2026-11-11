@@ -41,7 +41,8 @@ $e = fn($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 
 // OG defaults survive even when the slug is bad; social scrapers still
 // get a usable card. WhatsApp ignores SVG previews, hence the PNG.
-$host     = $_SERVER['HTTP_HOST'] ?? 'hodlc.lpc.cm';
+require_once __DIR__ . '/includes/site_url.php';
+$host     = site_host();
 $bg_image = reach_default_campaign_image($pdo);
 $guide_html = $slug !== '' ? reach_markdown(reach_evangelism_guide($pdo)) : '';
 $og_title = 'Reach — Household of David Lekki Centre';

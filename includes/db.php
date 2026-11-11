@@ -24,6 +24,9 @@ if (!function_exists('loadEnv')) {
 // Load your variables using the absolute server root path
 loadEnv($_SERVER['DOCUMENT_ROOT'] . '/.env');
 
+// The site's own address (SITE_URL), for links that leave the browser.
+require_once __DIR__ . '/site_url.php';
+
 // 3. Set the default timezone for Household of David Lekki Centre (PHP Level)
 date_default_timezone_set('Africa/Lagos');
 

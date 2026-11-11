@@ -171,7 +171,7 @@ function NewEventForm({ onDone, cloneFrom }) {
                     <//>
 
                     <${Field} label="Short link" name="slug" required
-                              hint=${`hodlc.lpc.cm/e/${form.slug || slugFrom(form.title) || '…'}`}>
+                              hint=${`${location.host}/e/${form.slug || slugFrom(form.title) || '…'}`}>
                         <${TextInput} name="slug" value=${form.slug} maxLength="40"
                             onInput=${(v) => set('slug')(v.toLowerCase())} />
                         ${errors.slug ? html`<p class="text-xs font-semibold text-hodRed mt-1">${errors.slug}</p>` : null}
