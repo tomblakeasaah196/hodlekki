@@ -1,4 +1,4 @@
--- /db/migrations/20261126090000_campaigns_core.sql
+-- /db/migrations/20261127090000_campaigns_core.sql
 --
 -- Email: personal addresses, consent, the domain's sending queue and hourly
 -- budget, campaigns, and the automation engine (Embrace, Assimilation, Charis).

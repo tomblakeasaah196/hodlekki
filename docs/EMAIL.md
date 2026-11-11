@@ -17,7 +17,7 @@ lead (screens, the sign-in prompt and sign-in by personal email are later PRs).
 | Path | What |
 | ---- | ---- |
 | `includes/campaigns/bootstrap.php` | The only entry point, after `includes/db.php`. Map of the module at the top. |
-| `db/migrations/20261126090000_campaigns_core.sql` | Every table (`email_*`, `automation_*`). |
+| `db/migrations/20261127090000_campaigns_core.sql` | Every table (`email_*`, `automation_*`). |
 | `cron/email_worker.php` | Every minute: sends the queue under the budget. `--status`, `--dry-run`, `--prune`. |
 | `cron/automation_tick.php` | Every 5 minutes: runs due automations. `--status`, `--dry-run`, `--rule=ID`, `--at="…"`. |
 | `includes/mailer.php` | `hod_send_mail()`: SMTP from `.env` (system@), now also with custom headers, a given Message-ID and one shared connection. |

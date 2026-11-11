@@ -6,7 +6,7 @@
 // drifted from production proves nothing), stand-ins for the platform tables
 // the module reads, a pinned Lagos clock and a fake mail transport.
 
-const CT_MIGRATION = '20261126090000_campaigns_core.sql';
+const CT_MIGRATION = '20261127090000_campaigns_core.sql';
 
 $GLOBALS['ct_passed'] = 0;
 $GLOBALS['ct_failed'] = 0;
