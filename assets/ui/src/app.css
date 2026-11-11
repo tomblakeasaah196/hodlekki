@@ -3063,7 +3063,8 @@ main.app-modal-scroll-locked { overflow: hidden !important; }
     .ui-bottombar,
     .ui-toasts,
     .ui-offline-bar,
-    .ui-skip { display: none !important; }
+    .ui-skip,
+    .ui-no-print { display: none !important; }
     body.ui-app { height: auto; overflow: visible; background: #FFFFFF; }
     .ui-main-col { margin: 0 !important; height: auto; }
     .ui-main { overflow: visible; padding: 0; }

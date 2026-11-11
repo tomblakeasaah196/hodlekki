@@ -11,8 +11,11 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+// Writes (every POST) must carry the session's CSRF token (includes/csrf.php).
+csrf_require();
+
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
+$active_role = $_SESSION['active_role'] ?? '';
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // 2. Role-Based Access Control (RBAC): Admin vs. Student
