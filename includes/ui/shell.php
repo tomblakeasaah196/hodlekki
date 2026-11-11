@@ -339,6 +339,18 @@ function ui_shell_close(): void
     'offline' => $page['offline'],
     'search' => ['index' => $searchIndex, 'groups' => array_merge(['__recent__'], array_values(ui_nav_sections()), ['Actions', 'People', 'Events'])],
     'notifications' => '/api/notifications_api.php',
+    // Vendored libraries a page loads on demand with HOD.lib('name').
+    'vendor' => [
+        'chart' => ui_asset('/assets/ui/vendor/chart.js-4.5.0/chart.umd.min.js'),
+        'cropper' => ui_asset('/assets/ui/vendor/cropperjs-1.5.13/cropper.min.js'),
+        'cropper.css' => ui_asset('/assets/ui/vendor/cropperjs-1.5.13/cropper.min.css'),
+        'geoapify' => ui_asset('/assets/ui/vendor/geoapify-autocomplete-1.5.0/geocoder-autocomplete.min.js'),
+        'html2canvas' => ui_asset('/assets/ui/vendor/html2canvas-1.4.1/html2canvas.min.js'),
+        'xlsx' => ui_asset('/assets/ui/vendor/xlsx-0.18.5/xlsx.full.min.js'),
+        'sortable' => ui_asset('/assets/ui/vendor/sortablejs-1.15.6/Sortable.min.js'),
+        // An ES module: import(HOD.config.vendor.qrcode).then(m => m.qrcode(0, 'M'))
+        'qrcode' => ui_asset('/assets/ui/vendor/qrcode-generator-1.5.0/qrcode.mjs'),
+    ],
 ]) ?>
 </body>
 </html>

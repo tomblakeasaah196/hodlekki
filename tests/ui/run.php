@@ -369,6 +369,26 @@ foreach ($strictFiles as $path => $src) {
     ok("strict page {$path} is clean", $problems === [], implode(', ', $problems));
 }
 
+// Every module page must require the shell by a path that resolves from its
+// own folder (modules/dashboard/ once required 'includes/header.php' and
+// answered HTTP 500 while Departments linked to it).
+$badRequire = [];
+foreach (glob($root . '/modules/*/index.php') ?: [] as $page) {
+    $src = (string) file_get_contents($page);
+    if (!preg_match_all("/\brequire(?:_once)?\b\s*\(?\s*([^;\n]*header\.php[^;\n]*?)\)?\s*;/", $src, $req)) {
+        continue;
+    }
+    foreach ($req[1] as $expr) {
+        $ok = strpos($expr, '__DIR__') !== false || preg_match("#['\"]\\.\\./\\.\\./includes/header\\.php['\"]#", $expr);
+        if (!$ok) {
+            $badRequire[] = substr($page, strlen($root) + 1) . ': ' . trim($expr);
+        }
+    }
+}
+ok('every module requires the shell by a path that resolves from its folder', $badRequire === [], implode('; ', $badRequire));
+ok('the old /modules/dashboard/ URL redirects to the dashboard',
+    strpos((string) file_get_contents($root . '/modules/dashboard/index.php'), "header('Location: /index.php'") !== false);
+
 $allowedCdn = array_values(array_filter(array_map('trim', file($root . '/tests/ui/tailwind_cdn_allowlist.txt') ?: []),
     static fn ($l) => $l !== '' && $l[0] !== '#'));
 sort($tailwindCdn);

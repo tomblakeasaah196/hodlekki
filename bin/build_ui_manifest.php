@@ -44,6 +44,9 @@ $globs = [
     '/assets/ui/js/*.js',
     '/assets/ui/js/pages/*.js',
     '/assets/ui/vendor/*.js',
+    '/assets/ui/vendor/*/*.js',
+    '/assets/ui/vendor/*/*.css',
+    '/assets/ui/vendor/*/*.mjs',
 ];
 $singles = [
     '/assets/js/global-search.js',
