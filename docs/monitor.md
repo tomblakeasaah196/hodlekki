@@ -39,6 +39,8 @@ Four steps make it complete, in this order:
    `.env` as `MONITOR_PROBE_SECRET=…` and in GitHub → Settings → Secrets and variables → Actions as the secret
    `MONITOR_PROBE_SECRET`. Optionally add the server's IP as the secret `ORIGIN_IP` (enables the origin-lock and
    origin-certificate checks). Run it once from GitHub → Actions → "Outside probe" → Run workflow.
+   Then add the Actions variable `MONITOR_PROBE_ENABLED` = `1` to start the hourly schedule (until then
+   the scheduled run is skipped and uses no Actions minutes).
 4. **Optional, recommended:** Cloudflare → Notifications → *Passive origin monitoring* (free). It emails within
    minutes when Cloudflare cannot reach the server — the one failure this server cannot report itself.
 5. **Optional:** the prepend (section 3) for full detail on the dozen public pages that never load `db.php`.

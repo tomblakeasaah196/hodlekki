@@ -15,6 +15,9 @@
 #   variable MONITOR_SITE_HOST     default hodlekki.org
 #   variable MONITOR_CONNECT_HOST  default connect.hodlekki.org
 #   variable MONITOR_DKIM_SELECTOR default "default" (cPanel's)
+#   variable MONITOR_PROBE_ENABLED  set to 1 to run the hourly schedule. Until then the
+#                                  scheduled job is skipped (and costs no minutes);
+#                                  "Run workflow" by hand always runs.
 #
 # Cost: one short job (about 20 s, billed as one minute) an hour = ~720 Actions
 # minutes a month on this private repository. "*/30" doubles that. A server that is
@@ -40,6 +43,8 @@ concurrency:
 jobs:
   probe:
     name: Check hodlekki.org from outside
+    # Off until the owner switches it on (the secret above must be set first).
+    if: ${{ vars.MONITOR_PROBE_ENABLED == '1' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
