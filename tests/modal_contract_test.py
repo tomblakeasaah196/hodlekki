@@ -68,7 +68,11 @@ for path in modal_sources:
         modal_id = match.group(1)
         require("modal" in modal_id.lower(), f"{path}: undiscoverable fixed dialog {modal_id}")
 
-require(fixed_modal_count >= 100,
+# A floor that only proves the scan still works (a broken pattern finds
+# nothing). The count falls on purpose as pages move to the components'
+# native <dialog> (docs/UI.md), which needs no modal manager: it was 126
+# before batch 1 of the UI migration and 98 after it.
+require(fixed_modal_count >= 20,
         f"modal scan unexpectedly found only {fixed_modal_count} authenticated overlays")
 
 if failures:
