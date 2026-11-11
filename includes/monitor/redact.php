@@ -49,14 +49,15 @@ if (!function_exists('monitor_redact')) {
         $s = preg_replace('/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/', '<token>', $s) ?? $s;
         $s = preg_replace('/\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{32,}\b/', '<token>', $s) ?? $s;
 
-        // Email addresses.
-        $s = preg_replace('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', '<email>', $s) ?? $s;
+        // Email addresses, also URL-encoded (ada%40gmail.com).
+        $s = preg_replace('/[A-Z0-9._%+\-]+(?:@|%40)[A-Z0-9.\-]+\.[A-Z]{2,}/i', '<email>', $s) ?? $s;
 
         // Phone numbers: international (+234 803 ..., +237 6...), Nigerian local
-        // (0803..., 234803...) and Cameroonian (237 6xx...) forms.
+        // (0803..., 234803...), also written with spaces or dashes (0803 123 4567,
+        // 0803-123-4567), and Cameroonian (237 6xx...) forms.
         $s = preg_replace('/\+\d[\d\s\-]{8,16}\d/', '<phone>', $s) ?? $s;
-        $s = preg_replace('/(?<![\w.])(?:234|0)[789][01]\d{8}(?![\w.])/', '<phone>', $s) ?? $s;
-        $s = preg_replace('/(?<![\w.])237[26]\d{8}(?![\w.])/', '<phone>', $s) ?? $s;
+        $s = preg_replace('/(?<![\w.])(?:234[\s\-]?|0)[789][01]\d[\s\-]?\d{3}[\s\-]?\d{4}(?![\w.])/', '<phone>', $s) ?? $s;
+        $s = preg_replace('/(?<![\w.])237[\s\-]?[26]\d{2}[\s\-]?\d{3}[\s\-]?\d{3}(?![\w.])/', '<phone>', $s) ?? $s;
 
         // Values a database driver quotes back: Duplicate entry 'ada@x.ng' for
         // key, Incorrect integer value: 'abc', Data truncated for column ... at row
@@ -79,12 +80,20 @@ if (!function_exists('monitor_secret_values')) {
      */
     function monitor_secret_values(): array
     {
+        // Worked out again whenever $_ENV has changed, so a warning met before
+        // db.php loaded .env (a session_start() warning) cannot leave an empty
+        // list behind for the rest of the request.
         static $cache = null;
-        if ($cache !== null) {
+        static $seen = -1;
+        if ($cache !== null && $seen === count($_ENV)) {
             return $cache;
         }
+        $seen = count($_ENV);
         $cache = [];
         $env = $_ENV;
+        if ($env === [] && !function_exists('site_env')) {
+            require_once dirname(__DIR__) . '/site_url.php';   // reads .env itself when db.php has not
+        }
         if (function_exists('site_env') && $env === []) {
             // One name per line: CI's secret sweep reads "NAME', '<long text>" as an inlined secret.
             $names = [
@@ -144,12 +153,19 @@ if (!function_exists('monitor_clean_url')) {
         $segments = explode('/', trim($rawPath, '/'));
         $path = [];
         $route = [];
+        $prev = '';
         foreach ($segments as $i => $seg) {
             if ($seg === '') {
                 continue;
             }
             $seg = rawurldecode($seg);
-            if (preg_match('/^[A-Za-z0-9_\-]{20,}$/', $seg) && preg_match('/\d/', $seg)) {
+            $was = $seg;
+            // A token: 16+ URL-safe characters with a digit or a capital (slugs and
+            // file names are lower case), or anything after /me/ (Special Events
+            // manage links, /e/<event>/me/<22-character token>, can be all letters).
+            if (preg_match('/^[A-Za-z0-9_\-]{16,}$/', $seg) && (preg_match('/[0-9A-Z]/', $seg) || $prev === 'me')) {
+                $seg = ':token';
+            } elseif ($prev === 'me' && preg_match('/^[A-Za-z0-9_\-]{8,}$/', $seg)) {
                 $seg = ':token';
             } elseif (mb_strlen($seg) > 60) {
                 $seg = ':long';
@@ -164,6 +180,7 @@ if (!function_exists('monitor_clean_url')) {
             } else {
                 $route[] = $seg;
             }
+            $prev = $was;
         }
         $p = '/' . implode('/', $path);
         $r = '/' . implode('/', $route);

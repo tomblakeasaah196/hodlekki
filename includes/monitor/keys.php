@@ -4,9 +4,12 @@
  * The monitor's keys (docs/monitor.md, "Signing"). Small on purpose: every page
  * that carries the browser script asks for an intake token through here.
  *
- *   monitor_secret()                MONITOR_SECRET from .env, or one derived from the
- *                                   database settings (one-way, labelled) so nothing
- *                                   has to be set up first
+ *   monitor_secret()                MONITOR_SECRET from .env, or a random key the monitor
+ *                                   makes once in its own folder outside the docroot
+ *                                   (secret.key, 0600), so nothing has to be set up.
+ *                                   Never derived from the database password: every
+ *                                   page prints an HMAC made with this key, which would
+ *                                   let anyone test password guesses offline.
  *   monitor_hash($value)            a keyed hash, to count people without knowing who
  *   monitor_intake_token()          today's token for the browser intake: "20261111.<hmac>"
  *   monitor_intake_token_valid($t)  today's, or one of the two days before (a tab left open)
@@ -29,12 +32,46 @@ if (!function_exists('monitor_secret')) {
         if (strlen($own) >= 16) {
             return $secret = $own;
         }
+        $dir = hod_monitor_data_dir();
+        $made = $dir !== null ? monitor_key_file($dir) : null;
+        if ($made !== null) {
+            return $secret = $made;
+        }
 
-        return $secret = hash_hmac(
-            'sha256',
-            'hod-monitor/v1|' . hod_monitor_env('DB_NAME'),
-            hod_monitor_env('DB_PASS') . '|' . hod_monitor_env('DB_USER') . '|hod'
-        );
+        // No folder to keep a key in (it should not happen on the server): a key
+        // for this process only. Tokens and stop links then last one request, so
+        // Health says to set MONITOR_SECRET.
+        return $secret = bin2hex(random_bytes(32));
+    }
+}
+
+if (!function_exists('monitor_key_file')) {
+    /**
+     * The key kept in <dir>/secret.key: read it, or make it once. Made in a
+     * temporary file and linked into place, so two first requests at the same
+     * moment end up with the same key. Null if it can be neither read nor made.
+     */
+    function monitor_key_file(string $dir): ?string
+    {
+        $file = $dir . '/secret.key';
+        $read = static function () use ($file): ?string {
+            $v = is_file($file) ? trim((string) @file_get_contents($file)) : '';
+            return preg_match('/^[0-9a-f]{64}$/', $v) ? $v : null;
+        };
+        if (($v = $read()) !== null) {
+            return $v;
+        }
+        $tmp = $file . '.' . getmypid() . '.' . bin2hex(random_bytes(4));
+        if (@file_put_contents($tmp, bin2hex(random_bytes(32))) === false) {
+            return null;
+        }
+        @chmod($tmp, 0600);
+        if (!@link($tmp, $file) && !is_file($file)) {
+            @rename($tmp, $file);   // a filesystem without hard links
+        }
+        @unlink($tmp);
+
+        return $read();
     }
 }
 

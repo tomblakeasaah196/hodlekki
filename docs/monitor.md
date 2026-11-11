@@ -95,6 +95,12 @@ already runs first on everything that matters, CLI included (a prepend set in
 files and never deployed. The prepend stays an optional extra, and the two are
 idempotent together.
 
+The intake allows 60 reports a minute per address (checked before anything is
+read) and 3,000 a minute in all, counting only reports with a valid token. Each
+record is stored on its own: one the database refuses is skipped with a log
+line, never blocking the rest, and when the database goes away part-way only
+what was not yet written is spooled, so nothing is counted twice.
+
 **Rules the capture keeps** (it runs on every request): it never prints and
 never changes what a visitor gets. An uncaught exception is recorded and then
 handed straight back to PHP, which ends the request exactly as before — the 500
@@ -107,7 +113,11 @@ connection**, so a page's rolled-back transaction or a fatal mid-transaction
 cannot take the record with it. A warning the monitor recorded is logged as one
 short `HODMON [E7KQ2M9X] …` line instead of PHP's own (the reader skips the
 marker); fatals and uncaught exceptions, which PHP logs itself, are matched to
-the recorded one within 10 seconds, so nothing is counted twice. `@`-silenced calls stay silent. When the
+the recorded one within 10 seconds, so nothing is counted twice. The write runs
+as the very last shutdown function, so it also records warnings raised by the
+others (the push dispatcher, a page's own hooks); anything raised after it
+(destructors, the session write) is left to PHP's own log line, which the log
+reader picks up. `@`-silenced calls stay silent. When the
 database is the problem ("too many connections", a refused connection), events
 go to a spool file outside the docroot and the cron stores them when it
 answers again; after a failed connection the flush does not try again for a
@@ -138,8 +148,9 @@ excerpts in a brief.
   path become `:token` / `:value`.
 - Stack traces never carry function arguments.
 - People are counted, never named: a signed-in person is a keyed hash of their
-  id; a visitor who is not signed in is a hash of the day, address and browser,
-  so they cannot be followed from one day to the next. Events keep the **role**
+  id; a visitor who is not signed in is a hash of the day and address (not the
+  browser, so one sender cannot pass for several people), and cannot be followed
+  from one day to the next. Events keep the **role**
   (`Super_Admin`, `Church_Member`, `guest`) — that is what "which role was
   affected" needs.
 - No IP address, cookie, request body, header or full user agent is stored
@@ -147,6 +158,25 @@ excerpts in a brief.
   address with the minute, in files that are deleted after three minutes.
 - The live wall and the alert emails carry counts, states and redacted titles,
   nothing else.
+
+**Text from browsers is untrusted.** Anyone can send a browser report (the
+intake token is on every public page), so its text is treated as hostile:
+- it never reaches a bell or an email subject or body — those say "A browser
+  error on /route" (`monitor_safe_title()`), and everything written to the bell
+  is made plain text whatever its source (`monitor_plain()`), since the bell has
+  rendered notification text as HTML;
+- in a "Fix with AI" brief it sits in a fence longer than any backticks inside
+  it (`monitor_md_fence()`), under a note that it is data, not instructions;
+- at most 200 new browser problems open an hour, and browser problems quiet for
+  30 days are cleared, so a flood of made-up errors cannot fill the tables;
+- the screens must show titles, messages and stacks as text (`textContent`,
+  `htmlspecialchars`), never as HTML.
+
+**Keys.** Intake tokens, the people hash and email stop links use
+`MONITOR_SECRET` from `.env`, or else a random key the monitor makes once in its
+own folder (`~/.hodlekki_monitor/secret.key`, 0600). Never one derived from the
+database password: every page prints an HMAC made with this key, which would let
+anyone test password guesses offline. Health → "Monitor key" says which is in use.
 
 ---
 
@@ -321,7 +351,7 @@ Recipient, settings and wall changes go to the Security Centre's audit log.
 
 ## 14. Tests
 
-`php tests/monitor/run.php` — about 370 checks, no MySQL, no network, no email:
+`php tests/monitor/run.php` — about 420 checks, no MySQL, no network, no email:
 the migration's shape; redaction; grouping, regressions, spikes, caps and the
 spool; **the capture in real child PHP processes** (warnings, `@`, deprecations,
 an uncaught exception and exit code 255, out of memory, cron heartbeats, the log

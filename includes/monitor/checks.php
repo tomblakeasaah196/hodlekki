@@ -128,7 +128,7 @@ function monitor_check_cron(string $name, array $job, ?array $beat, int $now, ?i
             return monitor_check($key, 'Background jobs', $label, 'warn', 'Late: ' . $detail, $fix);
         }
         if (isset($beat['ok']) && !$beat['ok']) {
-            return monitor_check($key, 'Background jobs', $label, 'warn', $detail . ' The last run stopped with an error: ' . (string) ($beat['last_error'] ?? 'see Errors') . '.', 'Open Errors, filter on cron, and use "Copy for AI".');
+            return monitor_check($key, 'Background jobs', $label, 'warn', $detail . ' The last run stopped with an error: ' . monitor_redact((string) ($beat['last_error'] ?? 'see Errors')) . '.', 'Open Errors, filter on cron, and use "Copy for AI".');
         }
 
         return monitor_check($key, 'Background jobs', $label, 'ok', $detail);
@@ -149,7 +149,7 @@ function monitor_check_cron(string $name, array $job, ?array $beat, int $now, ?i
         return monitor_check($key, 'Background jobs', $label, 'bad', 'Did not run ' . $dayWord . ' at ' . $when->format('H:i') . '. Last ran ' . monitor_ago($started, $now) . '.', $fix);
     }
     if (isset($beat['ok']) && !$beat['ok']) {
-        return monitor_check($key, 'Background jobs', $label, 'warn', 'Ran ' . monitor_ago($started, $now) . ' but stopped with an error: ' . (string) ($beat['last_error'] ?? 'see Errors') . '.', 'Open Errors, filter on cron, and use "Copy for AI".');
+        return monitor_check($key, 'Background jobs', $label, 'warn', 'Ran ' . monitor_ago($started, $now) . ' but stopped with an error: ' . monitor_redact((string) ($beat['last_error'] ?? 'see Errors')) . '.', 'Open Errors, filter on cron, and use "Copy for AI".');
     }
 
     return monitor_check($key, 'Background jobs', $label, 'ok', 'Ran ' . $dayWord . ' at ' . (new DateTimeImmutable('@' . $started))->setTimezone(new DateTimeZone('Africa/Lagos'))->format('H:i') . '.');
@@ -1034,6 +1034,13 @@ function monitor_checks_run(PDO $pdo, PDO $db, bool $slow = false): array
     $safe('php', 'Server', 'PHP (web)', fn () => monitor_check_php($web, $now));
     $safe('speed', 'Server', 'Server speed settings', fn () => monitor_check_speed($web));
     $safe('logs', 'Server', 'Log files', fn () => monitor_check_logs(monitor_facts_logs()));
+    $safe('monitor_key', 'Server', 'Monitor key', function () use ($dir) {
+        $own = strlen(hod_monitor_env('MONITOR_SECRET')) >= 16;
+        $kept = $dir !== null && is_file($dir . '/secret.key');
+        return monitor_check('monitor_key', 'Server', 'Monitor key', $own || $kept ? 'ok' : 'warn',
+            $own ? 'MONITOR_SECRET is set in .env.' : ($kept ? 'A random key kept in the monitor\'s own folder, outside the docroot.' : 'No lasting key: browser reports and email stop links only work within one request.'),
+            $own || $kept ? null : 'Set MONITOR_SECRET in .env (php -r "echo bin2hex(random_bytes(32));"), or make the monitor\'s folder writable.');
+    });
     $outside = null;
     $safe('probe', 'From outside', 'Outside probe', function () use ($db, $now, &$outside) {
         $outside = monitor_facts_outside($db);

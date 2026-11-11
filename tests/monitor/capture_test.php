@@ -113,3 +113,14 @@ $scan = monitor_log_scan_file($db, $log);
 $after = (int) $db->query('SELECT SUM(occurrences) FROM monitor_error_groups')->fetchColumn();
 eq('reading the same log afterwards records nothing twice', $before, $after);
 ok('…it saw the entries and skipped them', $scan['entries'] > 0 && $scan['recorded'] === 0, json_encode($scan));
+
+// ---- Warnings raised after the monitor's shutdown work are not lost (review, 11 Nov)
+@unlink($log);
+[$code] = $run($base . '/bin/late.php', <<<'PHP'
+register_shutdown_function(function () { $a = []; echo $a['late_shutdown']; });
+class Leaves { public function __destruct() { $a = []; echo $a['in_destructor']; } }
+$keep = new Leaves();
+PHP);
+eq('a script with late warnings still ends normally', 0, $code);
+ok('a warning from a later shutdown function is recorded', (bool) $db->query("SELECT 1 FROM monitor_error_groups WHERE title = 'Undefined array key \"late_shutdown\"'")->fetchColumn());
+has('a warning after the write is left to PHP\'s own log, where the log reader finds it', (string) @file_get_contents($log), 'PHP Warning:  Undefined array key "in_destructor"');

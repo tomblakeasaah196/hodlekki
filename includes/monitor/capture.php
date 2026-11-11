@@ -58,6 +58,7 @@ if (!function_exists('hod_monitor_install')) {
             'fatal'     => false,
             'flushed'   => false,
             'cron'      => null,
+            'bg_due'    => false,
             'context'   => [],
         ];
 
@@ -200,11 +201,13 @@ if (!function_exists('hod_monitor_on_shutdown')) {
                 hod_monitor_beat($st['cron'], 'finish', !$st['fatal'], $st['fatal'] ? hod_monitor_first_message() : '', $ms);
             }
 
-            if ($st['buffer'] || hod_monitor_background_due()) {
-                // Registered now, so it runs after every other shutdown function
-                // (the push dispatcher's included): last, after the response.
-                register_shutdown_function('hod_monitor_flush');
-            }
+            // Decided now, and never after a fatal error: nothing here may touch
+            // error_get_last() before the push dispatcher reads it.
+            $st['bg_due'] = !$st['fatal'] && hod_monitor_background_due();
+            // Always registered now, so it runs after every other shutdown function
+            // (the push dispatcher's included) and still records what they raise.
+            // It does nothing at all when there is nothing to write.
+            register_shutdown_function('hod_monitor_flush');
         } catch (Throwable $x) {
             @error_log('HODMON shutdown: ' . $x->getMessage());
         }
@@ -219,8 +222,10 @@ if (!function_exists('hod_monitor_flush')) {
         if ($st['flushed']) {
             return;
         }
+        // From here on the handler steps aside: anything raised later (destructors,
+        // the session write) is logged by PHP itself and read in by the log reader.
         $st['flushed'] = true;
-        if (!hod_monitor_enabled()) {
+        if (!hod_monitor_enabled() || (!$st['buffer'] && empty($st['bg_due']))) {
             return;
         }
         try {
@@ -310,8 +315,8 @@ if (!function_exists('hod_monitor_capture')) {
             return null;
         }
         $st = &$GLOBALS['hod_monitor'];
-        if ($st['busy'] || ($st['count'] >= HOD_MONITOR_MAX_PER_REQUEST && empty($e['force']))) {
-            return null;
+        if ($st['busy'] || $st['flushed'] || ($st['count'] >= HOD_MONITOR_MAX_PER_REQUEST && empty($e['force']))) {
+            return null;   // after the write, PHP logs it as usual and the log reader takes it
         }
         $st['busy'] = true;
         try {
@@ -449,11 +454,15 @@ if (!function_exists('hod_monitor_log_line')) {
 }
 
 if (!function_exists('hod_monitor_first_message')) {
+    /** What stopped a cron run, redacted: it is stored in the heartbeat and shown in Health. */
     function hod_monitor_first_message(): string
     {
         foreach ($GLOBALS['hod_monitor']['buffer'] ?? [] as $e) {
             if (in_array($e['level'] ?? '', ['fatal', 'error'], true)) {
-                return mb_substr((string) ($e['exception_class'] ?? '') . ' ' . (string) $e['message'], 0, 300);
+                require_once __DIR__ . '/redact.php';
+                $text = trim((string) ($e['exception_class'] ?? '') . ' ' . (string) $e['message']);
+
+                return mb_substr(monitor_redact(strtok($text, "\n") ?: $text), 0, 300);
             }
         }
 
@@ -583,8 +592,10 @@ if (!function_exists('hod_monitor_background_due')) {
         if ($dir === null) {
             return false;
         }
-        $t = @filemtime($dir . '/web.json');
+        // is_file() first: a failed filemtime() raises a warning, and even a
+        // silenced one would replace what error_get_last() holds.
+        $file = $dir . '/web.json';
 
-        return $t === false || $t < time() - 600;
+        return !is_file($file) || filemtime($file) < time() - 600;
     }
 }

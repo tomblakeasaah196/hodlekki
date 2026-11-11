@@ -12,8 +12,10 @@
  *   monitor_intake_csp($body, $contentType)            the same, recorded at once: for another
  *                                                      endpoint that receives CSP reports itself
  *   monitor_intake_store_events($events)               the database, or the spool if it is down
- *   monitor_intake_rate_ok($ip)                        at most 60 reports a minute per address,
- *                                                      3000 a minute in all
+ *   monitor_intake_rate_ok($ip)                        at most 60 reports a minute per address (before
+ *                                                      anything is read)
+ *   monitor_intake_global_ok()                         3000 a minute in all, counting only reports
+ *                                                      that carried a valid token
  *
  * Signed: a beacon carries the day's intake token (keys.php) the page was
  * served with, and a CSP report carries it in the report-uri. Nothing that did
@@ -81,6 +83,16 @@ function monitor_intake_beacon(string $body, array $server, ?array $session, ?in
     return ['ok' => true, 'status' => 204, 'events' => $events, 'rum' => $rum];
 }
 
+/** A line, column or time a browser sent, if it is a sane whole number (it fits an INT column). */
+function monitor_intake_int($v): ?int
+{
+    if (!is_int($v) && !(is_string($v) && ctype_digit($v)) && !(is_float($v) && floor($v) === $v)) {
+        return null;
+    }
+
+    return $v >= 0 && $v <= 10000000 ? (int) $v : null;
+}
+
 /** The page a beacon is about: a same-site path, nothing else. */
 function monitor_intake_page(string $page): string
 {
@@ -130,13 +142,13 @@ function monitor_intake_js_event(array $err, array $req, int $now): ?array
         'exception_class' => $type === 'rejection' ? 'UnhandledRejection' : (preg_match('/^(\w*Error):/', $msg, $m) ? $m[1] : 'Error'),
         'message'         => $msg,
         'file'            => $srcPath !== '' ? $srcPath : null,
-        'line'            => isset($err['line']) && is_numeric($err['line']) ? (int) $err['line'] : null,
+        'line'            => monitor_intake_int($err['line'] ?? null),
         'trace_text'      => $lines ? implode("\n", $lines) : null,
         'request'         => $req,
         'at'              => $now,
         'context'         => array_filter([
-            'col'        => isset($err['col']) && is_numeric($err['col']) ? (int) $err['col'] : null,
-            'after_ms'   => isset($err['at']) && is_numeric($err['at']) ? (int) $err['at'] : null,
+            'col'        => monitor_intake_int($err['col'] ?? null),
+            'after_ms'   => monitor_intake_int($err['at'] ?? null),
         ], fn ($v) => $v !== null),
     ];
 }
@@ -195,28 +207,29 @@ function monitor_intake_store_events(array $events): int
     }
     require_once __DIR__ . '/store.php';
     $prepared = array_map('monitor_prepare_event', $events);
+    if (monitor_circuit_open()) {
+        return monitor_spool_write('events', $prepared) ? count($prepared) : 0;   // the database was unreachable a moment ago
+    }
+    $handled = 0;
     try {
-        if (monitor_circuit_open()) {
-            throw new RuntimeException('database recently unreachable');
-        }
         $db = monitor_db();
         if (!monitor_ready($db)) {
-            throw new RuntimeException('monitor tables not there yet');
+            return monitor_spool_write('events', $prepared) ? count($prepared) : 0;   // before the migration
         }
-        $n = monitor_store_all($db, $prepared);
-        try {
-            require_once __DIR__ . '/wall.php';
-            monitor_wall_publish($db, false);
-        } catch (Throwable $e) {
-            // the cron publishes within the minute
-        }
-        return $n;
+        $n = monitor_store_all($db, $prepared, $handled);
     } catch (Throwable $e) {
-        if (!$e instanceof RuntimeException) {
-            monitor_circuit_trip();
-        }
-        return monitor_spool_write('events', $prepared) ? count($prepared) : 0;
+        monitor_circuit_trip();
+        $rest = array_slice($prepared, (int) $handled);
+        return monitor_spool_write('events', $rest) ? count($rest) : 0;
     }
+    try {
+        require_once __DIR__ . '/wall.php';
+        monitor_wall_publish($db, false);
+    } catch (Throwable $e) {
+        // the cron publishes within the minute
+    }
+
+    return $n;
 }
 
 /**
@@ -279,7 +292,7 @@ function monitor_intake_csp_events(string $body, string $contentType, array $ser
             'title'           => $title,
             'message'         => $title . ($report ? '. Report-only: nothing was blocked yet.' : '. The browser refused it.'),
             'file'            => $r['source'] !== '' ? monitor_intake_src($r['source']) : null,
-            'line'            => is_numeric($r['line']) ? (int) $r['line'] : null,
+            'line'            => monitor_intake_int($r['line']),
             'request'         => monitor_intake_request($page, $server, $session),
             'at'              => $now,
             'context'         => ['disposition' => $report ? 'report-only' : 'enforced'],
@@ -290,11 +303,26 @@ function monitor_intake_csp_events(string $body, string $contentType, array $ser
 }
 
 /**
- * At most $perIp reports a minute from one address, and $global from everyone.
- * Counted in small files under the monitor's folder (no database per report);
- * the address is only ever a hash salted with the minute.
+ * At most $perIp reports a minute from one address, checked before anything
+ * is read. Counted in small files under the monitor's folder (no database per
+ * report); the address is only ever a hash salted with the minute.
  */
-function monitor_intake_rate_ok(string $ip, int $perIp = 60, int $global = 3000): bool
+function monitor_intake_rate_ok(string $ip, int $perIp = 60): bool
+{
+    return monitor_intake_count(gmdate('YmdHi') . '-' . substr(hash_hmac('sha256', $ip . '|' . gmdate('YmdHi'), monitor_secret()), 0, 20), $perIp);
+}
+
+/**
+ * At most $global reports a minute from everyone, counted only once a report
+ * has shown a valid token: a flood of junk from one place cannot use up the
+ * allowance real browsers need.
+ */
+function monitor_intake_global_ok(int $global = 3000): bool
+{
+    return monitor_intake_count('g-' . gmdate('YmdHi'), $global);
+}
+
+function monitor_intake_count(string $name, int $limit): bool
 {
     $dir = hod_monitor_data_dir();
     if ($dir === null) {
@@ -304,28 +332,22 @@ function monitor_intake_rate_ok(string $ip, int $perIp = 60, int $global = 3000)
     if (!is_dir($rl)) {
         @mkdir($rl, 0700, true);
     }
-    $minute = gmdate('YmdHi');
-    foreach ([['g-' . $minute, $global], [$minute . '-' . substr(hash_hmac('sha256', $ip . '|' . $minute, monitor_secret()), 0, 20), $perIp]] as [$name, $limit]) {
-        $fh = @fopen($rl . '/' . $name, 'c+');
-        if (!$fh) {
-            continue;
-        }
-        flock($fh, LOCK_EX);
-        $n = (int) stream_get_contents($fh) + 1;
-        ftruncate($fh, 0);
-        rewind($fh);
-        fwrite($fh, (string) $n);
-        flock($fh, LOCK_UN);
-        fclose($fh);
-        if ($n > $limit) {
-            return false;
-        }
+    $fh = @fopen($rl . '/' . $name, 'c+');
+    if (!$fh) {
+        return true;
     }
+    flock($fh, LOCK_EX);
+    $n = (int) stream_get_contents($fh) + 1;
+    ftruncate($fh, 0);
+    rewind($fh);
+    fwrite($fh, (string) $n);
+    flock($fh, LOCK_UN);
+    fclose($fh);
 
-    return true;
+    return $n <= $limit;
 }
 
-/** Old rate-limit counters out (the cron, every run). */
+/** Old rate-limit counters out (the cron every run, and the intake now and then in case the cron is not set up). */
 function monitor_intake_rate_cleanup(): void
 {
     $dir = hod_monitor_data_dir();

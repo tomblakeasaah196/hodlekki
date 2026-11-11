@@ -951,6 +951,13 @@ MySQL 8 and MariaDB 10.11).
 - **Alerts only through `monitor_notify_admins()` (a `system_notifications` row
   each) and `monitor_email_recipients()` (confirmed addresses only, each with a
   stop link).** Never email an address that has not clicked its confirmation.
+  Every email goes through `monitor_mail()` (the one switch point to the
+  campaigns outbox).
+- **Text a browser sent is hostile** (anyone can post a report). It never goes
+  into a bell, an email subject or body: use `monitor_safe_title()`, and
+  `monitor_plain()` for anything else written to the bell (it has rendered
+  notification text as HTML). In a "Fix with AI" brief it goes inside
+  `monitor_md_fence()`. Screens show it with `textContent` / `htmlspecialchars`.
 - **Access goes through `monitor_user_can($pdo, 'monitor.view' | 'monitor.manage')`**,
   the single swap point for the permissions module (Super_Admin from live roles
   until `can()` exists). Never gate on `$_SESSION['active_role']`.

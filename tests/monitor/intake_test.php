@@ -90,7 +90,22 @@ eq('the same violation on two pages is one problem, with both pages', 2,
 // ---- Rate limit
 $ok = 0;
 for ($i = 0; $i < 65; $i++) {
-    $ok += monitor_intake_rate_ok('203.0.113.9', 60, 3000) ? 1 : 0;
+    $ok += monitor_intake_rate_ok('203.0.113.9', 60) ? 1 : 0;
 }
 eq('60 reports a minute from one address, then refused', 60, $ok);
-ok('another address is not affected', monitor_intake_rate_ok('203.0.113.10', 60, 3000));
+ok('another address is not affected', monitor_intake_rate_ok('203.0.113.10', 60));
+$g = 0;
+for ($i = 0; $i < 7; $i++) {
+    $g += monitor_intake_global_ok(5) ? 1 : 0;
+}
+eq('the site-wide allowance is its own count (only valid reports use it)', 5, $g);
+$big = $beacon(['errors' => [['type' => 'error', 'msg' => 'x', 'src' => '/a.js', 'line' => '3000000000', 'col' => -4]]]);
+eq('an impossible line number from a browser is dropped', [null, []], [$big['events'][0]['line'], $big['events'][0]['context']]);
+
+// ---- Without MONITOR_SECRET the key is random and kept, never derived from DB_PASS (review, 11 Nov)
+$kd = $GLOBALS['mt_dir'] . '/keytest';
+@mkdir($kd, 0700, true);
+$k1 = monitor_key_file($kd);
+ok('a random 64-hex key is made once', is_string($k1) && (bool) preg_match('/^[0-9a-f]{64}$/', $k1));
+eq('…and read back the same afterwards', $k1, monitor_key_file($kd));
+ok('…unrelated to the database password', !str_contains((string) $k1, hash_hmac('sha256', 'hod-monitor/v1|', 'Pw-for-the-test-9431|')));

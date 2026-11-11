@@ -109,8 +109,8 @@ switch ($cmd) {
         break;
 
     case 'scan':
-        $n = monitor_spool_import('events', fn ($r) => monitor_store_all($pdo, $r));
-        $m = monitor_spool_import('rum', fn ($r) => monitor_rum_store($pdo, $r));
+        $n = monitor_spool_import('events', fn (array $r) => monitor_store_all($pdo, [$r]));
+        $m = monitor_spool_import('rum', fn (array $r) => monitor_rum_store($pdo, [$r]));
         $s = monitor_log_scan_all($pdo);
         $out('Spool: ' . $n . ' error(s), ' . $m . ' speed report(s). Logs: ' . $s['files'] . ' file(s), ' . $s['entries'] . ' entries, ' . $s['recorded'] . ' recorded, ' . $s['skipped'] . ' skipped.');
         break;

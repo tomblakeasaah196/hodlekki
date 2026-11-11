@@ -99,7 +99,7 @@ eq('a missing key gives the default', 'd', monitor_state_get($db, 'nope', 'd'));
 $ev = monitor_prepare_event(monitor_test_raw(['message' => 'Spooled while the database was down', 'line' => 3]));
 ok('the spool takes records', monitor_spool_write('events', [$ev]));
 $got = [];
-$n = monitor_spool_import('events', function (array $recs) use (&$got) { $got = $recs; });
+$n = monitor_spool_import('events', function (array $record) use (&$got) { $got[] = $record; });
 eq('the spool gives them back once', 1, $n);
 eq('…unchanged', $ev['fingerprint'], $got[0]['fingerprint'] ?? null);
 eq('…and is empty afterwards', 0, monitor_spool_import('events', fn () => null));
@@ -113,5 +113,50 @@ monitor_flush_request(['cli' => true, 'buffer' => [monitor_test_raw(['message' =
 eq('the flush writes to the monitor\'s own connection', 1, (int) $fresh->query("SELECT COUNT(*) FROM monitor_error_groups WHERE title = 'Flushed after the response'")->fetchColumn());
 monitor_flush_request(['cli' => true, 'buffer' => [monitor_test_raw(['kind' => 'log', 'level' => 'fatal', 'message' => 'Database Connection Failed: SQLSTATE[HY000] [2002] No such file'])]]);
 eq('a database outage goes to the spool, not to the database', 0, (int) $fresh->query("SELECT COUNT(*) FROM monitor_error_groups WHERE title LIKE 'Database Connection Failed%'")->fetchColumn());
-eq('…where the cron will find it', 1, monitor_spool_import('events', fn ($r) => monitor_store_all($fresh, $r)));
+eq('…where the cron will find it', 1, monitor_spool_import('events', fn (array $r) => monitor_store_all($fresh, [$r])));
+
+// ---- One bad record never blocks the others, and nothing is written twice (review, 11 Nov)
+eq('a line number beyond an INT column is dropped, not stored', null, monitor_prepare_event(monitor_test_raw(['line' => '3000000000']))['line']);
+eq('…a sane one is kept', 12, monitor_int_or_null('12'));
+monitor_test_refuse($fresh, 'refuse_one', 'Refuse me', 'refused for the test');
+$three = array_map(fn ($m) => monitor_prepare_event(monitor_test_raw(['message' => $m, 'line' => 900])), ['First of three', 'Refuse me', 'Third of three']);
+$handled = 0;
+eq('a record the database refuses is skipped; the others are written', 2, monitor_store_all($fresh, $three, $handled));
+eq('…and all three count as handled (nothing to retry)', 3, $handled);
+
+// The database goes away part-way: only what was not written is kept for later.
+monitor_test_refuse($fresh, 'lock_one', 'Locked out', 'database is locked');
+monitor_db_set($fresh);
+monitor_flush_request(['cli' => true, 'buffer' => [monitor_test_raw(['message' => 'Before the outage', 'line' => 901]),
+    monitor_test_raw(['message' => 'Locked out', 'line' => 902]), monitor_test_raw(['message' => 'After the outage', 'line' => 903])]]);
+eq('written before the database went away', 1, (int) $fresh->query("SELECT COUNT(*) FROM monitor_error_groups WHERE title = 'Before the outage'")->fetchColumn());
+$respooled = [];
+monitor_spool_import('events', function (array $r) use (&$respooled) { $respooled[] = $r['title']; });
+eq('only the two not yet written were spooled', ['Locked out', 'After the outage'], $respooled);
+@unlink($GLOBALS['mt_dir'] . '/db_down');
+
+// The import stops when the database goes away, and keeps what it did not hand over.
+monitor_spool_write('events', array_map(fn ($m) => monitor_prepare_event(monitor_test_raw(['message' => $m, 'line' => 950])), ['One', 'Two', 'Three']));
+$seen = [];
+$first = monitor_spool_import('events', function (array $r) use (&$seen) {
+    if ($r['title'] === 'Two') {
+        throw new PDOException('SQLSTATE[HY000] [2006] MySQL server has gone away');
+    }
+    $seen[] = $r['title'];
+});
+eq('the import hands over what it can, then stops', [1, ['One']], [$first, $seen]);
+$later = [];
+monitor_spool_import('events', function (array $r) use (&$later) { $later[] = $r['title']; });
+eq('…and the next run gets the rest, once', ['Two', 'Three'], $later);
+
+// Anyone can send browser reports: at most 200 new browser problems an hour.
+$quota = monitor_test_db();
+monitor_test_clock('2026-11-13 10:00:00');
+$opened = 0;
+for ($i = 0; $i < 205; $i++) {
+    $opened += monitor_store_all($quota, [monitor_test_raw(['kind' => 'js', 'level' => 'error', 'message' => 'Injected ' . str_repeat('x', $i % 7) . chr(65 + $i % 26) . ($i * 7919), 'line' => $i, 'frames' => []])]);
+}
+eq('a flood of unique browser reports opens at most 200 problems an hour', 200, (int) $quota->query("SELECT COUNT(*) FROM monitor_error_groups WHERE kind = 'js'")->fetchColumn());
+monitor_store_all($quota, [monitor_test_raw(['kind' => 'php', 'level' => 'error', 'message' => 'A real server error during the flood', 'line' => 7])]);
+eq('…while server errors are still recorded', 1, (int) $quota->query("SELECT COUNT(*) FROM monitor_error_groups WHERE kind = 'php'")->fetchColumn());
 monitor_db_set(null);

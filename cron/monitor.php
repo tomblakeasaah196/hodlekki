@@ -69,12 +69,16 @@ $now = monitor_time();
 $minute = (int) date('i', $now);
 $done = [];
 
-// 1. The spool.
+// 1. The spool (each kind on its own: a problem with one never holds up the other).
 try {
-    $done['spooled'] = monitor_spool_import('events', fn ($records) => monitor_store_all($pdo, $records));
-    $done['speed'] = monitor_spool_import('rum', fn ($records) => monitor_rum_store($pdo, $records));
+    $done['spooled'] = monitor_spool_import('events', fn (array $record) => monitor_store_all($pdo, [$record]));
 } catch (Throwable $e) {
-    hod_monitor_report($e, ['step' => 'spool']);
+    hod_monitor_report($e, ['step' => 'spool: errors']);
+}
+try {
+    $done['speed'] = monitor_spool_import('rum', fn (array $record) => monitor_rum_store($pdo, [$record]));
+} catch (Throwable $e) {
+    hod_monitor_report($e, ['step' => 'spool: speed']);
 }
 
 // 2. The error logs.
@@ -159,8 +163,11 @@ function monitor_cleanup(PDO $pdo, int $now): int
     $old('DELETE FROM monitor_error_events WHERE occurred_at < ?', [$d30]);
     $old('DELETE FROM monitor_error_hourly WHERE hour < ?', [$d90]);
     $old('DELETE FROM monitor_error_people WHERE day < ?', [substr($d90, 0, 10)]);
-    $ids = $pdo->prepare("SELECT id FROM monitor_error_groups WHERE status IN ('fixed', 'ignored') AND last_seen_at < ?");
-    $ids->execute([$d90]);
+    // Settled problems after 90 quiet days; browser and CSP reports (anyone can
+    // send one) after 30 quiet days whatever their status; quota counters after 2.
+    $ids = $pdo->prepare("SELECT id FROM monitor_error_groups
+                           WHERE (status IN ('fixed', 'ignored') AND last_seen_at < ?) OR (kind IN ('js', 'csp') AND last_seen_at < ?)");
+    $ids->execute([$d90, $d30]);
     foreach (array_chunk(array_map('intval', $ids->fetchAll(PDO::FETCH_COLUMN)), 200) as $chunk) {
         $in = implode(',', $chunk);
         foreach (['monitor_error_events', 'monitor_error_hourly', 'monitor_error_people', 'monitor_error_paths', 'monitor_error_notes'] as $t) {
@@ -173,6 +180,7 @@ function monitor_cleanup(PDO $pdo, int $now): int
     $old('DELETE FROM monitor_alert_log WHERE at < ?', [$d90]);
     $old('DELETE FROM monitor_rum_daily WHERE day < ?', [monitor_fmt($now - 400 * 86400, 'Y-m-d')]);
     $old("DELETE FROM monitor_state WHERE (k LIKE 'digest:%' OR k LIKE 'cleanup:%') AND updated_at < ?", [monitor_fmt($now - 14 * 86400)]);
+    $old("DELETE FROM monitor_state WHERE k LIKE 'browser_new:%' AND updated_at < ?", [monitor_fmt($now - 2 * 86400)]);
     $dir = hod_monitor_data_dir();
     foreach ($dir !== null ? (glob($dir . '/spool/*.jsonl') ?: []) : [] as $f) {
         if ((int) @filemtime($f) < $now - 7 * 86400) {

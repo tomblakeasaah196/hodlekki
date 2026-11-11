@@ -67,3 +67,16 @@ eq('a file in this tree is shown relative', 'includes/db.php', monitor_short_pat
 eq('the docroot on the server is shown relative', 'api/events_api.php', monitor_short_path('/home/smartqaq/public_html/hodlekki/api/events_api.php'));
 eq('the repository checkout is shown relative', 'bin/deploy.sh', monitor_short_path('/home/smartqaq/repositories/hodlekki/bin/deploy.sh'));
 eq('the account home is shown as ~', '~/deploy.log', monitor_short_path('/home/smartqaq/deploy.log'));
+
+// ---- Gaps the review found (11 Nov)
+foreach (['call 0803 123 4567 now', 'call 0803-123-4567 now', 'call 234 803 123 4567 now', 'SMS to 237 677 123 456'] as $spaced) {
+    lacks('a phone number with spaces or dashes is masked: ' . $spaced, monitor_redact($spaced), '123');
+}
+eq('a URL-encoded email is masked', 'to=<email>', monitor_redact('to=ada%40gmail.com'));
+eq('a Special Events manage token with no digit is hidden', '/e/chara/me/:token', monitor_clean_url('/e/chara/me/abcdefghijklmnopqrstuv')[0]);
+eq('…in the route too', '/e/:event/me/:token', monitor_clean_url('/e/chara/me/abcdefghijklmnopqrstuv')[1]);
+eq('a mixed-case token anywhere is hidden', '/x/:token', monitor_clean_url('/x/AbCdEfGhIjKlMnOpQr')[0]);
+eq('a long lower-case slug is kept', '/e/chara-night-karaoke-games/checkin', monitor_clean_url('/e/chara-night-karaoke-games/checkin')[0]);
+$_ENV['MONITOR_TEST_LATE_SECRET'] = 'late-secret-value-7781';
+eq('a secret added to the environment later is still redacted (no stale cache)', 'got [MONITOR_TEST_LATE_SECRET]', monitor_redact('got late-secret-value-7781'));
+unset($_ENV['MONITOR_TEST_LATE_SECRET']);

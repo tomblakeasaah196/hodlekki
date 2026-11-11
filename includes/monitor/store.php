@@ -27,6 +27,12 @@ if (!function_exists('site_env')) {
 const MONITOR_EVENTS_KEPT     = 50;     // occurrences kept per problem
 const MONITOR_EVENTS_PER_HOUR = 20;     // occurrence rows per problem per hour (fatal: always)
 const MONITOR_SPOOL_MAX_BYTES = 20 * 1048576;
+const MONITOR_BROWSER_NEW_PER_HOUR = 200;   // new problems a browser report may open in an hour
+
+/** A record deliberately not kept (a quota): skipped quietly, never retried. */
+final class MonitorSkip extends RuntimeException
+{
+}
 const MONITOR_LEVELS          = ['fatal', 'error', 'warning', 'notice', 'deprecated', 'slow', 'info'];
 const MONITOR_STATUSES        = ['new', 'investigating', 'fixed', 'ignored'];
 
@@ -307,8 +313,10 @@ function monitor_prepare_event(array $e): array
     if (!empty($req['user_id'])) {
         $userHash = monitor_hash('u:' . (int) $req['user_id']);
     } elseif (!empty($req['ip']) && ($req['source'] ?? '') !== 'cron') {
-        // A visitor who is not signed in: counted for one day, never followed across days.
-        $userHash = monitor_hash('g:' . monitor_fmt((int) ($e['at'] ?? monitor_time()), 'Ymd') . '|' . $req['ip'] . '|' . ($req['ua'] ?? ''));
+        // A visitor who is not signed in: counted by address for one day, never
+        // followed across days. Not by browser too: a sender that only changes its
+        // user agent must not count as several people (the 3-people alert rule).
+        $userHash = monitor_hash('g:' . monitor_fmt((int) ($e['at'] ?? monitor_time()), 'Ymd') . '|' . $req['ip']);
     }
 
     $ev = [
@@ -319,7 +327,7 @@ function monitor_prepare_event(array $e): array
         'message'         => $message,
         'exception_class' => isset($e['exception_class']) ? mb_substr((string) $e['exception_class'], 0, 190) : null,
         'file'            => $file,
-        'line'            => isset($e['line']) && $e['line'] !== null ? (int) $e['line'] : null,
+        'line'            => monitor_int_or_null($e['line'] ?? null),
         'route'           => $route,
         'path'            => $path,
         'method'          => $method !== '' ? mb_substr($method, 0, 8) : null,
@@ -329,8 +337,8 @@ function monitor_prepare_event(array $e): array
         'release'         => $e['release'] ?? monitor_release_id(),
         'device'          => !empty($req['device']) ? (string) $req['device'] : (!empty($req['ua']) ? monitor_device_class((string) $req['ua']) : null),
         'browser'         => !empty($req['ua']) ? monitor_browser_family((string) $req['ua']) : null,
-        'duration_ms'     => isset($e['duration_ms']) ? (int) $e['duration_ms'] : null,
-        'memory_mb'       => isset($e['memory_mb']) ? (int) $e['memory_mb'] : null,
+        'duration_ms'     => monitor_int_or_null($e['duration_ms'] ?? null),
+        'memory_mb'       => monitor_int_or_null($e['memory_mb'] ?? null),
         'trace'           => $trace,
         'context'         => $context ? mb_substr((string) json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0, 4000) : null,
         'ref'             => (string) ($e['ref'] ?? monitor_new_ref()),
@@ -340,6 +348,17 @@ function monitor_prepare_event(array $e): array
     $ev['fingerprint'] = monitor_fingerprint($ev);
 
     return $ev;
+}
+
+/** A whole number that fits an INT column (0 to 2^31 - 1), or null: browsers can send anything. */
+function monitor_int_or_null($v): ?int
+{
+    if ($v === null || $v === '' || !is_numeric($v)) {
+        return null;
+    }
+    $f = (float) $v;
+
+    return $f >= 0 && $f <= 2147483647 ? (int) $f : null;
 }
 
 function monitor_new_ref(): string
@@ -354,19 +373,42 @@ function monitor_new_ref(): string
 
 /* ───────────────────────────── recording ───────────────────────────── */
 
-/** Record prepared events. Returns how many were written. Throws if the database fails. */
-function monitor_store_all(PDO $db, array $events): int
+/**
+ * Record prepared events, each on its own: one the database refuses (bad data)
+ * is skipped with a line in the log, so it can never block the others. Throws
+ * only when the database itself is unreachable; $handled then says how many
+ * events were dealt with (written or skipped) before that, so a caller re-spools
+ * only the rest and nothing is written twice. Returns how many were written.
+ */
+function monitor_store_all(PDO $db, array $events, ?int &$handled = null): int
 {
-    $n = 0;
-    foreach ($events as $ev) {
-        if (!isset($ev['fingerprint'])) {
-            $ev = monitor_prepare_event($ev);
+    $written = 0;
+    $handled = 0;
+    foreach (array_values($events) as $ev) {
+        try {
+            if (!isset($ev['fingerprint'])) {
+                $ev = monitor_prepare_event($ev);
+            }
+            monitor_record($db, $ev);
+            $written++;
+        } catch (MonitorSkip $e) {
+            // deliberately not kept
+        } catch (Throwable $e) {
+            if (monitor_is_connection_error($e)) {
+                throw $e;
+            }
+            @error_log('HODMON skipped a record the database refused: ' . mb_substr(monitor_redact($e->getMessage()), 0, 300));
         }
-        monitor_record($db, $ev);
-        $n++;
+        $handled++;
     }
 
-    return $n;
+    return $written;
+}
+
+/** Is this the database being unreachable or overloaded (try later), rather than one bad record? */
+function monitor_is_connection_error(Throwable $e): bool
+{
+    return (bool) preg_match('/SQLSTATE\[08|\[(1040|1203|2002|2003|2005|2006|2013)\]|server has gone away|Lost connection|Too many connections|max_user_connections|database is locked|Connection refused/i', $e->getMessage());
 }
 
 /**
@@ -381,6 +423,16 @@ function monitor_record(PDO $db, array $ev): array
     $cameBack = false;
 
     $group = monitor_group_by_fingerprint($db, $ev['fingerprint']);
+    if ($group === null && in_array($ev['kind'], ['js', 'csp'], true)) {
+        // Anyone can send a browser report, and a sender varying the message would
+        // open a new problem each time: at most MONITOR_BROWSER_NEW_PER_HOUR an hour.
+        $key = 'browser_new:' . monitor_fmt($ev['at'], 'YmdH');
+        $opened = (int) monitor_state_get($db, $key, '0');
+        if ($opened >= MONITOR_BROWSER_NEW_PER_HOUR) {
+            throw new MonitorSkip('browser problem quota reached for this hour');
+        }
+        monitor_state_set($db, $key, (string) ($opened + 1));
+    }
     if ($group === null) {
         try {
             $db->prepare(
@@ -547,16 +599,17 @@ function monitor_flush_request(array $st): void
         if ($spoolOnly || monitor_circuit_open() || monitor_is_db_outage($st['buffer'])) {
             monitor_spool_write('events', $events);
         } else {
+            $handled = 0;
             try {
                 $db = monitor_db();
                 if (!monitor_ready($db)) {
                     monitor_spool_write('events', $events);   // before the migration: kept for the cron
                 } else {
-                    $wrote = monitor_store_all($db, $events);
+                    $wrote = monitor_store_all($db, $events, $handled);
                 }
             } catch (Throwable $e) {
                 monitor_circuit_trip();
-                monitor_spool_write('events', $events);
+                monitor_spool_write('events', array_slice($events, (int) $handled));   // only what was not written
             }
         }
     }
@@ -638,11 +691,13 @@ function monitor_spool_write(string $kind, array $records): bool
 }
 
 /**
- * Take everything spooled for $kind and hand it to $handler (an array of
- * records at a time). Each file is emptied under its lock, so a writer
- * appending meanwhile only adds to the next import. Returns records handed over.
+ * Take everything spooled for $kind and hand it to $each, one record at a time,
+ * oldest file first, each file under its lock (a writer appending meanwhile
+ * only adds to the next import). If $each throws (the database went away), the
+ * records not yet handled are written back and the import stops: nothing is
+ * lost and nothing is handled twice. Returns how many records were handled.
  */
-function monitor_spool_import(string $kind, callable $handler, int $maxFiles = 30): int
+function monitor_spool_import(string $kind, callable $each, int $maxFiles = 30): int
 {
     $dir = hod_monitor_data_dir();
     if ($dir === null || !is_dir($dir . '/spool')) {
@@ -668,15 +723,31 @@ function monitor_spool_import(string $kind, callable $handler, int $maxFiles = 3
                 $records[] = $r;
             }
         }
+        $done = 0;
+        $failed = false;
         try {
-            if ($records) {
-                $handler($records);
+            foreach ($records as $r) {
+                $each($r);
+                $done++;
             }
-            ftruncate($fh, 0);
-            $count += count($records);
-        } finally {
-            flock($fh, LOCK_UN);
-            fclose($fh);
+        } catch (Throwable $e) {
+            $failed = true;
+        }
+        ftruncate($fh, 0);
+        rewind($fh);
+        if ($failed) {
+            $rest = '';
+            foreach (array_slice($records, $done) as $r) {
+                $rest .= json_encode($r, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n";
+            }
+            fwrite($fh, $rest);
+        }
+        fflush($fh);
+        flock($fh, LOCK_UN);
+        fclose($fh);
+        $count += $done;
+        if ($failed) {
+            break;   // the database is not answering: the rest waits for the next run
         }
         // An emptied file from an earlier hour will not be written again.
         if (!str_contains(basename($file), gmdate('YmdH'))) {

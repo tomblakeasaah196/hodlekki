@@ -222,7 +222,7 @@ try {
             }
             monitor_state_set($pdo, 'scan_now_at', (string) monitor_time());
             hod_monitor_context(['not_slow' => true]);
-            $imported = monitor_spool_import('events', fn ($recs) => monitor_store_all($pdo, $recs));
+            $imported = monitor_spool_import('events', fn (array $record) => monitor_store_all($pdo, [$record]));
             $scan = monitor_log_scan_all($pdo);
             monitor_wall_publish($pdo, true);
             monitor_api_reply(['status' => 'success', 'message' => 'Read ' . $scan['files'] . ' log file(s): ' . $scan['recorded'] . ' new entr' . ($scan['recorded'] === 1 ? 'y' : 'ies') . ' recorded' . ($imported ? ', ' . $imported . ' from the spool' : '') . '.', 'data' => $scan]);

@@ -78,6 +78,32 @@ function monitor_alert_log(PDO $db, string $channel, string $kind, string $subje
        ->execute([monitor_fmt(), $channel, $kind, mb_substr($subject, 0, 255), $recipients, $ok ? 1 : 0, $error !== null ? mb_substr($error, 0, 255) : null]);
 }
 
+/**
+ * Text that is safe anywhere: no markup, no quotes, no backticks, one line.
+ * The bell (includes/header.php) has rendered notification text as HTML, and an
+ * error's text can come from anyone (a browser beacon, a crafted request), so
+ * everything the monitor writes there goes through this, whatever its source.
+ */
+function monitor_plain(string $text, int $max = 500): string
+{
+    $s = strip_tags(html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    $s = str_replace(['<', '>', '"', '`', '&', '\\'], ' ', $s);
+    $s = str_replace("'", '’', $s);
+    $s = trim(preg_replace('/\s+/u', ' ', $s) ?? $s);
+
+    return mb_substr($s, 0, $max);
+}
+
+/** A problem's title as it may appear in a bell or an email subject: never text a browser sent. */
+function monitor_safe_title(array $g, int $max = 120): string
+{
+    if (in_array($g['kind'] ?? '', ['js', 'csp'], true)) {
+        return ($g['kind'] === 'csp' ? 'A Content-Security-Policy report' : 'A browser error') . ' on ' . monitor_plain((string) ($g['route'] ?: 'a page'), 80);
+    }
+
+    return monitor_plain((string) $g['title'], $max);
+}
+
 /** A bell for each active Super_Admin. Returns how many were written. */
 function monitor_notify_admins(PDO $pdo, PDO $db, string $kind, string $title, string $message, string $link, bool $capped = true): int
 {
@@ -85,11 +111,13 @@ function monitor_notify_admins(PDO $pdo, PDO $db, string $kind, string $title, s
         return 0;
     }
     $ids = monitor_super_admin_ids($pdo);
+    $title = monitor_plain($title, 150);
+    $message = monitor_plain($message, 500);
     $n = 0;
     try {
         $stmt = $pdo->prepare('INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, ?, ?, ?)');
         foreach ($ids as $id) {
-            $stmt->execute([$id, mb_substr($title, 0, 150), mb_substr($message, 0, 500), $link]);
+            $stmt->execute([$id, $title, $message, $link]);
             $n++;
         }
         monitor_alert_log($db, 'bell', $kind, $title, $n, $n > 0);
@@ -226,7 +254,7 @@ function monitor_email_recipients(PDO $db, string $kind, string $subject, string
 
 /* ───────────────────────────── what gets announced ───────────────────────────── */
 
-/** "fatal · Undefined array key "x" · /modules/events/ · ×12, 4 people" */
+/** "fatal · Undefined array key "x" · /modules/events/ · ×12, 4 people" (browser text never shown: see monitor_safe_title()) */
 function monitor_alert_row(PDO $db, array $g): array
 {
     $s = monitor_group_stats($db, (int) $g['id']);
@@ -235,42 +263,77 @@ function monitor_alert_row(PDO $db, array $g): array
 
     return [
         'tone'   => $tone,
-        'title'  => mb_substr((string) $g['title'], 0, 160),
-        'detail' => monitor_kind_label($g) . ($where !== '' ? ' · ' . $where : '') . ' · ' . (int) $g['occurrences'] . '×'
+        'title'  => monitor_safe_title($g, 160),
+        'detail' => monitor_kind_label($g) . ($where !== '' ? ' · ' . monitor_plain((string) $where, 120) : '') . ' · ' . (int) $g['occurrences'] . '×'
             . ($s['people_24h'] ? ', ' . $s['people_24h'] . ' ' . ($s['people_24h'] === 1 ? 'person' : 'people') : '')
             . ((int) $g['regressions'] > 0 ? ' · came back after a fix' : '') . ' · #' . $g['id'],
     ];
 }
 
+/**
+ * Who can be told, and whether email has room this hour. When there are
+ * confirmed addresses, an alert waits until email has room, so the two
+ * channels go out together and nothing is marked sent that was not emailed.
+ */
+function monitor_alert_channels(PDO $pdo, PDO $db): array
+{
+    $recipients = count(monitor_recipients_active($db));
+
+    return [
+        'recipients' => $recipients,
+        'admins'     => count(monitor_super_admin_ids($pdo)),
+        'email_room' => $recipients === 0 || monitor_alerts_last_hour($db, 'email') < MONITOR_EMAILS_PER_HOUR,
+    ];
+}
+
+/** Did an alert reach someone (by email when there are recipients, else by the bell), or is there nobody to tell? */
+function monitor_alert_delivered(array $ch, int $mailed, int $belled): bool
+{
+    if ($ch['recipients'] === 0 && $ch['admins'] === 0) {
+        return true;
+    }
+
+    return $ch['recipients'] > 0 ? $mailed > 0 : $belled > 0;
+}
+
 /** New and returning problems worth a message now. One message for all of them. */
 function monitor_alert_new_errors(PDO $pdo, PDO $db): int
 {
-    $rows = $db->query(
+    // Server problems and browser problems are picked separately, so browser
+    // errors still waiting for their third person can never crowd a server
+    // error out of the list.
+    $server = $db->query(
         "SELECT * FROM monitor_error_groups
-          WHERE status = 'new' AND alerted_at IS NULL AND level IN ('fatal', 'error') AND kind NOT IN ('csp', 'slow')
+          WHERE status = 'new' AND alerted_at IS NULL AND level IN ('fatal', 'error') AND kind NOT IN ('csp', 'slow', 'js')
           ORDER BY CASE level WHEN 'fatal' THEN 0 ELSE 1 END, last_seen_at DESC LIMIT 40"
     )->fetchAll(PDO::FETCH_ASSOC);
-    $due = [];
-    foreach ($rows as $g) {
-        if ($g['kind'] === 'js' && (int) $g['regressions'] === 0) {
-            // A browser error is announced once it has reached 3 people: one phone with a
-            // flaky extension is not worth a message, the same error for three people is.
-            $stmt = $db->prepare('SELECT COUNT(DISTINCT user_hash) FROM monitor_error_people WHERE group_id = ? AND day >= ?');
-            $stmt->execute([$g['id'], monitor_fmt(monitor_time() - 86400, 'Y-m-d')]);
-            if ((int) $stmt->fetchColumn() < 3) {
-                continue;
-            }
+    $browser = $db->query(
+        "SELECT * FROM monitor_error_groups
+          WHERE status = 'new' AND alerted_at IS NULL AND level IN ('fatal', 'error') AND kind = 'js'
+          ORDER BY last_seen_at DESC LIMIT 200"
+    )->fetchAll(PDO::FETCH_ASSOC);
+    $due = $server;
+    $people = $db->prepare('SELECT COUNT(DISTINCT user_hash) FROM monitor_error_people WHERE group_id = ? AND day >= ?');
+    foreach ($browser as $g) {
+        // A browser error is announced once it has reached 3 people (or came back
+        // after a fix): one phone with a flaky extension is not worth a message.
+        $people->execute([$g['id'], monitor_fmt(monitor_time() - 86400, 'Y-m-d')]);
+        if ((int) $g['regressions'] > 0 || (int) $people->fetchColumn() >= 3) {
+            $due[] = $g;
         }
-        $due[] = $g;
     }
     if (!$due) {
         return 0;
+    }
+    $ch = monitor_alert_channels($pdo, $db);
+    if (!$ch['email_room']) {
+        return 0;   // over the hourly email cap: everything waits for the next hour, in one message
     }
     $show = array_slice($due, 0, 10);
     $back = count(array_filter($due, fn ($g) => (int) $g['regressions'] > 0));
     $n = count($due);
     $subject = $n === 1
-        ? ((int) $due[0]['regressions'] > 0 ? 'Came back: ' : 'New error: ') . mb_substr((string) $due[0]['title'], 0, 90)
+        ? ((int) $due[0]['regressions'] > 0 ? 'Came back: ' : 'New error: ') . monitor_safe_title($due[0], 90)
         : $n . ' new or returning errors on ' . site_host();
     $intro = $n === 1
         ? ((int) $due[0]['regressions'] > 0 ? 'A problem that was marked fixed has happened again.' : 'The site met a new problem.')
@@ -282,15 +345,14 @@ function monitor_alert_new_errors(PDO $pdo, PDO $db): int
     }
     $mailed = monitor_email_recipients($db, 'errors', 'HOD Lekki: ' . $subject, $subject, $intro, ['Problems' => $list]);
     $belled = monitor_notify_admins($pdo, $db, 'errors', $n === 1 ? 'New error on the site' : $n . ' new errors on the site',
-        mb_substr((string) $due[0]['title'], 0, 120) . ($n > 1 ? ' (+' . ($n - 1) . ' more)' : '') . '. Open the monitor.', monitor_screen_link('#errors'));
-    $recipients = count(monitor_recipients_active($db));
-    if ($mailed > 0 || $belled > 0 || ($recipients === 0 && monitor_super_admin_ids($pdo) === [])) {
+        monitor_safe_title($due[0], 120) . ($n > 1 ? ' (+' . ($n - 1) . ' more)' : '') . '. Open the monitor.', monitor_screen_link('#errors'));
+    if (monitor_alert_delivered($ch, $mailed, $belled)) {
         $ids = array_map(fn ($g) => (int) $g['id'], $due);
         $db->prepare('UPDATE monitor_error_groups SET alerted_at = ? WHERE id IN (' . implode(',', $ids) . ')')->execute([monitor_fmt()]);
         return $n;
     }
 
-    return 0;   // over the hourly cap, or nothing could be sent: the next run tries again
+    return 0;   // nothing could be sent: the next run tries again
 }
 
 /** Problems that suddenly happen far more often (store.php notes them). */
@@ -301,12 +363,16 @@ function monitor_alert_spikes(PDO $pdo, PDO $db): int
     if (!$rows) {
         return 0;
     }
-    $subject = count($rows) === 1 ? 'Spiking: ' . mb_substr((string) $rows[0]['title'], 0, 90) : count($rows) . ' errors are spiking';
+    $ch = monitor_alert_channels($pdo, $db);
+    if (!$ch['email_room']) {
+        return 0;
+    }
+    $subject = count($rows) === 1 ? 'Spiking: ' . monitor_safe_title($rows[0], 90) : count($rows) . ' errors are spiking';
     $mailed = monitor_email_recipients($db, 'spike', 'HOD Lekki: ' . $subject, $subject,
         'These problems are suddenly happening far more often than usual (at least 20 in the last hour and five times their normal rate).',
         ['Spiking' => array_map(fn ($g) => monitor_alert_row($db, $g), $rows)]);
-    $belled = monitor_notify_admins($pdo, $db, 'spike', 'An error is spiking', mb_substr((string) $rows[0]['title'], 0, 120) . '. Open the monitor.', monitor_screen_link('#errors'));
-    if ($mailed > 0 || $belled > 0) {
+    $belled = monitor_notify_admins($pdo, $db, 'spike', 'An error is spiking', monitor_safe_title($rows[0], 120) . '. Open the monitor.', monitor_screen_link('#errors'));
+    if (monitor_alert_delivered($ch, $mailed, $belled)) {
         $stmt = $db->prepare('UPDATE monitor_error_groups SET spike_alerted_at = ? WHERE id = ?');
         foreach ($rows as $g) {
             $stmt->execute([monitor_fmt(), $g['id']]);
@@ -354,10 +420,14 @@ function monitor_alert_health(PDO $pdo, PDO $db, ?array $checks = null): int
         'Needs attention' => array_map(fn ($c) => ['tone' => 'bad', 'title' => $c['label'], 'detail' => trim($c['detail'] . ($c['fix'] ? ' What to do: ' . $c['fix'] : ''))], $red),
         'Recovered'       => array_map(fn ($c) => ['tone' => 'ok', 'title' => $c['label'], 'detail' => $c['detail']], $recovered),
     ];
+    $ch = monitor_alert_channels($pdo, $db);
+    if (!$ch['email_room']) {
+        return 0;   // the next run, when email has room again
+    }
     $mailed = monitor_email_recipients($db, 'health', 'HOD Lekki: ' . $subject, $subject,
         $red ? 'A health check of the site turned red. Each item says what is wrong and what to do.' : 'Checks that were red are fine again.', $sections);
     $belled = $red ? monitor_notify_admins($pdo, $db, 'health', $subject, mb_substr($red[0]['detail'], 0, 200) . ' See the monitor.', monitor_screen_link('#health')) : 0;
-    if ($mailed > 0 || $belled > 0 || !$red) {
+    if (!$red || monitor_alert_delivered($ch, $mailed, $belled)) {
         $stmt = $db->prepare('UPDATE monitor_checks SET alerted_at = ?, alerted_state = ? WHERE check_key = ?');
         foreach ($red as $c) {
             $stmt->execute([monitor_fmt($now), 'bad', $c['key']]);

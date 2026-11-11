@@ -7,7 +7,8 @@
  *   POST ?k=csp&t=<token> (a page's CSP report-uri) a Content-Security-Policy violation report
  *
  * Signed (the day's intake token from the page) and rate-limited (60 a minute
- * per address, 3000 in all). Answers 204 at once and records after the response,
+ * per address before anything is read; 3000 a minute in all, counting only
+ * reports with a valid token). Answers 204 at once and records after the response,
  * so a phone never waits on it. Deliberately does NOT load includes/db.php: a
  * report costs no database connection unless it carries an error, and speed
  * figures go to the spool, imported by the cron every minute.
@@ -57,10 +58,18 @@ if ($isCsp) {
         exit;
     }
     $events = monitor_intake_csp_events($body, $contentType, $_SERVER, $session);
+    if (!monitor_intake_global_ok()) {
+        http_response_code(429);
+        exit;
+    }
 } else {
     $r = monitor_intake_beacon($body, $_SERVER, $session);
     if (!$r['ok']) {
         http_response_code($r['status']);
+        exit;
+    }
+    if (!monitor_intake_global_ok()) {
+        http_response_code(429);
         exit;
     }
     $events = $r['events'];
@@ -77,6 +86,9 @@ if (function_exists('fastcgi_finish_request')) {
 
 if ($events) {
     monitor_intake_store_events($events);
+}
+if (random_int(1, 50) === 1) {
+    monitor_intake_rate_cleanup();   // keeps the counters tidy even before the monitor's cron is set up
 }
 if ($rum !== null) {
     require_once __DIR__ . '/../includes/monitor/rum.php';

@@ -207,6 +207,18 @@ function monitor_test_mysql(string $dsn): PDO
     return $pdo;
 }
 
+/** Make the database refuse a problem with this title, with this message, on either engine. */
+function monitor_test_refuse(PDO $db, string $name, string $title, string $message): void
+{
+    if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+        $db->exec("CREATE TRIGGER {$name} BEFORE INSERT ON monitor_error_groups WHEN NEW.title = " . $db->quote($title)
+            . ' BEGIN SELECT RAISE(ABORT, ' . $db->quote($message) . '); END');
+        return;
+    }
+    $db->exec("CREATE TRIGGER {$name} BEFORE INSERT ON monitor_error_groups FOR EACH ROW BEGIN IF NEW.title = " . $db->quote($title)
+        . " THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = " . $db->quote($message) . '; END IF; END');
+}
+
 /** The columns of a table, on either engine. */
 function monitor_test_columns(PDO $db, string $table): array
 {
