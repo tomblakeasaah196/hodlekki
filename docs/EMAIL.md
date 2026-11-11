@@ -181,9 +181,18 @@ plain POST forms with the CSRF field (no page script).
 
 **Capture from forms** (`email_capture_after_save()`): the Connect card and
 Embrace add/edit start confirmation for a new or changed address (saving again
-never re-sends) and record a "yes" to church news only when the box was ticked
-(Connect: the person's own, with IP and user agent; Embrace: the spoken yes,
-with the worker's id and `EMAIL_CONSENT_NEWS_SPOKEN_TEXT`).
+never re-sends). Their "Stay in touch with us" box **starts ticked** (owner's
+decision, 11 Nov 2026, on record after the NDPA point was raised) and is
+recorded honestly as method `prechecked` with the exact wording shown
+(`EMAIL_CONSENT_VISITOR_TEXT`): Connect with the visitor's IP and user agent,
+Embrace with the worker's id — never as a typed or spoken yes. A pre-ticked box
+never undoes an unsubscribe. (Members get no box at all; that rule arrives with
+the public-pages change.)
+
+**Referrer-Policy:** never `no-referrer` on a folder whose pages post their own
+CSRF-checked forms: browsers then send `Origin: null` and `csrf_same_origin()`
+refuses the post (#120). `email/.htaccess` uses `same-origin`; the tests check
+every folder.
 
 **The Connect card cannot be used to mail strangers.** Confirmation links are
 limited to 3 a day per address (whoever the "person" is), and links started
