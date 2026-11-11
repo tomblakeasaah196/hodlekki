@@ -120,8 +120,8 @@ try {
             $qr_hash = hash('sha256', bin2hex(random_bytes(16)) . $phone);
 
             $email = !empty(trim($_POST['email'] ?? '')) ? strtolower(trim($_POST['email'])) : null;
-            if ($email && str_ends_with($email, '@hodlc.com')) {
-                echo json_encode(['status' => 'error', 'message' => 'Please use a personal email address.']);
+            if ($email && (str_ends_with($email, '@hodlc.com') || preg_match('/[@.]hodlekki\.org$/', $email))) {
+                echo json_encode(['status' => 'error', 'message' => 'Please use their personal email address, not a church one.']);
                 exit;
             }
 
@@ -161,17 +161,27 @@ try {
                 $qr_hash 
             ]);
 
+            // The new person's id, read once, straight after the INSERT: anything
+            // that runs below may insert rows of its own.
+            $newVisitorId = (int) $pdo->lastInsertId();
+
             // Reach: if this first timer was met through Reach, mark that lead "Visited Church".
             require_once __DIR__ . '/../includes/reach_helpers.php';
-            reach_mark_visited_church($pdo, $phone, (int) $pdo->lastInsertId());
+            reach_mark_visited_church($pdo, $phone, $newVisitorId);
 
             // ATTENDANCE AUTO-CHECK-IN: a first timer captured on Embrace was
             // obviously physically in the building — mark them Present for
             // whichever Sunday/Midweek service is happening right now, so
             // they show up immediately in the Events & Attendance module and
             // the Analytics tab without anyone having to check them in twice.
-            $newVisitorId = (int) $pdo->lastInsertId();
             $auto_checked_in_events = embrace_auto_checkin_today($pdo, $newVisitorId, $user_id);
+
+            // Email (docs/EMAIL.md): a confirm link to their address, and their
+            // spoken "yes" to church news, recorded with this worker's name.
+            if ($email) {
+                require_once __DIR__ . '/../includes/campaigns/bootstrap.php';
+                email_capture_after_save($pdo, $newVisitorId, $email, 'embrace', (int) $user_id, !empty($_POST['email_news']));
+            }
 
             // NOTIFICATION TRIGGER
             $embStmt = $pdo->query("SELECT ud.user_id FROM user_departments ud JOIN departments d ON ud.department_id = d.id WHERE d.name LIKE '%Embrace%' AND ud.role_in_dept IN ('Director', 'HOD') AND ud.is_active = 1");
@@ -207,6 +217,10 @@ try {
             }
 
             $email = !empty(trim($_POST['email'] ?? '')) ? strtolower(trim($_POST['email'])) : null;
+            if ($email && (str_ends_with($email, '@hodlc.com') || preg_match('/[@.]hodlekki\.org$/', $email))) {
+                echo json_encode(['status' => 'error', 'message' => 'Please use their personal email address, not a church one.']);
+                exit;
+            }
             $visitation_preference = $_POST['visitation_preference'] ?? 'None';
             $invitation_source = $_POST['invitation_source'] ?? 'Self_Discovery';
 
@@ -247,6 +261,12 @@ try {
 
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
+
+            // A new or changed address gets a confirm link (saving again never re-sends).
+            if ($email) {
+                require_once __DIR__ . '/../includes/campaigns/bootstrap.php';
+                email_capture_after_save($pdo, (int) $visitor_id, $email, 'embrace', (int) $user_id, !empty($_POST['email_news']));
+            }
 
             echo json_encode(['status' => 'success', 'message' => 'Record successfully updated.']);
             break;

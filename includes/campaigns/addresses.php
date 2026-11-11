@@ -265,6 +265,15 @@ function email_capture_start(PDO $pdo, int $userId, string $rawEmail, string $so
         return ['ok' => false, 'code' => 'RATE_LIMITED',
                 'message' => 'We have sent several links today. Please check your inbox (and spam folder), or try again tomorrow.'];
     }
+    // The public Connect card can name any address: limit links per requester
+    // and in total, so it can never be used to mail strangers or to use up the
+    // domain's budget for real confirmations and resets.
+    if ($source === 'connect' && ($opts['send'] ?? true) !== false) {
+        $why = email_connect_throttle($pdo, (string) ($opts['ip'] ?? ''), $now);
+        if ($why !== null) {
+            return ['ok' => false, 'code' => 'THROTTLED', 'message' => $why];
+        }
+    }
 
     $token = campaigns_token(32);
     $hash = hash('sha256', $token);
@@ -305,6 +314,9 @@ function email_capture_start(PDO $pdo, int $userId, string $rawEmail, string $so
             'now'        => true,
         ]);
         $outboxId = $queued['id'] ?? null;
+        if (!empty($queued['ok']) && $source === 'connect') {
+            email_connect_throttle_note($pdo, (string) ($opts['ip'] ?? ''), $now);
+        }
         if (empty($queued['ok'])) {
             error_log('[email] could not queue the confirmation email for user ' . $userId . ': ' . ($queued['message'] ?? $queued['code'] ?? 'unknown'));
         }
@@ -461,6 +473,87 @@ function email_sync_users_email(PDO $pdo, int $userId, string $email): void
             error_log('[email] users.email sync failed for user ' . $userId . ': ' . $e->getMessage());
         }
     }
+}
+
+/**
+ * A form has just saved an email for this person (Connect, an Embrace worker
+ * adding or editing a first timer). Starts confirmation unless that address is
+ * already confirmed or already waiting for its link (saving a record again
+ * never re-sends), and records a "yes" to church news when the form asked.
+ * Best effort: the record is already saved, so this never throws.
+ *
+ * $evidence: ip, user_agent (the person's own form).
+ */
+function email_capture_after_save(PDO $pdo, int $personId, ?string $email, string $source, ?int $byUserId, bool $newsYes, array $evidence = []): void
+{
+    try {
+        $email = email_normalize($email);
+        if ($email === '' || $personId <= 0 || !campaigns_ready($pdo) || email_address_problem($email) !== null) {
+            return;
+        }
+        $staff = $source === 'embrace' || $source === 'staff';
+        $consent = $newsYes ? [
+            'granted'     => true,
+            'method'      => EMAIL_SOURCE_CONSENT_METHOD[$source] ?? 'profile',
+            'text'        => $staff ? EMAIL_CONSENT_NEWS_SPOKEN_TEXT : EMAIL_CONSENT_NEWS_TEXT,
+            'recorded_by' => $staff ? $byUserId : null,
+            'ip'          => $staff ? null : ($evidence['ip'] ?? null),
+            'user_agent'  => $staff ? null : ($evidence['user_agent'] ?? null),
+        ] : null;
+        $state = email_address_state($pdo, $personId);
+        if ($state['confirmed'] === $email || $state['pending'] === $email) {
+            if ($consent !== null && email_consent_state($pdo, $personId) !== 'granted') {
+                email_consent_record($pdo, $personId, 'granted', $consent['method'], $consent + ['email' => $email]);
+            }
+            return;
+        }
+        $r = email_capture_start($pdo, $personId, $email, $source, $byUserId, [
+            'consent'    => $consent,
+            'ip'         => $evidence['ip'] ?? null,
+            'user_agent' => $evidence['user_agent'] ?? null,
+        ]);
+        if (empty($r['ok'])) {
+            error_log('[email] capture after ' . $source . ' save for user ' . $personId . ': ' . ($r['code'] ?? '') . ' ' . ($r['message'] ?? ''));
+        } elseif (function_exists('email_prompt_unskip')) {
+            email_prompt_unskip($pdo, $personId);
+        }
+    } catch (Throwable $e) {
+        error_log('[email] capture after ' . $source . ' save failed for user ' . $personId . ': ' . $e->getMessage());
+    }
+}
+
+const EMAIL_CONNECT_LINKS_PER_IP_HOUR = 5;
+const EMAIL_CONNECT_LINKS_PER_HOUR    = 20;
+
+/**
+ * Why a Connect-card link may not go now, or null. Per requester (hashed IP)
+ * and in total per hour. Fails closed: no throttle table, no link.
+ */
+function email_connect_throttle(PDO $pdo, string $ip, DateTimeImmutable $now): ?string
+{
+    if (!campaigns_table_exists($pdo, 'email_link_throttle')) {
+        return 'Email links from the Connect card are not set up yet.';
+    }
+    $stmt = $pdo->prepare("SELECT
+            (SELECT COUNT(*) FROM email_link_throttle WHERE kind = 'connect' AND created_at >= ?) AS total,
+            (SELECT COUNT(*) FROM email_link_throttle WHERE kind = 'connect' AND key_hash = ? AND created_at >= ?) AS mine");
+    $since = campaigns_sql_dt($now->modify('-1 hour'));
+    $stmt->execute([$since, hash('sha256', 'hod-connect-ip|' . $ip), $since]);
+    $c = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ((int) $c['mine'] >= EMAIL_CONNECT_LINKS_PER_IP_HOUR) {
+        return 'Too many confirmation links from this connection in the last hour.';
+    }
+    if ((int) $c['total'] >= EMAIL_CONNECT_LINKS_PER_HOUR) {
+        return 'The hourly limit for confirmation links from the Connect card is reached.';
+    }
+    return null;
+}
+
+function email_connect_throttle_note(PDO $pdo, string $ip, DateTimeImmutable $now): void
+{
+    $pdo->prepare("DELETE FROM email_link_throttle WHERE created_at < ?")->execute([campaigns_sql_dt($now->modify('-1 day'))]);
+    $pdo->prepare("INSERT INTO email_link_throttle (kind, key_hash, created_at) VALUES ('connect', ?, ?)")
+        ->execute([hash('sha256', 'hod-connect-ip|' . $ip), campaigns_sql_dt($now)]);
 }
 
 /** Withdraw a pending address (the person changed their mind). */

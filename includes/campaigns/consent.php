@@ -15,6 +15,9 @@
 
 const EMAIL_CONSENT_NEWS_TEXT = 'Yes, Household of David Lekki may email me church news, service reminders and messages from the pastoral team. I can unsubscribe at any time with the link in every email.';
 
+// What an Embrace worker reads out when they record the answer in person.
+const EMAIL_CONSENT_NEWS_SPOKEN_TEXT = 'Asked in person by an Embrace worker: "May Household of David Lekki email you church news, service reminders and messages from the pastoral team? You can unsubscribe at any time with the link in every email." The person said yes.';
+
 const EMAIL_CONSENT_PURPOSES = ['news'];
 const EMAIL_CONSENT_CHANNELS = ['email', 'sms'];
 const EMAIL_CONSENT_ACTIONS  = ['granted', 'withdrawn'];

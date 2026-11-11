@@ -89,6 +89,9 @@ function connect_identity(PDO $pdo): array {
         if (str_ends_with($email, CONNECT_SYSTEM_EMAIL_DOMAIN)) {
             connect_fail('@hodlc.com addresses are issued by the church. Please enter your personal email (e.g. name@gmail.com), or leave it blank.', 'email');
         }
+        if ($email === 'hodlekki.org' || preg_match('/[@.]hodlekki\.org$/', $email)) {
+            connect_fail('Please use your personal email (e.g. name@gmail.com), not a church one, or leave it blank.', 'email');
+        }
     }
 
     $stmt = $pdo->prepare("SELECT id FROM users WHERE " . CONNECT_PHONE_SQL . " LIKE ? LIMIT 1");
@@ -150,6 +153,21 @@ try {
         // ACTION 1: PUBLIC VISITOR REGISTRATION
         // =====================================================================================
         case 'submit_connect_card':
+            // A script that fills the hidden field, posts faster than a person
+            // can, or invents the page's signed time gets an ordinary success
+            // and nothing is saved or sent. A page left open for days is asked
+            // to reload.
+            require_once __DIR__ . '/../includes/campaigns/formguard.php';
+            $verdict = campaigns_form_verdict(connect_input('form_ts'), connect_input(CAMPAIGNS_FORM_HONEYPOT));
+            if ($verdict === 'bot') {
+                error_log('Embrace Public API: Connect card refused as automated (honeypot/timing).');
+                echo json_encode(['status' => 'success', 'message' => 'Welcome home! Your details have been received with love.']);
+                exit;
+            }
+            if ($verdict === 'expired') {
+                connect_fail('This page has been open a long time. Please reload it and fill in the card again.');
+            }
+
             [$fname, $lname, $phone, $email] = connect_identity($pdo);
 
             // Step 2: optional details. ENUM and DATE columns reject anything else in strict mode.
@@ -239,6 +257,17 @@ try {
                 reach_mark_visited_church($pdo, $phone, $new_id);
             } catch (Throwable $e) {
                 error_log("Embrace Public API (reach sync, user {$new_id}): " . $e->getMessage());
+            }
+
+            // Email (docs/EMAIL.md): a link to confirm the address, which doubles
+            // as their welcome; "yes" to church news only if they ticked the box
+            // (it is unticked by default). Best effort, never reported.
+            if ($email !== '') {
+                require_once __DIR__ . '/../includes/campaigns/bootstrap.php';
+                email_capture_after_save($pdo, $new_id, $email, 'connect', null, connect_input('email_news') === '1', [
+                    'ip'         => function_exists('security_client_ip') ? security_client_ip() : null,
+                    'user_agent' => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255),
+                ]);
             }
 
             try {
