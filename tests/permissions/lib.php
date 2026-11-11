@@ -10,6 +10,7 @@
 const PERM_TEST_CORE = '20261126090000_perm_core.sql';
 const PERM_TEST_PLATFORM = '20261126090100_perm_platform_columns.sql';
 const PERM_TEST_SEED = '20261126090200_perm_day_one.sql';
+const PERM_TEST_GRANTS = '20261126090300_perm_monitor_grant.sql';
 
 $GLOBALS['perm_test_passed'] = 0;
 $GLOBALS['perm_test_failed'] = 0;
@@ -162,6 +163,7 @@ function perm_test_db(): PDO
                   JOIN (SELECT 'requisition.disburse' AS k UNION ALL SELECT 'finance.countersign') m
                  WHERE d.name = 'Finance' AND d.type = 'Administrative'");
     $pdo->exec(perm_test_migration(PERM_TEST_SEED));
+    $pdo->exec(perm_test_migration(PERM_TEST_GRANTS));
     perm_use_pdo($pdo);
     perm_set_today('2026-11-11');
     return $pdo;

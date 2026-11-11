@@ -47,13 +47,14 @@ eq('Director / HOD roles carry no cells (decision 2)', 0,
     (int) $pdo->query("SELECT COUNT(*) FROM perm_grants g JOIN roles r ON r.id = g.role_id WHERE r.role_name IN ('Director','HOD')")->fetchColumn());
 eq('assets owners: Envision + River of Life (no department is NAMED IDI)', [3, 4], perm_module_owners($pdo)['assets']);
 eq('Finance owns disbursement', [14], perm_module_owners($pdo)['requisition.disburse']);
-foreach ([PERM_TEST_CORE, PERM_TEST_PLATFORM, PERM_TEST_SEED] as $f) {
+foreach ([PERM_TEST_CORE, PERM_TEST_PLATFORM, PERM_TEST_SEED, PERM_TEST_GRANTS] as $f) {
     ok("{$f} carries the _perm_ marker", str_contains($f, '_perm_'));
 }
 ok('seed is portable (no ON DUPLICATE / INSERT IGNORE)',
     !preg_match('/ON DUPLICATE|INSERT IGNORE/i', perm_test_migration(PERM_TEST_SEED)));
 $cells = (int) $pdo->query('SELECT COUNT(*) FROM perm_grants')->fetchColumn();
 $pdo->exec(perm_test_migration(PERM_TEST_SEED));
+$pdo->exec(perm_test_migration(PERM_TEST_GRANTS));
 eq('seed re-runs as a no-op', $cells, (int) $pdo->query('SELECT COUNT(*) FROM perm_grants')->fetchColumn());
 
 // ---------------------------------------------------------------------------
@@ -157,7 +158,7 @@ $calls = 0;
 $iter = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
 foreach ($iter as $file) {
     $path = str_replace('\\', '/', substr($file->getPathname(), strlen($root)));
-    if ($file->getExtension() !== 'php' || preg_match('#^/(vendor|tests|node_modules|\.git)/#', $path)
+    if ($file->getExtension() !== 'php' || preg_match('#^/(vendor|tests|node_modules|\.git|\.claude)/#', $path)
         || $path === '/includes/permissions/legacy_rules.php') {
         continue;
     }
