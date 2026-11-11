@@ -5,6 +5,7 @@
 // open that step, focus the field and show the message beside it.
 
 require_once '../includes/db.php';
+require_once '../includes/campaigns/formguard.php'; // honeypot, single-use signed time, Turnstile
 header('Content-Type: application/json');
 
 // Church-issued login addresses. Visitors give a personal email instead.
@@ -33,6 +34,11 @@ const CONNECT_PHONE_TAKEN = 'This phone number is already registered in our fami
 const CONNECT_EMAIL_TAKEN = 'This email is already linked to another profile. Please use a different email, or leave it blank.';
 
 function connect_fail(string $message, ?string $field = null, array $extra = []): never {
+    // Every error carries a fresh signed render time (the card's token is
+    // good for one saved card), so a visitor who mistyped never has to reload.
+    if (function_exists('campaigns_form_token')) {
+        $extra['form_ts'] = campaigns_form_token();
+    }
     echo json_encode(['status' => 'error', 'message' => $message, 'field' => $field] + $extra);
     exit;
 }
@@ -157,15 +163,14 @@ try {
             // can, or invents the page's signed time gets an ordinary success
             // and nothing is saved or sent. A page left open for days is asked
             // to reload.
-            require_once __DIR__ . '/../includes/campaigns/formguard.php';
             $verdict = campaigns_form_verdict(connect_input('form_ts'), connect_input(CAMPAIGNS_FORM_HONEYPOT));
             if ($verdict === 'bot') {
-                error_log('Embrace Public API: Connect card refused as automated (honeypot/timing).');
+                error_log('Embrace Public API: Connect card refused as automated (honeypot, timing or replay).');
                 echo json_encode(['status' => 'success', 'message' => 'Welcome home! Your details have been received with love.']);
                 exit;
             }
-            if ($verdict === 'expired') {
-                connect_fail('This page has been open a long time. Please reload it and fill in the card again.');
+            if ($verdict === 'stale' || $verdict === 'expired') {
+                connect_fail('Please send the card again.');
             }
 
             [$fname, $lname, $phone, $email] = connect_identity($pdo);
@@ -213,6 +218,14 @@ try {
             $wants_to_join = connect_input('wants_to_join') === '1' ? 1 : 0;
             $visitation_preference = connect_input('wants_visitation') === '1' ? 'In-Person' : 'None';
 
+            // Cloudflare Turnstile, when the owner has configured it. Checked
+            // last, after every field is valid: its token is single-use, so a
+            // mistyped phone must not cost the visitor a fresh challenge.
+            $turnstile = campaigns_turnstile_check(connect_input('cf-turnstile-response'), security_client_ip());
+            if ($turnstile === 'fail') {
+                connect_fail('Please tick the "I am human" box, then send again.', null, ['turnstile' => true]);
+            }
+
             // Generate unique QR hash for swift check-ins at physical services
             $qr_hash = hash('sha256', random_bytes(16) . $phone);
 
@@ -247,6 +260,7 @@ try {
                 connect_server_fail($e);
             }
             $new_id = (int) $pdo->lastInsertId();
+            campaigns_form_consume(connect_input('form_ts')); // this page has saved its card
 
             // The card is saved. Everything below is best-effort: a failure is
             // logged, never reported, so the visitor isn't told to retry a card

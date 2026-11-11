@@ -60,9 +60,9 @@ ct_eq('after the migration campaigns_ready() is true', true, campaigns_ready($pd
 // ===========================================================================
 ct_section('2. Personal email: rules');
 // ===========================================================================
-ct_ok('@hodlekki.org is refused', str_contains((string) email_address_problem('pastor@hodlekki.org'), 'outside hodlekki.org'));
+ct_ok('@hodlekki.org is refused', str_contains((string) email_address_problem('pastor@hodlekki.org'), 'not a church one'));
 ct_ok('a hodlekki.org subdomain is refused', email_address_problem('x@mail.hodlekki.org') !== null);
-ct_ok('@hodlc.com is refused as a sign-in name', str_contains((string) email_address_problem('grace@hodlc.com'), 'sign-in names'));
+ct_ok('@hodlc.com is refused as a sign-in name', str_contains((string) email_address_problem('grace@hodlc.com'), 'sign-in name'));
 ct_ok('a broken address is refused', email_address_problem('grace@gmail') !== null && email_address_problem('not an email') !== null);
 ct_eq('a Gmail address is fine (any case, any spaces)', null, email_address_problem('  Ada.Obi@Gmail.com '));
 ct_eq('typo hint', 'ada@gmail.com', email_typo_hint('ada@gmial.com'));
@@ -170,7 +170,12 @@ ct_ok('changed wording is a new row', email_consent_text_id($pdo, 'news', EMAIL_
     && email_consent_text_id($pdo, 'news', 'Different words.') !== $t);
 ct_eq('never asked: none', 'none', email_consent_state($pdo, 3));
 ct_eq('no confirmed email → no news by email', 'no_confirmed_email', email_may_send_news($pdo, 4)['reason']);
-ct_eq('confirmed but never said yes → no_consent', 'no_consent', email_may_send_news($pdo, 2)['reason']);
+ct_eq('a MEMBER with a confirmed email needs no box (membership)', true, email_may_send_news($pdo, 2)['ok']);
+ct_eq('…and the basis is not a consent row', 'none', email_consent_state($pdo, 2));
+ct_user($pdo, 6, 'Vera', 'Visitor');
+$vv = email_capture_start($pdo, 6, 'vera@gmail.com', 'profile', null, ['send' => false]);
+email_capture_confirm($pdo, $vv['token']);
+ct_eq('a VISITOR confirmed but never said yes → no_consent', 'no_consent', email_may_send_news($pdo, 6)['reason']);
 email_consent_record($pdo, 2, 'granted', 'signin_prompt', ['text' => EMAIL_CONSENT_NEWS_TEXT, 'ip' => '1.2.3.4']);
 ct_eq('after yes → ok', true, email_may_send_news($pdo, 2)['ok']);
 email_consent_record($pdo, 2, 'withdrawn', 'profile');
@@ -816,7 +821,7 @@ email_capture_start($p, 100, 'grace.o@gmail.com', 'signin_prompt', 100, ['send' 
 ct_eq('a link sent → in with a banner', 'banner', email_prompt_state($p, 100));
 $_SESSION['csrf_token'] = $_SESSION['csrf_token'] ?? null;
 $banner = email_prompt_banner($p, 100);
-ct_ok('the banner names the address and resends in one tap', str_contains($banner, 'grace.o@gmail.com')
+ct_ok('the banner shows the address masked and resends in one tap', str_contains($banner, 'g•••@gmail.com')
     && str_contains($banner, 'value="resend"') && str_contains($banner, '_csrf'));
 ct_at('2026-11-28 09:00');
 ct_eq('a week later without confirming → required again', 'required', email_prompt_state($p, 100));
@@ -840,17 +845,18 @@ email_capture_after_save($cf, 110, 'Kola@Gmail.com', 'connect', null, true, ['ip
 ct_eq('a Connect card with an email starts confirmation', 'kola@gmail.com', email_address_state($cf, 110)['pending']);
 ct_eq('…and the confirm email is queued', 1, ct_count($cf, 'email_outbox', "flow = 'confirm_email' AND user_id = 110"));
 $kc = email_consent_current($cf, 110);
-ct_ok('…with their own "yes" (the Connect wording, their IP)', $kc['action'] === 'granted' && $kc['method'] === 'connect_form'
-    && $kc['ip'] === '102.1.1.1' && $kc['recorded_by'] === null);
+ct_ok('…recorded honestly as a pre-ticked box left ticked, with their IP', $kc['action'] === 'granted' && $kc['method'] === 'prechecked'
+    && $kc['ip'] === '102.1.1.1' && $kc['recorded_by'] === null
+    && $cf->query('SELECT body FROM email_consent_texts WHERE id = ' . (int) $kc['text_id'])->fetchColumn() === EMAIL_CONSENT_VISITOR_TEXT);
 ct_at('2026-11-22 10:05');
 email_capture_after_save($cf, 110, 'kola@gmail.com', 'embrace', 900, false);
 ct_eq('saving the record again never re-sends the link', 1, ct_count($cf, 'email_outbox', "flow = 'confirm_email' AND user_id = 110"));
 ct_user($cf, 111, 'Lara', '1st_Timer');
 email_capture_after_save($cf, 111, 'lara@yahoo.com', 'embrace', 901, true);
 $lc = email_consent_current($cf, 111);
-ct_ok('an Embrace worker records a spoken yes, with their name and the script', $lc['method'] === 'embrace_entry'
+ct_ok("an Embrace worker's form is pre-ticked too: 'prechecked' with the worker's id, never \"spoken\"", $lc['method'] === 'prechecked'
     && (int) $lc['recorded_by'] === 901 && $lc['ip'] === null
-    && $cf->query('SELECT body FROM email_consent_texts WHERE id = ' . (int) $lc['text_id'])->fetchColumn() === EMAIL_CONSENT_NEWS_SPOKEN_TEXT);
+    && $cf->query('SELECT body FROM email_consent_texts WHERE id = ' . (int) $lc['text_id'])->fetchColumn() === EMAIL_CONSENT_VISITOR_TEXT);
 ct_user($cf, 112, 'Musa', '1st_Timer');
 email_capture_after_save($cf, 112, 'musa@hodlekki.org', 'embrace', 901, true);
 ct_ok('a church address is ignored (no link, no consent)', email_address_state($cf, 112)['pending'] === null && email_consent_state($cf, 112) === 'none');
@@ -859,6 +865,32 @@ ct_eq('no email, nothing recorded', 'none', email_consent_state($cf, 112));
 email_capture_after_save($cf, 111, 'lara.new@yahoo.com', 'embrace', 901, false);
 ct_eq('a changed address starts a new link', 'lara.new@yahoo.com', email_address_state($cf, 111)['pending']);
 ct_eq('…and an unticked box withdraws nothing', 'granted', email_consent_state($cf, 111));
+email_consent_record($cf, 111, 'withdrawn', 'one_click');
+email_capture_after_save($cf, 111, 'lara.new@yahoo.com', 'embrace', 901, true);
+email_capture_after_save($cf, 111, 'lara.third@yahoo.com', 'embrace', 901, true);
+ct_eq('a pre-ticked box never undoes an unsubscribe (re-save or new address)', 'withdrawn', email_consent_state($cf, 111));
+
+// Regression (#120): a page whose own forms are CSRF-checked must not be served
+// with Referrer-Policy no-referrer — browsers then send "Origin: null" on its
+// own POST and csrf_same_origin() refuses it ("open too long").
+$root = dirname(__DIR__, 2);
+$noRefBad = [];
+foreach (glob($root . '/{,*/,*/*/}.htaccess', GLOB_BRACE) ?: [] as $ht) {
+    $dir = dirname($ht);
+    $hasCsrfForm = false;
+    foreach (glob($dir . '/*.php') ?: [] as $php) {
+        $src = (string) file_get_contents($php);
+        if (str_contains($src, 'ui_csrf_field(') || str_contains($src, 'csrf_valid(') || str_contains($src, 'ui_standalone_csrf_ok(')) {
+            $hasCsrfForm = true;
+            break;
+        }
+    }
+    if ($hasCsrfForm && preg_match('/Referrer-Policy\s+"?no-referrer"?\s*$/mi', (string) file_get_contents($ht))) {
+        $noRefBad[] = substr($ht, strlen($root) + 1);
+    }
+}
+ct_eq('no folder with CSRF-checked forms sends Referrer-Policy no-referrer', [], $noRefBad);
+ct_ok('email/.htaccess keeps same-origin', (bool) preg_match('/Referrer-Policy\s+"same-origin"/', (string) file_get_contents($root . '/email/.htaccess')));
 
 // ===========================================================================
 ct_section('16b3. The Connect card cannot be used to mail strangers');
@@ -907,13 +939,38 @@ ct_user($noTable, 500, 'Early', '1st_Timer');
 ct_eq('before its migration the limiter fails closed (no Connect link)', 'THROTTLED',
     email_capture_start($noTable, 500, 'early@example.com', 'connect', null, ['ip' => '1.1.1.1'])['code'] ?? null);
 
-$tok = campaigns_form_token(1_800_000_000);
-ct_eq('a person who took their time', 'ok', campaigns_form_verdict($tok, '', 1_800_000_060));
-ct_eq('the hidden field filled in: a bot', 'bot', campaigns_form_verdict($tok, 'http://spam.example', 1_800_000_060));
-ct_eq('posted within 4 seconds of the page: a bot', 'bot', campaigns_form_verdict($tok, '', 1_800_000_002));
-ct_eq('an invented time: a bot', 'bot', campaigns_form_verdict('1799999000.' . str_repeat('a', 32), '', 1_800_000_060));
-ct_eq('no token at all: a bot', 'bot', campaigns_form_verdict('', '', 1_800_000_060));
-ct_eq('a page left open for days: asked to reload', 'expired', campaigns_form_verdict($tok, '', 1_800_000_000 + 4 * 86400));
+$sidA = 'session-a';
+$tok = campaigns_form_token(1_800_000_000, $sidA);
+ct_eq('a person who took their time', 'ok', campaigns_form_verdict($tok, '', 1_800_000_060, $sidA));
+ct_eq('the hidden field filled in: a bot (silent)', 'bot', campaigns_form_verdict($tok, 'http://spam.example', 1_800_000_060, $sidA));
+ct_eq('posted within 4 seconds of the page: a bot (silent)', 'bot', campaigns_form_verdict($tok, '', 1_800_000_002, $sidA));
+ct_eq('an invented time: "send again" (never a silent drop)', 'stale', campaigns_form_verdict('1799999000.' . str_repeat('a', 32), '', 1_800_000_060, $sidA));
+ct_eq('no token at all: "send again"', 'stale', campaigns_form_verdict('', '', 1_800_000_060, $sidA));
+ct_eq('a token from another session (a bot dropping cookies): "send again"', 'stale', campaigns_form_verdict($tok, '', 1_800_000_060, 'session-b'));
+ct_eq('a page left open for days: asked to reload', 'expired', campaigns_form_verdict($tok, '', 1_800_000_000 + 4 * 86400, $sidA));
+$_SESSION['connect_form_used'] = [];
+campaigns_form_consume($tok);
+ct_eq('once it has saved a card, the same page replayed is a bot', 'bot', campaigns_form_verdict($tok, '', 1_800_000_090, $sidA));
+$fresh = campaigns_form_token(1_800_000_100, $sidA);
+ct_ok("an error reply's fresh token works (after the 4 seconds)", $fresh !== $tok && campaigns_form_verdict($fresh, '', 1_800_000_105, $sidA) === 'ok');
+$_SESSION['connect_form_used'] = [];
+
+// Cloudflare Turnstile: off without keys; with keys, the reply decides; Cloudflare down lets the card through.
+unset($_ENV['TURNSTILE_SITE_KEY'], $_ENV['TURNSTILE_SECRET_KEY']);
+ct_eq('Turnstile without keys is off (the card works as before)', 'off', campaigns_turnstile_check('', '1.1.1.1'));
+$_ENV['TURNSTILE_SITE_KEY'] = '1x00000000000000000000AA';
+$_ENV['TURNSTILE_SECRET_KEY'] = '1x0000000000000000000000000000000AA';
+$seen = null;
+$ok = campaigns_turnstile_check('tok-123', '1.1.1.1', function (string $url, array $form) use (&$seen): ?array {
+    $seen = [$url, $form['response'], $form['remoteip']];
+    return ['success' => true];
+});
+ct_ok('with keys, a solved challenge passes (token and IP sent to siteverify)', $ok === 'ok'
+    && $seen === [CAMPAIGNS_TURNSTILE_VERIFY, 'tok-123', '1.1.1.1']);
+ct_eq('…a rejected one asks them to tick it again', 'fail', campaigns_turnstile_check('tok-x', '1.1.1.1', fn () => ['success' => false]));
+ct_eq('…no token at all fails', 'fail', campaigns_turnstile_check('', '1.1.1.1', fn () => ['success' => true]));
+ct_eq('…Cloudflare unreachable lets the card through (logged)', 'unreachable', campaigns_turnstile_check('tok-y', '1.1.1.1', fn () => null));
+unset($_ENV['TURNSTILE_SITE_KEY'], $_ENV['TURNSTILE_SECRET_KEY']);
 
 // ===========================================================================
 ct_section('16c. Sign-in with a personal email');

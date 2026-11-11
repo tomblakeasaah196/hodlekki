@@ -15,14 +15,20 @@
 
 const EMAIL_CONSENT_NEWS_TEXT = 'Yes, Household of David Lekki may email me church news, service reminders and messages from the pastoral team. I can unsubscribe at any time with the link in every email.';
 
-// What an Embrace worker reads out when they record the answer in person.
-const EMAIL_CONSENT_NEWS_SPOKEN_TEXT = 'Asked in person by an Embrace worker: "May Household of David Lekki email you church news, service reminders and messages from the pastoral team? You can unsubscribe at any time with the link in every email." The person said yes.';
+// Visitors (Connect card, Embrace first-timer entry): a box that starts TICKED
+// (owner's decision, 11 Nov 2026, on record after the NDPA point was raised).
+// It is recorded honestly as method 'prechecked' — a pre-ticked box left
+// ticked — never as a typed or spoken yes. The recorded wording is exactly the
+// label and the details shown behind (i).
+const EMAIL_CONSENT_VISITOR_LABEL   = 'Stay in touch with us';
+const EMAIL_CONSENT_VISITOR_DETAILS = 'Church news, service reminders and messages from the pastoral team, by email. One tap to stop, in every email.';
+const EMAIL_CONSENT_VISITOR_TEXT    = EMAIL_CONSENT_VISITOR_LABEL . ' — ' . EMAIL_CONSENT_VISITOR_DETAILS . ' (box ticked in advance, left ticked)';
 
 const EMAIL_CONSENT_PURPOSES = ['news'];
 const EMAIL_CONSENT_CHANNELS = ['email', 'sms'];
 const EMAIL_CONSENT_ACTIONS  = ['granted', 'withdrawn'];
 const EMAIL_CONSENT_METHODS  = [
-    'connect_form', 'embrace_entry', 'signin_prompt', 'profile',
+    'connect_form', 'embrace_entry', 'prechecked', 'signin_prompt', 'profile',
     'unsubscribe_link', 'one_click', 'complaint', 'staff', 'import',
 ];
 
@@ -120,6 +126,16 @@ function email_consent_state(PDO $pdo, int $userId, string $purpose = 'news', st
     return $row === null ? 'none' : (string) $row['action'];
 }
 
+const EMAIL_MEMBER_STATUSES = ['Member', 'Worker', 'Pastor'];
+
+/** A member of the church (not a visitor): church news needs no box for them. */
+function email_is_member(PDO $pdo, int $userId): bool
+{
+    $stmt = $pdo->prepare('SELECT spiritual_status FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    return in_array((string) $stmt->fetchColumn(), EMAIL_MEMBER_STATUSES, true);
+}
+
 /**
  * May we send this person church news by email right now?
  *
@@ -139,7 +155,10 @@ function email_may_send_news(PDO $pdo, int $userId): array
     if ($state === 'withdrawn') {
         return ['ok' => false, 'email' => $email, 'reason' => 'withdrawn'];
     }
-    if ($state !== 'granted') {
+    // Members (owner's decision, 11 Nov 2026): church messages come with
+    // membership, with one-tap unsubscribe in every email; no box. Visitors
+    // need the box ("Stay in touch with us").
+    if ($state !== 'granted' && !email_is_member($pdo, $userId)) {
         return ['ok' => false, 'email' => $email, 'reason' => 'no_consent'];
     }
     if (email_is_suppressed($pdo, $email)) {
