@@ -1,10 +1,11 @@
 // /assets/js/global-search.js
 // Global command palette (Ctrl/Cmd+K) for the authenticated app shell.
 //
-// Reads the RBAC-filtered navigation index emitted by includes/header.php as
-// window.HOD_SEARCH_INDEX (modules, module tabs, quick actions), fuzzy-matches
-// it client-side, and augments results with live people/event lookups from
-// /api/global_search_api.php (which enforces its own role checks).
+// Reads the access-filtered index the shell prints from the navigation
+// registry (includes/ui/nav.php → the #hod-ui JSON block: modules, module
+// tabs, quick actions), fuzzy-matches it client-side, and augments results
+// with live people/event lookups from /api/global_search_api.php (which
+// enforces its own role checks). Icons are names in the sprite.
 (function () {
     'use strict';
 
@@ -12,8 +13,9 @@
     var RECENTS_MAX = 6;
     var GROUP_ORDER = [
         '__recent__', 'Command Center', 'Growth & Retention', 'Specialized Units',
-        'Core Operations', 'Security & Stewardship', 'Actions', 'People', 'Events'
+        'Core Operations', 'Security & Stewardship', 'System', 'Actions', 'People', 'Events'
     ];
+    var SPRITE = '/assets/ui/icons.svg';
 
     var overlay, panel, input, results, spinner;
     var isOpen = false;
@@ -24,6 +26,7 @@
     var debounceTimer = null;
     var liveSeq = 0;
     var lastLiveQuery = '';
+    var opener = null;
 
     // ------------------------------------------------------------------
     // Utilities
@@ -112,12 +115,9 @@
     // ------------------------------------------------------------------
     // Rendering
     // ------------------------------------------------------------------
-    function iconSvg(pathD, cls) {
-        if (!pathD) {
-            pathD = 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z';
-        }
-        return '<svg class="' + (cls || 'w-[18px] h-[18px]') + ' shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
-            '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="' + esc(pathD) + '"></path></svg>';
+    function iconSvg(name) {
+        return '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="' + esc(SPRITE) + '#' +
+            esc(name || 'search') + '"></use></svg>';
     }
 
     function highlight(label, q) {
@@ -125,32 +125,29 @@
         var idx = label.toLowerCase().indexOf(q.toLowerCase());
         if (idx === -1) return esc(label);
         return esc(label.slice(0, idx)) +
-            '<mark class="bg-yellow-100 text-inherit rounded-sm px-0">' + esc(label.slice(idx, idx + q.length)) + '</mark>' +
+            '<mark>' + esc(label.slice(idx, idx + q.length)) + '</mark>' +
             esc(label.slice(idx + q.length));
     }
 
     function rowHtml(entry, flatIdx, q) {
         var it = entry.item;
         var active = flatIdx === activeIndex;
-        var sub = it.sub ? '<span class="text-[11px] text-gray-400 truncate">' + esc(it.sub) + '</span>' : '';
-        return '<button type="button" data-gs-idx="' + flatIdx + '" role="option" aria-selected="' + active + '" class="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ' +
-            (active ? 'bg-hodBlue/[0.06] text-hodBlue' : 'text-gray-700 hover:bg-gray-50') + '">' +
-            '<span class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ' + (active ? 'bg-hodBlue text-white' : 'bg-gray-100 text-gray-500') + '">' +
-            iconSvg(it.icon) + '</span>' +
-            '<span class="flex-1 min-w-0 flex flex-col">' +
-            '<span class="text-sm font-semibold truncate">' + highlight(it.label, q) + '</span>' + sub +
+        var sub = it.sub || (it.type === 'tab' ? 'Tab' : '');
+        return '<button type="button" class="ui-palette__item" id="gs-opt-' + flatIdx + '" data-gs-idx="' + flatIdx + '" role="option" aria-selected="' + active + '">' +
+            '<span class="ui-palette__icon">' + iconSvg(it.icon) + '</span>' +
+            '<span class="ui-palette__text">' +
+            '<span class="ui-palette__label">' + highlight(it.label, q) + '</span>' +
+            (sub ? '<span class="ui-palette__sub">' + esc(sub) + '</span>' : '') +
             '</span>' +
-            (it.type === 'tab' ? '<span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 bg-gray-100 rounded-md px-1.5 py-0.5 shrink-0">Tab</span>' : '') +
-            (active ? '<svg class="w-4 h-4 text-hodBlue/60 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>' : '') +
+            (active ? iconSvg('chevron-right') : '') +
             '</button>';
     }
 
     function emptyStateHtml(q) {
-        return '<div class="px-6 py-12 text-center">' +
-            '<div class="w-14 h-14 mx-auto mb-3 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-400">' +
-            iconSvg('M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z', 'w-6 h-6') + '</div>' +
-            '<p class="text-sm font-bold text-gray-700">No matches for &ldquo;' + esc(q) + '&rdquo;</p>' +
-            '<p class="text-xs text-gray-400 mt-1">Try a module name, a tab, a person or an event.</p></div>';
+        return '<div class="ui-empty ui-empty--compact">' +
+            '<div class="ui-empty__icon">' + iconSvg('search') + '</div>' +
+            '<p class="ui-empty__title">No matches for “' + esc(q) + '”</p>' +
+            '<p class="ui-empty__text">Try a module name, a tab, a person or an event.</p></div>';
     }
 
     function buildEntries(q) {
@@ -179,12 +176,12 @@
             });
             liveResults.people.forEach(function (p) {
                 (groups.People = groups.People || []).push({
-                    item: { label: p.label, sub: p.sub, url: p.url, group: 'People', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' }
+                    item: { label: p.label, sub: p.sub, url: p.url, group: 'People', icon: 'user-round' }
                 });
             });
             liveResults.events.forEach(function (ev) {
                 (groups.Events = groups.Events || []).push({
-                    item: { label: ev.label, sub: ev.sub, url: ev.url, group: 'Events', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' }
+                    item: { label: ev.label, sub: ev.sub, url: ev.url, group: 'Events', icon: 'calendar' }
                 });
             });
         }
@@ -206,7 +203,7 @@
             var list = groups[g];
             if (!list || !list.length) return;
             var title = g === '__recent__' ? 'Recent' : g;
-            html += '<p class="px-4 pt-4 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">' + esc(title) + '</p>';
+            html += '<p class="ui-palette__group">' + esc(title) + '</p>';
             list.forEach(function (entry) {
                 var idx = flatVisible.length;
                 flatVisible.push(entry);
@@ -216,9 +213,10 @@
 
         if (!flatVisible.length) {
             html = q ? emptyStateHtml(q)
-                : '<div class="px-6 py-10 text-center text-xs text-gray-400 font-semibold">Start typing to search…</div>';
+                : '<p class="ui-loading">Start typing to search.</p>';
         }
         results.innerHTML = html;
+        input.setAttribute('aria-activedescendant', flatVisible.length ? 'gs-opt-' + activeIndex : '');
 
         var activeEl = results.querySelector('[data-gs-idx="' + activeIndex + '"]');
         if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
@@ -233,7 +231,7 @@
             liveResults = { people: [], events: [] };
             return;
         }
-        spinner.classList.remove('hidden');
+        spinner.hidden = false;
         var body = new URLSearchParams({ action: 'search', q: q });
         fetch('/api/global_search_api.php', {
             method: 'POST',
@@ -242,13 +240,13 @@
             credentials: 'same-origin'
         }).then(function (r) { return r.json(); }).then(function (res) {
             if (seq !== liveSeq) return; // stale response
-            spinner.classList.add('hidden');
+            spinner.hidden = true;
             if (res && res.status === 'success' && res.data) {
                 liveResults = { people: res.data.people || [], events: res.data.events || [] };
                 if (input.value.trim().toLowerCase() === q.toLowerCase()) render();
             }
         }).catch(function () {
-            if (seq === liveSeq) spinner.classList.add('hidden');
+            if (seq === liveSeq) spinner.hidden = true;
         });
     }
 
@@ -284,14 +282,10 @@
         liveResults = { people: [], events: [] };
         lastLiveQuery = '';
         liveSeq++; // invalidate any in-flight fetch from a previous session
-        spinner.classList.add('hidden');
+        spinner.hidden = true;
         activeIndex = 0;
-        overlay.classList.remove('hidden');
-        document.documentElement.classList.add('overflow-hidden');
-        requestAnimationFrame(function () {
-            overlay.classList.remove('opacity-0');
-            panel.classList.remove('scale-95', '-translate-y-2');
-        });
+        opener = document.activeElement;
+        overlay.hidden = false;
         input.value = '';
         render();
         setTimeout(function () { input.focus(); }, 30);
@@ -300,10 +294,8 @@
     function close() {
         if (!isOpen) return;
         isOpen = false;
-        overlay.classList.add('opacity-0');
-        panel.classList.add('scale-95', '-translate-y-2');
-        document.documentElement.classList.remove('overflow-hidden');
-        setTimeout(function () { if (!isOpen) overlay.classList.add('hidden'); }, 200);
+        overlay.hidden = true;
+        if (opener && opener.isConnected && opener.focus) opener.focus({ preventScroll: true });
     }
 
     function toggle() { isOpen ? close() : open(); }
@@ -318,7 +310,12 @@
         input   = document.getElementById('gsInput');
         results = document.getElementById('gsResults');
         spinner = document.getElementById('gsSpinner');
-        items   = Array.isArray(window.HOD_SEARCH_INDEX) ? window.HOD_SEARCH_INDEX : [];
+        var boot = null;
+        try { boot = JSON.parse((document.getElementById('hod-ui') || {}).textContent || 'null'); } catch (e) { boot = null; }
+        items = boot && boot.search && Array.isArray(boot.search.index) ? boot.search.index
+            : (Array.isArray(window.HOD_SEARCH_INDEX) ? window.HOD_SEARCH_INDEX : []);
+        if (boot && boot.search && Array.isArray(boot.search.groups)) GROUP_ORDER = boot.search.groups;
+        if (boot && boot.sprite) SPRITE = boot.sprite;
 
         // Platform-appropriate shortcut hints
         var kbd = isMac() ? '\u2318K' : 'Ctrl K';
@@ -326,6 +323,9 @@
 
         document.querySelectorAll('[data-gs-open]').forEach(function (el) {
             el.addEventListener('click', function (e) { e.preventDefault(); open(); });
+        });
+        document.querySelectorAll('[data-gs-close]').forEach(function (el) {
+            el.addEventListener('click', function (e) { e.preventDefault(); close(); });
         });
 
         document.addEventListener('keydown', function (e) {

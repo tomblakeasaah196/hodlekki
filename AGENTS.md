@@ -16,6 +16,7 @@ follow-up on a plain PHP 8.3 + MySQL stack.
 | ----------------- | ------------------------------------------------------------------------ |
 | `api/`            | JSON endpoints. One `<name>_api.php` per module. Session-guarded.        |
 | `assets/`         | Static CSS/JS/images. `assets/uploads/` is runtime media, git-ignored.   |
+| `assets/ui/`      | The front-end foundation: compiled CSS, icon sprite, fonts, `ui.js`. See `docs/UI.md`. |
 | `auth/`           | Login, logout, first-time password setup.                                |
 | `cron/`           | CLI-only long-running jobs (currently just `sms_queue_worker.php`).      |
 | `includes/`       | Shared PHP: `db.php`, `header.php`, `functions.php`, PDF helpers, SMS.   |
@@ -61,9 +62,14 @@ follow-up on a plain PHP 8.3 + MySQL stack.
   endpoints, `<Module>` PascalCase not used.
 - **Routing:** none. It is file-per-URL — no framework, no router, no
   autoloader beyond Composer's for `vendor/`.
-- **Front-end:** Tailwind via CDN in most pages, custom colours
-  `hodBlue: #0A0E17` and `hodRed: #D11920`. jQuery for AJAX, Toastify
-  for notifications. Do not introduce React / Vue / Alpine unless asked.
+- **Front-end:** read **`docs/UI.md`** before touching any screen. Shared
+  components (`ui-*` classes, `includes/ui/components.php`, `HOD.*` in
+  `assets/ui/js/ui.js`), design tokens, two shells from one navigation
+  registry, a compiled and COMMITTED Tailwind v3 build (no CDN), strict CSP
+  and CSRF on rebuilt pages. Brand: navy `#0A0E17` / `#1D356A`, red
+  `#D11920`, Inter + Montserrat, all self-hosted. No new Toastify, `confirm()`,
+  hand-built modal, inline handler or CDN. Do not introduce React / Vue /
+  Alpine unless asked.
 - **Timezone:** `Africa/Lagos` at PHP level, `+01:00` at MySQL level,
   both set in `includes/db.php`.
 
@@ -261,9 +267,9 @@ never treat it as proof the engine behaves.
   GitHub App has `workflows` permission). Earlier notes in this file said it
   could not and told the owner to add CI steps by hand — that was true once and
   is not any more. So when a module arrives with a test suite, add the step in
-  the same pull request rather than handing it back. Two suites are still
-  missing a step for that reason: `tests/pwa/run.php` and
-  `tests/assimilation_export_test.php`.
+  the same pull request rather than handing it back. One suite is still
+  missing a step: `tests/assimilation_export_test.php` (`tests/pwa/run.php`
+  and `tests/ui/run.php` joined CI with the UI foundation).
 - **The deployed copy of this workflow is a fossil — do not read it.**
   `.deployignore` excludes `./.github`, and `bin/deploy.sh` never deletes, so
   `/public_html/hodlekki/.github/workflows/deploy.yml` is frozen at
@@ -568,12 +574,19 @@ notification, call `push_send_to_user()` or `push_enqueue()` directly.
   `push_message_from_notification()` rejects absolute URLs, `//host`,
   backslashes and `javascript:`, falling back to `/index.php`. Keep that
   guard — 60 call sites write that column.
-- **`sw.js` must never cache HTML.** Every page is rendered against a session
-  and full of member data; Cache Storage outlives sign-out. Navigations are
-  network-only with a static `/offline.html` fallback, and `/api/`, `/auth/`,
-  `/live/`, `/e/`, `/webhook/` and `/uploads/` are passed straight through.
-  `/live/` and `/e/` in particular belong to Special Events, which polls for
-  real-time state under its own CSP.
+- **`sw.js` keeps HTML only as safeguarded read-only offline copies** (owner's
+  decision, Nov 2026 — it used to cache none). Every page is rendered against
+  a session and full of member data, and Cache Storage outlives sign-out, so:
+  navigations are network-first; a page is kept ONLY when the server marks it
+  `X-HOD-Offline: snapshot; u=<session key>` (strict-mode pages, never
+  Security / Roles / Finance / Alerts / Requisitions / SMS Studio — see
+  `ui_page_config()`); one cache per session, 12 pages, 72 hours; wiped on any
+  navigation or redirect to `/auth/`; served only when the network fails, with
+  every action disabled. Do not widen any of these, and never cache an
+  `/api/` response. `/api/`, `/auth/`, `/live/`, `/e/`, `/webhook/` and
+  `/uploads/` are passed straight through; `/live/` and `/e/` belong to
+  Special Events, which polls for real-time state under its own CSP.
+  `docs/UI.md` §8.
 - **Rotating `VAPID_PUBLIC_KEY` invalidates every subscription** and nobody is
   told to opt in again. Treat it like `SE_HASH_PEPPER`.
 - **A row that names `user_id` is addressed to that member alone**; its
@@ -608,12 +621,9 @@ notification, call `push_send_to_user()` or `push_enqueue()` directly.
   `SE_REG_NOTICE_MIN_GAP_MINUTES`. Do not make `every` the default — a Chara
   night is 300 registrations, and that is how a congregation learns to ignore
   notifications. State is `reg_notice` rows in `se_audit_log`.
-- **Checks CI does not run yet** (nobody has added the step; see the note on
-  `.github/workflows/` below — an agent can add it, it no longer has to be the
-  owner. Same situation as the Assimilation Excel suite):
-  - `php tests/pwa/run.php` — 176 checks, no database, no network.
-  - `node --experimental-default-type=module --check assets/js/pwa.js`
-  - `node --experimental-default-type=module --check sw.js`
+- **Checks:** `php tests/pwa/run.php` (no database, no network) and
+  `node --check` on `assets/js/pwa.js` and `sw.js` run in CI (step "PWA and
+  push tests" and the UI foundation step). Not in CI yet:
   - `php tests/pwa/integration/run.php --host=… --db=push_it` — 51 checks
     against a REAL database, on **both** MySQL 8 and MariaDB 10.11. This is
     the only thing that covers the fan-out SQL, the audience expansion, the
@@ -931,6 +941,41 @@ before touching anything that reads `user_departments`:
   as `assets/js/celebrants_export.js`): geometry is arithmetic, names are
   measured with `ctx.measureText`, and the fitter guarantees one A4 page.
 
+## UI foundation (added 2026-11-11)
+
+Everything about building screens is in **`docs/UI.md`**. The rules an agent
+breaks without noticing:
+
+- **`assets/ui/app.css`, `assets/ui/icons.svg` and
+  `includes/ui/asset_manifest.php` are COMPILED and COMMITTED** (no Node on
+  the host). CI runs `bash bin/build_ui.sh --check` on every PR, and the build
+  scans nearly every page for classes — so after changing markup, a script
+  under `assets/ui/js/` or an icon, run `bash bin/build_ui.sh` and commit the
+  three outputs in the SAME commit. Never hand-edit them; on a merge conflict,
+  rebuild. Tailwind is v3.4.17 here (the old CDN's major version), separate
+  from Special Events' v4 build.
+- **Navigation is a registry.** `includes/ui/nav.php`: one entry per module in
+  `ui_nav_registry()`, one access decision in `ui_nav_can_access()` — the seam
+  the roles × modules permission matrix replaces. `tests/ui/run.php` pins
+  today's answers to the old hard-coded sidebar; change them on purpose,
+  with the test, never by accident. Do not add links to the shell by hand.
+- **Two page modes.** `$ui = ['mode' => 'strict']` (set before requiring
+  header.php) for pages rebuilt on the components: enforced strict CSP, no
+  inline script/handler/style, no jQuery. Unset = `legacy`: today's pages,
+  which keep jQuery (now self-hosted), `modal-manager.js` and a Toastify
+  stand-in that shows the shared toast. `tests/ui/run.php` refuses an inline
+  handler, style attribute, inline script, CDN or `confirm()` in any strict
+  page, and `tests/ui/tailwind_cdn_allowlist.txt` may only shrink.
+- **CSRF:** one token per session; the browser side is automatic. Rebuilt
+  modules' endpoints call `csrf_require()`. `db.php` only logs missing tokens
+  (`CSRF report-only:` in the error log) until `CSRF_ENFORCE_ALL` is flipped
+  in `includes/csrf.php` — check that log before flipping it.
+- **Security headers** come from `includes/security_headers.php` via
+  `db.php` (the root `.htaccess` never deploys). The CSP is the shell's job,
+  per page; `/e/` sends its own.
+- `includes/header.php` and `includes/footer.php` are thin: the shell is
+  `includes/ui/shell.php`. The variables pages read from header.php are kept.
+
 ## Common pitfalls spotted during onboarding
 
 - **A dialog must fit above the on-screen keyboard.** On Android Chrome and iOS
@@ -940,7 +985,7 @@ before touching anything that reads `user_departments`:
   "Can't find them?" wizard hid Phone and Next this way). `modal-manager.js`
   now sets `html.app-keyboard-open`, `--app-vv-height` and `--app-vv-top` while a
   dialog is open and the visual viewport is >120px shorter than the layout
-  viewport, and the shared CSS in `includes/header.php` fits every
+  viewport, and the shared CSS (now in `assets/ui/src/app.css`, "Legacy") fits every
   `.app-modal-overlay` / `.app-modal-panel` into it. It also scrolls the focused
   field to the middle. So: keep a dialog's scrolling inside `.app-modal-panel`
   (give the form area `overflow-y-auto flex-1`, header and footer `shrink-0`),

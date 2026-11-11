@@ -303,7 +303,9 @@
     function isPreservedPortaledWidget(element) {
         // An open widget dropdown portaled to <body> belongs to a control that
         // lives inside the active dialog; keep it interactive and readable.
-        return element instanceof HTMLElement && element.matches('.select2-container--open');
+        // The shared toast region (assets/ui/js/ui.js) carries data-ui-keep-live:
+        // a message about the dialog's own form must stay readable and closable.
+        return element instanceof HTMLElement && element.matches('.select2-container--open, [data-ui-keep-live]');
     }
 
     function isInsideTopDialog(target) {

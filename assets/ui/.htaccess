@@ -1,0 +1,27 @@
+# /assets/ui/.htaccess
+# The members' app front end (bin/build_ui.sh). Every URL the shell prints
+# carries a content hash (?v=…) and fonts carry a version in their file name,
+# so a changed file always has a new URL: browsers may keep these for a year
+# without asking again. This file deploys (only the ROOT .htaccess is
+# excluded by .deployignore).
+
+<IfModule mod_mime.c>
+    AddType font/woff2 .woff2
+    AddType image/svg+xml .svg
+    AddType text/javascript .js
+    AddType text/css .css
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header set Cache-Control "public, max-age=31536000, immutable"
+    Header set X-Content-Type-Options "nosniff"
+    <FilesMatch "\.woff2$">
+        Header set Access-Control-Allow-Origin "*"
+    </FilesMatch>
+</IfModule>
+
+# The build's sources never need to be fetched by a browser.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^src/ - [F,L]
+</IfModule>
