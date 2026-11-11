@@ -1,0 +1,211 @@
+<?php
+// /tests/permissions/run.php
+//
+// The permission engine against SQLite built from the real migrations:
+// resolver rules, can() targets, perm_where(), renames, holders, the seed's
+// shape, and the day-one parity of a synthetic church (every difference must
+// be one the owner and the lead decided).
+//
+// Run from the repo root:  php tests/permissions/run.php
+// Exit code 0 = all good, 1 = at least one failure. CLI only.
+
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit("CLI only.\n");
+}
+if (!extension_loaded('pdo_sqlite')) {
+    echo "SKIP: pdo_sqlite is not available in this PHP build.\n";
+    exit(0);
+}
+
+require_once __DIR__ . '/../../includes/permissions/parity.php';
+require_once __DIR__ . '/lib.php';
+
+perm_set_strict(true);
+
+// ---------------------------------------------------------------------------
+section('Seed shape');
+$pdo = perm_test_db();
+$modules = perm_modules();
+foreach ($pdo->query('SELECT * FROM perm_grants')->fetchAll() as $g) {
+    $m = $g['module_key'];
+    ok("grant module {$m} is registered", isset($modules[$m]));
+    if (!isset($modules[$m])) {
+        continue;
+    }
+    ok("{$m} level within max", (int) $g['level'] <= PERM_LEVELS[$modules[$m]['max']]);
+    foreach (['approve' => 'can_approve', 'export' => 'can_export', 'manage' => 'can_manage'] as $x => $col) {
+        ok("{$m} offers {$x}", (int) $g[$col] === 0 || in_array($x, $modules[$m]['extras'], true));
+    }
+    ok("{$m} scope valid", in_array($g['scope'], PERM_SCOPES, true));
+}
+eq('stable seat keys (mailbox chat relies on them)',
+    ['pastor_in_charge' => 'Assoc_Pastor', 'director' => 'Director', 'hod' => 'HOD', 'deputy_hod' => 'Deputy_HOD',
+     'sub_unit_head' => 'Sub_Unit_Head', 'worker' => 'Worker', 'member' => 'Member'],
+    array_column(perm_seat_types($pdo), 'roster_value', 'seat_key'));
+eq('Director / HOD roles carry no cells (decision 2)', 0,
+    (int) $pdo->query("SELECT COUNT(*) FROM perm_grants g JOIN roles r ON r.id = g.role_id WHERE r.role_name IN ('Director','HOD')")->fetchColumn());
+eq('assets owners: Envision + River of Life (no department is NAMED IDI)', [3, 4], perm_module_owners($pdo)['assets']);
+eq('Finance owns disbursement', [14], perm_module_owners($pdo)['requisition.disburse']);
+foreach ([PERM_TEST_CORE, PERM_TEST_PLATFORM, PERM_TEST_SEED] as $f) {
+    ok("{$f} carries the _perm_ marker", str_contains($f, '_perm_'));
+}
+ok('seed is portable (no ON DUPLICATE / INSERT IGNORE)',
+    !preg_match('/ON DUPLICATE|INSERT IGNORE/i', perm_test_migration(PERM_TEST_SEED)));
+$pdo->exec(perm_test_migration(PERM_TEST_SEED));
+eq('seed re-runs as a no-op', 181, (int) $pdo->query('SELECT COUNT(*) FROM perm_grants')->fetchColumn());
+
+// ---------------------------------------------------------------------------
+section('Resolver');
+$member = perm_test_person($pdo, 'Plain');
+$rp = perm_test_person($pdo, 'Resident');
+perm_test_role($pdo, $rp, 'Resident_Pastor');
+$sa = perm_test_person($pdo, 'Super');
+perm_test_role($pdo, $sa, 'Super_Admin', ['ends_on' => '2020-01-01']);
+$frozen = perm_test_person($pdo, 'Frozen');
+perm_test_role($pdo, $frozen, 'Resident_Pastor', ['frozen' => 1]);
+$later = perm_test_person($pdo, 'Later');
+perm_test_role($pdo, $later, 'Resident_Pastor', ['starts_on' => '2027-01-01']);
+$ended = perm_test_person($pdo, 'Ended');
+perm_test_role($pdo, $ended, 'Resident_Pastor', ['ends_on' => '2026-11-10']);
+$reachWorker = perm_test_person($pdo, 'ReachWorker');
+perm_test_seat($pdo, $reachWorker, 8, 'Worker');
+$reachHod = perm_test_person($pdo, 'ReachHod');
+perm_test_seat($pdo, $reachHod, 8, 'HOD');
+$sanitation = perm_test_person($pdo, 'Sanitation');
+perm_test_seat($pdo, $sanitation, 6, 'Worker');
+$removed = perm_test_person($pdo, 'Removed');
+perm_test_seat($pdo, $removed, 8, 'HOD', ['roster_status' => 'Removed', 'is_active' => 0]);
+$charisDir = perm_test_person($pdo, 'CharisDirector');
+perm_test_seat($pdo, $charisDir, 10, 'Director', ['end_date' => '2026-01-31']);
+
+$r = static fn (int $uid): array => perm_resolve($pdo, $uid);
+ok('member: own portal', perm_ctx_can($r($member), 'member_portal', 'edit', perm_person($member)));
+ok('member: no congregation', !perm_ctx_can($r($member), 'congregation'));
+ok('RP: congregation delete church-wide', perm_ctx_can($r($rp), 'congregation', 'delete', 'church'));
+ok('RP: roles view (decision 7), not manage', perm_ctx_can($r($rp), 'roles') && !perm_ctx_can($r($rp), 'roles', 'manage'));
+ok('break-glass never ends', $r($sa)['breakglass']);
+ok('frozen role does not count', !perm_ctx_can($r($frozen), 'congregation'));
+ok('role not started yet does not count', !perm_ctx_can($r($later), 'congregation'));
+ok('ended role does not count', !perm_ctx_can($r($ended), 'congregation'));
+ok('Reach worker: delete + export', perm_ctx_can($r($reachWorker), 'reach', 'delete') && perm_ctx_can($r($reachWorker), 'reach', 'export'));
+ok('Reach worker: no manage', !perm_ctx_can($r($reachWorker), 'reach', 'manage'));
+ok('Reach HOD: manage', perm_ctx_can($r($reachHod), 'reach', 'manage'));
+ok('Reach HOD: congregation (retired HOD role, now on the seat)', perm_ctx_can($r($reachHod), 'congregation', 'delete', 'church'));
+ok('Sanitation worker: no Reach', !perm_ctx_can($r($sanitation), 'reach'));
+ok('removed roster row gives nothing', !perm_ctx_can($r($removed), 'reach'));
+eq('Director covers sub-units', perm_test_scope(false, [10, 15]), perm_ctx_scope($r($charisDir), 'departments', 'edit'));
+ok('Director views every department', perm_ctx_can($r($charisDir), 'departments', 'view', 'church'));
+ok('seat end date ignored until expiry is enforced', perm_ctx_can($r($charisDir), 'charis', 'manage'));
+$pdo->exec("UPDATE perm_config SET cfg_value = '1' WHERE cfg_key = 'expiry_enforced'");
+perm_reset();
+ok('ended seat stops counting once enforced', !perm_ctx_can($r($charisDir), 'charis'));
+$pdo->exec("UPDATE perm_config SET cfg_value = '0' WHERE cfg_key = 'expiry_enforced'");
+perm_reset();
+$pdo->exec("UPDATE perm_department_seats SET is_enabled = 0 WHERE department_id = 8 AND seat_key = 'worker'");
+perm_reset();
+ok('a seat type the department does not use gives nothing', !perm_ctx_can($r($reachWorker), 'reach'));
+$pdo->exec("UPDATE perm_department_seats SET is_enabled = 1 WHERE department_id = 8 AND seat_key = 'worker'");
+perm_reset();
+
+// ---------------------------------------------------------------------------
+section('can(), targets, perm_where');
+perm_test_as($charisDir);
+ok('can: own department', can('departments', 'edit', 10));
+ok('can: sub-unit', can('departments', 'edit', 15));
+ok('can: not another department', !can('departments', 'edit', 8));
+ok('can: person in my department', can('departments', 'edit', perm_person($charisDir)));
+ok('can: person elsewhere', !can('departments', 'edit', perm_person($reachWorker)));
+$pdo->exec('CREATE TABLE t (id INTEGER PRIMARY KEY, dept INTEGER)');
+$pdo->exec('INSERT INTO t (dept) VALUES (8), (10), (15), (6)');
+[$w, $p] = perm_where('departments', 'edit', ['dept' => 'dept']);
+$st = $pdo->prepare("SELECT COUNT(*) FROM t WHERE {$w}");
+$st->execute($p);
+eq('perm_where keeps own departments only', 2, (int) $st->fetchColumn());
+$threw = false;
+try {
+    can('no_such_module');
+} catch (InvalidArgumentException $e) {
+    $threw = true;
+}
+ok('unknown module is refused loudly', $threw);
+perm_test_as($member);
+ok('member nav: portal yes', perm_nav_visible('member_portal'));
+ok('member nav: announcements no (needs approve)', !perm_nav_visible('announcements'));
+
+// ---------------------------------------------------------------------------
+section('Renames change nothing');
+$before = [$r($rp)['abilities'], $r($reachHod)['abilities'], $r($charisDir)['abilities']];
+$pdo->exec("UPDATE roles SET role_name = 'Senior_Pastor', label = 'Senior Pastor' WHERE role_name = 'Resident_Pastor'");
+$pdo->exec("UPDATE departments SET name = 'Evangelism Unit' WHERE id = 8");
+$pdo->exec("UPDATE departments SET name = 'Welfare Ministry' WHERE id = 10");
+perm_reset();
+eq('same access after renaming a role and two departments', $before,
+    [$r($rp)['abilities'], $r($reachHod)['abilities'], $r($charisDir)['abilities']]);
+
+// ---------------------------------------------------------------------------
+section('Holders and history');
+eq('seat holders by stable key', [$reachHod], perm_seat_holders($pdo, 'hod', 8));
+$holders = perm_holders($pdo, 'reach', 'manage');
+ok('reach managers: HOD and pastor', in_array($reachHod, $holders, true) && in_array($rp, $holders, true));
+ok('reach managers: not workers, not break-glass', !in_array($reachWorker, $holders, true) && !in_array($sa, $holders, true));
+ok('history row written', perm_history_add($pdo, ['via' => 'test', 'change_type' => 'grant.set', 'module_key' => 'reach',
+    'before' => ['level' => 3], 'after' => ['level' => 4], 'actor_user_id' => $sa, 'actor_label' => 'Test']));
+
+// ---------------------------------------------------------------------------
+section('Day-one parity of a synthetic church');
+$pdo = perm_test_db();
+$people = [];
+$add = static function (string $name, array $roles = [], array $seats = []) use ($pdo, &$people): int {
+    $uid = perm_test_person($pdo, $name);
+    foreach ($roles as $role => $extra) {
+        perm_test_role($pdo, $uid, is_int($role) ? $extra : $role, is_int($role) ? [] : $extra);
+    }
+    foreach ($seats as [$dept, $value, $extra]) {
+        perm_test_seat($pdo, $uid, $dept, $value, $extra ?? []);
+    }
+    return $people[$name] = $uid;
+};
+$add('member');
+foreach (['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Worker'] as $role) {
+    $add("role {$role}", [$role]);
+}
+$add('pastor in charge', ['Assoc_Pastor', 'Worker'], [[3, 'Assoc_Pastor', null]]);
+$add('director', ['Director', 'Worker'], [[11, 'Director', null]]);
+$add('finance director', ['Director', 'Worker'], [[14, 'Director', null]]);
+foreach ([1, 2, 3, 4, 7, 8, 9, 10, 11, 13, 14, 6] as $dept) {
+    $add("worker {$dept}", ['Worker'], [[$dept, 'Worker', null]]);
+    $add("hod {$dept}", ['HOD', 'Worker'], [[$dept, 'HOD', null]]);
+}
+$add('relieved hod', ['HOD', 'Worker'], [[9, 'HOD', ['roster_status' => 'Removed', 'is_active' => 0]]]);
+$add('frozen pastor in charge', ['Assoc_Pastor' => ['frozen' => 1]], [[8, 'Assoc_Pastor', null]]);
+
+$decided = ['closed hole', 'lost global role', 'combined roles', 'break-glass', 'lead decision', 'academy roster'];
+$run = perm_parity_run($pdo);
+foreach ($people as $name => $uid) {
+    $cats = [];
+    foreach (perm_parity_person($pdo, $uid)['diffs'] as $d) {
+        $cats[$d['category']] = true;
+    }
+    $unexpected = array_diff(array_keys($cats), $decided);
+    if ($name === 'frozen pastor in charge') {
+        eq('frozen pastor in charge: flagged as an unexpected gain', ['UNEXPECTED gain'], array_values($unexpected));
+        continue;
+    }
+    ok("{$name}: only decided differences", $unexpected === [], implode(', ', $unexpected));
+}
+ok('relieved HOD is named under decision 2', isset($run['categories']['lost global role'][$people['relieved hod']]));
+ok('IDI worker loses only dead links', isset($run['categories']['dead link removed'][$people['worker 1']]));
+eq('exit code 1 while one unexpected gain stands', 1, perm_parity_exit_code($run));
+$pdo->exec("DELETE FROM user_roles WHERE user_id = {$people['frozen pastor in charge']}");
+$pdo->exec("DELETE FROM user_departments WHERE user_id = {$people['frozen pastor in charge']}");
+perm_reset();
+eq('exit code 0 once only decided changes remain', 0, perm_parity_exit_code(perm_parity_run($pdo)));
+$pdo->exec("DELETE FROM perm_grants WHERE module_key = 'congregation' AND role_id = 2");
+perm_reset();
+eq('exit code 2 on a planted loss', 2, perm_parity_exit_code(perm_parity_run($pdo)));
+$report = perm_parity_render($pdo, perm_parity_run($pdo), false);
+ok('report fits one screen', substr_count($report, "\n") <= 24, (string) substr_count($report, "\n"));
+
+echo "\n{$GLOBALS['perm_test_passed']} passed, {$GLOBALS['perm_test_failed']} failed\n";
+exit($GLOBALS['perm_test_failed'] === 0 ? 0 : 1);

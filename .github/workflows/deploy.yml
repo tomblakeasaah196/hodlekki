@@ -272,6 +272,19 @@ jobs:
           php tests/dashboard_metrics_test.php
           php tests/auth_helpers_test.php
 
+      - name: Permissions tests (can(), day-one matrix, parity)
+        run: |
+          set -euo pipefail
+
+          # No MySQL: the perm_* schema and the day-one matrix are built on
+          # SQLite from the real migration files, and every difference
+          # between today's rules and can() must be one the owner decided.
+          if ! php -m | grep -qix 'pdo_sqlite'; then
+            echo "::error::pdo_sqlite is missing — the permissions tests would be skipped"
+            exit 1
+          fi
+          php tests/permissions/run.php
+
       - name: SMS Studio helper tests
         # No database, no network: phone normalisation, GSM-7 segment counting,
         # the sender name written into every text, the wallet pre-flight
