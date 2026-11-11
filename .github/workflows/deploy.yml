@@ -137,6 +137,17 @@ jobs:
           # what stops a class name reaching production without its utility.
           bash bin/build_se_css.sh --check
 
+      - name: UI build must be fresh (members' app CSS, icon sprite, asset hashes)
+        run: |
+          set -euo pipefail
+
+          # assets/ui/app.css, assets/ui/icons.svg and
+          # includes/ui/asset_manifest.php are COMMITTED because the host has
+          # no Node (docs/UI.md). Nearly every page is scanned for classes, so
+          # a markup change can need a rebuild: run `bash bin/build_ui.sh` and
+          # commit its outputs in the same commit as the change.
+          bash bin/build_ui.sh --check
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -271,6 +282,36 @@ jobs:
         # No database, no network: includes/site_url.php, the settings half of
         # includes/mailer.php, and bin/edge_lock.sh against a scratch folder.
         run: php tests/site_url_mailer_test.php
+
+      - name: UI foundation tests (navigation parity, CSRF, CSP, components, ratchet)
+        run: |
+          set -euo pipefail
+
+          # tests/ui/run.php renders the shell against SQLite and pins the
+          # navigation's access decisions to the old sidebar's; without
+          # pdo_sqlite the render half could not run.
+          if ! php -m | grep -qix 'pdo_sqlite'; then
+            echo "::error::pdo_sqlite is missing — the shell render test would not run"
+            exit 1
+          fi
+          php tests/ui/run.php
+          python3 tests/modal_contract_test.py
+
+          # The shell's scripts are classic scripts nothing compiles: a syntax
+          # error in any of them breaks every staff page at once.
+          fail=0
+          for f in assets/ui/js/*.js assets/ui/js/pages/*.js assets/js/global-search.js assets/js/pwa.js sw.js; do
+            if ! out=$(node --check "$f" 2>&1); then
+              echo "::error file=$f::$(echo "$out" | grep -m1 -E 'SyntaxError|Error' || echo 'does not parse')"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: PWA and push tests
+        # No database, no network: the RFC 8291 push encryption, the
+        # notification payloads, and what the service worker may keep.
+        run: php tests/pwa/run.php
 
       - name: Secret sweep (block obvious leaks)
         run: |

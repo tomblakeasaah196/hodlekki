@@ -6,6 +6,13 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// 1b. Baseline security headers (nosniff, referrer, framing, permissions)
+//     on every page and endpoint. The root .htaccess is cPanel-managed and
+//     never deployed, so they are sent from here. The CSP is per page: the
+//     shells send it (includes/security_headers.php explains).
+require_once __DIR__ . '/security_headers.php';
+security_send_baseline_headers();
+
 // 2. Native .env loader function (Bypasses Composer vendor directory entirely)
 if (!function_exists('loadEnv')) {
     function loadEnv($path) {
@@ -84,6 +91,13 @@ require_once __DIR__ . '/auth_helpers.php';
 //     a resumed session exactly as it vets any other.
 auth_remember_boot($pdo);
 security_enforce_session($pdo);
+
+// 9b. CSRF. One token per session (includes/csrf.php); the shells' script
+//     sends it with every write. Report-only until every module sends it:
+//     a signed-in write without it is logged, not refused. Endpoints of
+//     rebuilt modules refuse it themselves with csrf_require().
+require_once __DIR__ . '/csrf.php';
+csrf_observe();
 
 // 10. Web Push dispatcher.
 //     Same reasoning as the gate above: one hook here covers every page and

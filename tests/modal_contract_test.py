@@ -14,18 +14,23 @@ def require(condition: bool, message: str) -> None:
         failures.append(message)
 
 
-header = (ROOT / "includes/header.php").read_text(encoding="utf-8")
+# The shell moved from includes/header.php into includes/ui/shell.php, and the
+# shared dialog CSS from header.php's inline <style> into the compiled
+# stylesheet's source (assets/ui/src/app.css) — the UI foundation, PR 1.
+header = (ROOT / "includes/ui/shell.php").read_text(encoding="utf-8")
+styles = (ROOT / "assets/ui/src/app.css").read_text(encoding="utf-8")
 manager = (ROOT / "assets/js/modal-manager.js").read_text(encoding="utf-8")
 events = (ROOT / "modules/events/index.php").read_text(encoding="utf-8")
 
 require('/assets/js/modal-manager.js' in header, "authenticated layout must load modal-manager.js")
-require('class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10"' in header,
+require('<main id="main" class="ui-main"' in header,
         "the main scroll container must remain untransformed")
-require('main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10 animate-' not in header,
+main_rule = re.search(r"\.ui-main \{(.*?)\}", styles, re.S)
+require(main_rule is not None and "transform" not in main_rule.group(1) and "animation" not in main_rule.group(1),
         "animations on <main> create a containing block for fixed dialogs")
-require('.app-modal-overlay:not(.app-modal-preserve-layout)' in header,
+require('.app-modal-overlay:not(.app-modal-preserve-layout)' in styles,
         "shared centered-dialog CSS is missing")
-require('main.app-modal-scroll-locked' in header, "modal scroll lock CSS is missing")
+require('main.app-modal-scroll-locked' in styles, "modal scroll lock CSS is missing")
 
 for marker, description in (
     ("blockOutsideDismissal", "outside pointer/click dismissal guard"),

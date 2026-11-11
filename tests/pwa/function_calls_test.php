@@ -72,7 +72,8 @@ ok('includes/db.php requires the push helpers', str_contains($db, "push_helpers.
 ok('includes/db.php arms the dispatcher', str_contains($db, 'push_register_dispatcher($pdo)'));
 
 suite('the app shell carries the PWA');
-$header = (string) file_get_contents($repoRoot . '/includes/header.php');
+// The shell markup moved from header.php into includes/ui/shell.php (UI foundation).
+$header = (string) file_get_contents($repoRoot . '/includes/header.php') . (string) file_get_contents($repoRoot . '/includes/ui/shell.php');
 ok('header.php includes the head partial', str_contains($header, "pwa_head.php"));
 ok('header.php includes the launch screen', str_contains($header, "pwa_boot.php"));
 ok('the notification panel can open alert settings', str_contains($header, 'data-hod-alerts'));
@@ -127,7 +128,7 @@ suite('every surface that should carry the app does');
 // head one alone leaves a launch screen that never renders, and the boot one
 // alone leaves markup with no stylesheet.
 foreach ([
-    'includes/header.php'  => 'every ERP screen',
+    'includes/ui/shell.php' => 'every ERP screen',
     'auth/login.php'       => 'the sign-in page',
     'connect.php'          => 'Connect',
     'sermons.php'          => 'Sermons',
@@ -215,6 +216,17 @@ $sw = (string) file_get_contents($repoRoot . '/sw.js');
 foreach (['/api/', '/auth/', '/live/', '/e/', '/webhook/', '/uploads/'] as $prefix) {
     ok("{$prefix} is never cached", str_contains($sw, "'{$prefix}'"));
 }
-ok('navigations are not served from the cache', str_contains($sw, "request.mode === 'navigate'"));
+ok('navigations go to the network first', str_contains($sw, "request.mode === 'navigate'") && str_contains($sw, 'const network = fetch(request)'));
+// Read-only offline copies (UI foundation, Nov 2026): only pages the server
+// marks, one cache per session, wiped whenever /auth/ is reached.
+ok('only pages the server marks are kept for offline reading', str_contains($sw, "mark.startsWith('snapshot')"));
+ok('a copy is never kept from a redirect', str_contains($sw, '!response.redirected'));
+ok('copies are wiped on the way to sign-in or sign-out', str_contains($sw, "request.mode === 'navigate' && url.pathname.startsWith('/auth/')") && str_contains($sw, 'event.waitUntil(wipePages())'));
+ok('another session never shares the copies', str_contains($sw, 'name !== cacheName'));
+ok('copies expire', str_contains($sw, 'PAGES_MAX_AGE_MS'));
+$shellSrc = (string) file_get_contents($repoRoot . '/includes/ui/shell.php');
+ok('the shell marks only rebuilt pages, never the sensitive modules',
+    str_contains($shellSrc, "\$mode === 'strict' && (\$ui['offline'] ?? true)")
+    && str_contains($shellSrc, "'security', 'roles', 'finance', 'alerts', 'requisition', 'sms_studio'"));
 ok('the worker answers push events', str_contains($sw, "addEventListener('push'"));
 ok('and re-registers a rotated subscription', str_contains($sw, "addEventListener('pushsubscriptionchange'"));

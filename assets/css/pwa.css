@@ -62,17 +62,20 @@ html.hod-standalone .hod-no-select {
  * indicator. Applied only in standalone mode: in a browser tab the chrome
  * already handles it and this padding would just waste space.
  */
-html.hod-standalone body > aside,
-html.hod-standalone #sidebar {
+/* The members' app shell (body.ui-app, includes/ui/shell.php) places its own
+ * chrome around the safe areas; these rules are for the pages that still
+ * bring their own layout (public pages, /e/). */
+html.hod-standalone body:not(.ui-app) > aside,
+html.hod-standalone body:not(.ui-app) #sidebar {
     padding-top: var(--hod-safe-top);
     padding-bottom: var(--hod-safe-bottom);
 }
 
-html.hod-standalone header {
+html.hod-standalone body:not(.ui-app) header {
     padding-top: var(--hod-safe-top);
 }
 
-html.hod-standalone main {
+html.hod-standalone body:not(.ui-app) main {
     padding-bottom: calc(var(--hod-safe-bottom) + 4px);
 }
 
@@ -528,4 +531,15 @@ html.hod-standalone main {
     border-radius: 9px;
     cursor: pointer;
     flex: 0 0 auto;
+}
+
+/* ======================================================================
+ * 10. Inside the members' app shell
+ * The bottom bar owns the foot of the screen on phones: the install banner
+ * sits above it, and toasts go through the shared component (ui.js).
+ * ====================================================================== */
+@media (max-width: 1023px) {
+    body.ui-app #hodInstall {
+        bottom: calc(64px + var(--hod-safe-bottom) + 12px);
+    }
 }

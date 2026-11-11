@@ -53,6 +53,9 @@ error_log
 ./tailwindcss-linux-x64
 ./input.css
 ./tailwind.config.js
+./.tailwind
+# The UI build's sources (assets/ui/src): config, input CSS, icon SVGs.
+./assets/ui/src
 node_modules
 
 # Repo-only docs (internal design and ops notes, never public).

@@ -61,3 +61,7 @@ gk/
 # Ad-hoc scratch scripts — never commit
 _scratch/
 scratch_*.php
+
+# Pinned Tailwind standalone binaries fetched by bin/build_ui.sh (build tools,
+# not deliverables; ~40-120 MB each).
+/.tailwind/

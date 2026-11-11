@@ -128,6 +128,16 @@
      * ================================================================== */
 
     function toast(message, kind, action) {
+        // Inside the members' app the shared toast (assets/ui/js/ui.js) is
+        // the only one, so every message on the page looks the same.
+        if (window.HOD && typeof window.HOD.toast === 'function') {
+            var shared = window.HOD.toast(message, {
+                tone: kind === 'bad' ? 'danger' : 'success',
+                action: action ? { label: action.label, run: action.run } : undefined
+            });
+            return shared.close;
+        }
+
         var host = document.getElementById('hodToasts');
         if (!host) {
             host = el('div', { id: 'hodToasts' });
