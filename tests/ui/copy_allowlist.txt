@@ -18,7 +18,23 @@ connect.php | paragraph | Tell us a little more so we can serve and celebrate yo
 connect.php | paragraph | To bring people into an experience of God’s unconditional love that transforms them into men and women passionate about influencing their world through the principles of the Kingdom.
 connect.php | paragraph | To raise a people after God’s heart in every nation of the earth.
 connect.php | paragraph | Welcome to the family. A member of our Embrace Team will reach out to you shortly. We pray this marks the beginning of an incredible journey in your walk with God.
-modules/library/index.php | paragraph | Browse our collection of physical books, e-books, and audiobooks designed to build your faith, leadership, and purpose.
+index.php | button | Open the Connect page
+index.php | paragraph | “For where two or three gather in my name, there am I with them.” — Matthew 18:20
+index.php | subtitle | Scan to open the Connect page and join the Household of David family.
+modules/academy/index.php | empty-text | The Academy team will let you know when you have been placed in a cohort.
+modules/academy/index.php | paragraph | Show a course to its students, and open its exam when they are ready.
+modules/academy/index.php | paragraph | The first step to serving as a worker. It takes about ten minutes.
+modules/academy/index.php | title | You are approved, but not in a cohort yet
+modules/academy/index.php | title | Your application is being reviewed
+modules/embrace/index.php | paragraph | Every note is visible to everyone with Embrace access, and in the Excel register. This records who you meant it for.
+modules/embrace/index.php | paragraph | First timers who have been pushed to the congregation, with their follow-up notes.
+modules/embrace/index.php | subtitle | Choose the dates, then a quick image summary or the full Excel list.
+modules/idi/index.php | subtitle | How the church is growing and keeping its people, for the period you choose.
+modules/library/index.php | button | Sign in to borrow
+modules/member_portal/index.php | button | Send a prayer request
+modules/member_portal/index.php | button | Send to the Zoe team
+modules/member_portal/index.php | paragraph | Need agreement in prayer? Our intercessors are standing by to pray with you.
+modules/member_portal/index.php | subtitle | For giving you have already made. Add the receipt if you have one.
 modules/monitor/index.php | banner-text | The monitor's cron job runs the health checks every five minutes; the first appear within five minutes. "Run the checks now" on the Health tab runs them at once.
 modules/monitor/index.php | button | Make a new link
 modules/monitor/index.php | button | Run the checks now
@@ -36,6 +52,23 @@ modules/monitor/index.php | paragraph | New errors, red health checks and the mo
 modules/monitor/index.php | paragraph | Sends a test email to every confirmed address and a bell to every Super Admin.
 modules/monitor/index.php | title | The monitor is being set up
 modules/monitor/wall.php | paragraph | No open problems. When the site meets an error, it appears here within seconds.
+modules/profile/index.php | banner-text | An administrator has asked you to choose a new password before you carry on.
+modules/profile/index.php | button | Sign out other devices
+modules/profile/index.php | hint | Gmail, Yahoo or similar — for messages that should reach you outside the app.
+modules/profile/index.php | hint | The Charis team uses it to celebrate your day with you.
+modules/profile/index.php | subtitle | Drag to move, pinch or scroll to zoom. It is saved as a square.
+modules/profile/index.php | subtitle | Name changes are approved by a pastor, so the right person is always attached to your records.
+modules/reach/index.php | button | Use the church photo
+modules/reach/index.php | hint | Counted from when the lead was assigned without any follow-up. A daily alert goes to the whole Reach team.
+modules/reach/index.php | hint | Shown to volunteers on every campaign page. Use ## for headings, - for lists, **bold**, *italic*.
+modules/reach/index.php | paragraph | Enter the title and location, and AI can write the description and scripture.
+modules/reach/index.php | paragraph | The choices in the Event type list. Removing one keeps it on campaigns that already use it.
+modules/reach/index.php | paragraph | The link preview and capture-page background. No flyer? The default image is used. JPG, PNG or WebP, up to 5 MB.
+modules/reach/index.php | subtitle | Run outreach campaigns, share public capture links, and follow up everyone you meet.
+modules/regions/index.php | empty-text | Add your home address to your profile and you will be placed in your local hub, or an admin will place you.
+modules/regions/index.php | paragraph | Drag members between regions on a computer, or tap a member to move or mute them.
+modules/regions/index.php | subtitle | A prayer request or a testimony. It appears in the stream.
+modules/regions/index.php | title | You are not in a region yet
 parent_portal.php | paragraph | Here's what your little ones have been up to in Junior Church. Browse their attendance, lessons, and take-home resources below.
 parent_portal.php | paragraph | See what your child has been learning, their attendance, and take-home resources from Junior Church.
 parent_portal.php | paragraph | We couldn't find any children linked to your profile. Please contact the Junior Church team.
