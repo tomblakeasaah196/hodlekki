@@ -437,7 +437,7 @@ function legacy_abilities(array $p, array $depts, ?string $ar = null): array
     // --- Stewardship and system ----------------------------------------------------
     if ($sa) {
         $a['roles'] = ['view' => $C, 'manage' => $C];
-        $a['system_health'] = ['view' => $C];
+        $a['monitor'] = ['view' => $C, 'manage' => $C];             // monitor_user_can(): Super_Admin
         $a['ui_guide'] = ['view' => $C];
     }
     if ($sr(['Super_Admin', 'Resident_Pastor'])) {
@@ -500,7 +500,7 @@ function legacy_nav(array $p, array $abilities): array
         'assets' => $has($PD, [1, 3]),
         'finance' => $stew,
         'requisition' => $stew && $has(['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD']),
-        'roles' => $sa, 'ui_guide' => $sa, 'system_health' => $sa,
+        'roles' => $sa, 'ui_guide' => $sa, 'monitor' => $sa,      // nav entry 'system_health'
         'security' => $has(['Resident_Pastor']),
         'alerts' => $has(['Resident_Pastor']),
     ];

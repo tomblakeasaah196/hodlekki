@@ -92,6 +92,8 @@ return [
     'security' => ['label' => 'Security Centre', 'group' => 'stewardship', 'max' => 'edit', 'extras' => ['manage'], 'partitioned' => false],
     'alerts' => ['label' => 'Alerts Centre', 'group' => 'stewardship', 'max' => 'view', 'extras' => ['manage'], 'partitioned' => false],
 
-    'system_health' => ['label' => 'System Health', 'group' => 'system', 'max' => 'view', 'extras' => [], 'partitioned' => false],
+    // The system monitor (nav entry 'system_health'). includes/monitor/bootstrap.php
+    // asks can('monitor', 'view' | 'manage') through monitor_user_can().
+    'monitor' => ['label' => 'System monitor', 'group' => 'system', 'max' => 'view', 'extras' => ['manage'], 'partitioned' => false],
     'ui_guide' => ['label' => 'Design System', 'group' => 'system', 'max' => 'view', 'extras' => [], 'partitioned' => false],
 ];

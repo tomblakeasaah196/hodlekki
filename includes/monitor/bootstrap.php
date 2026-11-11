@@ -30,10 +30,13 @@ if (!function_exists('monitor_user_can')) {
         if ($userId <= 0) {
             return false;
         }
-        // The permissions module (erp-permissions) will define can(); until then,
-        // Super_Admin only, from the live roles table.
+        // Once the permissions engine is loaded, it decides: 'monitor.view' is
+        // can('monitor', 'view'), 'monitor.manage' is can('monitor', 'manage')
+        // (module key 'monitor' in includes/permissions/modules.php). Until
+        // then, Super_Admin only, from the live roles table.
         if (function_exists('can')) {
-            return (bool) can($ability);
+            [$module, $level] = array_pad(explode('.', $ability, 2), 2, 'view');
+            return (bool) can($module, $level);
         }
         if (!function_exists('security_is_super_admin')) {
             require_once dirname(__DIR__) . '/security_helpers.php';
