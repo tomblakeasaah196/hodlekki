@@ -106,6 +106,16 @@ tells the mail admins once. `mail_messages.is_auto` marks out-of-office answers 
 `mail_accounts.change_stamp` moves on every change a list shows. Event `mail.received` (new Inbox mail, not a first
 copy, not older than 48 h) for PR 4's listeners in `includes/mail/Listeners/`.
 
+## 7b. Sending and the domain's hourly budget
+
+Every send from an ERP mailbox goes through `MailTransport::send()`, which takes one slot per recipient in the
+`mailbox` lane of the email foundation's shared budget (`email_budget_take()`, docs/EMAIL.md) before SMTP, gives
+the slots back if the send fails, and records the host's own "max emails per hour" refusal
+(`email_budget_refused()`), which stops every sender for the rest of the hour. So people's replies, alerts,
+automations and campaigns together never pass the host's limit. A send refused for the budget is a temporary
+`MailSendException` ("…will go in the next hour"); PR 3's outbox retries it. Mail alerts to personal addresses
+(PR 4) go through `email_send_now()` with an alert lane, never `hod_send_mail()` directly.
+
 ## 8. Export of a departed holder's mail
 
 Requested on the Mailboxes screen (reason required). Two approvals by two different people, one per side. Then a job

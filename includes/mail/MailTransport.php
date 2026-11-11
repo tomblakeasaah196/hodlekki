@@ -43,13 +43,53 @@ final class MailTransport
         }
         $message->date(Clock::now());
 
-        $raw = MailServer::make()->send($account, $message);
+        // One hourly budget for the whole domain (docs/EMAIL.md, "One budget"): every recipient of a mailbox send
+        // takes a slot in the 'mailbox' lane first, so people's mail, alerts and campaigns together never pass
+        // the host's per-hour limit. A send that fails hands its slots back; the host's own "max emails per hour"
+        // refusal stops every sender for the rest of the hour.
+        $slots = count($message->recipients());
+        if (!self::budget('take', $slots)) {
+            throw new MailSendException('The church has sent all the email it may this hour. Your message will go in the next hour.', 'temporary', false, 451);
+        }
+        try {
+            $raw = MailServer::make()->send($account, $message);
+        } catch (MailSendException $e) {
+            $cap = function_exists('email_parse_cap_refusal') ? email_parse_cap_refusal($e->getMessage()) : null;
+            $cap !== null ? self::budget('refused', $cap['cap'] ?? 0) : self::budget('give_back', $slots);
+            throw $e;
+        }
 
         return [
             'message_id' => (string) $message->getMessageId(),
             'raw' => $raw,
             'sent_uid' => $copyToSent ? $this->appendToSent($account, $raw) : null,
         ];
+    }
+
+    /**
+     * The shared email budget (includes/campaigns/budget.php). 'take' answers whether $n slots were reserved;
+     * 'give_back' returns them; 'refused' records the host's hourly refusal ($n = the cap it named, 0 = none).
+     * Before the email foundation's tables exist nothing is metered (its own rule).
+     */
+    private static function budget(string $what, int $n): bool
+    {
+        if (!function_exists('email_budget_take')) {
+            $file = dirname(__DIR__) . '/campaigns/bootstrap.php';
+            if (is_file($file)) {
+                require_once $file;
+            }
+        }
+        if (!function_exists('email_budget_take')) {
+            return true;
+        }
+        $pdo = Db::pdo();
+        match ($what) {
+            'take' => $taken = email_budget_take($pdo, 'mailbox', $n),
+            'give_back' => email_budget_give_back($pdo, 'mailbox', $n),
+            'refused' => email_budget_refused($pdo, $n > 0 ? $n : null),
+        };
+
+        return $taken ?? true;
     }
 
     /** Put a copy in the mailbox's Sent folder (the server's exim does not), marked read */

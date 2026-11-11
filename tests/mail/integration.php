@@ -28,6 +28,8 @@ use HOD\Mail\MailError;
 use HOD\Mail\MailNav;
 use HOD\Mail\MailServer;
 use HOD\Mail\MailSettings;
+use HOD\Mail\MailTransport;
+use HOD\Mail\Mime\Message;
 use HOD\Mail\Store;
 use HOD\Mail\Sync\MailSync;
 use HOD\Mail\Tests\FakeMailServer;
@@ -295,6 +297,27 @@ Jobs::run();
 check('the diff queues a reset and it runs', $n['resets'] === 1 && $uapi->pops['embrace@hodlekki.org']['password'] !== $before
     && Store::account($embrace['id'])['status'] === 'active');
 
+section('Sending takes the domain\'s hourly budget (docs/EMAIL.md)');
+$pdo->exec('DELETE FROM email_rate_buckets');
+$sentTotal = static fn (): int => (int) Db::value('SELECT COALESCE(SUM(sent_total), 0) FROM email_rate_buckets');
+$msg = static fn () => (new Message())->to('ada@example.test')->cc('bola@example.test')->subject('Welcome')->text('Good to see you.');
+$box = Store::account($embrace['id']);
+$out = MailTransport::make()->send($hod, $box, $msg(), false);
+check('a reply to two people takes two slots in the mailbox lane', $sentTotal() === 2 && count($mail->sent) === 1 && $out['message_id'] !== '');
+$mail->smtpFailure = 'temporary';
+$e = throws(fn () => MailTransport::make()->send($hod, $box, $msg(), false));
+check('a send that fails gives its slots back', $e instanceof \HOD\Mail\MailSendException && $sentTotal() === 2);
+$mail->smtpFailure = 'temporary';
+$mail->smtpFailureText = 'Domain hodlekki.org has exceeded the max emails per hour (100/100 (100%)) allowed.';
+throws(fn () => MailTransport::make()->send($hod, $box, $msg(), false));
+check("the host's hourly refusal stops every sender for the hour", Db::value('SELECT refused_at FROM email_rate_buckets LIMIT 1') !== null);
+$before = count($mail->sent);
+$e = throws(fn () => MailTransport::make()->send($hod, $box, $msg(), false));
+check('then nothing more leaves this hour, and the person is told when', $e instanceof \HOD\Mail\MailSendException && $e->reason === 'temporary'
+    && count($mail->sent) === $before && str_contains($e->getMessage(), 'next hour'));
+$e = throws(fn () => MailTransport::make()->send($pastor, $box, $msg(), false));
+check('reading is not sending: a Read grant cannot send', $e instanceof MailError && $e->status === 403);
+$pdo->exec('DELETE FROM email_rate_buckets');
 section('Removing needs the address typed');
 $e = throws(fn () => Lifecycle::request($admin, 'remove', Store::account($info['id']), ['confirm' => 'info']));
 check('a wrong confirmation is refused', $e instanceof MailError && $e->field === 'confirm');

@@ -35,6 +35,9 @@ class FakeMailServer extends MailServer
     /** Make the next SMTP send fail: null, 'auth', 'rejected' or 'temporary' */
     public ?string $smtpFailure = null;
 
+    /** The server's words for that failure (default: a simulated message) */
+    public ?string $smtpFailureText = null;
+
     /** Make the next IMAP connections fail, one entry each: 'timeout' or 'unreachable' */
     public array $imapFailures = [];
 
@@ -151,7 +154,9 @@ class FakeMailServer extends MailServer
         if ($this->smtpFailure) {
             $reason = $this->smtpFailure;
             $this->smtpFailure = null;
-            throw new MailSendException("Simulated SMTP failure: {$reason}", $reason, $reason !== 'temporary', $reason === 'temporary' ? 451 : 550);
+            $text = $this->smtpFailureText ?? "Simulated SMTP failure: {$reason}";
+            $this->smtpFailureText = null;
+            throw new MailSendException($text, $reason, $reason !== 'temporary', $reason === 'temporary' ? 451 : 550);
         }
         $box = $this->mailboxes[strtolower($username)] ?? null;
         if (!$box || !hash_equals($box['password'], $password)) {
