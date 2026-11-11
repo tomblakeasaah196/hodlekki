@@ -153,6 +153,10 @@ never treat it as proof the engine behaves.
 
 - `uploads/` — real member uploads, sermon audio, event banners. Not in
   git; never rewrite, delete, or commit.
+  The one thing written there is the marked guard block in
+  `uploads/.htaccess` (and `assets/uploads/.htaccess`), by `bin/uploads_guard.sh`
+  on every deploy. Store every upload through `includes/upload_guard.php`
+  (allow-listed extensions, random names); never keep the uploader's file name.
 - `vendor/` — Composer output. Regenerate with `composer install`.
 - `.env` — production/local secrets. Never read its values back to the
   user in chat; never commit; never echo into logs.

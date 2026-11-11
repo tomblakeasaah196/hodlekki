@@ -271,14 +271,14 @@ try {
             if(empty($title)) exit(json_encode(['status' => 'error', 'message' => 'Title is required.']));
 
             if ($type === 'Document' && isset($_FILES['file_upload']) && $_FILES['file_upload']['error'] === UPLOAD_ERR_OK) {
-                $upload_dir = '../uploads/academy/';
-                if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-                $filename = time() . '_' . preg_replace('/[^a-zA-Z0-9.\-_]/', '', basename($_FILES['file_upload']['name']));
-                if (move_uploaded_file($_FILES['file_upload']['tmp_name'], $upload_dir . $filename)) {
-                    $file_url = '../../uploads/academy/' . $filename; 
-                } else {
-                    exit(json_encode(['status' => 'error', 'message' => 'Failed to upload document.']));
+                // Allow-listed types only, under a random name (includes/upload_guard.php).
+                require_once __DIR__ . '/../includes/upload_guard.php';
+                $stored = hod_upload_store($_FILES['file_upload'], __DIR__ . '/../uploads/academy/', '../../uploads/academy/',
+                    array_merge(HOD_UPLOAD_DOCS, HOD_UPLOAD_IMAGES, HOD_UPLOAD_MEDIA));
+                if (!$stored['ok']) {
+                    exit(json_encode(['status' => 'error', 'message' => $stored['error']]));
                 }
+                $file_url = $stored['url'];
             }
 
             $pdo->prepare("INSERT INTO course_materials (course_id, title, material_type, file_url) VALUES (?, ?, ?, ?)")->execute([$course_id, $title, $type, $file_url]);
@@ -305,12 +305,15 @@ try {
 
             // Handle optional file upload for reviews/presentations
             if (isset($_FILES['submission_file']) && $_FILES['submission_file']['error'] === UPLOAD_ERR_OK) {
-                $upload_dir = '../uploads/submissions/';
-                if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-                $filename = time() . '_SUB_' . preg_replace('/[^a-zA-Z0-9.\-_]/', '', basename($_FILES['submission_file']['name']));
-                if (move_uploaded_file($_FILES['submission_file']['tmp_name'], $upload_dir . $filename)) {
-                    $file_url = '../../uploads/submissions/' . $filename; 
+                // Any signed-in member can submit: allow-listed types only, under a
+                // random name, never the uploader's file name (includes/upload_guard.php).
+                require_once __DIR__ . '/../includes/upload_guard.php';
+                $stored = hod_upload_store($_FILES['submission_file'], __DIR__ . '/../uploads/submissions/', '../../uploads/submissions/',
+                    array_merge(HOD_UPLOAD_DOCS, HOD_UPLOAD_IMAGES, HOD_UPLOAD_MEDIA));
+                if (!$stored['ok']) {
+                    exit(json_encode(['status' => 'error', 'message' => $stored['error']]));
                 }
+                $file_url = $stored['url'];
             }
 
             if(empty($sub_text) && empty($file_url)) exit(json_encode(['status' => 'error', 'message' => 'You must either type a response or upload a file.']));
