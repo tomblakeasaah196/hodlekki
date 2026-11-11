@@ -3,6 +3,7 @@
 
 require_once '../includes/db.php';
 require_once __DIR__ . '/../includes/status_ladder.php';
+require_once __DIR__ . '/../includes/academy_access.php';
 header('Content-Type: application/json');
 
 // 1. Core Security & Session Check
@@ -10,6 +11,9 @@ if (!isset($_SESSION['user_id'])) {
     echo json_encode(['status' => 'error', 'message' => 'Unauthorized access. Please log in.']);
     exit;
 }
+
+// Writes (every POST) must carry the session's CSRF token (includes/csrf.php).
+csrf_require();
 
 $user_id = $_SESSION['user_id'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
@@ -329,6 +333,11 @@ try {
             $batch_id = $_POST['batch_id'] ?? '';
             $msg = trim($_POST['message'] ?? '');
             if(empty($msg) || empty($batch_id)) exit(json_encode(['status' => 'error', 'message' => 'Message cannot be empty.']));
+            // Only that cohort's students, its facilitators and Academy staff (includes/academy_access.php).
+            if (!academy_forum_allowed($pdo, (int) $user_id, $is_admin, $batch_id)) {
+                http_response_code(403);
+                exit(json_encode(['status' => 'error', 'message' => 'This noticeboard is for another cohort.']));
+            }
             
             $pdo->prepare("INSERT INTO academy_forum_messages (batch_id, sender_id, message) VALUES (?, ?, ?)")->execute([$batch_id, $user_id, $msg]);
             echo json_encode(['status' => 'success']);
@@ -336,6 +345,10 @@ try {
 
         case 'fetch_forum':
             $batch_id = $_POST['batch_id'] ?? '';
+            if (!academy_forum_allowed($pdo, (int) $user_id, $is_admin, $batch_id)) {
+                http_response_code(403);
+                exit(json_encode(['status' => 'error', 'message' => 'This noticeboard is for another cohort.']));
+            }
             $stmt = $pdo->prepare("
                 SELECT m.message, m.created_at, u.first_name, u.last_name, u.spiritual_status 
                 FROM academy_forum_messages m 
