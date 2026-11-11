@@ -14,7 +14,6 @@ modules/checkin_qr/index.php
 modules/contact_extractor/index.php
 modules/event_qr/index.php
 modules/event_report/index.php
-modules/library/index.php
 parent_portal.php
 reach.php
 register.php

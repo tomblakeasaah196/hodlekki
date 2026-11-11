@@ -1,5 +1,10 @@
 <?php
 // /testimonies.php
+// Baseline security headers (nosniff, referrer, framing, permissions): this
+// page does not load includes/db.php on every request, which is where every
+// other page gets them.
+require_once __DIR__ . '/includes/security_headers.php';
+security_send_baseline_headers();
 session_start();
 $is_logged_in = isset($_SESSION['user_id']);
 $user_name = $is_logged_in ? $_SESSION['first_name'] . ' ' . $_SESSION['last_name'] : '';

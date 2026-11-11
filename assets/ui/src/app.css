@@ -583,6 +583,7 @@
     }
     .ui-card__header {
         display: flex;
+        flex-wrap: wrap;
         align-items: flex-start;
         justify-content: space-between;
         gap: 12px;
@@ -713,6 +714,10 @@
         grid-template-columns: minmax(0, 1fr);
     }
     .ui-grid--stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    /* An odd last tile takes the whole row on phones instead of hanging alone. */
+    @media (max-width: 1023px) {
+        .ui-grid--stats > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+    }
     @media (min-width: 640px) {
         .ui-grid--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
@@ -1003,6 +1008,36 @@
     .ui-input:disabled,
     .ui-select:disabled,
     .ui-textarea:disabled { cursor: not-allowed; }
+    /* File picker: the native button styled as a secondary button inside the field. */
+    .ui-input[type="file"] {
+        height: auto;
+        padding: 5px 6px;
+        color: var(--ui-text-muted);
+        font-size: var(--ui-text-sm);
+        cursor: pointer;
+    }
+    .ui-input[type="file"]::file-selector-button {
+        margin-right: 10px;
+        padding: 6px 12px;
+        border: 1px solid var(--ui-border-strong);
+        border-radius: calc(var(--ui-radius) - 2px);
+        background: var(--ui-surface-sunken);
+        color: var(--ui-text);
+        font: 500 var(--ui-text-sm)/1.25 var(--ui-font-sans);
+        cursor: pointer;
+    }
+    .ui-input[type="file"]:hover::file-selector-button { background: var(--ui-surface-hover); }
+
+    /* A short quoted message (a pastor's note, a verse): rule on the left, keeps line breaks. */
+    .ui-quote {
+        margin: 0;
+        padding: 2px 0 2px 14px;
+        border-left: 2px solid var(--ui-primary);
+        color: var(--ui-text-muted);
+        font-size: var(--ui-text-md);
+        line-height: 1.55;
+        white-space: pre-line;
+    }
     .ui-textarea {
         height: auto;
         min-height: 104px;
@@ -1223,6 +1258,49 @@
         color: var(--ui-text-subtle);
     }
 
+    /* Address search (Geoapify, loaded with HOD.lib('geoapify')): its own
+     * input and list, dressed as .ui-input and a .ui-combobox list. */
+    .ui-geo { position: relative; }
+    .ui-geo .geoapify-autocomplete-input {
+        width: 100%;
+        height: var(--ui-control-h);
+        padding: 0 40px 0 12px;
+        border: 1px solid var(--ui-input-border);
+        border-radius: var(--ui-radius);
+        background: var(--ui-surface);
+        color: var(--ui-text);
+        font: 400 var(--ui-input-font)/1.4 var(--ui-font-sans);
+    }
+    .ui-geo .geoapify-autocomplete-input:focus {
+        outline: none;
+        border-color: var(--ui-primary);
+        box-shadow: var(--ui-focus-ring);
+    }
+    .ui-geo .geoapify-autocomplete-items {
+        position: absolute;
+        z-index: var(--ui-z-popover);
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        padding: 4px;
+        border: 1px solid var(--ui-border);
+        border-radius: 12px;
+        background: var(--ui-surface);
+        box-shadow: var(--ui-shadow-md);
+    }
+    .ui-geo .geoapify-autocomplete-item {
+        padding: 9px 10px;
+        border: 0;
+        border-radius: 8px;
+        color: var(--ui-text);
+        font-size: var(--ui-text-md);
+        line-height: 1.25rem;
+        cursor: pointer;
+    }
+    .ui-geo .geoapify-autocomplete-item.active,
+    .ui-geo .geoapify-autocomplete-item:hover { background: var(--ui-surface-hover); }
+    .ui-geo .geoapify-close-button { right: 8px; color: var(--ui-text-subtle); }
+
     /* ---------- Table ---------- */
 
     .ui-table-wrap {
@@ -1424,6 +1502,11 @@
         }
         .ui-dl dt:first-of-type,
         .ui-dl dd:first-of-type { border-top: 0; padding-top: 0; }
+        /* Label above value, for narrow columns. */
+        .ui-dl--stacked { grid-template-columns: minmax(0, 1fr); }
+        .ui-dl--stacked dt,
+        .ui-dl--stacked dd { padding: 0; border-top: 0; }
+        .ui-dl--stacked dd { margin: 2px 0 14px; }
     }
 
     /* ---------- Badge, count, status dot ---------- */
@@ -2303,6 +2386,67 @@
         color: var(--ui-nav-section);
         white-space: nowrap;
     }
+    /* On a light surface (the public bar). */
+    .ui-brand--light { flex: 0 1 auto; color: var(--ui-heading); }
+    .ui-brand--light .ui-brand__mark { box-shadow: 0 0 0 1px var(--ui-border); }
+    .ui-brand--light .ui-brand__sub { color: var(--ui-text-subtle); }
+
+    /* ---------- Public layout (includes/ui/public.php) ---------- */
+
+    body.ui-public {
+        min-height: 100dvh;
+        background: var(--ui-canvas);
+    }
+    .ui-public-bar {
+        position: sticky;
+        top: 0;
+        z-index: var(--ui-z-sticky, 20);
+        padding-top: var(--ui-safe-top);
+        border-bottom: 1px solid var(--ui-border);
+        background: var(--ui-surface);
+    }
+    .ui-public-bar__inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        max-width: 1200px;
+        height: 64px;
+        margin: 0 auto;
+        padding: 0 16px;
+    }
+    .ui-public-bar__actions { display: flex; flex: none; align-items: center; gap: 8px; }
+    .ui-public-main {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px 16px calc(48px + var(--ui-safe-bottom));
+        outline: none;
+    }
+    @media (min-width: 640px) {
+        .ui-public-bar__inner { padding: 0 24px; }
+        .ui-public-main { padding: 32px 24px 64px; }
+    }
+    @media (max-width: 479px) {
+        .ui-public .ui-brand__sub { display: none; }
+    }
+
+    /* A dialog that fills the screen (a document reader). */
+    .ui-dialog.ui-dialog--full {
+        width: 100vw;
+        height: 100dvh;
+        max-height: none;
+        margin: 0;
+        border-radius: 0;
+        background: var(--grey-900, #0A0E17);
+        color: #FFFFFF;
+    }
+    .ui-dialog--full .ui-dialog__header { padding: calc(10px + var(--ui-safe-top)) 12px 10px 20px; }
+    .ui-dialog--full .ui-dialog__title,
+    .ui-dialog--full .ui-dialog__description { color: inherit; }
+    .ui-dialog--full .ui-dialog__description { opacity: .7; }
+    .ui-dialog--full .ui-dialog__close { color: #FFFFFF; }
+    .ui-dialog--full .ui-dialog__body { flex: 1 1 auto; padding: 0; overflow: hidden; }
+    .ui-dialog--full[open]::before { content: none; }
     .ui-sidebar__iconbtn {
         display: grid;
         flex: none;
@@ -2980,7 +3124,8 @@ main.app-modal-scroll-locked { overflow: hidden !important; }
     .ui-bottombar,
     .ui-toasts,
     .ui-offline-bar,
-    .ui-skip { display: none !important; }
+    .ui-skip,
+    .ui-no-print { display: none !important; }
     body.ui-app { height: auto; overflow: visible; background: #FFFFFF; }
     .ui-main-col { margin: 0 !important; height: auto; }
     .ui-main { overflow: visible; padding: 0; }

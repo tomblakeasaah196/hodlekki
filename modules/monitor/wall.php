@@ -61,7 +61,7 @@ header('X-Content-Type-Options: nosniff');
         <section class="mw-panel" aria-labelledby="mw-latest-title">
             <h2 class="mw-panel__title" id="mw-latest-title">Latest open problems</h2>
             <ol class="mw-problems" data-mw="latest"></ol>
-            <p class="mw-empty" data-mw="latest-empty" hidden>No open problems. When the site meets an error, it appears here within seconds.</p>
+            <p class="mw-empty" data-mw="latest-empty" hidden>No open problems.</p>
         </section>
         <section class="mw-panel" aria-labelledby="mw-checks-title">
             <h2 class="mw-panel__title" id="mw-checks-title">Health checks</h2>

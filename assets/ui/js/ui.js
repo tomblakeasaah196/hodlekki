@@ -1240,6 +1240,81 @@
     HOD.info = { close: infoHide };
 
     /* ------------------------------------------------------------------ *
+     * Libraries on demand: HOD.lib('chart' | 'cropper' | 'geoapify' |
+     * 'html2canvas' | 'xlsx' | 'sortable') — vendored, hashed, loaded once,
+     * only when a page actually needs them.
+     * ------------------------------------------------------------------ */
+
+    var loading = {};
+
+    function load(src, isCss) {
+        if (loading[src]) return loading[src];
+        loading[src] = new Promise(function (resolve, reject) {
+            var el = document.createElement(isCss ? 'link' : 'script');
+            if (isCss) { el.rel = 'stylesheet'; el.href = src; } else { el.src = src; }
+            el.onload = function () { resolve(); };
+            el.onerror = function () { delete loading[src]; reject(new Error('Could not load ' + src)); };
+            document.head.appendChild(el);
+        });
+        return loading[src];
+    }
+
+    HOD.load = load;
+    HOD.lib = function (name) {
+        var map = config.vendor || {};
+        if (!map[name]) return Promise.reject(new Error('Unknown library ' + name));
+        var css = map[name + '.css'];
+        return Promise.all([load(map[name], false), css ? load(css, true) : null]);
+    };
+
+    /* ------------------------------------------------------------------ *
+     * Charts: Chart.js with the brand's quiet defaults.
+     *   HOD.chart(canvas, { type: 'line', data: …, options: … }).then(chart => …)
+     * Colours in order: navy, red, blue, green, amber, then softer tints.
+     * ------------------------------------------------------------------ */
+
+    HOD.palette = ['#1D356A', '#D11920', '#4A6BB0', '#157A4A', '#D98A00', '#7690C6', '#E2777B', '#9AA2B2'];
+    // For ordered steps (first timer → worker, a pipeline): one navy ramp,
+    // darkest first, so no step reads as an alarm.
+    HOD.ramp = ['#0A0E17', '#1D356A', '#33549A', '#4A6BB0', '#7690C6', '#A6B8DD', '#CCD7EE', '#E5EBF7'];
+    var chartDefaultsSet = false;
+
+    HOD.chart = function (canvas, cfg) {
+        return HOD.lib('chart').then(function () {
+            var Chart = window.Chart;
+            if (!chartDefaultsSet) {
+                chartDefaultsSet = true;
+                var css = getComputedStyle(root);
+                Chart.defaults.font.family = css.getPropertyValue('--ui-font-sans').trim() || 'Inter, sans-serif';
+                Chart.defaults.font.size = 12;
+                Chart.defaults.color = '#6E778A';
+                Chart.defaults.borderColor = '#E7EAF0';
+                Chart.defaults.maintainAspectRatio = false;
+                Chart.defaults.animation.duration = reduceMotion ? 0 : 450;
+                Chart.defaults.plugins.legend.labels.usePointStyle = true;
+                Chart.defaults.plugins.legend.labels.boxWidth = 8;
+                Chart.defaults.plugins.legend.labels.boxHeight = 8;
+                Chart.defaults.plugins.legend.labels.padding = 16;
+                Chart.defaults.plugins.tooltip.backgroundColor = '#0A0E17';
+                Chart.defaults.plugins.tooltip.padding = 10;
+                Chart.defaults.plugins.tooltip.cornerRadius = 8;
+                Chart.defaults.plugins.tooltip.titleFont = { weight: '600' };
+                Chart.defaults.plugins.tooltip.displayColors = false;
+                Chart.defaults.elements.line.tension = 0.35;
+                Chart.defaults.elements.line.borderWidth = 2;
+                Chart.defaults.elements.point.radius = 0;
+                Chart.defaults.elements.point.hoverRadius = 4;
+                Chart.defaults.elements.bar.borderRadius = 6;
+                Chart.defaults.scale.grid.drawTicks = false;
+                Chart.defaults.scale.border.display = false;
+            }
+            var existing = Chart.getChart(canvas);
+            if (existing) existing.destroy();
+            return new Chart(canvas, cfg);
+        });
+    };
+
+    /* ------------------------------------------------------------------ *
      * Formatting
      * ------------------------------------------------------------------ */
 

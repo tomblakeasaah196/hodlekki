@@ -91,6 +91,8 @@ $minLength = SECURITY_MIN_PASSWORD_LENGTH;
             <form id="pwForm" class="p-8 space-y-5" autocomplete="off">
                 <input type="hidden" name="action" value="change_password">
                 <input type="hidden" name="sign_out_others" value="1">
+                <!-- The profile API requires the session CSRF token (includes/csrf.php). -->
+                <input type="hidden" name="_csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
 
                 <div>
                     <label class="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-2">Current Password</label>

@@ -40,7 +40,7 @@ Renaming a campaign changes its link, so share the new one. A campaign with capt
 Click **Share** on a campaign card. You get:
 
 - the **public link** (`/reach.php?c=…`) — no login needed;
-- a ready-made **WhatsApp message** with the description, scripture and link — tap **Send via WhatsApp**. The preview shows the flyer (or the default image);
+- a ready-made **WhatsApp message** with the description, scripture and link — tap **Send on WhatsApp**. The preview shows the flyer (or the default image);
 - a **QR code** you can print or show on a phone at the meeting point.
 
 Volunteers open the link (it also has **Tips for sharing your faith** — prayer, the Gospel in brief, inviting people, scriptures and books), enter the phone number they are registered with, confirm their name, and start logging people. For **"Where are they spiritually?"** tap every category that applies — someone can be both *Broken* and a *New Convert*. Leaving it empty saves them as *Other*. Only numbers already in our family database can capture. Voice capture fills the form from one spoken sentence — always check it before saving.
@@ -163,3 +163,21 @@ leads and changing Reach settings needs **Reach: Manage** — the pastors and th
 department's Director and HOD. "Who can a lead be assigned to" is everyone seated in a
 department that owns Reach. Moving someone in the Departments roster changes this on
 their next page load.
+
+## The new look (November 2026)
+
+Reach now uses the same design as the rest of the app. Everything works as
+before; a few things moved or got easier:
+
+- **Campaign settings** (for people with **Reach: Manage**) is the gear button next
+  to **New campaign**.
+- **Share** shows the QR code drawn on your phone or computer — the link is no
+  longer sent to an outside QR service. **Copy** and **Send on WhatsApp** are
+  underneath.
+- On **Follow-up**, the status buttons, filters and category chips sit above
+  the list; tap a person to open their details on the right (at the bottom on
+  a phone). Calls and WhatsApp are one tap from there.
+- The overdue reminder is a yellow bar at the top of **Follow-up**; tap it to
+  show only those leads, tap again to show everyone.
+- **Analytics** charts use the church colours, and **Generate PDF** shows an
+  **Open the PDF** button when the report is ready.
