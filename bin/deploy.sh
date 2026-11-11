@@ -89,7 +89,7 @@ echo "[deploy] tar -> $DEPLOYPATH done"
 #     bin/retired_files.txt (relative paths only; anything odd is skipped).
 if [ -f "$REPO/bin/retired_files.txt" ]; then
     while IFS= read -r rel || [ -n "$rel" ]; do
-        rel="${rel%$''}"
+        rel="${rel%$'\r'}"
         case "$rel" in ''|'#'*) continue ;; esac
         case "$rel" in /*|*..*) echo "[deploy] retired: skipped unsafe path '$rel'" >&2; continue ;; esac
         if [ -f "$DEPLOYPATH/$rel" ]; then

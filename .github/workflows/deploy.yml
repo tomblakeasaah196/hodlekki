@@ -94,6 +94,15 @@ jobs:
           fi
           exit $fail
 
+      - name: Shell scripts must use LF line endings
+        # bash on the server cannot run a CRLF script; one stopped every deploy
+        # on 11 Nov 2026 (.gitattributes now forces LF for *.sh).
+        run: |
+          if grep -rlI $'\r' --include='*.sh' --exclude-dir=.git --exclude-dir=vendor . ; then
+            echo "::error::A shell script above has Windows (CRLF) line endings; bash on the server cannot run it"
+            exit 1
+          fi
+
       - name: Set up PHP 8.3
         uses: shivammathur/setup-php@v2
         with:
