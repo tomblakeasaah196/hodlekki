@@ -96,7 +96,9 @@ SELECT o.module_key, o.department_id
 
 -- ---------------------------------------------------------------------------
 -- 4. Role columns. Found by today's role name, stored by role id.
---    Super_Admin has no cells: it is break-glass (roles.is_break_glass).
+--    Super_Admin is break-glass (roles.is_break_glass) and needs no cells; its
+--    one cell, the system monitor, keeps routine monitor visits out of the
+--    break-glass log.
 -- ---------------------------------------------------------------------------
 
 INSERT INTO perm_grants (role_id, seat_key, module_key, level, can_approve, can_export, can_manage, scope, view_scope)
@@ -161,6 +163,9 @@ SELECT r.id, '', c.module_key, c.level, c.a, c.x, c.m, c.scope, c.view_scope
         UNION ALL SELECT 'Resident_Pastor', 'security', 3, 0, 0, 1, 'church', NULL
         UNION ALL SELECT 'Resident_Pastor', 'alerts', 1, 0, 0, 1, 'church', NULL
         UNION ALL SELECT 'Resident_Pastor', 'bible', 1, 0, 0, 1, 'church', NULL
+        -- The system monitor: Super Admins, as a plain grant (so viewing it is
+        -- not logged as a break-glass use every time).
+        UNION ALL SELECT 'Super_Admin', 'monitor', 1, 0, 0, 1, 'church', NULL
        ) c ON c.role_name = r.role_name
  WHERE NOT EXISTS (SELECT 1 FROM perm_grants g
                     WHERE g.role_id = r.id AND g.seat_key = '' AND g.module_key = c.module_key);

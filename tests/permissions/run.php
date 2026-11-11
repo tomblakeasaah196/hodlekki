@@ -52,8 +52,9 @@ foreach ([PERM_TEST_CORE, PERM_TEST_PLATFORM, PERM_TEST_SEED] as $f) {
 }
 ok('seed is portable (no ON DUPLICATE / INSERT IGNORE)',
     !preg_match('/ON DUPLICATE|INSERT IGNORE/i', perm_test_migration(PERM_TEST_SEED)));
+$cells = (int) $pdo->query('SELECT COUNT(*) FROM perm_grants')->fetchColumn();
 $pdo->exec(perm_test_migration(PERM_TEST_SEED));
-eq('seed re-runs as a no-op', 181, (int) $pdo->query('SELECT COUNT(*) FROM perm_grants')->fetchColumn());
+eq('seed re-runs as a no-op', $cells, (int) $pdo->query('SELECT COUNT(*) FROM perm_grants')->fetchColumn());
 
 // ---------------------------------------------------------------------------
 section('Resolver');
@@ -129,9 +130,77 @@ try {
     $threw = true;
 }
 ok('unknown module is refused loudly', $threw);
+perm_set_strict(false);
+perm_test_as($sa);
+ok('unknown module fails closed, even for break-glass', !can('no_such_module') && !can('reach', 'no_such_level'));
+ok('the old monitor.view spelling is not a module', !can('monitor.view'));
+perm_set_strict(true);
+ok('Super Admin: monitor view + manage as a plain grant (not break-glass)',
+    perm_ctx_can($r($sa), 'monitor', 'view') && perm_ctx_can($r($sa), 'monitor', 'manage'));
+ok('Resident Pastor: no monitor', !perm_ctx_can($r($rp), 'monitor'));
+if (!function_exists('monitor_user_can')) {
+    // The monitor's swap point, exactly as includes/monitor/bootstrap.php has it.
+    $src = (string) file_get_contents(__DIR__ . '/../../includes/monitor/bootstrap.php');
+    ok('monitor_user_can() splits "monitor.view" into can(module, level)',
+        str_contains($src, "explode('.', \$ability, 2)") && str_contains($src, 'can($module, $level)'));
+}
 perm_test_as($member);
 ok('member nav: portal yes', perm_nav_visible('member_portal'));
 ok('member nav: announcements no (needs approve)', !perm_nav_visible('announcements'));
+
+// ---------------------------------------------------------------------------
+section('Every module key the code asks for is registered');
+// A key missing from includes/permissions/modules.php fails closed for
+// everyone, Super Admins included — so every call site is checked here.
+$root = realpath(__DIR__ . '/../..');
+$calls = 0;
+$iter = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+foreach ($iter as $file) {
+    $path = str_replace('\\', '/', substr($file->getPathname(), strlen($root)));
+    if ($file->getExtension() !== 'php' || preg_match('#^/(vendor|tests|node_modules|\.git)/#', $path)
+        || $path === '/includes/permissions/legacy_rules.php') {
+        continue;
+    }
+    // Real calls only: comments and docblocks are dropped first.
+    $src = '';
+    foreach (token_get_all((string) file_get_contents($file->getPathname())) as $tok) {
+        if (is_array($tok) && in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+            continue;
+        }
+        $src .= is_array($tok) ? $tok[1] : $tok;
+    }
+    $found = [];
+    // can('module') / can('module', 'level') / api_require_can(...) / require_can(...) / perm_*('module', 'level')
+    if (preg_match_all("/\\b(?:can|require_can|api_require_can|perm_scope|perm_where|perm_nav_visible)\\(\\s*'([a-z_.]+)'(?:\\s*,\\s*'([a-z]+)')?/",
+        $src, $m, PREG_SET_ORDER)) {
+        foreach ($m as $hit) {
+            $found[] = [$hit[1], $hit[2] ?? 'view'];
+        }
+    }
+    // monitor_user_can($pdo, 'monitor.view') — split the way bootstrap.php splits it.
+    if (preg_match_all("/monitor_user_can\\(\\s*\\\$\\w+\\s*,\\s*'([a-z_]+)\\.([a-z]+)'/", $src, $m, PREG_SET_ORDER)) {
+        foreach ($m as $hit) {
+            $found[] = [$hit[1], $hit[2]];
+        }
+    }
+    foreach ($found as [$module, $level]) {
+        $calls++;
+        $known = false;
+        try {
+            $known = perm_known($module, $level === '' ? 'view' : $level);
+        } catch (InvalidArgumentException $e) {
+            $known = false;
+        }
+        ok("{$path}: '{$module}' / '{$level}' is registered", $known);
+    }
+}
+ok('the scan found the call sites (monitor API at least)', $calls >= 3, (string) $calls);
+require_once $root . '/includes/ui/nav.php';
+$navToModule = ['system_health' => 'monitor'];
+foreach (ui_nav_registry() as $item) {
+    $key = $navToModule[$item['key']] ?? $item['key'];
+    ok("nav entry {$item['key']} has a module", isset($modules[$key]));
+}
 
 // ---------------------------------------------------------------------------
 section('Renames change nothing');

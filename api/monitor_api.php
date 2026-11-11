@@ -5,7 +5,7 @@
  * monitor's screens and the live wall.
  *
  * Access: monitor_user_can() — Super_Admin from the live roles table today,
- * can('monitor.view' / 'monitor.manage') once the permissions module lands.
+ * can('monitor', 'view' | 'manage') once the permissions engine is loaded.
  * Writes need POST and the CSRF token: the platform's csrf_require() when it
  * exists, else this module's own X-Monitor-CSRF header (token from ?action=summary).
  *
