@@ -124,12 +124,13 @@ function email_prompt_banner(PDO $pdo, int $userId): string
         . '<input type="hidden" name="do" value="resend">'
         . '<input type="hidden" name="back" value="' . ui_e($here) . '">'
         . '<input type="hidden" name="next" value="' . ui_e($here) . '">'
-        . ui_button('Send the link again', ['variant' => 'secondary', 'size' => 'sm', 'type' => 'submit'])
-        . '<a class="ui-link" href="/auth/add_email.php?next=' . ui_e(rawurlencode($here)) . '">Use a different email</a>'
+        . ui_button('Resend', ['variant' => 'secondary', 'size' => 'sm', 'type' => 'submit'])
+        . '<a class="ui-link" href="/auth/add_email.php?next=' . ui_e(rawurlencode($here)) . '">Wrong email?</a>'
         . '</form>';
     return ui_banner('info', [
-        'title'   => 'Please confirm your email',
-        'text'    => 'We sent a link to ' . $pending . '. Tap it to finish; until then you can keep working.',
+        'title'   => 'Confirm your email',
+        'text'    => 'Sent to ' . email_mask($pending) . '.',
+        'info'    => 'Tap the link in that email. You can keep working until then; after a week we will ask again.',
         'actions' => $actions,
     ]);
 }

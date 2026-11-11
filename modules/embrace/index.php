@@ -13,6 +13,7 @@ $ui = [
 require_once '../../includes/header.php';
 // Access: the 'embrace' row of the permission matrix (Roles & permissions).
 require_can('embrace');
+require_once '../../includes/campaigns/consent.php'; // the "Stay in touch" wording, recorded exactly as shown
 
 $embraceVisit = ['None' => 'Does not want a visit', 'In-Person' => 'In person', 'Virtual' => 'Virtual (video call)'];
 ?>
@@ -108,10 +109,10 @@ $embraceVisit = ['None' => 'Does not want a visit', 'In-Person' => 'In person', 
             <?= ui_field('text', ['name' => 'last_name', 'id' => 'emb-last', 'label' => 'Last name', 'required' => true, 'autocomplete' => 'off']) ?>
             <?= ui_field('tel', ['name' => 'phone', 'id' => 'emb-phone', 'label' => 'Phone', 'required' => true, 'inputmode' => 'tel', 'autocomplete' => 'off']) ?>
             <div class="ui-field">
-                <?= ui_field('email', ['name' => 'email', 'id' => 'emb-email', 'label' => 'Personal email', 'optional' => true, 'autocomplete' => 'off', 'info' => 'Their own address, not a church one. They will get a link to confirm it.']) ?>
+                <?= ui_field('email', ['name' => 'email', 'id' => 'emb-email', 'label' => 'Personal email', 'optional' => true, 'autocomplete' => 'off', 'info' => 'Their own address. They get a link to confirm it.']) ?>
                 <label class="ui-check mt-1">
-                    <input type="checkbox" name="email_news" value="1">
-                    <span>They agreed to church news by email <?= ui_info('Ask first: "May we email you church news, service reminders and messages from the pastoral team? You can unsubscribe at any time." Leave unticked if they did not say yes.', 'About email consent') ?></span>
+                    <input type="checkbox" name="email_news" value="1" checked>
+                    <span><?= ui_e(EMAIL_CONSENT_VISITOR_LABEL) ?><span class="ui-check__hint"><?= ui_e(EMAIL_CONSENT_VISITOR_DETAILS) ?> Untick if they would rather not.</span></span>
                 </label>
             </div>
             <?= ui_field('select', ['name' => 'gender', 'id' => 'emb-gender', 'label' => 'Gender', 'options' => ['Male' => 'Male', 'Female' => 'Female']]) ?>

@@ -128,7 +128,7 @@ if (!empty($_COOKIE[SECURITY_SIGNOUT_COOKIE])) {
                 <div class="mb-8 hidden md:block">
                     <h2 class="text-3xl lg:text-4xl font-display font-bold text-white mb-3 tracking-tight">Welcome Home.</h2>
                     <p class="text-blue-100/90 text-sm lg:text-base leading-relaxed font-light">
-                        Thank you for serving the Lord with excellence. Your dedication helps us raise a people after God’s heart in every nation.
+                        Thank you for serving with excellence.
                     </p>
                 </div>
 

@@ -6,7 +6,7 @@
 // or an address exists. A link goes only to the CONFIRMED personal email of an
 // active account (email_reset_request(), includes/campaigns/identity.php),
 // throttled per requester and per identifier. First-time password setup stays
-// on /auth/setup_password.php.
+// on /auth/setup_password.php. Short copy: docs/UI.md §12.
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/campaigns/bootstrap.php';
@@ -18,9 +18,9 @@ $typed = '';
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $typed = trim((string) ($_POST['identifier'] ?? ''));
     if (!ui_standalone_csrf_ok()) {
-        $error = 'This page was open too long. Please try again.';
+        $error = 'Please try again.';
     } elseif ($typed === '') {
-        $error = 'Enter the email you sign in with.';
+        $error = 'Enter your email.';
     } else {
         try {
             email_reset_request($pdo, $typed, security_client_ip());
@@ -31,19 +31,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     }
 }
 
-ui_standalone_open('Reset your password', ['footer' => '<a class="ui-link" href="/auth/login.php">Back to sign in</a>']);
+ui_standalone_open('Reset password', ['footer' => '<a class="ui-link" href="/auth/login.php">Back to sign in</a>']);
 
 if ($done): ?>
     <h1 class="ui-h2">Check your email</h1>
-    <p class="text-ink-muted">
-        If that account has a confirmed personal email, a link to choose a new password is on its way.
-        It works once, for 30 minutes. Look in Spam or Promotions too.
-    </p>
-    <?= ui_banner('info', ['title' => 'No email on your account yet?',
-        'text' => 'Ask the church office to reset your password. Once you are signed in, add your email and next time you can do this yourself.']) ?>
+    <p class="text-ink-muted">If we know this account, a link is on its way.
+        <?= ui_info('It goes to the confirmed personal email and works once, for 30 minutes. Look in Spam too. No email on your account yet? Ask the church office to reset your password.', 'About the link') ?></p>
 <?php else: ?>
     <h1 class="ui-h2">Forgot your password?</h1>
-    <p class="text-ink-muted">Enter the email you sign in with. We will send a link to your confirmed personal email.</p>
+    <p class="text-ink-muted">We will email you a reset link.</p>
     <?php if ($error !== null): ?>
         <?= ui_banner('danger', ['title' => 'Please check this', 'text' => $error]) ?>
     <?php endif; ?>
@@ -56,9 +52,9 @@ if ($done): ?>
             'required' => true,
             'autocomplete' => 'username',
             'inputmode' => 'email',
-            'hint' => 'Your personal email, or the church sign-in name you were given.',
+            'info' => 'Your personal email, or the church sign-in name you were given.',
         ]) ?>
-        <?= ui_button('Send reset link', ['variant' => 'primary', 'type' => 'submit', 'icon' => 'mail', 'block' => true]) ?>
+        <?= ui_button('Send link', ['variant' => 'primary', 'type' => 'submit', 'icon' => 'mail', 'block' => true]) ?>
     </form>
 <?php endif;
 

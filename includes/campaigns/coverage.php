@@ -20,8 +20,8 @@ function email_coverage(PDO $pdo): array
 {
     $ready = campaigns_ready($pdo);
     $groups = [
-        'first_timers' => 'SELECT u.id, u.email, u.phone FROM users u WHERE ' . embrace_pipeline_sql($pdo, 'u'),
-        'members'      => "SELECT u.id, u.email, u.phone FROM users u WHERE u.spiritual_status IN ('"
+        'first_timers' => 'SELECT u.id, u.email, u.phone, u.spiritual_status FROM users u WHERE ' . embrace_pipeline_sql($pdo, 'u'),
+        'members'      => "SELECT u.id, u.email, u.phone, u.spiritual_status FROM users u WHERE u.spiritual_status IN ('"
                           . implode("', '", COVERAGE_MEMBER_STATUSES) . "')",
     ];
     $confirmed = $pending = $news = [];
@@ -66,7 +66,8 @@ function email_coverage(PDO $pdo): array
             // How automations reach them (same order as automation_choose_channel()).
             if (($news[$uid] ?? null) === false) {
                 $c['unsubscribed']++;
-            } elseif (isset($confirmed[$uid]) && ($news[$uid] ?? false) === true) {
+            } elseif (isset($confirmed[$uid]) && (($news[$uid] ?? false) === true
+                      || (!isset($news[$uid]) && in_array((string) ($p['spiritual_status'] ?? ''), EMAIL_MEMBER_STATUSES, true)))) {
                 $c['news']++;
             } elseif ($phoneOk($p['phone'] ?? null)) {
                 $c['sms_only']++;

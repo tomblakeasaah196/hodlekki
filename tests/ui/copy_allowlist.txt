@@ -7,24 +7,12 @@ assimilation.php | paragraph | Check it and try again, or ask your Assimilation 
 assimilation.php | paragraph | Enter the phone number the church has for you. Only the Assimilation team can open this page.
 assimilation.php | paragraph | Saving this closes the follow-up and tells your leaders why. Bless them before you drop.
 assimilation.php | paragraph | You are all caught up. Keep praying for the ones you have called.
-auth/login.php | paragraph | Thank you for serving the Lord with excellence. Your dedication helps us raise a people after God’s heart in every nation.
 auth/setup_password.php | paragraph | For accounts that have never had a password. Enter your registered email to create one.
-checkin.php | paragraph | Enter the person's phone number to look them up. If they're not registered, you can register them at once.
-checkin.php | paragraph | It looks like this number hasn't been registered yet. No problem — just provide the name to complete registration.
-checkin.php | paragraph | We're so glad you're here. Enter the phone number you used to register to check in.
-connect.php | paragraph | Household of David is a global ministry led by <span class="font-bold text-hodRed">Pastor Sola Osunmakinde</span>. Our Resident Pastor is <span class="font-bold text-hodRed">Pastor Ebele Uzo-Peters</span>. Whether you're just passing through or looking for a family, you belong here.
-connect.php | paragraph | Integrity, Sharing our faith boldly, Excellence (Global mindset), Excitement, Acceptance, Commitment, and Teamwork.
-connect.php | paragraph | Tell us a little more so we can serve and celebrate you better.
-connect.php | paragraph | To bring people into an experience of God’s unconditional love that transforms them into men and women passionate about influencing their world through the principles of the Kingdom.
-connect.php | paragraph | To raise a people after God’s heart in every nation of the earth.
-connect.php | paragraph | Welcome to the family. A member of our Embrace Team will reach out to you shortly. We pray this marks the beginning of an incredible journey in your walk with God.
 parent_portal.php | paragraph | Here's what your little ones have been up to in Junior Church. Browse their attendance, lessons, and take-home resources below.
 parent_portal.php | paragraph | See what your child has been learning, their attendance, and take-home resources from Junior Church.
 parent_portal.php | paragraph | We couldn't find any children linked to your profile. Please contact the Junior Church team.
 reach.php | paragraph | Check it and try again, or ask your Reach leader to add you to the family database.
 reach.php | paragraph | Enter the phone number you&#39;re registered with, so every soul you log is credited to you.
 reach.php | paragraph | We couldn&#39;t find this Reach campaign. Please ask your Reach leader for the current capture link.
-register.php | paragraph | This is a multi-day event. Select every day you plan to be there.
-register.php | paragraph | Your spot has been confirmed. We can't wait to fellowship with you. You can safely close this page.
 testimonies.php | paragraph | "They triumphed over him by the blood of the Lamb and by the word of their testimony." <span class="text-xs font-bold tracking-widest text-hodRed mt-3 block uppercase">— Revelation 12:11</span>
 verify.php | paragraph | Enter the cryptographic code found on your printed or digital document to verify its authenticity.

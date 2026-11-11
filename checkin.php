@@ -196,7 +196,7 @@
             <div id="step-phone" class="animate-fade text-center">
                 <div class="text-5xl mb-3">🙏</div>
                 <h2 class="font-head text-2xl font-bold text-white">Welcome!</h2>
-                <p class="text-white/65 text-sm mt-1 mb-6">We're so glad you're here. Enter the phone number you used to register to check in.</p>
+                <p class="text-white/65 text-sm mt-1 mb-6">Enter the phone number you registered with.</p>
                 <div class="flex items-center gap-2 mb-1"> <input type="tel" id="phoneInput" class="glass-input text-center" placeholder="e.g. 09020868023" autocomplete="off" inputmode="numeric"> </div>
                 <p class="text-[11px] text-white/40 mt-1 mb-4">We'll use this to find your registration.</p> <button class="btn-primary w-full" onclick="lookupPhone()">Find me</button>
                 <div class="mt-4 text-center"> <button class="btn-ghost w-full text-sm" onclick="startVolunteer()" id="volunteerBtn">👋 IDI volunteer assistance (for someone without a phone)</button> </div>
@@ -204,7 +204,7 @@
             <div id="step-volunteer" class="hidden animate-fade text-center">
                 <div class="text-5xl mb-3">🤝</div>
                 <h2 class="font-head text-2xl font-bold text-white">IDI Volunteer Assistance</h2>
-                <p class="text-white/65 text-sm mt-1 mb-5">Enter the person's phone number to look them up. If they're not registered, you can register them at once.</p>
+                <p class="text-white/65 text-sm mt-1 mb-5">Enter their phone number to look them up.</p>
                 <div class="flex items-center gap-2 mb-1"> <input type="tel" id="volPhone" class="glass-input text-center" placeholder="e.g. 09020868023" autocomplete="off" inputmode="numeric"> </div>
                 <p class="text-[11px] text-white/40 mt-1 mb-4">We'll use this to find their registration.</p> <button class="btn-primary w-full mb-2" onclick="volunteerLookup()">Find person</button> <button class="btn-ghost w-full text-sm" onclick="goVolRegister()">➕ Register someone new</button> <button class="btn-ghost w-full text-sm mt-2 border-none opacity-80" onclick="goPhone()">← Exit to standard check-in</button>
             </div> <!-- STEP 2: Confirm name -->
@@ -221,7 +221,7 @@
             <div id="step-register" class="hidden animate-fade text-center">
                 <div class="text-5xl mb-3">🎉</div>
                 <h2 class="font-head text-2xl font-bold text-white">We'd love to welcome you!</h2>
-                <p class="text-white/65 text-sm mt-1 mb-5">It looks like this number hasn't been registered yet. No problem — just provide the name to complete registration.</p> <input type="text" id="regName" class="glass-input text-center mb-3" placeholder="Full name" autocomplete="off"> <input type="tel" id="regPhone" class="glass-input text-center mb-4" placeholder="Phone number" autocomplete="off" inputmode="numeric"> 
+                <p class="text-white/65 text-sm mt-1 mb-5">New number: add a name to register.</p> <input type="text" id="regName" class="glass-input text-center mb-3" placeholder="Full name" autocomplete="off"> <input type="tel" id="regPhone" class="glass-input text-center mb-4" placeholder="Phone number" autocomplete="off" inputmode="numeric"> 
                 <!-- How did you hear about us -->
                 <div class="mb-4">
                     <label class="block text-white/60 text-[11px] font-bold uppercase tracking-wider mb-1.5" style="text-align:left;">How did you hear about this event?</label>

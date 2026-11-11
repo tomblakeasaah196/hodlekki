@@ -181,19 +181,45 @@ plain POST forms with the CSRF field (no page script).
 
 **Capture from forms** (`email_capture_after_save()`): the Connect card and
 Embrace add/edit start confirmation for a new or changed address (saving again
-never re-sends) and record a "yes" to church news only when the box was ticked
-(Connect: the person's own, with IP and user agent; Embrace: the spoken yes,
-with the worker's id and `EMAIL_CONSENT_NEWS_SPOKEN_TEXT`).
+never re-sends). Their "Stay in touch with us" box **starts ticked** (owner's
+decision, 11 Nov 2026, on record after the NDPA point was raised) and is
+recorded honestly as method `prechecked` with the exact wording shown
+(`EMAIL_CONSENT_VISITOR_TEXT`): Connect with the visitor's IP and user agent,
+Embrace with the worker's id — never as a typed or spoken yes. A pre-ticked box
+never undoes an unsubscribe.
+
+**Members get no box** (owner's decision): for Member, Worker and Pastor,
+church messages come with membership, with one-tap unsubscribe in every email.
+`email_may_send_news()` allows them with a confirmed address unless they
+withdrew or unsubscribed; visitors still need the box. The sign-in prompt and
+Profile show no news box.
+
+**Referrer-Policy:** never `no-referrer` on a folder whose pages post their own
+CSRF-checked forms: browsers then send `Origin: null` and `csrf_same_origin()`
+refuses the post (#120). `email/.htaccess` uses `same-origin`; the tests check
+every folder.
 
 **The Connect card cannot be used to mail strangers.** Confirmation links are
 limited to 3 a day per address (whoever the "person" is), and links started
 from Connect to 5 an hour per requester (hashed IP) and 20 an hour in all
 (`email_link_throttle`, `db/migrations/20261130090000_campaigns_throttle.sql`;
 it fails closed). Over a limit the card is still saved and nothing is queued.
-The card also carries a honeypot and a signed render time
-(`includes/campaigns/formguard.php`, key `CONNECT_FORM_KEY` or derived one-way
-from `.env`): a bot gets an ordinary success and nothing is saved; a page left
-open for 3+ days is asked to reload.
+The card also carries (`includes/campaigns/formguard.php`):
+- a honeypot field (filled → an ordinary-looking success, nothing saved);
+- a signed render time **bound to the visitor's session and spent once a card
+  is saved**: posting within 4 seconds or replaying a page that already saved
+  a card → silent success, nothing saved; a token from another session (a
+  script dropping cookies, an invented time) → "Please send the card again";
+  **every error reply carries a fresh token** (`form_ts`), which the page puts
+  back in its form, so a visitor who mistyped never reloads. Key
+  `CONNECT_FORM_KEY`, or derived one-way from `.env`;
+- **Cloudflare Turnstile** when `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`
+  are in `.env`: verified server-side after every field is valid (its token is
+  single-use) and before anything is saved; the widget resets on every error.
+  Without the keys the card works as before; if Cloudflare cannot be reached the
+  card is saved and the miss is logged. When Connect is rebuilt on the strict
+  CSP, add `https://challenges.cloudflare.com` to its `script-src` and
+  `frame-src`.
 
 ## 3. For other modules
 
