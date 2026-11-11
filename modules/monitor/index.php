@@ -97,8 +97,8 @@ foreach ($tabs as $k => $t) {
 <?php if (!$ready): ?>
     <?= ui_empty([
         'icon' => 'activity',
-        'title' => 'Setting up',
-        'text' => 'This page fills in after the next deploy.',
+        'title' => 'The monitor is being set up',
+        'text' => 'Its tables are not in the database yet. They arrive with the next deploy (bin/deploy.sh runs db/migrate.php); this page fills in as soon as they do.',
     ]) ?>
 <?php else: ?>
 
@@ -118,12 +118,12 @@ foreach ($tabs as $k => $t) {
         <?= ui_banner('danger', [
             'title' => count($bad) === 1 ? $bad[0]['label'] . ' needs attention' : count($bad) . ' things need attention',
             'text' => count($bad) === 1 ? $bad[0]['detail'] : implode(' · ', array_map(fn ($c) => $c['label'], $bad)),
-            'actions' => ui_button('See checks', ['variant' => 'secondary', 'size' => 'sm', 'attrs' => ['data-action' => 'monitor.tab', 'data-tab-target' => 'health']]),
+            'actions' => ui_button('See the health checks', ['variant' => 'secondary', 'size' => 'sm', 'attrs' => ['data-action' => 'monitor.tab', 'data-tab-target' => 'health']]),
         ]) ?>
     <?php elseif ($checks && !$notOk): ?>
         <?= ui_banner('success', ['title' => 'Everything is working', 'text' => 'Every health check is green. Last checked ' . $ago(monitor_ts($checks[0]['checked_at'] ?? null)) . '.']) ?>
     <?php elseif (!$checks && $cronCheck['state'] === 'ok'): ?>
-        <?= ui_banner('info', ['title' => 'Waiting for the first checks', 'text' => 'First results arrive within five minutes.', 'info' => 'The monitor\'s cron job runs the health checks every five minutes. "Run checks" on the Health tab runs them at once.']) ?>
+        <?= ui_banner('info', ['title' => 'Waiting for the first checks', 'text' => 'The monitor\'s cron job runs the health checks every five minutes; the first appear within five minutes. "Run the checks now" on the Health tab runs them at once.']) ?>
     <?php endif; ?>
 
     <?= ui_tabs($tabs, 'overview', 'System Health sections') ?>
@@ -144,7 +144,7 @@ foreach ($tabs as $k => $t) {
                 <div class="ui-card__header"><h2 class="ui-card__title">Errors in the last 24 hours</h2></div>
                 <div class="ui-card__body ui-stack ui-stack--sm">
                     <?= $bars($snap['errors']['spark_24h'], 'Errors per hour over the last 24 hours') ?>
-                    <p class="ui-meta">Each bar is an hour, oldest on the left. <?= ui_info('Warnings, notices and slow pages are not counted here.', 'About this chart') ?></p>
+                    <p class="ui-meta">Each bar is an hour, oldest on the left. Warnings, notices and slow pages are not counted here.</p>
                 </div>
             </div>
             <div class="ui-card">
@@ -188,7 +188,7 @@ foreach ($tabs as $k => $t) {
                     <?php endforeach; ?>
                 </ul>
             <?php else: ?>
-                <div class="ui-card__body"><?= ui_empty(['compact' => true, 'icon' => 'circle-check', 'title' => 'No open problems', 'text' => 'New errors appear here within a minute.']) ?></div>
+                <div class="ui-card__body"><?= ui_empty(['compact' => true, 'icon' => 'circle-check', 'title' => 'No open problems', 'text' => 'When the site meets an error it appears here within a minute, with everything needed to fix it.']) ?></div>
             <?php endif; ?>
         </div>
 
@@ -246,7 +246,7 @@ foreach ($tabs as $k => $t) {
     <section data-tab-panel="health" id="panel-health" role="tabpanel" aria-labelledby="tab-health" class="ui-tab-panel ui-stack ui-stack--md" hidden>
         <div class="ui-toolbar">
             <p class="ui-toolbar__grow ui-meta"><?= $checks ? 'Checked ' . ui_e($ago(monitor_ts($checks[0]['checked_at'] ?? null))) . '. The cron checks every five minutes; the slower ones (email sign-in, SMS wallet, disk, real-user speed) hourly.' : 'No checks yet.' ?></p>
-            <?= ui_button('Run checks', ['variant' => 'secondary', 'icon' => 'refresh-cw', 'attrs' => ['data-action' => 'monitor.checks']]) ?>
+            <?= ui_button('Run the checks now', ['variant' => 'secondary', 'icon' => 'refresh-cw', 'attrs' => ['data-action' => 'monitor.checks']]) ?>
         </div>
         <?php
         $groups = [];
@@ -255,7 +255,7 @@ foreach ($tabs as $k => $t) {
         }
         ?>
         <?php if (!$groups): ?>
-            <?= ui_empty(['icon' => 'activity', 'title' => 'No checks yet', 'text' => '"Run checks" runs them once from here.']) ?>
+            <?= ui_empty(['icon' => 'activity', 'title' => 'No checks yet', 'text' => 'They run every five minutes once the monitor\'s cron job is in cPanel → Cron Jobs. "Run the checks now" runs them once from here.']) ?>
         <?php endif; ?>
         <?php foreach ($groups as $grp => $list): ?>
             <div class="ui-card">
@@ -297,7 +297,7 @@ foreach ($tabs as $k => $t) {
         <div id="monitor-speed" aria-live="polite">
             <div class="ui-grid ui-grid--stats"><div class="ui-card ui-skeleton ui-skeleton--block"></div><div class="ui-card ui-skeleton ui-skeleton--block"></div><div class="ui-card ui-skeleton ui-skeleton--block"></div><div class="ui-card ui-skeleton ui-skeleton--block"></div></div>
         </div>
-        <p class="ui-meta">Measured in members' own browsers. <?= ui_info('As Google does (Core Web Vitals): the figure is what 75% of visits were at least as fast as. Good: loading under 2.5 s, response to a tap under 200 ms, layout shift under 0.10, first byte under 0.8 s.', 'About page speed') ?></p>
+        <p class="ui-meta">Measured in members' own browsers as Google does (Core Web Vitals): the figure is what 75% of visits were at least as fast as. Good: loading under 2.5 s, response to a tap under 200 ms, layout shift under 0.10, first byte under 0.8 s.</p>
     </section>
 
     <!-- ── Uptime ───────────────────────────────────────────────── -->
@@ -305,7 +305,7 @@ foreach ($tabs as $k => $t) {
         <div id="monitor-uptime" aria-live="polite">
             <div class="ui-card ui-skeleton ui-skeleton--block"></div>
         </div>
-        <p class="ui-meta">Checked from outside, about every hour. <?= ui_info('From GitHub machines (the outside probe): both addresses, the certificates, the mail records and the origin lock. A server that is down cannot receive the report, so a gap in the bars is itself a warning.', 'About outside checks') ?></p>
+        <p class="ui-meta">Checked from GitHub's machines (the outside probe, about every hour): both addresses, the certificates, the mail records and the origin lock. A server that is down cannot receive the report, so a gap in the bars is itself a warning.</p>
     </section>
 
     <?php if ($canManage): ?>
@@ -316,7 +316,7 @@ foreach ($tabs as $k => $t) {
                 <div class="ui-card__header ui-card__header--divided">
                     <div>
                         <h2 class="ui-card__title">Alert emails</h2>
-                        <p class="ui-card__description">New errors, red checks and the morning summary. <?= ui_info('An address gets nothing until its owner clicks the confirmation link. Super Admins always get the bell and phone notifications.', 'About alerts') ?></p>
+                        <p class="ui-card__description">New errors, red health checks and the morning summary. An address gets nothing until its owner clicks the confirmation link. Super Admins always get the bell and phone notifications.</p>
                     </div>
                 </div>
                 <ul class="ui-list" id="monitor-recipients">
@@ -338,7 +338,7 @@ foreach ($tabs as $k => $t) {
                     <?php endforeach; ?>
                 </ul>
                 <?php if (!array_filter($recipients, fn ($r) => $r['status'] !== 'removed')): ?>
-                    <div class="ui-card__body"><?= ui_empty(['compact' => true, 'icon' => 'mail', 'title' => 'No alert emails yet', 'text' => 'Add the address that should hear about problems first.']) ?></div>
+                    <div class="ui-card__body"><?= ui_empty(['compact' => true, 'icon' => 'mail', 'title' => 'No alert emails yet', 'text' => 'Add the address that should hear about problems first. Alerts reach Super Admins\' bells either way.']) ?></div>
                 <?php endif; ?>
                 <form class="ui-card__footer ui-form" data-action="monitor.recipient-add" data-ui-validate novalidate>
                     <?= ui_field('email', ['name' => 'email', 'label' => 'Add an address', 'required' => true, 'placeholder' => 'name@example.com', 'hint' => 'A confirmation link is sent to it first.']) ?>
@@ -366,21 +366,21 @@ foreach ($tabs as $k => $t) {
                 <div class="ui-card">
                     <div class="ui-card__header"><h2 class="ui-card__title">Live wall</h2></div>
                     <div class="ui-card__body ui-stack ui-stack--sm">
-                        <p class="ui-meta">A full-screen view for a TV. <?= ui_info('Health, errors as they happen, uptime and speed. It needs no sign-in; the link itself is the key, so share it only with the team.', 'About the live wall') ?></p>
+                        <p class="ui-meta">A full-screen view for a TV or a spare screen: health, errors as they happen, uptime and speed. It needs no sign-in; the link itself is the key, so share it only with the team.</p>
                         <div class="ui-input-group">
                             <label class="sr-only" for="monitor-wall-link">Live wall link</label>
                             <input class="ui-input" id="monitor-wall-link" readonly value="<?= ui_e(site_url('/modules/monitor/wall.php#k=' . $wall)) ?>">
                             <?= ui_button('Copy link', ['variant' => 'secondary', 'icon' => 'copy', 'attrs' => ['data-action' => 'monitor.copy-wall']]) ?>
                         </div>
-                        <div><?= ui_button('New link', ['variant' => 'danger-ghost', 'size' => 'sm', 'icon' => 'refresh-cw', 'attrs' => ['data-action' => 'monitor.wall-rotate']]) ?></div>
+                        <div><?= ui_button('Make a new link', ['variant' => 'danger-ghost', 'size' => 'sm', 'icon' => 'refresh-cw', 'attrs' => ['data-action' => 'monitor.wall-rotate']]) ?></div>
                     </div>
                 </div>
 
                 <div class="ui-card">
                     <div class="ui-card__header"><h2 class="ui-card__title">Test the alerts</h2></div>
                     <div class="ui-card__body ui-stack ui-stack--sm">
-                        <p class="ui-meta">To every confirmed address and Super Admin.</p>
-                        <div><?= ui_button('Send test', ['variant' => 'secondary', 'icon' => 'bell-ring', 'attrs' => ['data-action' => 'monitor.test-alert']]) ?></div>
+                        <p class="ui-meta">Sends a test email to every confirmed address and a bell to every Super Admin.</p>
+                        <div><?= ui_button('Send a test alert', ['variant' => 'secondary', 'icon' => 'bell-ring', 'attrs' => ['data-action' => 'monitor.test-alert']]) ?></div>
                     </div>
                 </div>
             </div>
