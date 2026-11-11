@@ -258,7 +258,9 @@
         --ui-z-chrome: 40;
         --ui-z-menu: 45;
         --ui-z-popover: 60;
-        --ui-z-toast: 90;
+        /* Above every legacy modal (modal-manager.js raises them to 10000+,
+         * pages use z-[9999]); native dialogs are handled in ui.js. */
+        --ui-z-toast: 2147483000;
 
         /* ---- Shell geometry ---- */
         --ui-sidebar-w: 264px;
@@ -270,6 +272,9 @@
         --ui-safe-bottom: env(safe-area-inset-bottom, 0px);
         --ui-safe-left: env(safe-area-inset-left, 0px);
         --ui-safe-right: env(safe-area-inset-right, 0px);
+        /* How much of the bottom of the screen the shell owns (phone bottom
+         * bar); anything fixed to the bottom sits above it. */
+        --ui-bottom-offset: 0px;
     }
 
     @media (min-width: 640px) {
@@ -1710,9 +1715,19 @@
     .ui-toasts {
         position: fixed;
         z-index: var(--ui-z-toast);
+        top: auto;
         left: 12px;
         right: 12px;
         bottom: calc(var(--ui-bottombar-h) + var(--ui-safe-bottom) + 12px);
+        /* It is a popover (top layer, above open dialogs): undo the UA box. */
+        width: auto;
+        height: auto;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        overflow: visible;
+        background: transparent;
+        color: inherit;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -1860,6 +1875,20 @@
         background: var(--ui-surface-subtle);
     }
     .ui-dialog__footer-start { margin-right: auto; }
+
+    /* Browsers without <dialog> (Safari before 15.4): ui.js adds these. */
+    .ui-dialog--fallback {
+        position: fixed;
+        z-index: calc(var(--ui-z-toast) - 2);
+        inset: 0;
+        height: fit-content;
+    }
+    .ui-dialog-scrim {
+        position: fixed;
+        z-index: calc(var(--ui-z-toast) - 3);
+        inset: 0;
+        background: var(--ui-scrim);
+    }
 
     .ui-confirm__icon {
         display: grid;
@@ -2425,8 +2454,14 @@
         overflow-y: auto;
         overscroll-behavior-y: contain;
         -webkit-overflow-scrolling: touch;
-        padding-bottom: calc(var(--ui-bottombar-h) + var(--ui-safe-bottom));
         scroll-padding-top: 16px;
+    }
+    /* Clearance under the phone bottom bar, as a spacer rather than padding:
+     * a page that sets main { padding: 0 } (the Bible) keeps it. */
+    .ui-main::after {
+        content: "";
+        display: block;
+        height: var(--ui-bottom-offset);
     }
     /* Pages that still bring their own padding (not on .ui-page) get the
      * gutter the old shell gave them. */
@@ -2577,7 +2612,6 @@
         .ui-account-btn__name { font-size: var(--ui-text-md); font-weight: 600; line-height: 1.125rem; color: var(--ui-text); }
         .ui-account-btn__role { font-size: 12px; line-height: 16px; color: var(--ui-text-subtle); }
         .ui-bottombar { display: none; }
-        .ui-main { padding-bottom: 0; }
 
         /* Collapsed to an icon rail. */
         html.ui-rail .ui-sidebar { width: var(--ui-rail-w); }
@@ -2827,6 +2861,22 @@ main.app-modal-scroll-locked { overflow: hidden !important; }
         max-height: calc(100dvh - 1.5rem) !important;
         border-radius: 1.25rem;
     }
+}
+
+/* Phones: the bottom bar owns the foot of the screen, so controls that pages
+ * fix to the bottom are lifted above it. */
+@media (max-width: 1023px) {
+    body.ui-app { --ui-bottom-offset: calc(var(--ui-bottombar-h) + var(--ui-safe-bottom)); }
+    html.ui-kb-open body.ui-app { --ui-bottom-offset: 0px; }
+    /* Hymnary choir transport (assets/css/hymnal.css) */
+    body.ui-app .hy-transport { bottom: calc(var(--ui-bottom-offset) + .75rem); }
+    /* Bible voice player (assets/css/bible.css) */
+    body.ui-app .bb-player { bottom: calc(var(--ui-bottom-offset) + 1rem); }
+    /* Floating buttons on pages not yet rebuilt (Special Events Studio's
+     * Preview, the Events back-to-top, toast stacks). */
+    body.ui-app .ui-legacy-content .fixed.bottom-4 { bottom: calc(var(--ui-bottom-offset) + 1rem); }
+    body.ui-app .ui-legacy-content .fixed.bottom-6 { bottom: calc(var(--ui-bottom-offset) + 1.5rem); }
+    body.ui-app .ui-legacy-content .fixed.bottom-8 { bottom: calc(var(--ui-bottom-offset) + 2rem); }
 }
 
 /* ======================================================================

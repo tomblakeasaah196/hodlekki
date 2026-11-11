@@ -330,7 +330,7 @@ function ui_shell_close(): void
     </div>
 </div>
 
-<div class="ui-toasts" id="ui-toasts" aria-live="polite" aria-atomic="false"></div>
+<div class="ui-toasts" id="ui-toasts" aria-live="polite" aria-atomic="false" popover="manual" data-ui-keep-live></div>
 
 <?= ui_json_script('hod-ui', [
     'sprite' => ui_sprite_url(),

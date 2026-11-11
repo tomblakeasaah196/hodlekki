@@ -21,9 +21,9 @@
 //   * live in one cache per signed-in session (hod-pages-<key>); a different
 //     session's key wipes the old cache before anything is stored;
 //   * are capped at PAGES_MAX pages and PAGES_MAX_AGE_MS old;
-//   * are wiped on every navigation to /auth/ (sign-in, sign-out, a revoked
-//     or expired session lands there) and when a page is answered with a
-//     redirect to /auth/. (Not Clear-Site-Data: its "storage" type, the only
+//   * are wiped on every navigation to /auth/ (sign-in, sign-out, and a
+//     revoked or expired session, whose page redirects there); a copy still
+//     downloading when a wipe happens is thrown away. (Not Clear-Site-Data: its "storage" type, the only
 //     one that reaches Cache Storage, also unregisters this worker and with
 //     it every push subscription.)
 //   * are served ONLY when the network fails or hangs, stamped with
@@ -46,6 +46,11 @@ const PAGES_MAX = 12;
 const PAGES_MAX_AGE_MS = 72 * 60 * 60 * 1000;
 const PAGE_TIMEOUT_MS = 8000;
 const OFFLINE_URL = '/offline.html';
+
+// Bumped by every wipe. A page copy that started saving before a wipe (sign-
+// out while its body was still downloading) is discarded, never written into
+// a cache the wipe just emptied.
+let wipeGeneration = 0;
 
 // The few files the offline page and the first paint need. Kept small on
 // purpose: a precache that fails to fetch one entry fails the whole install.
@@ -178,7 +183,17 @@ async function cacheFirstVersioned(request) {
     const hit = await cache.match(request);
     if (hit) return hit;
 
-    const response = await fetch(request);
+    let response;
+    try {
+        response = await fetch(request);
+    } catch (error) {
+        // Offline, with a saved page copy that names an older ?v= hash: the
+        // newest cached version of the same file beats none (without it the
+        // copy renders unstyled and without its read-only guard).
+        const any = await cache.match(request, { ignoreSearch: true });
+        if (any) return any;
+        throw error;
+    }
     if (response && response.ok && response.type === 'basic') {
         const url = new URL(request.url);
         const keys = await cache.keys();
@@ -198,6 +213,7 @@ async function cacheFirstVersioned(request) {
 /* ---------- read-only page copies ---------- */
 
 async function wipePages() {
+    wipeGeneration += 1;
     const names = await caches.keys();
     await Promise.all(names.filter((name) => name.startsWith(PAGES_PREFIX)).map((name) => caches.delete(name)));
 }
@@ -212,6 +228,7 @@ async function savePage(request, response, mark) {
     const match = /u=([A-Za-z0-9_-]{8,64})/.exec(mark);
     if (!match) return;
     const cacheName = PAGES_PREFIX + match[1];
+    const generation = wipeGeneration;
 
     // Another session's copies never sit beside this one's.
     const names = await caches.keys();
@@ -223,6 +240,9 @@ async function savePage(request, response, mark) {
     let html = await response.text();
     html = html.replace(/<html\b/i, `<html data-ui-snapshot="${new Date(savedAt).toISOString()}"`);
 
+    // Signed out (or another session started) while this was downloading.
+    if (generation !== wipeGeneration) return;
+
     const cache = await caches.open(cacheName);
     await cache.put(
         pageKey(request),
@@ -231,6 +251,11 @@ async function savePage(request, response, mark) {
             headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-HOD-Saved-At': String(savedAt) },
         })
     );
+    // A wipe that ran during the put: undo it.
+    if (generation !== wipeGeneration) {
+        await caches.delete(cacheName);
+        return;
+    }
 
     // Keep only the most recent PAGES_MAX.
     const keys = await cache.keys();
@@ -271,12 +296,11 @@ async function navigate(event) {
     const request = event.request;
     const network = fetch(request).then((response) => {
         const mark = response.headers.get('X-HOD-Offline') || '';
+        // A redirect (an ended session is sent to /auth/login.php) arrives
+        // here as an opaque redirect and is never kept; the browser then
+        // navigates to /auth/, which wipes every copy (see the fetch handler).
         if (response.ok && response.type === 'basic' && !response.redirected && mark.startsWith('snapshot')) {
             event.waitUntil(savePage(request, response.clone(), mark).catch(() => undefined));
-        }
-        // Sent to sign in: the session ended or was revoked. Its copies go.
-        if (response.redirected && new URL(response.url).pathname.startsWith('/auth/')) {
-            event.waitUntil(wipePages());
         }
         return response;
     });

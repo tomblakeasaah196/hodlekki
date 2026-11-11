@@ -194,6 +194,21 @@
      * Boot
      * ------------------------------------------------------------------ */
 
+    // "Alerts on this device", the alert settings gear and "Install the app"
+    // live inside dialogs, but assets/js/pwa.js opens its sheets in <body>,
+    // which is inert under a modal <dialog>. Close the dialog at once (capture
+    // phase, before pwa.js's own handler runs) so its sheet is usable.
+    document.addEventListener('click', function (event) {
+        var trigger = event.target instanceof Element && event.target.closest('[data-hod-alerts], [data-hod-install]');
+        if (!trigger) return;
+        var dialog = trigger.closest('dialog.ui-dialog');
+        if (!dialog || !dialog.hasAttribute('open')) return;
+        dialog.classList.remove('is-open');
+        if (typeof dialog.close === 'function') dialog.close('pwa');
+        else dialog.removeAttribute('open');
+        if (!document.querySelector('dialog[open]')) root.classList.remove('ui-dialog-open');
+    }, true);
+
     ready(function () {
         sidebar = document.getElementById('ui-sidebar');
         mainCol = document.querySelector('.ui-main-col');

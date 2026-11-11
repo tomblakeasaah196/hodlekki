@@ -39,7 +39,9 @@ function security_send_baseline_headers(): void
     header('Cross-Origin-Opener-Policy: same-origin-allow-popups');
     // Microphone: the member portal, River of Life and public testimonies
     // record audio. Camera: QR check-in. Geolocation: address pickers.
-    header('Permissions-Policy: accelerometer=(), camera=(self), display-capture=(), geolocation=(self), gyroscope=(), magnetometer=(), microphone=(self), payment=(), usb=(), fullscreen=(self)');
+    // Fullscreen: this site, and the YouTube players embedded in sermons,
+    // Junior Church and event pages (their own fullscreen button).
+    header('Permissions-Policy: accelerometer=(), camera=(self), display-capture=(), geolocation=(self), gyroscope=(), magnetometer=(), microphone=(self), payment=(), usb=(), fullscreen=(self "https://www.youtube.com" "https://www.youtube-nocookie.com")');
 }
 
 /**

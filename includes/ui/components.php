@@ -127,7 +127,8 @@ function ui_avatar(string $name, ?string $imageUrl = null, string $size = 'md', 
     $class = ui_e(trim(implode(' ', array_filter($classes))));
 
     if ($imageUrl !== null && $imageUrl !== '') {
-        return '<span class="' . $class . '"><img src="' . ui_e($imageUrl) . '" alt="" loading="lazy" decoding="async"></span>';
+        // nav-avatar-img: modules/profile/index.php swaps its src after an upload.
+        return '<span class="' . $class . '"><img class="nav-avatar-img" src="' . ui_e($imageUrl) . '" alt="" decoding="async"></span>';
     }
 
     return '<span class="' . $class . '" aria-hidden="true">' . ui_e(ui_initials($name)) . '</span>';

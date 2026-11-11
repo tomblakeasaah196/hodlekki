@@ -168,10 +168,45 @@
             host.id = 'ui-toasts';
             host.className = 'ui-toasts';
             host.setAttribute('aria-live', 'polite');
+            host.setAttribute('popover', 'manual');
+            host.setAttribute('data-ui-keep-live', '');
             document.body.appendChild(host);
         }
         return host;
     }
+
+    function topOpenDialog() {
+        var open = document.querySelectorAll('dialog[open]');
+        return open.length ? open[open.length - 1] : null;
+    }
+
+    // A toast must never sit under a dialog. Where the Popover API exists the
+    // region is re-shown in the top layer, above any open <dialog>; elsewhere
+    // it moves into the open dialog. (Legacy modals are plain elements: the
+    // z-index in app.css clears them, and modal-manager.js leaves the region
+    // live because of data-ui-keep-live.)
+    function liftToasts(host) {
+        if (!host.children.length) {
+            if (typeof host.hidePopover === 'function') {
+                try { host.hidePopover(); } catch (e) { /* not showing */ }
+            }
+            return;
+        }
+        if (typeof host.showPopover === 'function') {
+            try {
+                if (host.matches(':popover-open')) host.hidePopover();
+                host.showPopover();
+                return;
+            } catch (e) { /* fall through */ }
+        }
+        var target = topOpenDialog() || document.body;
+        if (host.parentNode !== target) target.appendChild(host);
+    }
+
+    document.addEventListener('ui:dialog-open', function () {
+        var host = document.getElementById('ui-toasts');
+        if (host) liftToasts(host);
+    });
 
     /**
      * HOD.toast('Saved') · HOD.toast('Could not save', 'danger')
@@ -209,6 +244,7 @@
 
         while (host.children.length >= 3) host.removeChild(host.firstChild);
         host.appendChild(node);
+        liftToasts(host);
         requestAnimationFrame(function () { node.classList.add('is-open'); });
 
         var duration = opts.duration || (opts.action ? 9000 : (tone === 'danger' ? 7000 : 4500));
@@ -223,7 +259,10 @@
             closed = true;
             clearTimeout(timer);
             node.classList.remove('is-open');
-            setTimeout(function () { if (node.parentNode) node.parentNode.removeChild(node); }, reduceMotion ? 0 : 220);
+            setTimeout(function () {
+                if (node.parentNode) node.parentNode.removeChild(node);
+                liftToasts(host);
+            }, reduceMotion ? 0 : 220);
         }
         return { close: close };
     }
@@ -363,10 +402,20 @@
 
     function openDialog(target, opener) {
         var dialog = resolveDialog(target);
-        if (!dialog || dialog.open) return dialog;
+        if (!dialog || dialog.hasAttribute('open')) return dialog;
         openers.set(dialog, opener || document.activeElement);
-        if (typeof dialog.showModal === 'function') dialog.showModal();
-        else dialog.setAttribute('open', '');
+        if (typeof dialog.showModal === 'function') {
+            dialog.showModal();
+        } else {
+            // No <dialog> support (Safari before 15.4): a fixed panel over a scrim.
+            dialog.setAttribute('open', '');
+            dialog.classList.add('ui-dialog--fallback');
+            var scrim = document.createElement('div');
+            scrim.className = 'ui-dialog-scrim';
+            scrim.addEventListener('click', function () { closeDialog(dialog, 'backdrop'); });
+            dialog.parentNode.insertBefore(scrim, dialog);
+            dialog.__scrim = scrim;
+        }
         var auto = dialog.querySelector('[autofocus], [data-autofocus]');
         if (auto) auto.focus();
         requestAnimationFrame(function () { dialog.classList.add('is-open'); });
@@ -375,20 +424,21 @@
         return dialog;
     }
 
-    function closeDialog(target, value) {
+    function closeDialog(target, value, immediate) {
         var dialog = resolveDialog(target);
-        if (!dialog || !dialog.open || dialog.__closing) return;
+        if (!dialog || !dialog.hasAttribute('open') || dialog.__closing) return;
         dialog.__closing = true;
         dialog.classList.remove('is-open');
         setTimeout(function () {
             dialog.__closing = false;
             if (typeof dialog.close === 'function') dialog.close(value);
             else dialog.removeAttribute('open');
+            if (dialog.__scrim) { dialog.__scrim.remove(); dialog.__scrim = null; }
             if (!document.querySelector('dialog[open]')) root.classList.remove('ui-dialog-open');
             var opener = openers.get(dialog);
             if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus({ preventScroll: true });
             dialog.dispatchEvent(new CustomEvent('ui:dialog-close', { bubbles: true, detail: { value: value } }));
-        }, reduceMotion ? 0 : 180);
+        }, reduceMotion || immediate ? 0 : 180);
     }
 
     // Escape: animate out instead of the browser's instant close.
@@ -404,7 +454,7 @@
     // form is never thrown away by a stray tap).
     document.addEventListener('click', function (event) {
         var dialog = event.target;
-        if (!(dialog instanceof HTMLDialogElement) || !dialog.classList.contains('ui-dialog')) return;
+        if (!dialog || dialog.tagName !== 'DIALOG' || !dialog.classList.contains('ui-dialog')) return;
         if (dialog.hasAttribute('data-dialog-static') || dialog.querySelector('form')) return;
         var rect = dialog.getBoundingClientRect();
         var inside = event.clientX >= rect.left && event.clientX <= rect.right &&
@@ -1067,7 +1117,9 @@
         document.addEventListener('focusin', function (event) {
             var target = event.target instanceof Element ? event.target.closest('[data-tooltip]') : null;
             hideTip();
-            if (target && target.matches(':focus-visible')) { tipFor = target; showTip(target); }
+            var keyboard = false;
+            try { keyboard = !!target && target.matches(':focus-visible'); } catch (e) { keyboard = false; }
+            if (keyboard) { tipFor = target; showTip(target); }
         });
         document.addEventListener('focusout', hideTip);
         document.addEventListener('scroll', hideTip, true);

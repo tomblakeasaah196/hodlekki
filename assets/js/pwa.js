@@ -585,17 +585,17 @@
         var shareWord = env.iPad ? 'top' : 'bottom';
 
         var panel = sheet('hodIosSheet',
-            '<div style="display:flex;align-items:center;gap:13px;margin-bottom:16px">' +
+            '<div class="hod-sheet-head">' +
                 '<div class="hod-mark"><img src="/assets/pwa/icon-192.png" alt="" width="36" height="36"></div>' +
-                '<div><h2 style="margin:0">Add HOD Lekki to your Home Screen</h2>' +
-                '<p style="margin:3px 0 0">Three taps, and it opens like any other app.</p></div>' +
+                '<div><h2 class="hod-m0">Add HOD Lekki to your Home Screen</h2>' +
+                '<p class="hod-sub">Three taps, and it opens like any other app.</p></div>' +
             '</div>' +
             '<ul class="hod-steps">' +
                 '<li><span class="hod-step-n"></span><span>Tap the <span class="hod-chip">' + ICON.share + ' Share</span> button at the ' + shareWord + ' of Safari.</span></li>' +
                 '<li><span class="hod-step-n"></span><span>Scroll down and choose <span class="hod-chip">' + ICON.plus + ' Add to Home&nbsp;Screen</span>.</span></li>' +
                 '<li><span class="hod-step-n"></span><span>Tap <span class="hod-chip">Add</span> in the top right. Done.</span></li>' +
             '</ul>' +
-            '<p style="font-size:.78rem;margin-bottom:14px">Notifications on iPhone only work once the app is on your home screen &mdash; ' +
+            '<p class="hod-note">Notifications on iPhone only work once the app is on your home screen &mdash; ' +
                 'that is an Apple rule, not ours. Open it from the home screen afterwards and we will ask you to turn alerts on.</p>' +
             '<button type="button" class="hod-btn hod-btn-navy" data-close>Show me</button>');
 
@@ -791,7 +791,7 @@
                   '<li>' + ICON.tick + '<span>Approvals waiting on you, before they go stale</span></li>' +
                   '<li>' + ICON.tick + '<span>Service and department announcements</span></li>' +
               '</ul>' +
-              '<p style="font-size:.76rem">You can switch them off, or set quiet hours, at any time.</p>';
+              '<p class="hod-small">You can switch them off, or set quiet hours, at any time.</p>';
 
         var panel = sheet('hodPushCard',
             '<div class="hod-centered">' +
@@ -802,7 +802,7 @@
             '<button type="button" class="hod-btn hod-btn-primary" data-enable>' +
                 (iosNeedsInstall ? 'Show me how' : 'Turn on alerts') +
             '</button>' +
-            '<button type="button" class="hod-btn hod-btn-ghost" style="margin-top:9px" data-later>Not now</button>');
+            '<button type="button" class="hod-btn hod-btn-ghost hod-mt-9" data-later>Not now</button>');
 
         panel.querySelector('[data-later]').addEventListener('click', function () {
             store.snooze('push-dismissed');
@@ -901,7 +901,7 @@
                     '<strong>Add to Home Screen first</strong>' +
                     '<small>iPhone and iPad only deliver notifications to an installed app.</small>' +
                     '</div></div>' +
-                    '<button type="button" class="hod-btn hod-btn-navy" style="margin-top:14px" data-ios>Show me how</button>';
+                    '<button type="button" class="hod-btn hod-btn-navy hod-mt-14" data-ios>Show me how</button>';
                 body.querySelector('[data-ios]').addEventListener('click', function () {
                     closeSheet();
                     setTimeout(showIosGuide, 300);
@@ -925,13 +925,13 @@
                         '<small>Hold non-urgent alerts overnight. Security alerts always come through.</small>' +
                     '</div>' +
                 '</div>' +
-                '<div class="hod-row" style="border-top:0;padding-top:0;gap:9px">' +
+                '<div class="hod-row hod-row-flat">' +
                     '<select class="hod-select" data-from aria-label="Quiet hours start">' + HOURS + '</select>' +
-                    '<span style="font-size:.8rem;color:var(--hod-muted)">to</span>' +
+                    '<span class="hod-to">to</span>' +
                     '<select class="hod-select" data-to aria-label="Quiet hours end">' + HOURS + '</select>' +
                 '</div>' +
-                '<button type="button" class="hod-btn hod-btn-ghost" style="margin-top:14px" data-test>Send me a test alert</button>' +
-                '<p data-devices style="margin:14px 0 0;font-size:.74rem;text-align:center"></p>';
+                '<button type="button" class="hod-btn hod-btn-ghost hod-mt-14" data-test>Send me a test alert</button>' +
+                '<p data-devices class="hod-devices"></p>';
 
             var toggle = body.querySelector('[data-device]');
             var note = body.querySelector('[data-device-note]');

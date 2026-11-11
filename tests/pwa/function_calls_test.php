@@ -224,6 +224,8 @@ ok('a copy is never kept from a redirect', str_contains($sw, '!response.redirect
 ok('copies are wiped on the way to sign-in or sign-out', str_contains($sw, "request.mode === 'navigate' && url.pathname.startsWith('/auth/')") && str_contains($sw, 'event.waitUntil(wipePages())'));
 ok('another session never shares the copies', str_contains($sw, 'name !== cacheName'));
 ok('copies expire', str_contains($sw, 'PAGES_MAX_AGE_MS'));
+ok('a copy still downloading when a wipe happens is discarded', substr_count($sw, 'generation !== wipeGeneration') >= 2);
+ok('offline, a page copy still finds its stylesheet after a deploy', str_contains($sw, 'ignoreSearch: true'));
 $shellSrc = (string) file_get_contents($repoRoot . '/includes/ui/shell.php');
 ok('the shell marks only rebuilt pages, never the sensitive modules',
     str_contains($shellSrc, "\$mode === 'strict' && (\$ui['offline'] ?? true)")
