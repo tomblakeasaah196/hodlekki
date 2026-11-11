@@ -46,6 +46,9 @@ $checks = $ready ? monitor_checks_current($pdo) : [];
 $notOk = array_values(array_filter($checks, fn ($c) => $c['state'] !== 'ok'));
 $bad = array_values(array_filter($checks, fn ($c) => $c['state'] === 'bad'));
 $wall = $ready ? monitor_wall_key($pdo) : null;
+// The monitor's own cron job, read from its heartbeat file (no database).
+$cronCheck = monitor_check_monitor_cron(monitor_beats()['monitor'] ?? null, time());
+$cronLine = monitor_cron_jobs()['monitor']['line'];
 $recipients = $ready && $canManage ? monitor_recipients_list($pdo) : [];
 $digestHour = $ready ? (int) monitor_state_get($pdo, 'digest_hour', '8') : 8;
 
@@ -99,6 +102,18 @@ foreach ($tabs as $k => $t) {
     ]) ?>
 <?php else: ?>
 
+    <?php if ($cronCheck['state'] !== 'ok'): ?>
+        <?= ui_banner($cronCheck['state'] === 'bad' ? 'danger' : 'warning', [
+            'title' => $cronCheck['state'] === 'bad' ? 'The monitor\'s cron job has stopped' : 'One step left: add the monitor\'s cron job',
+            'text' => $cronCheck['detail'] . ' In cPanel → Cron Jobs, add this line (every minute):',
+            'actions' => '<div class="ui-input-group w-full">'
+                . '<label class="sr-only" for="monitor-cron-line">Cron line</label>'
+                . '<input class="ui-input font-mono text-xs" id="monitor-cron-line" readonly value="' . ui_e($cronLine) . '">'
+                . ui_button('Copy line', ['variant' => 'secondary', 'icon' => 'copy', 'attrs' => ['data-action' => 'monitor.copy', 'data-copy-target' => 'monitor-cron-line']])
+                . '</div>',
+        ]) ?>
+    <?php endif; ?>
+
     <?php if ($bad): ?>
         <?= ui_banner('danger', [
             'title' => count($bad) === 1 ? $bad[0]['label'] . ' needs attention' : count($bad) . ' things need attention',
@@ -107,8 +122,8 @@ foreach ($tabs as $k => $t) {
         ]) ?>
     <?php elseif ($checks && !$notOk): ?>
         <?= ui_banner('success', ['title' => 'Everything is working', 'text' => 'Every health check is green. Last checked ' . $ago(monitor_ts($checks[0]['checked_at'] ?? null)) . '.']) ?>
-    <?php elseif (!$checks): ?>
-        <?= ui_banner('info', ['title' => 'Waiting for the first checks', 'text' => 'The monitor\'s cron job runs the health checks every five minutes. If nothing appears within ten minutes, add it in cPanel → Cron Jobs (see DEPLOY.md, "The system monitor").']) ?>
+    <?php elseif (!$checks && $cronCheck['state'] === 'ok'): ?>
+        <?= ui_banner('info', ['title' => 'Waiting for the first checks', 'text' => 'The monitor\'s cron job runs the health checks every five minutes; the first appear within five minutes. "Run the checks now" on the Health tab runs them at once.']) ?>
     <?php endif; ?>
 
     <?= ui_tabs($tabs, 'overview', 'System Health sections') ?>

@@ -128,3 +128,12 @@ eq('the worst state wins', 'bad', monitor_checks_worst([['state' => 'ok'], ['sta
 $GLOBALS['monitor_test_now'] = time();
 $all = monitor_checks_run($db, $db, false);
 ok('a full run on an empty database gives every check a state', count($all) >= 20 && !array_filter($all, fn ($c) => !in_array($c['state'], ['ok', 'warn', 'bad', 'unknown'], true)), (string) count($all));
+
+// ---- The monitor's own cron: a setup step until it first runs, an outage only after
+$now = monitor_test_clock('2026-11-11 23:00:00');
+$never = monitor_check_monitor_cron(null, $now);
+eq('never run: amber, a step still to do (not a red error)', 'warn', $never['state']);
+has('…with the exact line to add', (string) $never['fix'], '/home/smartqaq/public_html/hodlekki/cron/monitor.php');
+eq('ran 25 minutes ago: stopped (red)', 'bad', monitor_check_monitor_cron(['started_at' => $now - 1500, 'finished_at' => $now - 1499], $now)['state']);
+eq('ran a minute ago: fine', 'ok', monitor_check_monitor_cron(['started_at' => $now - 60, 'finished_at' => $now - 58], $now)['state']);
+eq('inside its own run (only the start written so far): fine', 'ok', monitor_check_monitor_cron(['started_at' => $now], $now)['state']);

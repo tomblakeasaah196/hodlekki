@@ -109,8 +109,11 @@ steps, once:
 3. **The outside probe:** `MONITOR_PROBE_SECRET` (64 hex characters) in the
    docroot `.env` AND as the GitHub Actions secret of the same name; optionally
    the server's IP as the secret `ORIGIN_IP` (origin-lock and origin-certificate
-   checks). Then GitHub → Actions → "Outside probe" → Run workflow. It runs
-   hourly (~720 Actions minutes a month).
+   checks). Then GitHub → Actions → "Outside probe" → Run workflow to try it.
+   The hourly schedule starts only once the Actions **variable**
+   `MONITOR_PROBE_ENABLED` is set to `1` (Settings → Secrets and variables →
+   Actions → Variables); from then on it costs ~720 Actions minutes a month.
+   Until then nothing runs on its own and nothing is billed.
 4. **Recommended:** Cloudflare → Notifications → passive origin monitoring
    (free), for minute-level "origin unreachable" emails.
 5. **Optional:** cPanel → MultiPHP INI Editor → Editor Mode → hodlekki.org:
