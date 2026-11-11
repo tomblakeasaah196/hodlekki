@@ -33,7 +33,7 @@ return [
     '/assets/ui/vendor/geoapify-autocomplete-1.5.0/minimal.css' => 'c954079eeca3',
     '/assets/ui/vendor/html2canvas-1.4.1/html2canvas.min.js' => 'e87e55079432',
     '/assets/ui/vendor/jquery-3.7.1.min.js' => 'fc9a93dd241f',
-    '/assets/ui/vendor/qrcode-generator-1.5.0/qrcode.mjs' => '362b87cb2567',
+    '/assets/ui/vendor/qrcode-generator-1.5.0/qrcode.mjs' => 'e4e021710660',
     '/assets/ui/vendor/sortablejs-1.15.6/Sortable.min.js' => '6d0a831fc19b',
     '/assets/ui/vendor/xlsx-0.18.5/xlsx.full.min.js' => 'c9506197caf8',
 ];

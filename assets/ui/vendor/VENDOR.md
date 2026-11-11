@@ -21,4 +21,4 @@ Everything the members' app loads is served from this site — no CDN at runtime
 | vendor/html2canvas-1.4.1/html2canvas.min.js | html2canvas, card images (loaded on demand) | 1.4.1 (npm) | MIT (LICENSE) | e87e550794322e574a1fda0c1549a3c70dae5a93d9113417a429016838eab8cb |
 | vendor/xlsx-0.18.5/xlsx.full.min.js | SheetJS Community, spreadsheet export/import (loaded on demand) | 0.18.5 (npm) | Apache-2.0 (LICENSE) | c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99 |
 | vendor/sortablejs-1.15.6/Sortable.min.js | SortableJS, drag to reorder | 1.15.6 (npm) | MIT (LICENSE) | 6d0a831fc19b4bae851797ad3393157e861afb7862459c11226359b27e2c4337 |
-| vendor/qrcode-generator-1.5.0/qrcode.mjs | qrcode-generator, QR codes drawn in the browser (copied from assets/se/vendor, same file) | 1.5.0 | MIT (LICENSE) | 362b87cb2567228c027be12d8e1faebf9a9f857a4c77f9d1a30bae7e7514d6cc |
+| vendor/qrcode-generator-1.5.0/qrcode.mjs | qrcode-generator, QR codes drawn in the browser (copied from assets/se/vendor, same file) | 1.5.0 | MIT (LICENSE) | e4e021710660c0426e4bad9436a96dafa688b50ec7e0c4dbd773ba18108de5b8 |
