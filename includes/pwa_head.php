@@ -76,7 +76,7 @@ if (!defined('PWA_HEAD_RENDERED')) {
     // a same-origin script with data-* settings, safe under any CSP. Printed
     // first so it sees errors thrown by the inline scripts that follow.
     require_once __DIR__ . '/monitor/browser.php';
-    echo monitor_browser_tag();
+    echo monitor_browser_tag(isset($pwaNonce) && $pwaNonce !== '' ? (string) $pwaNonce : null);
     ?>
     <!-- ================= HOD Lekki — installable app ================= -->
     <link rel="manifest" href="/manifest.php">

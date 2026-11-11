@@ -23,7 +23,13 @@
 require_once __DIR__ . '/keys.php';
 
 if (!function_exists('monitor_browser_tag')) {
-    function monitor_browser_tag(): string
+    /**
+     * $nonce: the page's CSP nonce, when it has one ($pwaNonce). A same-origin
+     * script is allowed by 'self' already; carrying the nonce as well keeps the
+     * tag valid under any policy the page adopts (e.g. 'strict-dynamic') and
+     * keeps the rule "every script on a nonced page carries the nonce" true.
+     */
+    function monitor_browser_tag(?string $nonce = null): string
     {
         static $printed = false;
         if ($printed) {
@@ -41,7 +47,8 @@ if (!function_exists('monitor_browser_tag')) {
             $rate = is_numeric($rate) ? max(0.0, min(1.0, (float) $rate)) : 1.0;
             $printed = true;
 
-            return '<script src="/assets/js/monitor.js?v=' . (int) filemtime($file) . '"'
+            return '<script' . ($nonce !== null && $nonce !== '' ? ' nonce="' . htmlspecialchars($nonce, ENT_QUOTES, 'UTF-8') . '"' : '')
+                . ' src="/assets/js/monitor.js?v=' . (int) filemtime($file) . '"'
                 . ' data-t="' . htmlspecialchars(monitor_intake_token(), ENT_QUOTES, 'UTF-8') . '"'
                 . ' data-rum="' . rtrim(rtrim(number_format($rate, 3, '.', ''), '0'), '.') . '"'
                 . ' data-e="/api/monitor_intake.php"></script>' . "\n";
