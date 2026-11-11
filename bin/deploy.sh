@@ -135,12 +135,21 @@ echo "[deploy] composer install done"
 # 7. Clear the host's NGINX cache. cPanel runs NGINX in front of LiteSpeed
 #    and keeps its own copy of static files, so without this a new sw.js or
 #    asset can be served stale for hours after a deploy. Never fatal.
+#    The first version logged a failure on every deploy while the same call
+#    from cPanel worked. Likely cause: it piped uapi into `grep -q`, which
+#    exits at the first match; uapi then dies of SIGPIPE and, under pipefail,
+#    the whole test counts as failed. So: no pipe (the output is captured
+#    first and matched in bash), a clean environment (the webhook runs this
+#    from a web request), and on failure uapi's own words go to the log.
 UAPI=/usr/local/cpanel/bin/uapi
 if [ -x "$UAPI" ]; then
-    if "$UAPI" NginxCaching clear_cache 2>&1 | grep -q '^ *status: 1'; then
+    me="$(id -un)"
+    nginx_out="$(env -i HOME="/home/$me" USER="$me" LOGNAME="$me" PATH=/usr/local/bin:/usr/bin:/bin "$UAPI" --output=json NginxCaching clear_cache 2>&1)" || true
+    nginx_flat="$(printf '%s' "$nginx_out" | tr -d '[:space:]')"
+    if [[ "$nginx_flat" == *'"status":1'* ]]; then
         echo "[deploy] nginx cache cleared"
     else
-        echo "[deploy] WARNING: nginx cache clear failed (not fatal)"
+        echo "[deploy] WARNING: nginx cache clear failed (not fatal): ${nginx_flat:0:300}"
     fi
 fi
 
