@@ -1228,6 +1228,49 @@
         color: var(--ui-text-subtle);
     }
 
+    /* Address search (Geoapify, loaded with HOD.lib('geoapify')): its own
+     * input and list, dressed as .ui-input and a .ui-combobox list. */
+    .ui-geo { position: relative; }
+    .ui-geo .geoapify-autocomplete-input {
+        width: 100%;
+        height: var(--ui-control-h);
+        padding: 0 40px 0 12px;
+        border: 1px solid var(--ui-input-border);
+        border-radius: var(--ui-radius);
+        background: var(--ui-surface);
+        color: var(--ui-text);
+        font: 400 var(--ui-input-font)/1.4 var(--ui-font-sans);
+    }
+    .ui-geo .geoapify-autocomplete-input:focus {
+        outline: none;
+        border-color: var(--ui-primary);
+        box-shadow: var(--ui-focus-ring);
+    }
+    .ui-geo .geoapify-autocomplete-items {
+        position: absolute;
+        z-index: var(--ui-z-popover);
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        padding: 4px;
+        border: 1px solid var(--ui-border);
+        border-radius: 12px;
+        background: var(--ui-surface);
+        box-shadow: var(--ui-shadow-md);
+    }
+    .ui-geo .geoapify-autocomplete-item {
+        padding: 9px 10px;
+        border: 0;
+        border-radius: 8px;
+        color: var(--ui-text);
+        font-size: var(--ui-text-md);
+        line-height: 1.25rem;
+        cursor: pointer;
+    }
+    .ui-geo .geoapify-autocomplete-item.active,
+    .ui-geo .geoapify-autocomplete-item:hover { background: var(--ui-surface-hover); }
+    .ui-geo .geoapify-close-button { right: 8px; color: var(--ui-text-subtle); }
+
     /* ---------- Table ---------- */
 
     .ui-table-wrap {
@@ -1429,6 +1472,11 @@
         }
         .ui-dl dt:first-of-type,
         .ui-dl dd:first-of-type { border-top: 0; padding-top: 0; }
+        /* Label above value, for narrow columns. */
+        .ui-dl--stacked { grid-template-columns: minmax(0, 1fr); }
+        .ui-dl--stacked dt,
+        .ui-dl--stacked dd { padding: 0; border-top: 0; }
+        .ui-dl--stacked dd { margin: 2px 0 14px; }
     }
 
     /* ---------- Badge, count, status dot ---------- */

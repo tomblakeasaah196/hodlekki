@@ -345,6 +345,7 @@ function ui_shell_close(): void
         'cropper' => ui_asset('/assets/ui/vendor/cropperjs-1.5.13/cropper.min.js'),
         'cropper.css' => ui_asset('/assets/ui/vendor/cropperjs-1.5.13/cropper.min.css'),
         'geoapify' => ui_asset('/assets/ui/vendor/geoapify-autocomplete-1.5.0/geocoder-autocomplete.min.js'),
+        'geoapify.css' => ui_asset('/assets/ui/vendor/geoapify-autocomplete-1.5.0/minimal.css'),
         'html2canvas' => ui_asset('/assets/ui/vendor/html2canvas-1.4.1/html2canvas.min.js'),
         'xlsx' => ui_asset('/assets/ui/vendor/xlsx-0.18.5/xlsx.full.min.js'),
         'sortable' => ui_asset('/assets/ui/vendor/sortablejs-1.15.6/Sortable.min.js'),
