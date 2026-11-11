@@ -88,6 +88,11 @@ for ($i = 0; $i < 30; $i++) {
 $sg = monitor_group($db, $spike['group_id']);
 ok('a sudden burst is noted as a spike', $sg['spiked_at'] !== null);
 has('the spike note gives the numbers', (string) $db->query("SELECT body FROM monitor_error_notes WHERE group_id = " . (int) $spike['group_id'] . " AND body LIKE 'Spiking%'")->fetchColumn(), '20 times in the last hour');
+// A burst found in old log lines is history, not a spike.
+for ($i = 0; $i < 30; $i++) {
+    $past = monitor_test_record($db, ['message' => 'Busy last night', 'line' => 89, 'frames' => [], 'at' => monitor_time() - 5 * 3600 + $i]);
+}
+ok('a burst in lines hours old is not a spike', monitor_group($db, $past['group_id'])['spiked_at'] === null);
 
 // ---- Upserts on both spellings
 monitor_state_set($db, 'k1', 'one');

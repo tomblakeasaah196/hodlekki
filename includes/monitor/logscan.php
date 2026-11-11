@@ -14,8 +14,9 @@
  * plus PHP's own error_log setting and MONITOR_EXTRA_LOGS. Each file is read
  * from where the last run stopped (offset + inode in monitor_state), at most
  * 2 MB a run; a file seen for the first time is read from its last 256 KB, so
- * recent history arrives without months of old lines. Lines older than an hour
- * are listed, never announced.
+ * recent history arrives without months of old lines. Lines older than an hour,
+ * and everything the first scan of a fresh install finds, are listed, never
+ * announced; an old line never counts towards a spike either.
  *
  * Lines the handlers already recorded are skipped: their "HODMON [ref]" marker,
  * or — for the fatal errors PHP logs itself — an occurrence of the same problem
@@ -64,8 +65,11 @@ function monitor_log_sources(?string $root = null): array
 function monitor_log_scan_all(PDO $db, ?array $sources = null): array
 {
     $done = ['files' => 0, 'entries' => 0, 'recorded' => 0, 'skipped' => 0];
+    // The first scan of a fresh install reads the recent history of every log:
+    // all of it is listed, none announced (the morning summary counts it).
+    $first = (int) $db->query("SELECT COUNT(*) FROM monitor_state WHERE k LIKE 'log:%'")->fetchColumn() === 0;
     foreach ($sources ?? monitor_log_sources() as $path) {
-        $r = monitor_log_scan_file($db, $path);
+        $r = monitor_log_scan_file($db, $path, MONITOR_LOG_CHUNK, $first);
         $done['files']++;
         foreach (['entries', 'recorded', 'skipped'] as $k) {
             $done[$k] += $r[$k];
@@ -76,7 +80,7 @@ function monitor_log_scan_all(PDO $db, ?array $sources = null): array
 }
 
 /** Read what was added to one file since last time. */
-function monitor_log_scan_file(PDO $db, string $path, int $max = MONITOR_LOG_CHUNK): array
+function monitor_log_scan_file(PDO $db, string $path, int $max = MONITOR_LOG_CHUNK, bool $quiet = false): array
 {
     $done = ['entries' => 0, 'recorded' => 0, 'skipped' => 0];
     $key = 'log:' . sha1($path);
@@ -134,8 +138,8 @@ function monitor_log_scan_file(PDO $db, string $path, int $max = MONITOR_LOG_CHU
             continue;
         }
         $res = monitor_record($db, $ev);
-        // An old line found in the log is listed, not announced.
-        if ($res['is_new'] && $ev['at'] < $now - 3600) {
+        // An old line found in the log is listed, not announced; so is all of the first scan.
+        if ($res['is_new'] && ($quiet || $ev['at'] < $now - 3600)) {
             $db->prepare('UPDATE monitor_error_groups SET alerted_at = ? WHERE id = ?')->execute([monitor_fmt($now), $res['group_id']]);
         }
         $done['recorded']++;

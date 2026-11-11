@@ -294,25 +294,39 @@ function monitor_check_db(array $f): array
     return monitor_check('db', 'Server', $label, $state, $detail, $state === 'ok' ? null : 'Look at Errors → Slow pages for the screens involved; a sudden change often follows a deploy.');
 }
 
-/** Disk: the cPanel quota when it can be read, else the free space of the disk. */
+/**
+ * Disk: how much of the cPanel quota the account uses (the quota's own figure,
+ * else the home folder measured by du), else the free space of the disk.
+ * A figure that could not be read is amber "unknown", never 0%.
+ */
 function monitor_check_disk(array $f): array
 {
     $label = 'Disk space';
-    if (isset($f['used'], $f['limit']) && $f['limit'] > 0) {
-        $share = $f['used'] / $f['limit'];
-        $detail = monitor_mb($f['used']) . ' used of the ' . monitor_mb($f['limit']) . ' cPanel quota (' . round($share * 100) . '%).';
+    $fix = 'cPanel → Disk Usage: old backups in the home folder, large error_log files and uploads are the usual suspects.';
+    $used = (float) ($f['used'] ?? 0);
+    $limit = (float) ($f['limit'] ?? 0);
+    if ($used > 0 && $limit > 0) {
+        $share = $used / $limit;
+        $detail = monitor_mb($used) . ' used of the ' . monitor_mb($limit) . ' cPanel quota (' . round($share * 100) . '%)'
+            . (($f['source'] ?? '') === 'du' ? ', measured from the home folder.' : '.');
         $state = $share >= 0.95 ? 'bad' : ($share >= 0.85 ? 'warn' : 'ok');
+    } elseif ($used > 0) {
+        return monitor_check('disk', 'Server', $label, 'ok', monitor_mb($used) . ' used by the home folder; the account has no cPanel quota.');
+    } elseif ($limit > 0) {
+        return monitor_check('disk', 'Server', $label, 'warn', 'Unknown: the cPanel quota is ' . monitor_mb($limit) . ', but how much of it is used could not be read (cPanel answers 0 and the home folder could not be measured).',
+            'Look at cPanel → Disk Usage. If this stays, the hourly check could not run "du" on the home folder; see the monitor cron\'s output.');
     } elseif (isset($f['free'], $f['total']) && $f['total'] > 0) {
         $share = 1 - $f['free'] / $f['total'];
         $detail = monitor_mb($f['free']) . ' free of ' . monitor_mb($f['total']) . ' on the disk (' . round($share * 100) . '% used; the account quota could not be read).';
         $state = $share >= 0.97 ? 'bad' : ($share >= 0.90 ? 'warn' : 'ok');
+    } elseif (isset($f['at'])) {
+        return monitor_check('disk', 'Server', $label, 'warn', 'Unknown: neither the cPanel quota nor the free space of the disk could be read.', 'Look at cPanel → Disk Usage.');
     } else {
-        return monitor_check('disk', 'Server', $label, 'unknown', 'Neither the cPanel quota nor the free space could be read.');
+        return monitor_check('disk', 'Server', $label, 'unknown', 'Read hourly by the monitor\'s cron; not read yet.');
     }
 
-    return monitor_check('disk', 'Server', $label, $state, $detail, $state === 'ok' ? null : 'cPanel → Disk Usage: old backups in the home folder, large error_log files and uploads are the usual suspects.');
+    return monitor_check('disk', 'Server', $label, $state, $detail, $state === 'ok' ? null : $fix);
 }
-
 /** Backups made by JBS HQ's backup system into ~/backups/hodlc (docs in jbspraxis/platform: BACKUPS.md). */
 function monitor_check_backups(array $f, int $now): array
 {
@@ -856,37 +870,73 @@ function monitor_facts_db(PDO $pdo, PDO $db): array
     return $f;
 }
 
-/** Hourly, from the cron: the cPanel quota (uapi), or the disk's free space. */
-function monitor_refresh_disk(PDO $db): void
+/** The cPanel account's home folder (/home/<user>), from where the site lives; null off cPanel. */
+function monitor_home_dir(): ?string
+{
+    $root = str_replace('\\', '/', monitor_root());
+
+    return preg_match('#^(/home\d*/[^/]+)/#', $root . '/', $m) ? $m[1] : null;
+}
+
+/**
+ * The disk facts from what the server answered: the uapi Quota get_quota_info
+ * data, du -sk of the home folder (KB), and the disk's free and total bytes.
+ * cPanel answers "0 MB used" when the server's filesystem quotas are off, so a
+ * used figure of 0 is never believed: the home folder's size stands in.
+ */
+function monitor_disk_facts(?array $quota, ?int $duKb, $free, $total): array
 {
     $f = [];
-    if (function_exists('exec') && PHP_SAPI === 'cli' && is_executable('/usr/bin/uapi')) {
+    $limit = (float) ($quota['megabyte_limit'] ?? 0);
+    $used = (float) ($quota['megabytes_used'] ?? 0);
+    if ($limit > 0) {
+        $f['limit'] = $limit * 1048576;
+    }
+    if ($used > 0) {
+        $f += ['used' => $used * 1048576, 'source' => 'quota'];
+    } elseif ($duKb !== null && $duKb > 0) {
+        $f += ['used' => (float) $duKb * 1024, 'source' => 'du'];
+    }
+    if (!isset($f['limit']) && !isset($f['used']) && $free !== false && $free !== null && $total) {
+        $f = ['free' => (float) $free, 'total' => (float) $total];
+    }
+
+    return $f;
+}
+
+/** Hourly, from the cron: the cPanel quota (uapi), the home folder's size (du), or the disk's free space. */
+function monitor_refresh_disk(PDO $db): void
+{
+    $cli = function_exists('exec') && PHP_SAPI === 'cli';
+    $quota = null;
+    if ($cli && is_executable('/usr/bin/uapi')) {
         $out = [];
         @exec('/usr/bin/uapi --output=json Quota get_quota_info 2>/dev/null', $out);
-        $j = json_decode(implode("\n", $out), true);
-        $d = $j['result']['data'] ?? null;
-        if (is_array($d) && isset($d['megabytes_used'])) {
-            $limit = (float) ($d['megabyte_limit'] ?? 0);
-            $f = ['used' => (float) $d['megabytes_used'] * 1048576, 'limit' => $limit > 0 ? $limit * 1048576 : 0];
+        $d = json_decode(implode("\n", $out), true)['result']['data'] ?? null;
+        $quota = is_array($d) ? $d : null;
+    }
+    $duKb = null;
+    $home = monitor_home_dir();
+    if ($cli && $home !== null && (float) ($quota['megabytes_used'] ?? 0) <= 0) {
+        // At most 90 s, at low priority; the cron's lock keeps the next run from overlapping.
+        $out = [];
+        $code = 0;
+        @exec('timeout 90 nice -n 19 du -sk ' . escapeshellarg($home) . ' 2>/dev/null', $out, $code);
+        // du exits 1 when a few folders are unreadable but still prints the total; 124 is the timeout.
+        if ($code !== 124 && preg_match('/^(\d+)\s/', (string) end($out), $m)) {
+            $duKb = (int) $m[1];
         }
     }
-    if (empty($f['limit'])) {
-        $free = @disk_free_space(monitor_root());
-        $total = @disk_total_space(monitor_root());
-        if ($free !== false && $total) {
-            $f = ['free' => $free, 'total' => $total];
-        }
-    }
+    $f = monitor_disk_facts($quota, $duKb, @disk_free_space(monitor_root()), @disk_total_space(monitor_root()));
     $f['at'] = monitor_time();
     monitor_state_set($db, 'disk', (string) json_encode($f));
 }
-
 function monitor_facts_backups(): array
 {
     $dir = hod_monitor_env('MONITOR_BACKUP_DIR');
     if ($dir === '') {
-        $root = str_replace('\\', '/', monitor_root());
-        $dir = preg_match('#^(/home\d*/[^/]+)/#', $root . '/', $m) ? $m[1] . '/backups/hodlc' : '';
+        $home = monitor_home_dir();
+        $dir = $home !== null ? $home . '/backups/hodlc' : '';
     }
     $f = ['dir' => $dir !== '' ? $dir : '~/backups/hodlc', 'readable' => $dir !== '' && is_dir($dir) && is_readable($dir)];
     if (!$f['readable']) {
