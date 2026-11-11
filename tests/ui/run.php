@@ -178,7 +178,12 @@ ok('System Health is for Super Admins only (monitor_user_can() today)',
     && !ui_nav_can_access('system_health', ['roles' => ['Resident_Pastor'], 'is_super_admin' => false, 'dept_ids' => [1], 'dept_roles' => []]));
 ok('an unknown key is refused', !ui_nav_can_access('nonexistent', ['roles' => ['Super_Admin'], 'is_super_admin' => true, 'dept_ids' => [], 'dept_roles' => []]));
 $covered = array_keys(old_sidebar(['roles' => [], 'is_super_admin' => false, 'dept_ids' => [], 'dept_roles' => [], 'assim_nav' => false, 'se_nav' => false]));
-$untested = array_diff($keys, $covered, ['ui_guide', 'system_health']);
+// Mail is new (no old-sidebar rule to match): it follows its own flag, set from the mail module's one access
+// decision (mail_nav_visible(); tests/mail checks the decision itself).
+ok('Mail shows with its flag and only with it',
+    ui_nav_can_access('mail', ['roles' => [], 'is_super_admin' => false, 'dept_ids' => [], 'dept_roles' => [], 'mail_nav' => true])
+    && !ui_nav_can_access('mail', ['roles' => ['Super_Admin'], 'is_super_admin' => true, 'dept_ids' => [], 'dept_roles' => []]));
+$untested = array_diff($keys, $covered, ['ui_guide', 'system_health', 'mail']);
 ok('every registry entry is covered by the parity matrix', $untested === [], implode(', ', $untested));
 
 /* ---------------------------------------------------------------------- */

@@ -1025,6 +1025,31 @@ contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
   integration job; `_campaigns_` is a required migration marker). Run both
   after touching `includes/campaigns/`, `includes/mailer.php` or the crons.
 
+## Mail (added 2026-11-11)
+
+The church's mailboxes inside the ERP. Runbook and contracts: `docs/MAIL.md`; staff guide:
+`modules/mail/how_to_use.md`. Engine `includes/mail/` (namespace `HOD\Mail`, entry `includes/mail/bootstrap.php`
+after `includes/db.php`), ported from bureau.lpc.cm's Courrier. Tests: `php tests/mail/run.php` (lint job) and
+`php tests/mail/integration.php` (integration job, both engines).
+
+- **One access decision:** `mail_can()` / `HOD\Mail\MailAccess::decide()`. It asks `can()` for the module abilities
+  (`mail`, `mail.personal`, `mail.ai`, `mail.export_admin`, `mail.export_pastoral`, registered in
+  `includes/permissions/modules.php`) and resolves who works from a shared mailbox from `mail_grants` (role ids,
+  department seat-type keys, departments, people). Never a role or seat NAME in mail code; never
+  `$_SESSION['active_role']`. Mail admins do not read a mailbox without a grant; a personal mailbox opens to its
+  holder only. Break-glass never counts for the pastoral export side.
+- **No cPanel token.** Pages queue `mail_admin_jobs`; `cron/mail_minute.php` runs them with the server's own `uapi`
+  (`HOD\Mail\Admin\Uapi`: CLI only, `proc_open` with an argument list, an allow-list of functions, every address on
+  `MAIL_DOMAIN`). Never turn it into a shell string, never call cPanel from a web request.
+- **Passwords are never shown.** Made in the jobs, encrypted with `MAIL_VAULT_KEY` (row-bound AES-256-GCM),
+  staged as `secret_pending` before cPanel takes them. Never in JSON, logs, exceptions, sessions or the audit log.
+  system@ is never brought in: its password is `MAIL_PASSWORD`, used by `hod_send_mail()`.
+- **Quota from cPanel:** at most `MAIL_DOMAIN_QUOTA` (15) on hodlekki.org, checked when queued and again in the job;
+  `quota.reserved_personal` keeps slots for personal mailboxes.
+- **No ext-imap, no mail library:** the IMAP and SMTP clients are hand-written over TLS sockets. The web PHP has no
+  intl, fileinfo, sodium or gmp; `tests/mail/unit.php` fails on any call to them in the engine.
+- **Degrade before the migration:** every entry asks `mail_ready()`.
+- Crons (the owner adds them): `cron/mail_minute.php` every minute, `cron/mail_daily.php` at 06:45.
 ## Departments module (ministry years)
 
 `modules/departments/` is ministry-year aware, and its rules are worth knowing

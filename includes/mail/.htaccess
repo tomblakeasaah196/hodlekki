@@ -1,0 +1,2 @@
+# includes/mail/: the Mail engine. Code is loaded by PHP, never served (docs/MAIL.md).
+Require all denied

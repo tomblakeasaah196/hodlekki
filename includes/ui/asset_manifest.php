@@ -10,6 +10,8 @@ return [
     '/assets/ui/app.css' => '9b4315fd9783',
     '/assets/ui/icons.svg' => '4c619399f535',
     '/assets/ui/js/legacy.js' => 'f26c58951edf',
+    '/assets/ui/js/pages/mail-mailboxes.js' => '3f6003f9fbf1',
+    '/assets/ui/js/pages/mail.js' => '05f30adc1681',
     '/assets/ui/js/pages/monitor.js' => 'af148b574c38',
     '/assets/ui/js/pages/ui-guide.js' => '3ae37ab91654',
     '/assets/ui/js/shell.js' => '4a885da3094d',

@@ -43,6 +43,18 @@ return [
     'regions' => ['label' => 'Regional Hubs', 'group' => 'command', 'max' => 'delete', 'extras' => ['export', 'manage'], 'partitioned' => false,
         'member' => true, 'own' => 'your region'],
     'idi' => ['label' => 'Data Insights (IDI)', 'group' => 'command', 'max' => 'view', 'extras' => [], 'partitioned' => false],
+    // Mail (docs/MAIL.md). Who works from a shared mailbox is NOT a matrix cell: it is that mailbox's own grants
+    // (mail_grants: roles, department seats, departments, people). The matrix decides what follows.
+    'mail' => ['label' => 'Mail: manage mailboxes (create, grants, suspend, quota)', 'group' => 'command', 'max' => 'none',
+        'extras' => ['manage'], 'partitioned' => false, 'nav' => ['manage']],
+    'mail.personal' => ['label' => 'Hold a personal mailbox (firstname.lastname@)', 'group' => 'command', 'max' => 'view', 'extras' => [],
+        'partitioned' => false, 'nav' => []],
+    'mail.ai' => ['label' => 'AI summaries and draft replies in Mail', 'group' => 'command', 'max' => 'view', 'extras' => [],
+        'partitioned' => false, 'nav' => []],
+    'mail.export_admin' => ['label' => 'Approve exporting a departed holder\'s mail (admin side)', 'group' => 'command', 'max' => 'none',
+        'extras' => ['approve'], 'partitioned' => false, 'nav' => []],
+    'mail.export_pastoral' => ['label' => 'Approve exporting a departed holder\'s mail (pastoral side)', 'group' => 'command', 'max' => 'none',
+        'extras' => ['approve'], 'partitioned' => false, 'nav' => []],
 
     'congregation' => ['label' => 'Congregation', 'group' => 'growth', 'max' => 'delete', 'extras' => [], 'partitioned' => false],
     'reach' => ['label' => 'Reach (Evangelism)', 'group' => 'growth', 'max' => 'delete', 'extras' => ['export', 'manage'], 'partitioned' => false,
