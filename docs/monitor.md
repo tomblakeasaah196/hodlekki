@@ -73,7 +73,7 @@ Four steps make it complete, in this order:
 | | Push notifications | cannot send, or jobs waiting over 15 min | yes |
 | | Email sending | not configured, SMTP refuses the sign-in (tested hourly without sending), 5+ failed sends a day | yes |
 | Server | Database speed | unreachable, or a members query over 1 s | yes |
-| | Disk space | cPanel quota 95% (amber 85%) | yes |
+| | Disk space | cPanel quota 95% (amber 85%); when cPanel answers "0 used" (server quotas off) the home folder is measured with `du`; a figure that cannot be read is amber "Unknown", never 0% | yes |
 | | Backups | no database backup in `~/backups/hodlc` within 26 h (amber: half the size of the last, uploads over 8 days) | yes |
 | | PHP (web) | below 8.3, a required extension missing, or `display_errors` on | yes |
 | | Server speed settings | (amber only) OPcache off, full, or below 95% warm hit rate; no early response | — |
@@ -207,15 +207,17 @@ What is sent:
 
 | What | When |
 |---|---|
-| New or returning errors | one message per cron run listing all of them: server fatal/error at once; a browser error once 3 people met it; warnings, CSP reports and slow pages only in the summary. A problem marked fixed that happens again reopens and is announced again. |
-| Spikes | at least 20 in the last hour and 5× the usual rate; at most every 6 hours per problem |
+| New or returning errors | one message per cron run listing all of them: server fatal/error at once; a browser error once 3 people met it; warnings, CSP reports and slow pages only in the summary. A problem marked fixed that happens again reopens and is announced again. Lines found in the logs over an hour old, and everything the first scan of a fresh install finds, are listed, not announced. |
+| Spikes | at least 20 in the last hour and 5× the usual rate (old log lines never count); at most every 6 hours per problem |
 | Health | an urgent check (table in 2) turning red, again every 6 hours while red, and when it recovers |
 | Morning summary | 08:00 Lagos (`digest_hour`), once a day: checks not green, new problems, the most frequent open ones, yesterday's deploys |
 | Watchdog | the monitor's own cron silent for 20 minutes (or never run, 2 hours after install) — noticed by ordinary page visits, at most every 6 hours |
 | Test | `bin/monitor.php test-alert` or the Config screen |
 
 Caps: 6 alert emails and 3 bells an hour (summary, watchdog, confirmations and
-tests aside). What does not fit waits for the next run, in one message.
+tests aside). What does not fit waits for the next run, in one message. An
+alert counts as sent once either channel reached someone, so a broken mailer
+never repeats the same bell (the Email check shows the failed sends).
 
 ---
 

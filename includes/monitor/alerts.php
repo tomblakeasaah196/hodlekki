@@ -273,7 +273,7 @@ function monitor_alert_row(PDO $db, array $g): array
 /**
  * Who can be told, and whether email has room this hour. When there are
  * confirmed addresses, an alert waits until email has room, so the two
- * channels go out together and nothing is marked sent that was not emailed.
+ * channels go out together.
  */
 function monitor_alert_channels(PDO $pdo, PDO $db): array
 {
@@ -286,14 +286,18 @@ function monitor_alert_channels(PDO $pdo, PDO $db): array
     ];
 }
 
-/** Did an alert reach someone (by email when there are recipients, else by the bell), or is there nobody to tell? */
+/**
+ * Did an alert reach someone, or is there nobody to tell? Either channel will
+ * do: when email fails, the bell that did go out counts, so a broken mailer
+ * never repeats the same bell every run (the Email check shows the failures).
+ */
 function monitor_alert_delivered(array $ch, int $mailed, int $belled): bool
 {
     if ($ch['recipients'] === 0 && $ch['admins'] === 0) {
         return true;
     }
 
-    return $ch['recipients'] > 0 ? $mailed > 0 : $belled > 0;
+    return $mailed > 0 || $belled > 0;
 }
 
 /** New and returning problems worth a message now. One message for all of them. */

@@ -71,6 +71,15 @@ $db->prepare('UPDATE monitor_error_groups SET spiked_at = ? WHERE id = ?')->exec
 eq('a spike is told', 1, monitor_alert_spikes($db, $db));
 eq('…once', 0, monitor_alert_spikes($db, $db));
 
+// ---- A broken mailer: the bell rings once, not every run
+monitor_test_clock('2026-11-11 13:00:00');
+$GLOBALS['mt_mail_fail'] = true;
+monitor_test_record($db, ['kind' => 'exception', 'level' => 'fatal', 'exception_class' => 'RuntimeException', 'message' => 'While mail is down', 'line' => 500]);
+eq('with email failing, the bell still tells', 1, monitor_alert_new_errors($db, $db));
+monitor_alert_new_errors($db, $db);
+eq('…once: the next run does not ring again', 1, (int) $db->query("SELECT COUNT(*) FROM monitor_alert_log WHERE channel = 'bell' AND ok = 1 AND at >= '" . monitor_fmt() . "'")->fetchColumn());
+$GLOBALS['mt_mail_fail'] = false;
+
 // ---- Health: on turning red, every 6 hours while red, and on recovery
 monitor_test_clock('2026-11-11 14:00:00');
 $GLOBALS['mt_mail'] = [];

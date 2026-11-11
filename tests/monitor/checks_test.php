@@ -58,6 +58,21 @@ eq('database answering slowly: worth a look', 'warn', monitor_check_db(['query_m
 eq('database unreachable: bad', 'bad', monitor_check_db(['error' => 'gone away'])['state']);
 eq('quota 96% used: bad', 'bad', monitor_check_disk(['used' => 96, 'limit' => 100])['state']);
 eq('quota 50% used: fine', 'ok', monitor_check_disk(['used' => 50, 'limit' => 100])['state']);
+// cPanel answers "0 MB used" when the server's quotas are off: never shown as 0%.
+$zero = monitor_check_disk(['used' => 0, 'limit' => 200000 * 1048576, 'at' => $now]);
+eq('quota says 0 used: amber, not 0%', 'warn', $zero['state']);
+has('…called unknown', $zero['detail'], 'Unknown');
+lacks('…with no percentage', $zero['detail'], '%');
+$f = monitor_disk_facts(['megabytes_used' => '0.00', 'megabyte_limit' => '200000.00'], 5242880, 1e12, 2e12);
+eq('…so the home folder\'s size (du) stands in, against the quota', [5242880 * 1024.0, 200000 * 1048576.0, 'du'], [$f['used'], $f['limit'], $f['source']]);
+$d = monitor_check_disk($f);
+eq('…and is judged like the quota', 'ok', $d['state']);
+has('…saying how it was measured', $d['detail'], '5.0 GB used of the 195.3 GB cPanel quota (3%), measured from the home folder');
+eq('a quota that reports its use is believed', [1073741824.0, 'quota'], array_values(array_intersect_key(monitor_disk_facts(['megabytes_used' => 1024, 'megabyte_limit' => 2048], null, 1, 2), ['used' => 1, 'source' => 1])));
+eq('no quota and no du: the disk\'s free space', ['free' => 50.0, 'total' => 100.0], monitor_disk_facts(['megabytes_used' => 0, 'megabyte_limit' => 0], null, 50, 100));
+eq('no limit but a measured home folder: fine', 'ok', monitor_check_disk(monitor_disk_facts(null, 1024, 50, 100))['state']);
+eq('nothing could be read: amber', 'warn', monitor_check_disk(['at' => $now])['state']);
+eq('not read yet: waiting', 'unknown', monitor_check_disk([])['state']);
 eq('no backup found: bad', 'bad', monitor_check_backups(['readable' => true, 'dir' => '/x'], $now)['state']);
 eq('last backup 30 hours old: bad', 'bad', monitor_check_backups(['readable' => true, 'dir' => '/x', 'db_at' => $now - 30 * 3600, 'db_size' => 9e6], $now)['state']);
 eq('last backup half the size of the one before: worth a look', 'warn', monitor_check_backups(['readable' => true, 'dir' => '/x', 'db_at' => $now - 3600, 'db_size' => 4e6, 'prev_size' => 9e6, 'files_at' => $now - 86400], $now)['state']);
