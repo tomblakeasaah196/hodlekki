@@ -1127,6 +1127,119 @@
     }
 
     /* ------------------------------------------------------------------ *
+     * Info (i) — ui_info(). The detail behind short copy. On a computer it
+     * shows on hover or keyboard focus; a click (or a tap on a phone) pins
+     * it open; Escape, a click elsewhere or the next (i) closes it. The text
+     * sits in the top layer (Popover API) so an open dialog never covers
+     * it; where that API is missing it is a fixed box, which still works.
+     * The text is also the button's aria-describedby.
+     * ------------------------------------------------------------------ */
+
+    var info = { wrap: null, pinned: false, timer: null };
+
+    function infoParts(wrap) {
+        return { btn: wrap.querySelector('.ui-info__btn'), pop: wrap.querySelector('.ui-info__pop') };
+    }
+
+    function infoPlace(wrap) {
+        var p = infoParts(wrap);
+        var r = p.btn.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > window.innerHeight) { infoHide(); return; }
+        p.pop.style.left = '0px';
+        p.pop.style.top = '0px';
+        var w = p.pop.offsetWidth, h = p.pop.offsetHeight;
+        var vw = document.documentElement.clientWidth, vh = window.innerHeight;
+        var left = Math.min(Math.max(8, r.left + r.width / 2 - 24), vw - w - 8);
+        var top = r.bottom + 8;
+        if (top + h > vh - 8 && r.top - h - 8 >= 8) top = r.top - h - 8;
+        p.pop.style.left = Math.round(left) + 'px';
+        p.pop.style.top = Math.round(Math.max(8, top)) + 'px';
+    }
+
+    function infoHide() {
+        clearTimeout(info.timer);
+        var wrap = info.wrap;
+        info.wrap = null;
+        info.pinned = false;
+        if (!wrap) return;
+        var p = infoParts(wrap);
+        if (p.pop) {
+            p.pop.classList.remove('is-open');
+            if (typeof p.pop.hidePopover === 'function') { try { p.pop.hidePopover(); } catch (e) { /* not open */ } }
+        }
+        if (p.btn) p.btn.setAttribute('aria-expanded', 'false');
+    }
+
+    function infoShow(wrap, pin) {
+        clearTimeout(info.timer);
+        if (info.wrap && info.wrap !== wrap) infoHide();
+        var p = infoParts(wrap);
+        if (!p.btn || !p.pop) return;
+        info.pinned = info.wrap === wrap ? (info.pinned || !!pin) : !!pin;
+        info.wrap = wrap;
+        p.pop.classList.add('is-open');
+        if (typeof p.pop.showPopover === 'function') { try { p.pop.showPopover(); } catch (e) { /* already open */ } }
+        p.btn.setAttribute('aria-expanded', 'true');
+        infoPlace(wrap);
+    }
+
+    function infoFrom(node) {
+        return node instanceof Element ? node.closest('[data-ui-info]') : null;
+    }
+
+    document.addEventListener('click', function (event) {
+        var btn = event.target instanceof Element ? event.target.closest('.ui-info__btn') : null;
+        if (btn) {
+            event.preventDefault();
+            var wrap = infoFrom(btn);
+            if (info.wrap === wrap && info.pinned) infoHide(); else infoShow(wrap, true);
+            return;
+        }
+        if (info.wrap && !info.wrap.contains(event.target)) infoHide();
+    });
+    if (canHover) {
+        document.addEventListener('mouseover', function (event) {
+            var wrap = infoFrom(event.target);
+            if (!wrap) return;
+            if (info.wrap === wrap) clearTimeout(info.timer);
+            else infoShow(wrap, false);
+        });
+        document.addEventListener('mouseout', function (event) {
+            var wrap = infoFrom(event.target);
+            if (!wrap || wrap !== info.wrap || info.pinned || wrap.contains(event.relatedTarget)) return;
+            info.timer = setTimeout(function () { if (info.wrap === wrap && !info.pinned) infoHide(); }, 150);
+        });
+    }
+    document.addEventListener('focusin', function (event) {
+        var btn = event.target instanceof Element ? event.target.closest('.ui-info__btn') : null;
+        if (!btn) return;
+        var keyboard = false;
+        try { keyboard = btn.matches(':focus-visible'); } catch (e) { keyboard = false; }
+        if (keyboard) infoShow(infoFrom(btn), false);
+    });
+    document.addEventListener('focusout', function (event) {
+        var wrap = infoFrom(event.target);
+        if (wrap && wrap === info.wrap && !info.pinned && !wrap.contains(event.relatedTarget)) infoHide();
+    });
+    // Escape closes the (i) first — and only it, not the dialog around it.
+    document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape' || !info.wrap) return;
+        var btn = infoParts(info.wrap).btn;
+        var hadFocus = info.wrap.contains(document.activeElement);
+        event.preventDefault();
+        event.stopPropagation();
+        infoHide();
+        if (hadFocus && btn) btn.focus({ preventScroll: true });
+    }, true);
+    document.addEventListener('scroll', function () { if (info.wrap) infoPlace(info.wrap); }, true);
+    window.addEventListener('resize', function () { if (info.wrap) infoPlace(info.wrap); });
+    document.addEventListener('ui:dialog-close', function (event) {
+        if (info.wrap && event.target instanceof Element && event.target.contains(info.wrap)) infoHide();
+    });
+
+    HOD.info = { close: infoHide };
+
+    /* ------------------------------------------------------------------ *
      * Formatting
      * ------------------------------------------------------------------ */
 

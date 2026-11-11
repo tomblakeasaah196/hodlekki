@@ -43,6 +43,9 @@ live version of everything below is **Design System** in the menu
    vendored under `assets/ui/vendor/` with its SHA-256 in `VENDOR.md`.
 8. **Rebuild the CSS in the same commit** (`bash bin/build_ui.sh`). CI fails
    on a stale build.
+9. **Short copy.** A title is 2–4 words, at most one short line sits under
+   it, and everything else goes behind an (i) — `ui_info()`. See §12
+   "Writing: short copy"; the copy linter in `tests/ui` enforces it.
 
 Out of scope of these rules: the Bible and the Hymnary (their own reading
 design, `assets/css/bible.css` / `hymnal.css`) and Special Events (its own
@@ -158,14 +161,14 @@ echo them. Every helper escapes what it prints and drops `on*` attributes.
 | --- | --- | --- | --- |
 | Icon | `<svg class="ui-icon"><use href="…icons.svg?v=…#name"/></svg>` | `ui_icon('search', 'ui-icon--sm')` | Lucide subset, sprite at `assets/ui/icons.svg`. Add an SVG to `assets/ui/src/icons/` to add an icon. Sizes `--xs/--sm/--lg/--xl`. |
 | Button | `.ui-btn` + `--primary/--secondary/--ghost/--soft/--danger/--danger-ghost/--brand`, `--sm/--lg`, `--icon`, `--block` | `ui_button('Save member', ['variant' => 'primary', 'icon' => 'check'])` | One primary per area. Icon-only buttons get `aria-label` + tooltip from the label. Busy: `HOD.busy(btn, true)`. |
-| Page header | `.ui-page-header` | `ui_page_header([...])` | Title, description, actions, optional back link. The phone app bar shows the title once this scrolls away. |
+| Page header | `.ui-page-header` | `ui_page_header([...])` | Title (2–4 words), description (one short line), `info` (the rest, behind an (i) by the title), actions, optional back link. The phone app bar shows the title once this scrolls away. |
 | Card | `.ui-card` › `__header` (`--divided`) / `__body` (`--flush`) / `__footer` | — | `a.ui-card` is a link card. |
 | Grid | `.ui-grid --2/--3/--stats/--sidebar`, `.ui-stack --sm/--md` | — | Stats: 2 across on phones, 4 on desktop. |
 | Toolbar | `.ui-toolbar` › `__grow`, `__end`; `.ui-search` | — | Search input with icon: `<div class="ui-search"><svg…/><input class="ui-input" type="search"></div>`. |
 | Tabs | `.ui-tabs` › `.ui-tab` + panels `[data-tab-panel]` | `ui_tabs($tabs, $active)` | Keyboard arrows, `#tab=<id>` deep link, `ui:tab` event. |
 | Chips | `.ui-chips` › `.ui-chip[aria-pressed]` | — | Filters; scrolls sideways on phones. |
 | Segmented | `.ui-segmented` › `.ui-segmented__item[aria-pressed]` | — | View switches (list / calendar). |
-| Field | `.ui-field` › `.ui-label`, control, `.ui-hint`, `.ui-field-error` | `ui_field('tel', ['name' => …, 'label' => …, 'required' => true])` | Label always visible; placeholder is only a format hint. Types: text, email, tel, number, date, time, password, search, url, textarea, select. |
+| Field | `.ui-field` › `.ui-label`, control, `.ui-hint`, `.ui-field-error` | `ui_field('tel', ['name' => …, 'label' => …, 'required' => true, 'info' => …])` | Label always visible; placeholder is only a format hint. `hint` only when essential (≤ 10 words); otherwise `info`, an (i) beside the label that also describes the control. Types: text, email, tel, number, date, time, password, search, url, textarea, select. |
 | Inputs | `.ui-input`, `.ui-select`, `.ui-textarea`, `.ui-input-group` | — | 16 px on phones (iOS zoom). `aria-invalid="true"` shows the error state. |
 | Searchable select | `<select data-ui-combobox>` | — | Progressive enhancement for long lists (members, areas). The real select still submits. |
 | Check / radio / switch | `<label class="ui-check"><input type="checkbox">…</label>`, `input.ui-switch` | — | `.ui-check__hint` for a second line. |
@@ -180,7 +183,8 @@ echo them. Every helper escapes what it prints and drops `on*` attributes.
 | No access | — | `echo ui_no_access();` then the footer and `exit` | The one "this page is not open to you" state, for every page gate. |
 | Loading | `.ui-skeleton` (`--text/--title/--circle/--block`), `.ui-spinner`, `.ui-loading` | — | Nothing under 100 ms; inline spinner up to 1 s; skeleton beyond. |
 | Progress / steps | `progress.ui-progress` (`--sm`, tones), `ol.ui-steps` › `.ui-step` (`.is-done`, `aria-current="step"`) | — | `<progress>` needs no style attribute. |
-| Banner | `.ui-banner --info/--success/--warning/--danger` | `ui_banner('warning', ['title' => …, 'text' => …])` | In-page messages that stay. |
+| Banner | `.ui-banner --info/--success/--warning/--danger` | `ui_banner('warning', ['title' => …, 'text' => …, 'info' => …])` | In-page messages that stay. `text` is one line saying what to do; details go in `info`. |
+| Info (i) | `.ui-info` › `button.ui-info__btn` + `.ui-info__pop[popover]` | `ui_info('Counted from when it was assigned.', 'About overdue leads')` | The detail behind short copy. Hover or keyboard focus shows it on a computer, a tap toggles it on a phone, Escape or a tap elsewhere closes it. The text is the button's `aria-describedby`; it sits in the top layer, so dialogs never cover it. Options: `id`, `class`, `html` (trusted markup, e.g. a link). Strict-CSP safe (behaviour in `ui.js`). |
 | Toast | `.ui-toast` | `HOD.toast()` | Passing messages; one region for the whole app. |
 | Dialog | `dialog.ui-dialog --sm/--lg/--xl/--drawer` | `ui_dialog_start($id, [...])` … `ui_dialog_end($footerHtml)` | Native `<dialog>`: focus trap, Esc, return focus. A bottom sheet on phones. Open with `data-dialog-open="id"`, close with `data-dialog-close`. A dialog holding a form never closes on a backdrop tap. Ids must not contain "modal". |
 | Menu | `button[data-menu-trigger][aria-controls=id]` + `.ui-menu#id[hidden]` › `.ui-menu__item`, `__sep`, `__label`, `--danger` | — | Keyboard arrows, Esc, outside click. |
@@ -365,6 +369,8 @@ bash bin/build_ui.sh --check  # what CI runs: fails if any of the three is stale
    pages), and the module's own suites.
 10. Look at it at 375 px and 1280 px, keyboard only, empty / loading /
     error / offline states, and the console (no CSP violation).
+11. Copy follows §12: titles 2–4 words, one line under them, the rest
+    behind `ui_info()`; buttons are a verb and an object.
 
 ## 11. Is it top-notch?
 
@@ -377,5 +383,64 @@ Before calling a screen done:
 - [ ] Keyboard: everything reachable, focus visible, dialogs trap and return focus.
 - [ ] Empty, loading, error, offline and no-permission states all designed and worded.
 - [ ] Buttons are verbs; destructive ones name what they destroy and confirm.
+- [ ] Short copy (§12): no paragraph to read; the detail is one tap away behind (i).
 - [ ] Console clean: no CSP violation, no error.
 - [ ] Lighthouse mobile ≥ 90 performance on a signed-in page.
+
+## 12. Writing: short copy
+
+The owner's rule, for every screen: people don't read paragraphs. Say the
+least that lets someone act, and put the rest one tap away.
+
+| What | Limit | Where the rest goes |
+| --- | --- | --- |
+| Title (page, dialog, empty state) | 2–4 words. A greeting ("Hi Ada,") is fine and is not counted. | — |
+| Under the title | At most **one** short line, about 12 words, one sentence. | `'info' => …` on `ui_page_header()`, or `ui_info()` |
+| Button | A verb and an object, 1–3 words: "Send link", "Save member". Never "OK", "Submit", "Click here". | — |
+| Error, banner | One line saying what to do. | `'info' => …` on `ui_banner()` |
+| Field hint | Only when essential (a format, a size limit), ≤ 10 words. | `'info' => …` on `ui_field()` |
+| Empty state | A short title and one line naming the next step, plus the button. | `ui_info()` |
+| Any other paragraph | One line. | `ui_info()` |
+
+**Before → after**
+
+- Page subtitle: "Run outreach campaigns, share public capture links, and follow up
+  everyone you meet." → **"Outreach, capture links and follow-up."** with
+  the rest in `'info'`.
+- Banner: "Texts are paused until the wallet is topped up. Nothing has been
+  lost." → **"Top up the wallet to send texts."**, `'info' => 'Texts are
+  paused until… Nothing has been lost.'`
+- Field hint: "Counted from when the lead was assigned without any follow-up.
+  A daily alert goes to the whole Reach team." → no hint;
+  `'info' => 'Counted from when…'`.
+- Empty state: "People added at the welcome desk appear here as they arrive.
+  You can also add someone yourself." → **"No first timers yet"** /
+  "People added at the welcome desk appear here." + **Add first timer**.
+- Button: "Send to the Zoe team" → **"Send request"**; "Add a first timer" →
+  **"Add first timer"**.
+
+**In code**
+
+```php
+<?= ui_page_header([
+    'title' => 'Reach',
+    'description' => 'Outreach, capture links and follow-up.',
+    'info' => 'Share each campaign link; everyone you meet lands in Follow-up.',
+]) ?>
+<?= ui_field('number', ['name' => 'overdue_days', 'label' => 'Overdue after (days)',
+    'info' => 'Counted from when the lead was assigned without any follow-up.']) ?>
+<p class="ui-meta">Semantic names only. <?= ui_info('Navy carries the app; red is the accent.', 'About colour') ?></p>
+```
+
+Copy written in page scripts (toasts, rows built in JS) follows the same
+rule; `HOD.toast()` messages are one sentence.
+
+**The check.** `tests/ui/copy_lint.php` (run by `tests/ui/run.php`, so CI)
+reads strict pages and standalone/public pages and checks, where the copy is
+a literal: `ui_page_header` and `ui_dialog_start` titles and descriptions,
+`ui_banner` titles and texts, `ui_empty` titles and texts, `ui_field` hints,
+`ui_button` labels and plain `<p>` copy. `php tests/ui/copy_lint.php` lists
+what breaks the limits. Copy that was already too long when the rule arrived
+is in `tests/ui/copy_allowlist.txt`; that list may only shrink — fix a line
+and delete it there. A new or edited string is checked fresh, so editing old
+copy means making it short.
