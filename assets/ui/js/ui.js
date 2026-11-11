@@ -1274,6 +1274,9 @@
      * ------------------------------------------------------------------ */
 
     HOD.palette = ['#1D356A', '#D11920', '#4A6BB0', '#157A4A', '#D98A00', '#7690C6', '#E2777B', '#9AA2B2'];
+    // For ordered steps (first timer → worker, a pipeline): one navy ramp,
+    // darkest first, so no step reads as an alarm.
+    HOD.ramp = ['#0A0E17', '#1D356A', '#33549A', '#4A6BB0', '#7690C6', '#A6B8DD', '#CCD7EE', '#E5EBF7'];
     var chartDefaultsSet = false;
 
     HOD.chart = function (canvas, cfg) {

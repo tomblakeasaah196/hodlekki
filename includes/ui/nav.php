@@ -69,7 +69,8 @@ function ui_nav_registry(): array
         ['key' => 'regions', 'label' => 'Regional Hubs', 'icon' => 'map-pin', 'href' => '/modules/regions/index.php', 'section' => 'command',
             'match' => ['regions'], 'keywords' => ['regions', 'hubs', 'locations', 'broadcast'], 'tabs' => ['hub' => 'My Region']],
         ['key' => 'idi', 'label' => 'Data Insights (IDI)', 'icon' => 'chart-column', 'href' => '/modules/idi/index.php', 'section' => 'command',
-            'match' => ['idi'], 'keywords' => ['idi', 'analytics', 'insights', 'data', 'reports', 'statistics']],
+            'match' => ['idi'], 'keywords' => ['idi', 'analytics', 'insights', 'data', 'reports', 'statistics'],
+            'tabs' => ['congregation' => 'Congregation', 'attendance' => 'Events', 'embrace' => 'Embrace', 'operations' => 'Units & Academy', 'charis' => 'Charis', 'pastoral' => 'Pastoral']],
 
         ['key' => 'congregation', 'label' => 'Congregation', 'icon' => 'users', 'href' => '/modules/congregation/index.php', 'section' => 'growth',
             'match' => ['congregation'], 'keywords' => ['members', 'people', 'database', 'roster', 'directory']],

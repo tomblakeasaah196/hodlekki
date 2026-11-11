@@ -34,6 +34,9 @@ if (!$has_access) {
     exit;
 }
 
+// Writes (every POST) must carry the session's CSRF token (includes/csrf.php).
+csrf_require();
+
 $action = $_POST['action'] ?? $_GET['action'] ?? 'fetch_all_insights';
 
 // Date range from the global filter form (defaults match modules/idi/index.php)
