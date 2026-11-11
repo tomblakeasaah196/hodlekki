@@ -330,10 +330,13 @@ jobs:
 
           # The browser half runs on every page of the site: a syntax error in
           # it would silently stop all error and speed reporting.
-          if ! out=$(node --check assets/js/monitor.js 2>&1); then
-            echo "::error file=assets/js/monitor.js::$(echo "$out" | grep -m1 -E 'SyntaxError|Error' || echo 'does not parse')"
-            exit 1
-          fi
+          # (assets/ui/js/pages/monitor.js is checked with the other page scripts.)
+          for f in assets/js/monitor.js assets/js/monitor_wall.js; do
+            if ! out=$(node --check "$f" 2>&1); then
+              echo "::error file=$f::$(echo "$out" | grep -m1 -E 'SyntaxError|Error' || echo 'does not parse')"
+              exit 1
+            fi
+          done
 
       - name: Secret sweep (block obvious leaks)
         run: |

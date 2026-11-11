@@ -28,6 +28,7 @@ $files = [
     'alerts_test.php',
     'brief_test.php',
     'wall_test.php',
+    'screens_test.php',
     'function_calls_test.php',
 ];
 

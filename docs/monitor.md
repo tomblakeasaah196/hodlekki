@@ -7,10 +7,19 @@ outside; members' real loading times on phones and computers. When something
 breaks, the right people hear about it once, and every problem can be handed to
 Claude as a complete, private brief ("Fix with AI").
 
-It was built in two pull requests. **This one is the engine**: capture, storage,
-checks, the outside probe, alerts, the AI briefs, a JSON API, a command line
-and tests. **The screens** (Overview, Errors, Health, Speed, Uptime, Config and
-the live wall) follow on the shared UI components, using the API below.
+**The engine** (capture, storage, checks, the outside probe, alerts, the AI
+briefs, a JSON API, a command line) and **the screens**:
+
+- **System Health** (`modules/monitor/index.php`, menu → System, Super Admins):
+  Overview, Errors (each problem in a drawer with **Copy for AI** / **Download
+  brief**, status, notes, the 14-day trend, pages, occurrences, the stack),
+  Health, Speed (phones / computers), Uptime and Settings (alert emails, the
+  morning summary hour, the live wall link, a test alert). Strict mode on the
+  shared UI (docs/UI.md); behaviour in `assets/ui/js/pages/monitor.js`, which
+  puts every word that came from an error into the page as text, never HTML.
+- **The live wall** (`modules/monitor/wall.php`), full screen for a TV, no
+  sign-in: the key is in the link's fragment (section 7).
+- The member-facing guide is `modules/monitor/how_to_use.md`.
 
 Models it learned from: JBS HQ's System Health (`ErrorMonitor`, `LogScanner`,
 `HealthChecks` with the warm OPcache rate, `MonitorAlerts`, the watchdog) and
@@ -380,6 +389,8 @@ SQLite, and again in the integration job on **MySQL 8.0 and MariaDB 10.11**
 `cron/monitor.php`, `bin/monitor.php`, `monitor_confirm.php` (+
 `assets/css/monitor_public.css`), `assets/js/monitor.js`,
 `.github/workflows/monitor-probe.yml`, `db/migrations/20261125090000_monitor_core.sql`,
-`tests/monitor/`. Touched: `includes/db.php` (install + the connection-failure
+`tests/monitor/`. Screens: `modules/monitor/index.php`, `modules/monitor/wall.php`,
+`modules/monitor/how_to_use.md`, `assets/ui/js/pages/monitor.js`, `assets/js/monitor_wall.js`,
+`assets/css/monitor_wall.css`. Touched: `includes/db.php` (install + the connection-failure
 note), `includes/pwa_head.php` (the tag), `.github/workflows/deploy.yml`,
 `tests/special_events/db_setup.php` (the `_monitor_` marker).
