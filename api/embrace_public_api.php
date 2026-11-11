@@ -89,6 +89,9 @@ function connect_identity(PDO $pdo): array {
         if (str_ends_with($email, CONNECT_SYSTEM_EMAIL_DOMAIN)) {
             connect_fail('@hodlc.com addresses are issued by the church. Please enter your personal email (e.g. name@gmail.com), or leave it blank.', 'email');
         }
+        if ($email === 'hodlekki.org' || preg_match('/[@.]hodlekki\.org$/', $email)) {
+            connect_fail('Please use your personal email (e.g. name@gmail.com), not a church one, or leave it blank.', 'email');
+        }
     }
 
     $stmt = $pdo->prepare("SELECT id FROM users WHERE " . CONNECT_PHONE_SQL . " LIKE ? LIMIT 1");
@@ -239,6 +242,17 @@ try {
                 reach_mark_visited_church($pdo, $phone, $new_id);
             } catch (Throwable $e) {
                 error_log("Embrace Public API (reach sync, user {$new_id}): " . $e->getMessage());
+            }
+
+            // Email (docs/EMAIL.md): a link to confirm the address, which doubles
+            // as their welcome; "yes" to church news only if they ticked the box
+            // (it is unticked by default). Best effort, never reported.
+            if ($email !== '') {
+                require_once __DIR__ . '/../includes/campaigns/bootstrap.php';
+                email_capture_after_save($pdo, $new_id, $email, 'connect', null, connect_input('email_news') === '1', [
+                    'ip'         => function_exists('security_client_ip') ? security_client_ip() : null,
+                    'user_agent' => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255),
+                ]);
             }
 
             try {

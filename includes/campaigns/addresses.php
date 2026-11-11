@@ -463,6 +463,53 @@ function email_sync_users_email(PDO $pdo, int $userId, string $email): void
     }
 }
 
+/**
+ * A form has just saved an email for this person (Connect, an Embrace worker
+ * adding or editing a first timer). Starts confirmation unless that address is
+ * already confirmed or already waiting for its link (saving a record again
+ * never re-sends), and records a "yes" to church news when the form asked.
+ * Best effort: the record is already saved, so this never throws.
+ *
+ * $evidence: ip, user_agent (the person's own form).
+ */
+function email_capture_after_save(PDO $pdo, int $personId, ?string $email, string $source, ?int $byUserId, bool $newsYes, array $evidence = []): void
+{
+    try {
+        $email = email_normalize($email);
+        if ($email === '' || $personId <= 0 || !campaigns_ready($pdo) || email_address_problem($email) !== null) {
+            return;
+        }
+        $staff = $source === 'embrace' || $source === 'staff';
+        $consent = $newsYes ? [
+            'granted'     => true,
+            'method'      => EMAIL_SOURCE_CONSENT_METHOD[$source] ?? 'profile',
+            'text'        => $staff ? EMAIL_CONSENT_NEWS_SPOKEN_TEXT : EMAIL_CONSENT_NEWS_TEXT,
+            'recorded_by' => $staff ? $byUserId : null,
+            'ip'          => $staff ? null : ($evidence['ip'] ?? null),
+            'user_agent'  => $staff ? null : ($evidence['user_agent'] ?? null),
+        ] : null;
+        $state = email_address_state($pdo, $personId);
+        if ($state['confirmed'] === $email || $state['pending'] === $email) {
+            if ($consent !== null && email_consent_state($pdo, $personId) !== 'granted') {
+                email_consent_record($pdo, $personId, 'granted', $consent['method'], $consent + ['email' => $email]);
+            }
+            return;
+        }
+        $r = email_capture_start($pdo, $personId, $email, $source, $byUserId, [
+            'consent'    => $consent,
+            'ip'         => $evidence['ip'] ?? null,
+            'user_agent' => $evidence['user_agent'] ?? null,
+        ]);
+        if (empty($r['ok'])) {
+            error_log('[email] capture after ' . $source . ' save for user ' . $personId . ': ' . ($r['code'] ?? '') . ' ' . ($r['message'] ?? ''));
+        } elseif (function_exists('email_prompt_unskip')) {
+            email_prompt_unskip($pdo, $personId);
+        }
+    } catch (Throwable $e) {
+        error_log('[email] capture after ' . $source . ' save failed for user ' . $personId . ': ' . $e->getMessage());
+    }
+}
+
 /** Withdraw a pending address (the person changed their mind). */
 function email_capture_cancel(PDO $pdo, int $userId): int
 {
