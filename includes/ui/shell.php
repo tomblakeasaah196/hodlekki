@@ -122,9 +122,6 @@ function ui_shell_open(PDO $pdo, array $page): void
     <link rel="stylesheet" href="<?= ui_e(strncmp($href, '/assets/', 8) === 0 && strpos($href, '?') === false ? ui_asset($href) : $href) ?>">
 <?php endforeach; ?>
 <?php if ($page['mode'] === 'legacy'): ?>
-    <!-- Legacy pages run inline scripts that need jQuery while the page parses. -->
-    <script src="<?= ui_e(ui_asset('/assets/ui/vendor/jquery-3.7.1.min.js')) ?>"></script>
-    <script src="<?= ui_e(ui_asset('/assets/ui/js/legacy.js')) ?>"></script>
     <script src="<?= ui_e(ui_asset('/assets/js/modal-manager.js')) ?>" defer></script>
     <script src="<?= ui_e(ui_asset('/assets/js/tab-deeplink.js')) ?>" defer></script>
 <?php elseif ($page['jquery']): ?>
@@ -226,6 +223,10 @@ function ui_shell_open(PDO $pdo, array $page): void
     </div>
     <main id="main" class="ui-main" tabindex="-1">
 <?php if ($page['mode'] === 'legacy'): ?>
+        <!-- Legacy pages run inline scripts that need jQuery while they parse.
+             Loaded here, not in <head>, so the shell paints before it. -->
+        <script src="<?= ui_e(ui_asset('/assets/ui/vendor/jquery-3.7.1.min.js')) ?>"></script>
+        <script src="<?= ui_e(ui_asset('/assets/ui/js/legacy.js')) ?>"></script>
         <div class="ui-legacy-content">
 <?php endif;
 }
