@@ -155,6 +155,30 @@ function monitor_check_cron(string $name, array $job, ?array $beat, int $now, ?i
     return monitor_check($key, 'Background jobs', $label, 'ok', 'Ran ' . $dayWord . ' at ' . (new DateTimeImmutable('@' . $started))->setTimezone(new DateTimeZone('Africa/Lagos'))->format('H:i') . '.');
 }
 
+/**
+ * The monitor's own cron job. Never having run is a setup step still to do
+ * (amber, with the exact line), not an outage; having run and stopped is red.
+ * When this runs inside that cron, its own start was just recorded: green.
+ */
+function monitor_check_monitor_cron(?array $beat, int $now): array
+{
+    $job = monitor_cron_jobs()['monitor'];
+    $last = isset($beat['finished_at']) ? (int) $beat['finished_at'] : (isset($beat['started_at']) ? (int) $beat['started_at'] : null);
+    if ($last === null) {
+        return monitor_check('cron_monitor', 'Background jobs', $job['label'], 'warn',
+            'Not set up yet: the monitor\'s cron job has never run on this server. Until it does, the error logs are not read, these checks are not refreshed and no alert or morning summary is sent. Errors are still recorded as they happen.',
+            'cPanel → Cron Jobs → add: ' . $job['line']);
+    }
+    $late = intdiv(max(0, $now - $last), 60);
+    if ($late >= 20) {
+        return monitor_check('cron_monitor', 'Background jobs', $job['label'], 'bad',
+            'Stopped: last ran ' . monitor_ago($last, $now) . '. No log is read, no check refreshed and no alert sent until it runs again.',
+            'cPanel → Cron Jobs must have: ' . $job['line'] . ' — then run it once by hand in cPanel → Terminal to see any error.');
+    }
+
+    return monitor_check('cron_monitor', 'Background jobs', $job['label'], 'ok', 'Last ran ' . monitor_ago($last, $now) . '; runs every minute.');
+}
+
 /** SMS: the queue moving, failures, and the BulkSMS wallet. */
 function monitor_check_sms(array $f, int $now): array
 {
@@ -1016,7 +1040,8 @@ function monitor_checks_run(PDO $pdo, PDO $db, bool $slow = false): array
     $since = monitor_installed_at();
     foreach (monitor_cron_jobs() as $name => $job) {
         if ($name === 'monitor') {
-            continue;   // it is running right now; the watchdog covers it stopping
+            $safe('cron_monitor', 'Background jobs', $job['label'], fn () => monitor_check_monitor_cron($beats['monitor'] ?? null, $now));
+            continue;
         }
         $safe('cron_' . $name, 'Background jobs', $job['label'], fn () => monitor_check_cron($name, $job, $beats[$name] ?? null, $now, $since));
     }

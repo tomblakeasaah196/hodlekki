@@ -34,3 +34,5 @@ ok('the wall needs no sign-in and no database', !str_contains($wall, 'header.php
 // Alerts link to the right tab.
 ok('alert links open the right tab (#tab=…)', str_contains((string) file_get_contents($root . '/includes/monitor/alerts.php'), "monitor_screen_link('#tab=errors')"));
 eq('…and the link reaches the page once it exists', '/modules/monitor/index.php#tab=health', monitor_screen_link('#tab=health'));
+has('the page shows the monitor cron state with the exact line to copy', $page, "data-copy-target' => 'monitor-cron-line'");
+has('…amber while it is a setup step, red only once it has stopped', $page, "\$cronCheck['state'] === 'bad' ? 'danger' : 'warning'");
