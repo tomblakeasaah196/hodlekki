@@ -80,23 +80,23 @@ function email_address_problem(string $raw, ?PDO $pdo = null, ?int $userId = nul
 {
     $email = email_normalize($raw);
     if ($email === '') {
-        return 'Enter your email address.';
+        return 'Enter your email.';
     }
     if (strlen($email) > 190) {
-        return 'That email address is too long.';
+        return 'That email is too long.';
     }
     if (!email_is_valid_syntax($email)) {
-        return "That email address doesn't look right. Please check it (for example name@gmail.com).";
+        return "That email doesn't look right.";
     }
     $domain = email_domain($email);
     if ($domain === 'hodlc.com') {
-        return '@hodlc.com addresses are sign-in names issued by the church, not mailboxes. Please enter your personal email (for example name@gmail.com).';
+        return 'Use your own email, not a hodlc.com sign-in name.';
     }
     if (email_is_church_domain($email)) {
-        return 'Please use an email outside hodlekki.org. Password reset links go to this address, and you would not be able to open a church mailbox while you are signed out.';
+        return 'Use your own email, not a church one.';
     }
     if ($pdo !== null && ($owner = member_by_confirmed_email($pdo, $email)) !== null && $owner !== $userId) {
-        return "This email belongs to another member's account. If it is yours, please speak to the church office.";
+        return 'This email is on another account. Ask the church office.';
     }
     return null;
 }
@@ -220,7 +220,7 @@ function email_address_state(PDO $pdo, int $userId): array
 function email_capture_start(PDO $pdo, int $userId, string $rawEmail, string $source, ?int $byUserId = null, array $opts = []): array
 {
     if (!campaigns_ready($pdo)) {
-        return ['ok' => false, 'code' => 'FEATURE_NOT_READY', 'message' => 'Email is being set up. Please try again later.'];
+        return ['ok' => false, 'code' => 'FEATURE_NOT_READY', 'message' => 'Email is being set up. Try again later.'];
     }
     if (!in_array($source, EMAIL_SOURCES, true)) {
         throw new InvalidArgumentException('Unknown email source: ' . $source);
@@ -263,7 +263,7 @@ function email_capture_start(PDO $pdo, int $userId, string $rawEmail, string $so
     $byAddress = (int) $stmt->fetchColumn();
     if ($byPerson >= EMAIL_LINKS_PER_PERSON_DAY || $byAddress >= EMAIL_LINKS_PER_ADDRESS_DAY) {
         return ['ok' => false, 'code' => 'RATE_LIMITED',
-                'message' => 'We have sent several links today. Please check your inbox (and spam folder), or try again tomorrow.'];
+                'message' => 'Too many links today. Try again tomorrow.'];
     }
     // The public Connect card can name any address: limit links per requester
     // and in total, so it can never be used to mail strangers or to use up the
@@ -285,7 +285,7 @@ function email_capture_start(PDO $pdo, int $userId, string $rawEmail, string $so
     $existing = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     if ($existing !== null && $existing['last_sent_at'] !== null
         && $now->getTimestamp() - campaigns_dt((string) $existing['last_sent_at'])->getTimestamp() < EMAIL_RESEND_GAP_SECONDS) {
-        return ['ok' => false, 'code' => 'TOO_SOON', 'message' => 'A link is on its way. Please wait a minute before asking for another.'];
+        return ['ok' => false, 'code' => 'TOO_SOON', 'message' => 'A link is on its way. Wait a minute.'];
     }
 
     if ($existing !== null) {

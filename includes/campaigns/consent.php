@@ -126,6 +126,16 @@ function email_consent_state(PDO $pdo, int $userId, string $purpose = 'news', st
     return $row === null ? 'none' : (string) $row['action'];
 }
 
+const EMAIL_MEMBER_STATUSES = ['Member', 'Worker', 'Pastor'];
+
+/** A member of the church (not a visitor): church news needs no box for them. */
+function email_is_member(PDO $pdo, int $userId): bool
+{
+    $stmt = $pdo->prepare('SELECT spiritual_status FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    return in_array((string) $stmt->fetchColumn(), EMAIL_MEMBER_STATUSES, true);
+}
+
 /**
  * May we send this person church news by email right now?
  *
@@ -145,7 +155,10 @@ function email_may_send_news(PDO $pdo, int $userId): array
     if ($state === 'withdrawn') {
         return ['ok' => false, 'email' => $email, 'reason' => 'withdrawn'];
     }
-    if ($state !== 'granted') {
+    // Members (owner's decision, 11 Nov 2026): church messages come with
+    // membership, with one-tap unsubscribe in every email; no box. Visitors
+    // need the box ("Stay in touch with us").
+    if ($state !== 'granted' && !email_is_member($pdo, $userId)) {
         return ['ok' => false, 'email' => $email, 'reason' => 'no_consent'];
     }
     if (email_is_suppressed($pdo, $email)) {

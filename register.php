@@ -342,7 +342,7 @@ if (!empty($token)) {
                     </svg>
                 </div>
                 <h2 class="text-3xl font-extrabold gradient-text mb-2">You're Registered!</h2>
-                <p class="text-white/70 mb-8 max-w-md">Your spot has been confirmed. We can't wait to fellowship with you. You can safely close this page.</p>
+                <p class="text-white/70 mb-8 max-w-md">Your spot is confirmed — see you there!</p>
                 
                 <div class="flex flex-col sm:flex-row gap-4 w-full max-w-md justify-center">
                     <button onclick="shareEvent()" class="cta flex-1">Invite Others</button>
@@ -441,7 +441,7 @@ if (!empty($token)) {
                             <div class="step-icon">2</div>
                             <h3 class="text-lg font-bold text-white">Which Day(s) Will You Attend?</h3>
                         </div>
-                        <p class="text-xs text-white/50 -mt-1">This is a multi-day event. Select every day you plan to be there.</p>
+                        <p class="text-xs text-white/50 -mt-1">Pick every day you will come.</p>
                         <div id="dayCheckboxContainer" class="opt-grid"></div>
                     </div>
 

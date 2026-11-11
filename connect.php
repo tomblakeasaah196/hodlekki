@@ -8,6 +8,11 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/includes/site_url.php';
 require_once __DIR__ . '/includes/campaigns/consent.php';   // EMAIL_CONSENT_NEWS_TEXT: the wording shown is the wording recorded
 require_once __DIR__ . '/includes/campaigns/formguard.php'; // signed render time + honeypot for the card
+
+// The church's own statements, word for word (shown in full behind an (i)).
+const CONNECT_VISION  = 'To raise a people after God’s heart in every nation of the earth.';
+const CONNECT_MISSION = 'To bring people into an experience of God’s unconditional love that transforms them into men and women passionate about influencing their world through the principles of the Kingdom.';
+const CONNECT_VALUES  = ['Integrity', 'Sharing our faith boldly', 'Excellence (Global mindset)', 'Excitement', 'Acceptance', 'Commitment', 'Teamwork'];
 $site = static fn (string $path): string => htmlspecialchars(site_url($path), ENT_QUOTES, 'UTF-8');
 ?>
 <!DOCTYPE html>
@@ -90,6 +95,9 @@ $site = static fn (string $path): string => htmlspecialchars(site_url($path), EN
         .field-error-msg { margin-top: 0.375rem; font-size: 0.75rem; font-weight: 700; color: #D11920; line-height: 1.35; }
     </style>
     <?php require_once __DIR__ . '/includes/pwa_head.php'; ?>
+<?php if (campaigns_turnstile_enabled()): ?>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<?php endif; ?>
 </head>
 <body class="bg-gray-50 antialiased min-h-screen relative overflow-x-hidden selection:bg-hodRed selection:text-white">
 <?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
@@ -117,8 +125,9 @@ $site = static fn (string $path): string => htmlspecialchars(site_url($path), EN
                 <img src="/assets/images/hod_logo.svg" alt="HOD Logo" class="h-20 mx-auto drop-shadow-sm mb-4" onerror="this.onerror=null; this.src='https://placehold.co/200x60/0A0E17/FFF?text=HOD+Lekki'">
                 <h1 class="text-5xl md:text-7xl font-heading font-black text-gray-900 tracking-tight drop-shadow-sm">Welcome Home.</h1>
                 <p class="text-lg md:text-xl text-gray-600 font-medium max-w-2xl mx-auto leading-relaxed">
-                    Household of David is a global ministry led by <span class="font-bold text-hodRed">Pastor Sola Osunmakinde</span>. Our Resident Pastor is <span class="font-bold text-hodRed">Pastor Ebele Uzo-Peters</span>. Whether you're just passing through or looking for a family, you belong here.
+                    Led by <span class="font-bold text-hodRed">Pastor Sola Osunmakinde</span>, with Resident Pastor <span class="font-bold text-hodRed">Ebele Uzo-Peters</span>.
                 </p>
+                <p class="text-lg md:text-xl text-gray-600 font-medium max-w-2xl mx-auto leading-relaxed">Passing through or looking for a family, you belong here.</p>
             </div>
             
             <!-- Identity Cards (Vision, Mission, Values) -->
@@ -128,21 +137,21 @@ $site = static fn (string $path): string => htmlspecialchars(site_url($path), EN
                         <svg class="w-6 h-6 text-hodRed" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                     </div>
                     <h3 class="text-xl font-heading font-black text-gray-900 mb-3 tracking-tight">Our Vision</h3>
-                    <p class="text-sm text-gray-600 font-medium leading-relaxed">To raise a people after God’s heart in every nation of the earth.</p>
+                    <p class="text-sm text-gray-600 font-medium leading-relaxed">A people after God’s heart in every nation. <details class="inline-block align-middle text-left text-sm text-gray-500 ml-1"><summary class="cursor-pointer select-none font-bold text-gray-400" aria-label="More">(i)</summary><span class="block mt-1 leading-relaxed"><?= htmlspecialchars(CONNECT_VISION, ENT_QUOTES, 'UTF-8') ?></span></details></p>
                 </div>
                 <div class="glass-panel p-8 rounded-3xl hover:-translate-y-1 transition-transform duration-300">
                     <div class="w-12 h-12 bg-hodBlue/10 rounded-full flex items-center justify-center mb-5 border border-hodBlue/20">
                         <svg class="w-6 h-6 text-hodBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <h3 class="text-xl font-heading font-black text-gray-900 mb-3 tracking-tight">Our Mission</h3>
-                    <p class="text-sm text-gray-600 font-medium leading-relaxed">To bring people into an experience of God’s unconditional love that transforms them into men and women passionate about influencing their world through the principles of the Kingdom.</p>
+                    <p class="text-sm text-gray-600 font-medium leading-relaxed">Bringing people into God’s life-changing love. <details class="inline-block align-middle text-left text-sm text-gray-500 ml-1"><summary class="cursor-pointer select-none font-bold text-gray-400" aria-label="More">(i)</summary><span class="block mt-1 leading-relaxed"><?= htmlspecialchars(CONNECT_MISSION, ENT_QUOTES, 'UTF-8') ?></span></details></p>
                 </div>
                 <div class="glass-panel p-8 rounded-3xl hover:-translate-y-1 transition-transform duration-300">
                     <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-5 border border-gray-200">
                         <svg class="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
                     </div>
                     <h3 class="text-xl font-heading font-black text-gray-900 mb-3 tracking-tight">Our Values</h3>
-                    <p class="text-sm text-gray-600 font-medium leading-relaxed">Integrity, Sharing our faith boldly, Excellence (Global mindset), Excitement, Acceptance, Commitment, and Teamwork.</p>
+                    <ul class="text-sm text-gray-600 font-medium leading-relaxed"><?php foreach (CONNECT_VALUES as $value): ?><li><?= htmlspecialchars($value, ENT_QUOTES, 'UTF-8') ?></li><?php endforeach; ?></ul>
                 </div>
             </div>
 
@@ -260,7 +269,7 @@ $site = static fn (string $path): string => htmlspecialchars(site_url($path), EN
 
                 <!-- STEP 2: Demographics -->
                 <div id="step2" class="hidden space-y-6 animate-fade-in-up">
-                    <p class="text-gray-500 font-medium text-sm">Tell us a little more so we can serve and celebrate you better.</p>
+                    <p class="text-gray-500 font-medium text-sm">A little more, so we can serve and celebrate you.</p>
                     <div class="grid grid-cols-2 gap-5">
                         <div>
                             <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Gender</label>
@@ -318,6 +327,9 @@ $site = static fn (string $path): string => htmlspecialchars(site_url($path), EN
                         <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">How can we pray for you today?</label>
                         <textarea name="prayer_requests" rows="3" maxlength="2000" placeholder="Our Zoe Intercessory team is ready to agree with you..." class="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 outline-none focus:border-hodRed focus:ring-2 focus:ring-hodRed/20 transition-all shadow-sm resize-none"></textarea>
                     </div>
+                    <?php if (campaigns_turnstile_enabled()): ?>
+                        <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars(campaigns_turnstile_site_key(), ENT_QUOTES, 'UTF-8') ?>" data-theme="light"></div>
+                    <?php endif; ?>
                 </div>
 
             </form>
@@ -341,7 +353,7 @@ $site = static fn (string $path): string => htmlspecialchars(site_url($path), EN
             </div>
             <h2 class="text-3xl font-heading font-black text-gray-900 mb-4 tracking-tight">We've Received You!</h2>
             <p class="text-gray-600 text-base font-medium leading-relaxed mb-8">
-                Welcome to the family. A member of our Embrace Team will reach out to you shortly. We pray this marks the beginning of an incredible journey in your walk with God.
+                Welcome to the family — our Embrace Team will reach out soon.
             </p>
             <div class="space-y-3">
                 <a href="<?= $site('/testimonies.php') ?>" class="block w-full bg-hodBlue hover:bg-gray-900 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-xs transition-all shadow-md">Read Testimonies on the Wall</a>
@@ -479,6 +491,10 @@ $site = static fn (string $path): string => htmlspecialchars(site_url($path), EN
 
         // A reply that isn't { status: 'success' }: show its message on its field.
         function showServerError(res) {
+            // Every error reply carries a fresh signed time (one per saved card),
+            // and a Turnstile token is single-use: refresh both, never reload.
+            if (res && typeof res === 'object' && res.form_ts) $('input[name="form_ts"]').val(res.form_ts);
+            if (window.turnstile && document.querySelector('.cf-turnstile')) { try { window.turnstile.reset(); } catch (e) {} }
             if (res && typeof res === 'object' && res.message) {
                 showError(res.message, res.field, { exists: !!res.exists });
             } else {
