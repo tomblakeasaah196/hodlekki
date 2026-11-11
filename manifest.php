@@ -1,5 +1,10 @@
 <?php
 // /manifest.php
+// Baseline security headers (nosniff, referrer, framing, permissions): this
+// page does not load includes/db.php on every request, which is where every
+// other page gets them.
+require_once __DIR__ . '/includes/security_headers.php';
+security_send_baseline_headers();
 /**
  * Web App Manifest for HOD Lekki.
  *

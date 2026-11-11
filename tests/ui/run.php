@@ -386,6 +386,19 @@ foreach (glob($root . '/modules/*/index.php') ?: [] as $page) {
     }
 }
 ok('every module requires the shell by a path that resolves from its folder', $badRequire === [], implode('; ', $badRequire));
+// Every public entry point sends the baseline security headers: either it
+// loads includes/db.php (or the shell) unconditionally at the top level, or it
+// calls security_send_baseline_headers() itself (login and connect once sent
+// none on a plain GET).
+$noHeaders = [];
+foreach (array_merge(glob($root . '/*.php') ?: [], glob($root . '/auth/*.php') ?: []) as $entry) {
+    $src = (string) file_get_contents($entry);
+    $loadsDb = (bool) preg_match("#^require_once __DIR__ \\. '(/\\.\\.)?/includes/(db|header)\\.php';#m", $src);
+    if (!$loadsDb && strpos($src, 'security_send_baseline_headers()') === false) {
+        $noHeaders[] = substr($entry, strlen($root) + 1);
+    }
+}
+ok('every root and /auth/ entry point sends the baseline security headers', $noHeaders === [], implode(', ', $noHeaders));
 ok('the old /modules/dashboard/ URL redirects to the dashboard',
     strpos((string) file_get_contents($root . '/modules/dashboard/index.php'), "header('Location: /index.php'") !== false);
 
