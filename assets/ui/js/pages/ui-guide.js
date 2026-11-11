@@ -11,7 +11,7 @@
     HOD.actions.on('guide.toast', function (button) {
         var tone = button.getAttribute('data-tone');
         if (tone === 'danger') {
-            HOD.toast("Roster not saved. Check your connection and try again.", 'danger');
+            HOD.toast("We couldn't save the roster. Check your connection and try again — nothing was lost.", 'danger');
         } else if (tone === 'undo') {
             HOD.toast('Chiamaka Eze moved to the archive.', {
                 tone: 'success',
@@ -25,7 +25,7 @@
     HOD.actions.on('guide.confirm', function () {
         HOD.confirm({
             title: 'Delete Folasade Bello?',
-            message: 'Her attendance and notes go too. This cannot be undone.',
+            message: 'Her attendance history and follow-up notes are deleted with her record. This cannot be undone.',
             confirmLabel: 'Delete member',
             tone: 'danger',
             requireText: 'DELETE'

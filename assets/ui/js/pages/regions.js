@@ -412,7 +412,7 @@
             HOD.actions.on('regions.auto-assign', function (btn) {
                 HOD.confirm({
                     title: 'Auto-assign unassigned members?',
-                    message: 'Members with map coordinates are placed by the Jakande pivot rule.',
+                    message: 'Everyone in Unassigned who has map coordinates is placed in a region by the Jakande pivot rule. You can move anyone afterwards.',
                     confirmLabel: 'Auto-assign'
                 }).then(function (ok) {
                     if (!ok) return;

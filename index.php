@@ -85,15 +85,16 @@ $dashName = trim((string) ($_SESSION['first_name'] ?? ''));
     . '<a class="ui-btn ui-btn--primary" data-dash-detail-link href="#" hidden><span></span>' . ui_icon('chevron-right') . '</a>'
 ) ?>
 
-<?= ui_dialog_start('dash-qr', ['title' => 'Welcome home', 'description' => 'Scan to join the family.', 'size' => 'sm']) ?>
+<?= ui_dialog_start('dash-qr', ['title' => 'Welcome home', 'description' => 'Scan to open the Connect page and join the Household of David family.', 'size' => 'sm']) ?>
     <div class="flex flex-col items-center gap-4 text-center">
         <div class="rounded-ui-lg border border-line bg-surface p-4" data-dash-qr aria-label="QR code for the Connect page" role="img">
             <span class="ui-skeleton block h-48 w-48"></span>
         </div>
+        <p class="ui-meta">“For where two or three gather in my name, there am I with them.” — Matthew 18:20</p>
     </div>
 <?= ui_dialog_end(
     ui_button('Close', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
-    . ui_button('Open Connect', ['variant' => 'primary', 'icon' => 'external-link', 'href' => connect_origin() . '/', 'attrs' => ['target' => '_blank', 'rel' => 'noopener']])
+    . ui_button('Open the Connect page', ['variant' => 'primary', 'icon' => 'external-link', 'href' => connect_origin() . '/', 'attrs' => ['target' => '_blank', 'rel' => 'noopener']])
 ) ?>
 
 <?= ui_json_script('dash-config', ['connectUrl' => connect_origin() . '/']) ?>

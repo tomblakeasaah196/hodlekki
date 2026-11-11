@@ -58,7 +58,7 @@ function idi_chart_card(string $id, string $title, string $about, string $height
 <div class="ui-page">
     <?= ui_page_header([
         'title' => 'Data Insights',
-        'description' => 'Growth and retention for any period.',
+        'description' => 'How the church is growing and keeping its people, for the period you choose.',
         'actions' => ui_button('Export to Excel', ['icon' => 'download', 'attrs' => ['data-action' => 'idi.export']]),
     ]) ?>
 

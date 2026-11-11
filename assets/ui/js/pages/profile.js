@@ -242,7 +242,7 @@
     function signOutOthers(button) {
         HOD.confirm({
             title: 'Sign out your other devices?',
-            message: 'This device stays signed in.',
+            message: 'Every other phone or computer signed in as you is signed out. This one stays signed in.',
             confirmLabel: 'Sign them out',
             tone: 'danger'
         }).then(function (yes) {

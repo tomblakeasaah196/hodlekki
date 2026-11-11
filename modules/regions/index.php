@@ -48,8 +48,8 @@ if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
         <div class="ui-card" data-regions-unassigned hidden>
             <?= ui_empty([
                 'icon' => 'map-pin',
-                'title' => 'No region yet',
-                'text' => 'Add your home address to join your local hub.',
+                'title' => 'You are not in a region yet',
+                'text' => 'Add your home address to your profile and you will be placed in your local hub, or an admin will place you.',
                 'actions' => ui_button('Update my address', ['variant' => 'primary', 'href' => '/modules/profile/index.php']),
             ]) ?>
         </div>
@@ -115,7 +115,7 @@ if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
                 <h2 class="ui-h3">Regional distribution</h2>
-                <p class="ui-meta">Drag members between regions, or tap one.</p>
+                <p class="ui-meta">Drag members between regions on a computer, or tap a member to move or mute them.</p>
             </div>
             <div class="flex flex-wrap gap-2">
                 <?= ui_button('Export', ['variant' => 'secondary', 'size' => 'sm', 'icon' => 'download', 'href' => '/api/regions_api.php?action=admin_export_excel']) ?>
@@ -133,7 +133,7 @@ if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
 <?php endif; ?>
 </div>
 
-<?= ui_dialog_start('regions-prayer', ['title' => 'Share with your region', 'description' => 'It appears in the regional stream.']) ?>
+<?= ui_dialog_start('regions-prayer', ['title' => 'Share with your region', 'description' => 'A prayer request or a testimony. It appears in the stream.']) ?>
     <form class="ui-form" id="regions-prayer-form" data-action="regions.save" data-ui-validate novalidate>
         <input type="hidden" name="action" value="add_prayer">
         <?= ui_field('textarea', ['name' => 'prayer_content', 'id' => 'regions-prayer-text', 'label' => "What's on your heart?", 'required' => true, 'attrs' => ['rows' => '4']]) ?>

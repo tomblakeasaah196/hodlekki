@@ -87,7 +87,7 @@ function profile_password_field(string $id, string $name, string $label, string 
             <hr class="ui-divider my-0">
 
             <div class="ui-form-grid">
-                <?= ui_field('email', ['name' => 'real_email', 'id' => 'profile-real-email', 'label' => 'Personal email', 'optional' => true, 'autocomplete' => 'email', 'info' => 'Gmail, Yahoo or similar — for messages that should reach you outside the app.', 'attrs' => ['data-profile' => 'real_email']]) ?>
+                <?= ui_field('email', ['name' => 'real_email', 'id' => 'profile-real-email', 'label' => 'Personal email', 'optional' => true, 'autocomplete' => 'email', 'hint' => 'Gmail, Yahoo or similar — for messages that should reach you outside the app.', 'attrs' => ['data-profile' => 'real_email']]) ?>
                 <?= ui_field('tel', ['name' => 'phone', 'id' => 'profile-phone', 'label' => 'Phone number', 'autocomplete' => 'tel', 'inputmode' => 'tel', 'attrs' => ['data-profile' => 'phone']]) ?>
                 <?= ui_field('date', ['name' => 'dob', 'id' => 'profile-dob', 'label' => 'Date of birth', 'attrs' => ['data-profile' => 'dob']]) ?>
                 <?= ui_field('select', ['name' => 'marital_status', 'id' => 'profile-marital', 'label' => 'Marital status', 'options' => ['Single' => 'Single', 'Married' => 'Married', 'Separated' => 'Separated', 'Divorced' => 'Divorced'], 'attrs' => ['data-profile' => 'marital_status', 'data-action-change' => 'profile.marital']]) ?>
@@ -104,7 +104,7 @@ function profile_password_field(string $id, string $name, string $label, string 
                 <div class="ui-span-full rounded-ui-lg border border-line bg-surface-subtle p-4" data-profile-married hidden>
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-start">
                         <div class="flex-1">
-                            <?= ui_field('date', ['name' => 'wedding_anniversary', 'id' => 'profile-anniversary', 'label' => 'Wedding anniversary', 'info' => 'The Charis team uses it to celebrate your day with you.', 'attrs' => ['data-profile' => 'wedding_anniversary']]) ?>
+                            <?= ui_field('date', ['name' => 'wedding_anniversary', 'id' => 'profile-anniversary', 'label' => 'Wedding anniversary', 'hint' => 'The Charis team uses it to celebrate your day with you.', 'attrs' => ['data-profile' => 'wedding_anniversary']]) ?>
                         </div>
                         <div class="flex shrink-0 flex-col items-start gap-2 sm:items-center">
                             <span class="ui-label">Wedding photo</span>
@@ -134,7 +134,7 @@ function profile_password_field(string $id, string $name, string $label, string 
         </div>
         <div class="ui-card__body">
             <div class="mb-5" data-profile-forced hidden>
-                <?= ui_banner('warning', ['title' => 'Please set a new password', 'text' => 'Choose a new password to carry on.']) ?>
+                <?= ui_banner('warning', ['title' => 'Please set a new password', 'text' => 'An administrator has asked you to choose a new password before you carry on.']) ?>
             </div>
             <div class="ui-stack">
                 <form class="ui-form" data-action="profile.password" autocomplete="off" novalidate>
@@ -180,7 +180,7 @@ function profile_password_field(string $id, string $name, string $label, string 
                     <ul class="ui-list rounded-ui-lg border border-line" data-profile-devices>
                         <li class="ui-list__item"><span class="ui-skeleton ui-skeleton--text w-2/3"></span></li>
                     </ul>
-                    <?= ui_button('Sign out others', ['variant' => 'danger-ghost', 'block' => true, 'icon' => 'log-out', 'class' => 'mt-3', 'attrs' => ['data-action' => 'profile.sign-out-others']]) ?>
+                    <?= ui_button('Sign out other devices', ['variant' => 'danger-ghost', 'block' => true, 'icon' => 'log-out', 'class' => 'mt-3', 'attrs' => ['data-action' => 'profile.sign-out-others']]) ?>
                     </div>
                 </div>
             </div>
@@ -188,7 +188,7 @@ function profile_password_field(string $id, string $name, string $label, string 
     </section>
 </div>
 
-<?= ui_dialog_start('profile-name-dialog', ['title' => 'Request a name correction', 'description' => 'A pastor approves name changes.']) ?>
+<?= ui_dialog_start('profile-name-dialog', ['title' => 'Request a name correction', 'description' => 'Name changes are approved by a pastor, so the right person is always attached to your records.']) ?>
     <form class="ui-form" id="profile-name-form" data-action="profile.name-change" data-ui-validate novalidate>
         <input type="hidden" name="action" value="request_name_change">
         <?= ui_field('text', ['name' => 'correct_name', 'id' => 'profile-correct-name', 'label' => 'Your correct full name', 'required' => true, 'autocomplete' => 'name']) ?>
@@ -199,7 +199,7 @@ function profile_password_field(string $id, string $name, string $label, string 
     . ui_button('Send request', ['variant' => 'primary', 'type' => 'submit', 'attrs' => ['form' => 'profile-name-form']])
 ) ?>
 
-<?= ui_dialog_start('profile-crop-dialog', ['title' => 'Position your photo', 'description' => 'Drag to move; pinch or scroll to zoom.', 'size' => 'lg']) ?>
+<?= ui_dialog_start('profile-crop-dialog', ['title' => 'Position your photo', 'description' => 'Drag to move, pinch or scroll to zoom. It is saved as a square.', 'size' => 'lg']) ?>
     <div class="overflow-hidden rounded-ui-lg bg-surface-sunken">
         <img class="block max-h-[60vh] max-w-full" alt="" data-profile-crop-img hidden>
     </div>

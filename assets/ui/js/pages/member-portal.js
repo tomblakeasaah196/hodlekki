@@ -179,7 +179,7 @@
             rec.timer = setInterval(tick, 1000);
             showRecording(true);
         }).catch(function () {
-            HOD.toast('Allow the microphone to record, or upload a voice note.', 'warning');
+            HOD.toast('Allow microphone access in your browser to record, or upload a voice note instead.', 'warning');
         });
     }
 
