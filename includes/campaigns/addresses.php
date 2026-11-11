@@ -491,11 +491,16 @@ function email_capture_after_save(PDO $pdo, int $personId, ?string $email, strin
         if ($email === '' || $personId <= 0 || !campaigns_ready($pdo) || email_address_problem($email) !== null) {
             return;
         }
+        // Visitor forms show a box that starts ticked: recorded as exactly that
+        // ('prechecked', with the wording shown), by whoever saved the form. A
+        // pre-ticked box never overrides an earlier "stop": a worker re-saving a
+        // record must not quietly re-subscribe someone who unsubscribed.
         $staff = $source === 'embrace' || $source === 'staff';
-        $consent = $newsYes ? [
+        $visitorForm = in_array($source, ['connect', 'embrace'], true);
+        $consent = $newsYes && email_consent_state($pdo, $personId) !== 'withdrawn' ? [
             'granted'     => true,
-            'method'      => EMAIL_SOURCE_CONSENT_METHOD[$source] ?? 'profile',
-            'text'        => $staff ? EMAIL_CONSENT_NEWS_SPOKEN_TEXT : EMAIL_CONSENT_NEWS_TEXT,
+            'method'      => $visitorForm ? 'prechecked' : (EMAIL_SOURCE_CONSENT_METHOD[$source] ?? 'profile'),
+            'text'        => $visitorForm ? EMAIL_CONSENT_VISITOR_TEXT : EMAIL_CONSENT_NEWS_TEXT,
             'recorded_by' => $staff ? $byUserId : null,
             'ip'          => $staff ? null : ($evidence['ip'] ?? null),
             'user_agent'  => $staff ? null : ($evidence['user_agent'] ?? null),

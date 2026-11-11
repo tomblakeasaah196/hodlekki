@@ -840,17 +840,18 @@ email_capture_after_save($cf, 110, 'Kola@Gmail.com', 'connect', null, true, ['ip
 ct_eq('a Connect card with an email starts confirmation', 'kola@gmail.com', email_address_state($cf, 110)['pending']);
 ct_eq('…and the confirm email is queued', 1, ct_count($cf, 'email_outbox', "flow = 'confirm_email' AND user_id = 110"));
 $kc = email_consent_current($cf, 110);
-ct_ok('…with their own "yes" (the Connect wording, their IP)', $kc['action'] === 'granted' && $kc['method'] === 'connect_form'
-    && $kc['ip'] === '102.1.1.1' && $kc['recorded_by'] === null);
+ct_ok('…recorded honestly as a pre-ticked box left ticked, with their IP', $kc['action'] === 'granted' && $kc['method'] === 'prechecked'
+    && $kc['ip'] === '102.1.1.1' && $kc['recorded_by'] === null
+    && $cf->query('SELECT body FROM email_consent_texts WHERE id = ' . (int) $kc['text_id'])->fetchColumn() === EMAIL_CONSENT_VISITOR_TEXT);
 ct_at('2026-11-22 10:05');
 email_capture_after_save($cf, 110, 'kola@gmail.com', 'embrace', 900, false);
 ct_eq('saving the record again never re-sends the link', 1, ct_count($cf, 'email_outbox', "flow = 'confirm_email' AND user_id = 110"));
 ct_user($cf, 111, 'Lara', '1st_Timer');
 email_capture_after_save($cf, 111, 'lara@yahoo.com', 'embrace', 901, true);
 $lc = email_consent_current($cf, 111);
-ct_ok('an Embrace worker records a spoken yes, with their name and the script', $lc['method'] === 'embrace_entry'
+ct_ok("an Embrace worker's form is pre-ticked too: 'prechecked' with the worker's id, never \"spoken\"", $lc['method'] === 'prechecked'
     && (int) $lc['recorded_by'] === 901 && $lc['ip'] === null
-    && $cf->query('SELECT body FROM email_consent_texts WHERE id = ' . (int) $lc['text_id'])->fetchColumn() === EMAIL_CONSENT_NEWS_SPOKEN_TEXT);
+    && $cf->query('SELECT body FROM email_consent_texts WHERE id = ' . (int) $lc['text_id'])->fetchColumn() === EMAIL_CONSENT_VISITOR_TEXT);
 ct_user($cf, 112, 'Musa', '1st_Timer');
 email_capture_after_save($cf, 112, 'musa@hodlekki.org', 'embrace', 901, true);
 ct_ok('a church address is ignored (no link, no consent)', email_address_state($cf, 112)['pending'] === null && email_consent_state($cf, 112) === 'none');
@@ -859,6 +860,32 @@ ct_eq('no email, nothing recorded', 'none', email_consent_state($cf, 112));
 email_capture_after_save($cf, 111, 'lara.new@yahoo.com', 'embrace', 901, false);
 ct_eq('a changed address starts a new link', 'lara.new@yahoo.com', email_address_state($cf, 111)['pending']);
 ct_eq('…and an unticked box withdraws nothing', 'granted', email_consent_state($cf, 111));
+email_consent_record($cf, 111, 'withdrawn', 'one_click');
+email_capture_after_save($cf, 111, 'lara.new@yahoo.com', 'embrace', 901, true);
+email_capture_after_save($cf, 111, 'lara.third@yahoo.com', 'embrace', 901, true);
+ct_eq('a pre-ticked box never undoes an unsubscribe (re-save or new address)', 'withdrawn', email_consent_state($cf, 111));
+
+// Regression (#120): a page whose own forms are CSRF-checked must not be served
+// with Referrer-Policy no-referrer — browsers then send "Origin: null" on its
+// own POST and csrf_same_origin() refuses it ("open too long").
+$root = dirname(__DIR__, 2);
+$noRefBad = [];
+foreach (glob($root . '/{,*/,*/*/}.htaccess', GLOB_BRACE) ?: [] as $ht) {
+    $dir = dirname($ht);
+    $hasCsrfForm = false;
+    foreach (glob($dir . '/*.php') ?: [] as $php) {
+        $src = (string) file_get_contents($php);
+        if (str_contains($src, 'ui_csrf_field(') || str_contains($src, 'csrf_valid(') || str_contains($src, 'ui_standalone_csrf_ok(')) {
+            $hasCsrfForm = true;
+            break;
+        }
+    }
+    if ($hasCsrfForm && preg_match('/Referrer-Policy\s+"?no-referrer"?\s*$/mi', (string) file_get_contents($ht))) {
+        $noRefBad[] = substr($ht, strlen($root) + 1);
+    }
+}
+ct_eq('no folder with CSRF-checked forms sends Referrer-Policy no-referrer', [], $noRefBad);
+ct_ok('email/.htaccess keeps same-origin', (bool) preg_match('/Referrer-Policy\s+"same-origin"/', (string) file_get_contents($root . '/email/.htaccess')));
 
 // ===========================================================================
 ct_section('16b3. The Connect card cannot be used to mail strangers');

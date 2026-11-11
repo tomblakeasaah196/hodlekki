@@ -15,14 +15,20 @@
 
 const EMAIL_CONSENT_NEWS_TEXT = 'Yes, Household of David Lekki may email me church news, service reminders and messages from the pastoral team. I can unsubscribe at any time with the link in every email.';
 
-// What an Embrace worker reads out when they record the answer in person.
-const EMAIL_CONSENT_NEWS_SPOKEN_TEXT = 'Asked in person by an Embrace worker: "May Household of David Lekki email you church news, service reminders and messages from the pastoral team? You can unsubscribe at any time with the link in every email." The person said yes.';
+// Visitors (Connect card, Embrace first-timer entry): a box that starts TICKED
+// (owner's decision, 11 Nov 2026, on record after the NDPA point was raised).
+// It is recorded honestly as method 'prechecked' — a pre-ticked box left
+// ticked — never as a typed or spoken yes. The recorded wording is exactly the
+// label and the details shown behind (i).
+const EMAIL_CONSENT_VISITOR_LABEL   = 'Stay in touch with us';
+const EMAIL_CONSENT_VISITOR_DETAILS = 'Church news, service reminders and messages from the pastoral team, by email. One tap to stop, in every email.';
+const EMAIL_CONSENT_VISITOR_TEXT    = EMAIL_CONSENT_VISITOR_LABEL . ' — ' . EMAIL_CONSENT_VISITOR_DETAILS . ' (box ticked in advance, left ticked)';
 
 const EMAIL_CONSENT_PURPOSES = ['news'];
 const EMAIL_CONSENT_CHANNELS = ['email', 'sms'];
 const EMAIL_CONSENT_ACTIONS  = ['granted', 'withdrawn'];
 const EMAIL_CONSENT_METHODS  = [
-    'connect_form', 'embrace_entry', 'signin_prompt', 'profile',
+    'connect_form', 'embrace_entry', 'prechecked', 'signin_prompt', 'profile',
     'unsubscribe_link', 'one_click', 'complaint', 'staff', 'import',
 ];
 

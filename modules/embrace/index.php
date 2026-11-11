@@ -1,6 +1,7 @@
 <?php
 // /modules/embrace/index.php
-require_once '../../includes/header.php'; 
+require_once '../../includes/header.php';
+require_once '../../includes/campaigns/consent.php'; // the "Stay in touch" wording, recorded exactly as shown
 ?>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -205,10 +206,10 @@ require_once '../../includes/header.php';
                         <div>
                             <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Email</label>
                             <input type="email" name="email" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-hodRed outline-none text-sm">
-                            <p class="text-xs text-gray-500 mt-1">Their own address (not a church one). They will get a link to confirm it.</p>
+                            <p class="text-xs text-gray-500 mt-1">Their own address. They get a link to confirm it.</p>
                             <label class="flex items-start gap-2 mt-2 cursor-pointer select-none">
-                                <input type="checkbox" name="email_news" value="1" class="mt-0.5 shrink-0">
-                                <span class="text-xs text-gray-600"><strong>They said yes to church news by email.</strong> Ask first: "May we email you church news, service reminders and messages from the pastoral team? You can unsubscribe at any time." Leave unticked if they did not say yes.</span>
+                                <input type="checkbox" name="email_news" value="1" checked class="mt-0.5 shrink-0">
+                                <span class="text-xs text-gray-600"><strong><?= htmlspecialchars(EMAIL_CONSENT_VISITOR_LABEL, ENT_QUOTES, 'UTF-8') ?></strong> — <?= htmlspecialchars(EMAIL_CONSENT_VISITOR_DETAILS, ENT_QUOTES, 'UTF-8') ?> Untick if they would rather not.</span>
                             </label>
                         </div>
                     </div>

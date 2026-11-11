@@ -245,10 +245,16 @@ $site = static fn (string $path): string => htmlspecialchars(site_url($path), EN
                         <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Email (Optional)</label>
                         <input type="email" name="email" maxlength="100" autocomplete="email" inputmode="email" placeholder="Your personal email, e.g. name@gmail.com" class="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 outline-none focus:border-hodRed focus:ring-2 focus:ring-hodRed/20 transition-all shadow-sm">
                         <p class="text-xs text-gray-500 font-medium mt-2">We will send a link to confirm it.</p>
-                        <label class="flex items-start gap-3 mt-3 cursor-pointer select-none">
-                            <input type="checkbox" name="email_news" value="1" class="mt-0.5 w-5 h-5 shrink-0 text-hodRed rounded border-gray-300 focus:ring-hodRed cursor-pointer">
-                            <span class="text-xs font-semibold text-gray-600 leading-relaxed"><?= htmlspecialchars(EMAIL_CONSENT_NEWS_TEXT, ENT_QUOTES, 'UTF-8') ?> <span class="text-gray-400 font-medium">(Optional)</span></span>
-                        </label>
+                        <div class="flex items-start gap-3 mt-3">
+                            <label class="flex items-center gap-3 cursor-pointer select-none">
+                                <input type="checkbox" name="email_news" value="1" checked class="w-5 h-5 shrink-0 text-hodRed rounded border-gray-300 focus:ring-hodRed cursor-pointer">
+                                <span class="text-sm font-bold text-gray-700"><?= htmlspecialchars(EMAIL_CONSENT_VISITOR_LABEL, ENT_QUOTES, 'UTF-8') ?></span>
+                            </label>
+                            <details class="text-xs text-gray-500">
+                                <summary class="cursor-pointer select-none font-bold text-gray-400" aria-label="What this means">(i)</summary>
+                                <p class="mt-1 leading-relaxed"><?= htmlspecialchars(EMAIL_CONSENT_VISITOR_DETAILS, ENT_QUOTES, 'UTF-8') ?></p>
+                            </details>
+                        </div>
                     </div>
                 </div>
 
