@@ -99,6 +99,9 @@ jobs:
         with:
           php-version: '8.3'
           coverage: none
+          # Named, not assumed: a runner image update (Nov 2026) stopped
+          # shipping pdo_sqlite by default and the SQLite suites failed.
+          extensions: pdo_sqlite, sqlite3, mbstring, intl, gd, zip, sodium
 
       - name: PHP syntax check (php -l over the tree)
         run: |
