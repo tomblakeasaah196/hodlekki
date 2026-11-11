@@ -317,6 +317,11 @@ jobs:
         # against a scratch docroot: no script file may ever be served from uploads.
         run: php tests/upload_guard/run.php
 
+      - name: Mail tests (protocol over real sockets, vault, quota, uapi rules, static rules)
+        # No database, no network beyond 127.0.0.1: tests/mail/run.php runs unit.php,
+        # protocol_unit.php and protocol_wire.php (scripted IMAP and SMTP servers).
+        run: php tests/mail/run.php
+
       - name: UI foundation tests (navigation parity, CSRF, CSP, components, ratchet)
         run: |
           set -euo pipefail
@@ -489,6 +494,14 @@ jobs:
           SE_TEST_DB_NAME: se_it
         run: php tests/campaigns/integration.php
 
+      - name: Mail on a real database (access through can(), quota, jobs, export, sync)
+        env:
+          SE_TEST_DB_HOST: 127.0.0.1
+          SE_TEST_DB_PORT: '3306'
+          SE_TEST_DB_USER: root
+          SE_TEST_DB_PASS: root
+          SE_TEST_DB_NAME: se_it
+        run: php tests/mail/integration.php
   deploy:
     name: Deploy via webhook
     needs: [lint, integration]
