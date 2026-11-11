@@ -84,6 +84,21 @@ tar cf - --exclude-from="$REPO/.deployignore" -C "$REPO" . \
   | ( cd "$DEPLOYPATH" && tar xpf - --no-overwrite-dir )
 echo "[deploy] tar -> $DEPLOYPATH done"
 
+# 2a. Retired files: tar never deletes, so files removed from the repo are
+#     removed from the docroot here, from the reviewed list in
+#     bin/retired_files.txt (relative paths only; anything odd is skipped).
+if [ -f "$REPO/bin/retired_files.txt" ]; then
+    while IFS= read -r rel || [ -n "$rel" ]; do
+        rel="${rel%$''}"
+        case "$rel" in ''|'#'*) continue ;; esac
+        case "$rel" in /*|*..*) echo "[deploy] retired: skipped unsafe path '$rel'" >&2; continue ;; esac
+        if [ -f "$DEPLOYPATH/$rel" ]; then
+            rm -f -- "$DEPLOYPATH/$rel"
+            echo "[deploy] retired: removed $rel"
+        fi
+    done < "$REPO/bin/retired_files.txt"
+fi
+
 # 2b. Origin lock: only Cloudflare may reach the site (bin/edge_lock.sh). On
 #     when the docroot .env has EDGE_TOKEN, off when it has none. Run from the
 #     repo checkout, so the script itself is always the version just pulled.
