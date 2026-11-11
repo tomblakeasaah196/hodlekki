@@ -114,6 +114,8 @@ ok('System Health is the monitor module',
     ui_nav_can_access('system_health', $navCtx(['monitor' => ['view' => $sc(true)]])) && !ui_nav_can_access('system_health', $navCtx([])));
 ok('Assimilation volunteers see Assimilation', ui_nav_can_access('assimilation', ['perm' => null, 'assim_team' => true, 'se_crew' => false]));
 ok('Special Events crew see Special Events', ui_nav_can_access('special_events', ['perm' => null, 'assim_team' => false, 'se_crew' => true]));
+ok('people who work from a mailbox see Mail (its own flag, from mail_nav_visible())',
+    ui_nav_can_access('mail', ['perm' => null, 'mail_nav' => true]) && !ui_nav_can_access('mail', ['perm' => null]));
 ok('nobody resolved, nothing shows', !ui_nav_can_access('reach', ['perm' => null]));
 ok('an unknown key is refused', !ui_nav_can_access('nonexistent', $navCtx([], true)));
 $unmapped = array_filter($keys, static fn (string $k): bool => !isset(perm_modules()[ui_nav_module($k)]));

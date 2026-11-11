@@ -16,6 +16,8 @@ return [
     '/assets/ui/js/pages/embrace.js' => '8320d766e6e4',
     '/assets/ui/js/pages/idi.js' => '6e14ed9ed252',
     '/assets/ui/js/pages/library.js' => 'a9b1ff626085',
+    '/assets/ui/js/pages/mail-mailboxes.js' => 'bb72fc0db0b6',
+    '/assets/ui/js/pages/mail.js' => '05f30adc1681',
     '/assets/ui/js/pages/member-portal.js' => 'd65ff06f6dcf',
     '/assets/ui/js/pages/monitor.js' => 'd912c9c8e27f',
     '/assets/ui/js/pages/profile.js' => 'ad24c9b115e7',
