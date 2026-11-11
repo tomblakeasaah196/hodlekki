@@ -1,0 +1,14 @@
+# /email/.htaccess — the public email pages only.
+# Each file here is a thin page over includes/campaigns/ (docs/EMAIL.md). Only
+# the pages listed below are served; anything else in this folder (a stray
+# backup, a test file left by a deploy that never deletes) is refused.
+Options -Indexes
+
+<FilesMatch "^(?!confirm\.php$).*">
+    Require all denied
+</FilesMatch>
+
+# These pages carry personal tokens in their links: never index them, and
+# never leak the link to another site through the Referer header.
+Header set X-Robots-Tag "noindex, nofollow, noarchive"
+Header set Referrer-Policy "no-referrer"

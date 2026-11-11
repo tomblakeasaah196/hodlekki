@@ -6,7 +6,7 @@
 // drifted from production proves nothing), stand-ins for the platform tables
 // the module reads, a pinned Lagos clock and a fake mail transport.
 
-const CT_MIGRATION = '20261127090000_campaigns_core.sql';
+const CT_MIGRATIONS = ['20261127090000_campaigns_core.sql', '20261129090000_campaigns_identity.sql'];
 
 $GLOBALS['ct_passed'] = 0;
 $GLOBALS['ct_failed'] = 0;
@@ -35,10 +35,13 @@ function ct_section(string $name): void
 /** The module's migration, translated to SQLite. @return list<string> */
 function ct_schema_sql(): array
 {
-    $sql = (string) file_get_contents(__DIR__ . '/../../db/migrations/' . CT_MIGRATION);
+    $sql = '';
+    foreach (CT_MIGRATIONS as $file) {
+        $sql .= (string) file_get_contents(__DIR__ . '/../../db/migrations/' . $file) . PHP_EOL;
+    }
     $sql = preg_replace('/^\s*--.*$/m', '', $sql) ?? $sql;
     if (!preg_match_all('/CREATE TABLE IF NOT EXISTS (\w+) \((.*?)\)\s*ENGINE=[^;]*;/s', $sql, $tables, PREG_SET_ORDER)) {
-        throw new RuntimeException('No CREATE TABLE statements found in ' . CT_MIGRATION);
+        throw new RuntimeException('No CREATE TABLE statements found in the campaigns migrations');
     }
     $out = [];
     foreach ($tables as [, $name, $body]) {
@@ -89,7 +92,8 @@ function ct_platform_sql(): array
     return [
         "CREATE TABLE users (id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, email TEXT UNIQUE, phone TEXT,
             physical_address TEXT, spiritual_status TEXT, attendance_status TEXT, picture_path TEXT,
-            region_id INTEGER, created_at TEXT, awol_exempt INTEGER NOT NULL DEFAULT 0)",
+            region_id INTEGER, created_at TEXT, awol_exempt INTEGER NOT NULL DEFAULT 0,
+            password_hash TEXT, account_status TEXT DEFAULT 'active')",
         'CREATE TABLE regions (id INTEGER PRIMARY KEY, name TEXT, pastor_id INTEGER)',
         'CREATE TABLE events (id INTEGER PRIMARY KEY, title TEXT, event_category TEXT, event_date TEXT)',
         'CREATE TABLE checkins (id INTEGER PRIMARY KEY, event_id INTEGER, user_id INTEGER, checkin_date TEXT)',

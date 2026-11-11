@@ -27,6 +27,7 @@ $_ENV['SITE_URL'] = 'https://hodlekki.org';
 $_ENV['MAIL_FROM_ADDRESS'] = 'system@hodlekki.org';
 $_ENV['SMS_VAULT_KEY'] = $_ENV['SMS_VAULT_KEY'] ?? str_repeat('ab', 32);
 
+require_once __DIR__ . '/../../includes/security_helpers.php';
 require_once __DIR__ . '/../../includes/sms_functions.php';
 require_once __DIR__ . '/../../includes/campaigns/bootstrap.php';
 require_once __DIR__ . '/lib.php';
@@ -122,6 +123,21 @@ ct_eq('status sent', 'sent', $row['status']);
 ct_eq('the mailbox finds it by the reply\'s Message-ID', 9001, campaign_mail_lookup($pdo, email_message_id_hash($tx['sent'][0]['message_id']))['user_id'] ?? null);
 ct_eq('a click is served from the stored targets', 'https://hodlekki.org/', email_track_click($pdo, $q['ref'], 0));
 ct_eq('one-click unsubscribe', true, email_unsubscribe($pdo, $q['ref'])['ok']);
+
+ct_section('Sign-in email and password reset');
+ct_ok('identity tables exist', email_identity_ready($pdo));
+$pdo->exec('DELETE FROM auth_reset_tokens');
+$pdo->exec('DELETE FROM auth_reset_requests');
+$pdo->exec('DELETE FROM email_prompt_skips');
+ct_eq('a confirmed personal email signs in', 9001, (int) (email_signin_lookup($pdo, 'ADA.IT@gmail.com')['user']['id'] ?? 0));
+ct_eq('Chi, with a link pending (and no confirmed email), gets the banner', 'banner', email_prompt_state($pdo, 9003));
+ct_at('2026-11-16 17:00');
+$req = email_reset_request($pdo, 'ada.it@gmail.com', '10.0.0.1');
+ct_eq('a reset link is queued', true, $req['sent']);
+$pw = 'Hallelujah-2027!';
+ct_eq('the link sets a new password once', true, email_reset_complete($pdo, $req['token'], $pw, $pw)['ok']);
+ct_eq('…and only once', 'USED', email_reset_complete($other, $req['token'], $pw, $pw)['code'] ?? null);
+ct_ok('the password works', password_verify($pw, (string) $pdo->query('SELECT password_hash FROM users WHERE id = 9001')->fetchColumn()));
 
 ct_section('Unique claims raise real duplicate-key errors');
 $pdo->exec("INSERT INTO automation_rules (module, kind, name, is_enabled, config_json, version, created_at)

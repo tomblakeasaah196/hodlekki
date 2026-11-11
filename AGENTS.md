@@ -1006,6 +1006,14 @@ contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
   across modules — all unique keys claimed before anything is queued.
 - SMS fallback only through SMS Studio's queue (`sms_campaigns` audience
   `automation` + `sms_queue`), never `sms_log`.
+- **Sign-in by personal email** (docs/EMAIL.md §2b): `api/auth_api.php` looks
+  people up with `email_signin_lookup()` (confirmed personal email first, then
+  `users.email`); `includes/header.php` sends anyone `email_prompt_state()`
+  calls "required" to `/auth/add_email.php`, which — like
+  `change_password.php` — must never include header.php. Reset links go only
+  to a confirmed personal email (`email_reset_request()` /
+  `email_reset_complete()`); keep the same-answer rule on the forgot page.
+  `email_settings.signin_prompt = 0` turns the prompt off.
 - Degrade before the migration: `campaigns_ready()` first, `FEATURE_NOT_READY`
   or nothing — never a fatal.
 - Tests: `php tests/campaigns/run.php` (SQLite, CI lint job) and

@@ -58,7 +58,7 @@ here builds SMTP settings in code.
   on Connect, and Embrace, Congregation and Profile all overwrite it. On
   confirmation the address is copied into `users.email` only when that column
   is EMPTY — whatever is there may be what the person signs in with, and
-  changing it is the sign-in PR's job. Nothing reads that copy back.
+  changing it would change how they sign in. Nothing reads that copy back.
 - **Never `@hodlekki.org`** (or a subdomain) and never `@hodlc.com`:
   `email_address_problem()` is the only validator; every screen calls it.
   Reset links must reach someone who is locked out of the ERP.
@@ -143,6 +143,41 @@ here builds SMTP settings in code.
   step, so day one is not a flood of pastor alerts.
 
 ---
+
+## 2b. Sign-in and reset (`includes/campaigns/identity.php`)
+
+| Page | What |
+| ---- | ---- |
+| `auth/add_email.php` | The required prompt. `includes/header.php` sends a signed-in person here while `email_prompt_state()` says `required`; it never includes header.php (it would loop), like `change_password.php`. |
+| `email/confirm.php` | The link in the confirmation email. GET shows the address and one button; the POST confirms (mail scanners open links, they do not press buttons). `email/.htaccess` serves only the listed pages. |
+| `auth/forgot_password.php` | "Forgot your password?" (linked from the login page). Always the same answer. |
+| `auth/reset_password.php` | The reset link's page: new password, the one policy, every session signed out. |
+
+All four are **standalone strict pages** (`includes/ui/standalone.php`): the
+foundation's tokens, components, `ui.js` and strict CSP, one centred card,
+plain POST forms with the CSRF field (no page script).
+
+- **The prompt** (`email_prompt_state()`, cached 5 minutes in the session):
+  no confirmed address, no link sent in the last 7 days, and no "I don't have
+  an email" in the last 90 days → **required**; a link pending under 7 days →
+  in, with a banner on every page (resend in one tap, or change it);
+  confirmed → nothing. `email_settings.signin_prompt = 0` switches the prompt
+  off without a deploy.
+- **Sign-in** (`email_signin_lookup()`, used by `api/auth_api.php`): a
+  confirmed personal email first, then `users.email`. A church sign-in name
+  (`@hodlc.com`) of someone who has confirmed a personal email gets, only after
+  the right password, "You now sign in with your personal email (g•••@gmail.com)".
+  Lockout, attempts and audit rows are unchanged.
+- **Reset**: the link goes only to the confirmed personal email of an active
+  account (`email_reset_request()`), throttled 10 an hour per requester and 3
+  per identifier (both stored as hashes), token sha256-stored, 30 minutes,
+  once; a newer link or any password change makes older links useless.
+  `email_reset_complete()` uses `security_password_problems()` and the AGENTS
+  credential-change rule (password_changed_at, lockout cleared,
+  `security_revoke_sessions()`), then emails a "password changed" notice.
+  `setup_password.php` stays first-time only.
+- Schema: `db/migrations/20261129090000_campaigns_identity.sql`
+  (`auth_reset_tokens`, `auth_reset_requests`, `email_prompt_skips`).
 
 ## 3. For other modules
 
