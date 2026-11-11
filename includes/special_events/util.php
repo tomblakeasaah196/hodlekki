@@ -603,15 +603,16 @@ function se_write_file_atomic(string $path, string $contents): bool
 // URLs (§8.6.1)
 // --------------------------------------------------------------------------
 
-/** The site's origin, e.g. https://hodlc.lpc.cm (no trailing slash). */
+/**
+ * The site's origin, e.g. https://hodlekki.org (no trailing slash): SITE_URL in
+ * .env (includes/site_url.php), so event links, QR codes and SMS never carry
+ * connect.hodlekki.org or the old hodlc.lpc.cm address.
+ */
 function se_site_origin(): string
 {
-    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'hodlc.lpc.cm');
-    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
-        || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
+    require_once dirname(__DIR__) . '/site_url.php';
 
-    return ($https ? 'https://' : 'http://') . $host;
+    return site_origin();
 }
 
 /** `/e/<slug>` plus an optional sub-path, as an absolute URL. */

@@ -1,5 +1,5 @@
 # tar --exclude-from patterns used by bin/deploy.sh when copying
-# /home/smartqaq/repositories/hodlekki/  ->  /home/smartqaq/public_html/hodlc.lpc.cm/
+# /home/smartqaq/repositories/hodlekki/  ->  /home/smartqaq/public_html/hodlekki/
 #
 # FORMAT: this file is read by GNU tar, not rsync. Two rules matter:
 #

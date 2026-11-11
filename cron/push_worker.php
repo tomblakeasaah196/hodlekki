@@ -9,7 +9,7 @@
  * devices. No module has to opt in: writing a notification is enough.
  *
  * Run every minute via cron (CLI only):
- *     * * * * *  php /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php >/dev/null 2>&1
+ *     * * * * *  php /home/smartqaq/public_html/hodlekki/cron/push_worker.php >/dev/null 2>&1
  *
  * includes/push_dispatch.php already sends most messages within milliseconds
  * of the request that created them, so in normal operation this worker finds

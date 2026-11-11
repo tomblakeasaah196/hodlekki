@@ -73,10 +73,10 @@ function payload(count = ITEMS.length) {
         text: {
             organizer: 'Envision', title: 'Chara', edition: '2026',
             tagline: 'One night of joy, games and the word.',
-            venue: 'Household of David, Lekki', url: 'hodlc.lpc.cm/e/chara',
+            venue: 'Household of David, Lekki', url: 'hodlekki.org/e/chara',
             heading: 'The programme',
         },
-        qr: 'https://hodlc.lpc.cm/e/chara',
+        qr: 'https://hodlekki.org/e/chara',
         hero: null,
         colors: {
             primary: '#1D356A', secondary: '#D11920', accent: '#F5C518',

@@ -199,7 +199,7 @@ function render(overrides = {}) {
     return renderTemplate(TEMPLATE, {
         text: { title: 'Chara', venue: 'HOD Lekki Centre' },
         colors: { bg: '#0B0D13', primary: '#1D356A' },
-        qr: { ref_url: 'https://hodlc.lpc.cm/e/chara?r=AB12CD' },
+        qr: { ref_url: 'https://hodlekki.org/e/chara?r=AB12CD' },
         flags: { has_photo: false },
         ...overrides,
     });
@@ -352,10 +352,10 @@ for (const file of ['im_going.svg', 'im_going_square.svg']) {
             text: {
                 title: 'Chara', edition: '2026', headline: "I'm going!", first_name: 'Ada',
                 date: 'Sat 24 Oct', time: '5:00 PM', venue: 'HOD Lekki Centre',
-                url: 'hodlc.lpc.cm/e/chara', organizer: 'Envision', signature: 'Chara 2026 by Envision',
+                url: 'hodlekki.org/e/chara', organizer: 'Envision', signature: 'Chara 2026 by Envision',
             },
             colors: { bg: '#0B0D13', primary: '#1D356A', secondary: '#D11920', accent: '#F5C518' },
-            qr: { ref_url: 'https://hodlc.lpc.cm/e/chara?r=AB12CD' },
+            qr: { ref_url: 'https://hodlekki.org/e/chara?r=AB12CD' },
             flags: { has_photo: false },
         });
 
@@ -382,11 +382,11 @@ const POSTER_DATA = {
     text: {
         organizer: 'Envision', title: 'Chara', edition: '2026', headline: 'Check in here',
         sub: 'Scan with your phone camera', date: 'Sat 24 Oct 2026', time: 'Doors 4:30 PM',
-        venue: 'HOD Lekki Centre', url: 'hodlc.lpc.cm/e/chara/in',
+        venue: 'HOD Lekki Centre', url: 'hodlekki.org/e/chara/in',
         help: 'No phone? The desk will check you in.', signature: 'Chara 2026 by Envision',
     },
     colors: { bg: '#0B0D13', primary: '#1D356A', secondary: '#D11920', accent: '#F5C518' },
-    qr: { checkin_url: 'https://hodlc.lpc.cm/e/chara/in' },
+    qr: { checkin_url: 'https://hodlekki.org/e/chara/in' },
     flags: { has_venue: true },
 };
 

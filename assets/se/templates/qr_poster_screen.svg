@@ -63,7 +63,7 @@
   <!-- ...and the same address in words, for the camera that will not focus -->
   <rect id="se__fill__primary" x="900" y="600" width="760" height="94" rx="47" fill="#1D356A"/>
   <text id="se__text__url" x="1280" y="658" font-size="40" font-weight="700"
-        text-anchor="middle" fill="#FFFFFF">hodlc.lpc.cm/e/chara/in</text>
+        text-anchor="middle" fill="#FFFFFF">hodlekki.org/e/chara/in</text>
   <rect id="se__box__url--fit" x="940" y="616" width="680" height="62"/>
 
   <text id="se__text__date" x="900" y="760" font-size="34" font-weight="700"

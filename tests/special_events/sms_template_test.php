@@ -109,7 +109,7 @@ ok('a longer venue produces a longer message', $long['chars'] > $short['chars'])
 ok('and the page count is reported honestly', $long['pages'] >= $short['pages']);
 
 echo "    the manage link is costed at its real length\n";
-// A 22-character token on https://hodlc.lpc.cm/e/chara/me/ is 53 characters
+// A 22-character token on https://hodlekki.org/e/chara/me/ is 53 characters
 // (Appendix E). The preview must spend those characters, not pretend
 // {{link}} is six.
 $preview = se_message_preview('{{link}}', $event, $days, [], $settings);

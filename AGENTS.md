@@ -201,6 +201,13 @@ never treat it as proof the engine behaves.
   their own.
 - **New cron job:** `cron/<name>.php`, CLI-only guard, and document the
   crontab line in the README.
+- **Links that leave the browser** (QR codes, SMS, push, emails, posters,
+  share cards): `site_url()` / `site_origin()` / `site_host()` from
+  `includes/site_url.php` — never `$_SERVER['HTTP_HOST']` and never a
+  hard-coded domain. The site is hodlekki.org; connect.hodlekki.org is only
+  the public Connect page.
+- **Sending email:** `hod_send_mail()` in `includes/mailer.php` (system@ sends,
+  replies go to embrace@). Never build SMTP settings in code.
 
 ## Deployment (agents: know this before you push)
 
@@ -209,7 +216,7 @@ never treat it as proof the engine behaves.
   2. Secret sweep (`define('SMS_VAULT_KEY', ...)`, hardcoded `DB_PASS=`,
      or a tracked `.env` all fail the run).
   3. POST to the deploy webhook at
-     `https://hodlc.lpc.cm/webhook/deploy.php` with header
+     `https://hodlekki.org/webhook/deploy.php` with header
      `X-Deploy-Token: <DEPLOY_WEBHOOK_SECRET>`. Output streams back
      into the Actions log.
 - **Single source of truth: [bin/deploy.sh](bin/deploy.sh).** Both the
@@ -217,7 +224,7 @@ never treat it as proof the engine behaves.
   script:
   1. `git fetch origin main && git reset --hard origin/main` in
      `/home/smartqaq/repositories/hodlekki`.
-  2. Copy repo → `/home/smartqaq/public_html/hodlc.lpc.cm/` by streaming
+  2. Copy repo → `/home/smartqaq/public_html/hodlekki/` by streaming
      through **`tar`** (rsync is not installed on this host), applying
      `--exclude-from=.deployignore` so `.env`, root `.htaccess`,
      `.user.ini`, `php.ini`, `uploads/`, `assets/uploads/`, and
@@ -259,7 +266,7 @@ never treat it as proof the engine behaves.
   `tests/assimilation_export_test.php`.
 - **The deployed copy of this workflow is a fossil — do not read it.**
   `.deployignore` excludes `./.github`, and `bin/deploy.sh` never deletes, so
-  `/public_html/hodlc.lpc.cm/.github/workflows/deploy.yml` is frozen at
+  `/public_html/hodlekki/.github/workflows/deploy.yml` is frozen at
   whatever was there before that exclusion was added. It is missing whole jobs.
   The file in git is the only one that runs; editing from the docroot copy
   silently deletes everything added since.
@@ -506,7 +513,7 @@ via `source(none)`). Consequences:
 - `SE_HASH_PEPPER` (64 hex) is **required** in `.env`. Without it the module
   refuses to issue tokens. Rotating it invalidates every device cookie and
   manage link.
-- Cron, every 5 minutes: `php /home/smartqaq/public_html/hodlc.lpc.cm/cron/special_events.php`
+- Cron, every 5 minutes: `php /home/smartqaq/public_html/hodlekki/cron/special_events.php`
   (reminders, retention, purges). Arrives with PR4.
 - After every deploy, check **Studio → Settings → Health → Schema**.
 
@@ -616,7 +623,7 @@ notification, call `push_send_to_user()` or `push_enqueue()` directly.
     stale null cursor, concluded it was the first run ever, and would have
     silently dropped everything queued in between.
 - **Operations:** cron every minute,
-  `php /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php`.
+  `php /home/smartqaq/public_html/hodlekki/cron/push_worker.php`.
   `php cron/push_worker.php --status` prints readiness, queue depth, device
   count and the cursor. Kill switches live in `push_config` (`enabled`,
   `inline_dispatch`).

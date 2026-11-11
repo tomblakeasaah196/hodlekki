@@ -4,14 +4,14 @@ Every push to `main` triggers `.github/workflows/deploy.yml`, which:
 
 1. Runs `php -l` across the tree and a secret sweep (fails on `.env`,
    hardcoded DB creds, or a hardcoded `SMS_VAULT_KEY`).
-2. POSTs to a webhook on the live site: `https://hodlc.lpc.cm/webhook/deploy.php`,
+2. POSTs to a webhook on the live site: `https://hodlekki.org/webhook/deploy.php`,
    with header `X-Deploy-Token: <DEPLOY_WEBHOOK_SECRET>`.
 3. The webhook verifies the token (constant-time compare), then exec's
    [`bin/deploy.sh`](bin/deploy.sh) on the server.
 4. `bin/deploy.sh` (held under a `flock` so two deploys can't collide):
    a. `git fetch origin main && git reset --hard origin/main` on
       `/home/smartqaq/repositories/hodlekki`.
-   b. Copies the repo → `/home/smartqaq/public_html/hodlc.lpc.cm/` by
+   b. Copies the repo → `/home/smartqaq/public_html/hodlekki/` by
       streaming through `tar` (rsync is not installed on this host),
       applying `--exclude-from=.deployignore` so `.env`, root
       `.htaccess`, `.user.ini`, `php.ini`, `uploads/`, `assets/uploads/`,
@@ -57,6 +57,43 @@ can still be missing in the browser.
   `extension=fileinfo` to the cPanel-generated `php.ini`** — it is managed by
   cPanel, and editing it by hand is the owner's call, not a deploy step.
 
+## Addresses, origin lock and email (November 2026)
+
+The site moved from **hodlc.lpc.cm** (a subdomain borrowed from lpc.cm) to its
+own domain, **hodlekki.org**, on the same cPanel account.
+
+- **hodlekki.org** — the app. cPanel addon domain, docroot
+  `/home/smartqaq/public_html/hodlekki`. `www.hodlekki.org` redirects to it
+  (a Cloudflare redirect rule).
+- **connect.hodlekki.org** — the public Connect page. Same docroot; `index.php`
+  serves `connect.php` at its root, and that page's links go to hodlekki.org.
+- **hodlc.lpc.cm** — redirects every path to hodlekki.org for one month after the
+  switch, then is removed. Its folder keeps only the redirect.
+- **DNS** is on Cloudflare (zone hodlekki.org), set up like nfelia.com: the web
+  names proxied, `mail.` and `webmail.` straight to the server (DNS only), MX,
+  SPF, cPanel's DKIM key, DMARC (`p=none`, reports to dmarc@hodlekki.org).
+  SSL mode Full (strict) with a Cloudflare Origin Certificate for hodlekki.org
+  and *.hodlekki.org (to 2041), whose key was generated in cPanel.
+- **Links** that leave the browser are built from `SITE_URL` in `.env`
+  (`includes/site_url.php`), never from the request's host.
+
+**Origin lock.** Cloudflare adds a secret `X-Hodlekki-Edge` header to every
+request it forwards (a Transform Rule in the hodlekki.org zone).
+`bin/edge_lock.sh`, run by every deploy, writes a block at the top of the
+docroot `.htaccess` that refuses anything without it, using `EDGE_TOKEN` from
+the docroot `.env` — or removes the block when `.env` has no `EDGE_TOKEN`. The
+order matters, or everyone (the deploy webhook too) is locked out: the
+Cloudflare rule first, then `EDGE_TOKEN` in `.env`, then a deploy or
+`bash /home/smartqaq/repositories/hodlekki/bin/edge_lock.sh`. To unlock in an
+emergency, delete the `EDGE_TOKEN` line and run that script again.
+
+**Email.** `includes/mailer.php` sends over SMTP through the server's own mail
+service (`MAIL_HOST=localhost`, port 465, ssl), as **system@hodlekki.org**, with
+replies addressed to **embrace@hodlekki.org**. The `MAIL_*` settings are in
+`.env.example`; the password is the system@ mailbox's, set in cPanel → Email
+Accounts and pasted into `.env` by hand. Check it with
+`/usr/local/bin/ea-php83 bin/mail_test.php you@example.com` from the docroot.
+
 ## Why a webhook and not cPanel's UAPI
 
 I first wired this against cPanel's `VersionControl::update` UAPI. That
@@ -91,7 +128,7 @@ recipe, different trigger.
   ```
   Copy the 64-char hex string.
 - **Add the secret to `.env`** on the server. In cPanel → File Manager
-  navigate to `public_html/hodlc.lpc.cm/`, edit `.env`, and append:
+  navigate to `public_html/hodlekki/`, edit `.env`, and append:
   ```
   DEPLOY_WEBHOOK_SECRET="paste-the-64-char-string-here"
   ```
@@ -104,7 +141,7 @@ recipe, different trigger.
   3. Click **Deploy HEAD Commit** (runs `.cpanel.yml`, which invokes
      `bin/deploy.sh`).
   From this point on the webhook is live at
-  `https://hodlc.lpc.cm/webhook/deploy.php`.
+  `https://hodlekki.org/webhook/deploy.php`.
 
 ### 2. In GitHub
 
@@ -120,7 +157,7 @@ Go to https://github.com/tomblakeasaah196/hodlekki → Settings.
 
 | Name                 | Value                                                     |
 | -------------------- | --------------------------------------------------------- |
-| `DEPLOY_WEBHOOK_URL` | `https://hodlc.lpc.cm/webhook/deploy.php`                 |
+| `DEPLOY_WEBHOOK_URL` | `https://hodlekki.org/webhook/deploy.php`                 |
 
 The old `CPANEL_*` variables and the `CPANEL_API_TOKEN` secret are no
 longer used and can be deleted (or left — the workflow ignores them).

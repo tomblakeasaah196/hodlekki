@@ -4,7 +4,7 @@
 |---|---|
 | **Module** | Special Events (the "Envision Studio") |
 | **Code name / prefix** | `special_events` · database tables `se_*` · PHP functions `se_*()` |
-| **Public URL shape** | `https://hodlc.lpc.cm/e/<slug>` — e.g. `https://hodlc.lpc.cm/e/chara` |
+| **Public URL shape** | `https://hodlekki.org/e/<slug>` — e.g. `https://hodlekki.org/e/chara` |
 | **First event** | **Chara 2026** — Envision's karaoke & games night (*chara*, χαρά, is Greek for "joy"). Target: last week of October 2026, date to be confirmed. |
 | **Organiser** | Envision, the creative department of Household of David Lekki Centre |
 | **Owner** | Tom-Blake Asaah |
@@ -158,7 +158,7 @@ Every decision below is binding for v1. "Source" is where it was made: **M** = m
 |---|---|---|
 | D1 | First event **Chara** is **3–4 weeks away**. Ship in phases: registration first, then check-in + teams, then the live show, then post-event (§25). | I |
 | D2 | **Fully standalone**: own `se_*` tables only. Nothing is written to `events`, `event_registrations`, `checkins` or `attendance`. Members are *recognised* by reading `users` (read-only). Other departments receive data only through the explicit hand-off (D17). | I |
-| D3 | **Shortest links**: `https://hodlc.lpc.cm/e/<slug>` with a slug entered at creation (Chara → `chara`). Sub-paths for the other surfaces (`/e/chara/in`, `/play`, `/stage`, …). Slug changes leave permanent redirects so printed QR codes never break. | I |
+| D3 | **Shortest links**: `https://hodlekki.org/e/<slug>` with a slug entered at creation (Chara → `chara`). Sub-paths for the other surfaces (`/e/chara/in`, `/play`, `/stage`, …). Slug changes leave permanent redirects so printed QR codes never break. | I |
 | D4 | Realtime by **polling static JSON snapshots** on the current host, with a **driver interface** that can switch on a push service (Ably) by configuration later. | I |
 | D5 | Front-end for `/e/` surfaces and the Studio: **no-build modern** — native ES modules, Preact + htm + `@preact/signals` (vendored), GSAP (+ScrollTrigger, SplitText), precompiled Tailwind v4 + per-event CSS variables. Allowed **in this module only**; AGENTS.md is updated accordingly. | I, G |
 | D6 | Access: **Envision studio + per-event crew**. Super Admin, Resident/Assoc Pastors and Envision HOD/Director manage all events; any active Envision member can create events (and becomes Producer). Per-event crew roles: Producer, Host, Game master, Desk, Karaoke DJ, Media, Follow-up, Viewer — assignable to any member. | I |
@@ -346,7 +346,7 @@ Each journey lists the steps and the system behaviour behind them. Section refer
 
 1. **Studio → Special Events → "New event"** (or **"Clone…"** on a past event, §10.10).
 2. **Details.** Title `Chara`, edition `2026`, tagline, rich description, organiser label `Envision`, venue (name, address, map link, notes such as "Check-in is downstairs"). Then the **days**: for a single day, one row (doors open 4:00 PM, starts 5:00 PM, ends 10:00 PM). For multi-day events, one row per day. Last on the tab, the **public page** panel: the portal's opening line, the countdown and hero-video switches, and the **Good to know** questions (S6) — the `settings.portal` branch, saved on its own through `portal_settings_save` so it never collides with the form above it.
-3. **Slug.** Type `chara`. The field validates live: format, reserved words, availability (§10.2). The preview shows `hodlc.lpc.cm/e/chara`.
+3. **Slug.** Type `chara`. The field validates live: format, reserved words, availability (§10.2). The preview shows `hodlekki.org/e/chara`.
 4. **Brand.** Paste the **primary** and **secondary** hex codes (optional accent). The derived palette appears immediately, with contrast badges on the live preview. **"Suggest palettes ✨"** returns four AI palettes built around the two colours, each with a mini portal/stage/team preview (§13.2, §15). Then pick the display and body fonts and upload the logo/wordmark, hero image and hero video (§14.1).
 5. **Registration & capacity.** Field toggles (email optional/required/hidden, how-heard, karaoke interest), consent mode and text, custom questions; online capacity `120`, auto-close ✓, waitlist ☐/✓, self-cancel ☐/✓, walk-ins `30` (hard cap ☐/✓), seats-left mode; registration window (opens now, closes at event start).
 6. **Programme.** Either build items by hand (drag to reorder, durations, public/featured flags, links to games/karaoke), or **"Import with AI"** from pasted text, a photo/screenshot or a PDF of the programme. Review the parsed table, then Apply (§10.7, §15.3).
@@ -444,7 +444,7 @@ Typing the phone again returns "You're already checked in, Ada O. — on another
 ### 8.1 Context
 
 ```
-                         ┌────────────────────────── hodlc.lpc.cm (cPanel · LiteSpeed · PHP 8.3 · MySQL) ──────────────────────────┐
+                         ┌────────────────────────── hodlekki.org (cPanel · LiteSpeed · PHP 8.3 · MySQL) ──────────────────────────┐
                          │                                                                                                          │
  Guests' phones ──HTTPS──┤  /e/<slug>/…     e/index.php  (router + HTML shell, CSP)  ──► assets/se/** (vendored ESM, CSS, SVG, SFX)  │
  (portal, check-in,      │                                                                                                          │
@@ -1810,7 +1810,7 @@ Auth columns: **none** (anyone), **device** (device cookie bound to a registrati
   "presenter": null,
   "score": { "points": 5400, "rank": 12, "of": 96 },
   "alerts": [ { "type": "karaoke_up_next", "at_ms": 1792863600000 } ],
-  "links": { "manage_url": "https://hodlc.lpc.cm/e/chara/me/…", "ref_url": "https://hodlc.lpc.cm/e/chara?r=K3P9QX" }
+  "links": { "manage_url": "https://hodlekki.org/e/chara/me/…", "ref_url": "https://hodlekki.org/e/chara?r=K3P9QX" }
 }
 ```
 
@@ -2168,7 +2168,7 @@ Status hero (confirmed ✓ / waitlist #n / cancelled), event chips, then cards: 
 - **Start overlay** "Click to start the show": unlocks audio, requests fullscreen and Wake Lock, starts the 1 s tick.
 - Persistent chrome (toggleable): small wordmark bottom-left, optional team score strip at the bottom, tiny connection dot top-right.
 - Scenes as in §11.12, with transitions (400 ms crossfade + scene choreography):
-  - *Standby*: slow Ken-Burns brand slides, big QR "Scan to join → hodlc.lpc.cm/e/chara/in", live checked-in counter (count-up), countdown.
+  - *Standby*: slow Ken-Burns brand slides, big QR "Scan to join → hodlekki.org/e/chara/in", live checked-in counter (count-up), countdown.
   - *Teams*: four tall panels (colour, name/label, member count). A rename plays a typewriter + glow reveal with the `team_name` cue.
   - *Quiz/Trivia*: prompt (max 3 lines), tile grid, countdown ring, "87 / 104 answered". Reveal: tile glow, distribution bars, reference.
   - *Buzzer/Who Am I*: prompt or clues; on buzz, a full-frame flash in the team colour with the team name + buzzer display name.
@@ -3003,7 +3003,7 @@ Ship the phase's migrations with that phase's code (§9.4). Before merging to `m
 Add in cPanel → Cron Jobs:
 
 ```
-*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/special_events.php >/dev/null 2>&1
+*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/special_events.php >/dev/null 2>&1
 ```
 
 The script is CLI-only (`PHP_SAPI !== 'cli'` → 403), sets `$_SERVER['DOCUMENT_ROOT']` before requiring `includes/db.php`, takes `GET_LOCK('se_cron', 0)` (skips if another run holds it), runs its jobs, and writes `se_settings.cron_last_run`. Jobs, in order: message runs; karaoke hold releases; test-mode auto-off; token/device/rate-limit cleanup; AI source purge; retention anonymisation (daily, after 03:00).
@@ -3209,7 +3209,7 @@ Planned design so v1 does not paint us into a corner:
 | O13 | SMS: sender ID confirmed, units budget for ~300 reminders + ~150 thank-yous | Tom-Blake / Finance | Phase B |
 | O14 | Reach/Embrace HODs agree to the hand-off rules (§17.2) | Chidera / Odun-Ayo | Phase D |
 | O15 | Whether `/e/` hub should be public | Envision | Phase D (optional) |
-| O16 | ✅ **Fixed by PR0.** *(Deploy exclusions did not work under tar: `.deployignore` was written for rsync, and tar silently ignores entries that start or end with `/`, so `.git/`, `.github/`, `tests/`, `/AGENTS.md`, `/DEPLOY.md` and `/php.ini` were copied into the docroot on every deploy.)* Every entry is now in tar form, and a lint-job step re-runs the deploy's tar pipeline on each push and pull request and fails if any of those paths would be copied. **Two things are still on the owner:** (a) delete the copies already in the docroot — tar never deletes — via cPanel File Manager in `public_html/hodlc.lpc.cm/`: `.git/`, `.github/`, `tests/`, `docs/`, `AGENTS.md`, `DEPLOY.md`, and confirm `https://hodlc.lpc.cm/.git/config` then returns 403/404; (b) note that `./php.ini` is excluded, so edits to the repo's `php.ini` no longer deploy — the docroot copy is authoritative, as that file intends. | Tom-Blake | Cleanup after the PR0 merge, before the Phase A deploy |
+| O16 | ✅ **Fixed by PR0.** *(Deploy exclusions did not work under tar: `.deployignore` was written for rsync, and tar silently ignores entries that start or end with `/`, so `.git/`, `.github/`, `tests/`, `/AGENTS.md`, `/DEPLOY.md` and `/php.ini` were copied into the docroot on every deploy.)* Every entry is now in tar form, and a lint-job step re-runs the deploy's tar pipeline on each push and pull request and fails if any of those paths would be copied. **Two things are still on the owner:** (a) delete the copies already in the docroot — tar never deletes — via cPanel File Manager in `public_html/hodlekki/`: `.git/`, `.github/`, `tests/`, `docs/`, `AGENTS.md`, `DEPLOY.md`, and confirm `https://hodlekki.org/.git/config` then returns 403/404; (b) note that `./php.ini` is excluded, so edits to the repo's `php.ini` no longer deploy — the docroot copy is authoritative, as that file intends. | Tom-Blake | Cleanup after the PR0 merge, before the Phase A deploy |
 
 ---
 
@@ -4719,7 +4719,7 @@ Statistics: {{stats_json}}
 }
 ```
 
-**SMS length check** (computed with the same GSM-7 rules as `sms_segments()`). With `{{event_title}}` = "Chara 2026", `{{time}}` = "5:00 PM", `{{venue}}` = 18 chars, `{{first_name}}` = 9 chars and a 53-char link (`https://hodlc.lpc.cm/e/chara/me/` + 22-char token), the defaults are: reminder_1 ≈ 157, reminder_2 ≈ 153, thank_you ≈ 155, waitlist ≈ 138, link ≈ 95 characters, so each is **1 page**. A longer venue or first name can tip a message into 2 pages; the Studio shows the exact per-recipient estimate before a run, and Producers can shorten the venue text.
+**SMS length check** (computed with the same GSM-7 rules as `sms_segments()`). With `{{event_title}}` = "Chara 2026", `{{time}}` = "5:00 PM", `{{venue}}` = 18 chars, `{{first_name}}` = 9 chars and a 53-char link (`https://hodlekki.org/e/chara/me/` + 22-char token), the defaults are: reminder_1 ≈ 157, reminder_2 ≈ 153, thank_you ≈ 155, waitlist ≈ 138, link ≈ 95 characters, so each is **1 page**. A longer venue or first name can tip a message into 2 pages; the Studio shows the exact per-recipient estimate before a run, and Producers can shorten the venue text.
 
 ---
 

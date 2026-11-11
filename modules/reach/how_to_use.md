@@ -145,3 +145,11 @@ Campaigns of type **Special Event** are created by the Special Events hand-off;
 their leads arrive with notes about the event. Envision reviews consent and
 attendance before pushing them. Continue follow-up here using the normal Reach
 workflow; do not create a second campaign for the same event.
+
+## The site's address
+
+Reach links, QR codes and share cards point at **hodlekki.org** (the site moved
+from hodlc.lpc.cm in November 2026). They are built from `SITE_URL` in `.env`,
+not from the address someone happens to be using, so a link shared from
+connect.hodlekki.org or an old bookmark still opens the real site. Links already
+sent on the old address keep working for a month while it redirects.

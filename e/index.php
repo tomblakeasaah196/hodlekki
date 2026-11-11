@@ -846,7 +846,9 @@ function se_send_calendar(array $event, array $days, array $settings): void
 
         $lines[] = 'BEGIN:VEVENT';
         // Stable across regenerations, so a re-download updates rather than
-        // duplicating the entry in someone's calendar.
+        // duplicating the entry in someone's calendar. The @hodlc.lpc.cm part is
+        // an identifier, not an address: it stays as it is after the move to
+        // hodlekki.org, or every saved event would be duplicated.
         $lines[] = 'UID:' . $event['public_id'] . '-' . ($day['day_date'] ?: $i) . '@hodlc.lpc.cm';
         $lines[] = 'DTSTAMP:' . gmdate('Ymd\THis\Z');
         $lines[] = 'DTSTART:' . $utc($day['starts_at']);

@@ -169,7 +169,7 @@ Production runs on a cPanel shared host with MultiPHP set to `ea-php83`
 and LiteSpeed. Deploys are automated: every push to `main` triggers a
 GitHub Actions workflow (`.github/workflows/deploy.yml`) that lints the
 tree, then POSTs (with an `X-Deploy-Token` header) to a webhook on the
-live site (`https://hodlc.lpc.cm/webhook/deploy.php`). The webhook runs
+live site (`https://hodlekki.org/webhook/deploy.php`). The webhook runs
 [`bin/deploy.sh`](bin/deploy.sh), which does the `git pull`, copies the
 repo into the docroot with `tar` (honouring `.deployignore`, and never
 deleting), runs `composer install --no-dev`, and applies any pending
@@ -185,11 +185,11 @@ GitHub Secrets / Variables), and rollback instructions live in
 
 **Cron (once, in cPanel → Cron Jobs):**
 ```
-* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1
-0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/reach_lost_souls.php >/dev/null 2>&1
-15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/assimilation_watchlists.php >/dev/null 2>&1
-*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/special_events.php >/dev/null 2>&1
-* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php >/dev/null 2>&1
+* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1
+0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/reach_lost_souls.php >/dev/null 2>&1
+15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/assimilation_watchlists.php >/dev/null 2>&1
+*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/special_events.php >/dev/null 2>&1
+* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/push_worker.php >/dev/null 2>&1
 ```
 
 `sms_queue_worker.php` sends queued SMS for ~55 s (about one per second),
@@ -257,7 +257,7 @@ the untracked `.env` file.
 | `GEOAPIFY_API_KEY` | Client-side address-autocomplete key (domain-lock in the Geoapify dashboard). |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push identity (`php bin/generate_vapid_keys.php`). Optional — a pair is generated into `push_config` on first use. **Rotating them invalidates every subscription.** |
 | `VAPID_SUBJECT`    | `mailto:` or `https:` contact a push service can reach (RFC 8292). |
-| `SITE_URL`         | Absolute origin, e.g. `https://hodlc.lpc.cm`. Optional; learned from the first web request. |
+| `SITE_URL`         | Absolute origin, e.g. `https://hodlekki.org`. Optional; learned from the first web request. |
 | `BIBLE_API_KEY`    | API.Bible key for NKJV / NIV / AMP in The Bible. Optional — without it only the built-in KJV is offered. Related optional keys: `BIBLE_API_BASE`, `BIBLE_API_MONTHLY_CAP`, `BIBLE_API_ID_NKJV/NIV/AMP`, `BIBLE_FUMS_URL` (see `.env.example`). |
 
 

@@ -311,7 +311,9 @@ if (!defined('PUSH_HELPERS_LOADED')) {
             return $origin;
         }
 
-        return $stored !== '' ? $stored : 'https://hodlc.lpc.cm';
+        require_once __DIR__ . '/site_url.php';
+
+        return $stored !== '' ? $stored : site_origin();
     }
 
     /* ================================================================== *

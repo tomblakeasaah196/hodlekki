@@ -6,7 +6,7 @@ Special Events is where Envision builds and runs a one-off night — Chara, a
 karaoke and games evening, the next edition of anything. One screen holds the
 whole life of an event: create it, give it a short link and your colours, set
 how many seats it has, add the crew, and publish it to a public page at
-**hodlc.lpc.cm/e/your-link**.
+**hodlekki.org/e/your-link**.
 
 It is **separate from Sunday**. Nothing here touches the Sunday services,
 `events` or the regular check-in — these events have their own records and
@@ -45,7 +45,7 @@ the **Section** list at the top.
 | Field | What it is for |
 | ----- | -------------- |
 | **Name** | "Chara". Shown everywhere. |
-| **Short link** | The `chara` in `hodlc.lpc.cm/e/chara`. This goes on the poster, so keep it short and easy to say out loud. |
+| **Short link** | The `chara` in `hodlekki.org/e/chara`. This goes on the poster, so keep it short and easy to say out loud. |
 | **Starts** | The date and time. Doors and check-in are filled in for you and you can change them later. |
 | **Seats via the link** | How many people may register online. Chara used 120. Leave it empty for no limit. |
 
@@ -363,7 +363,7 @@ Press **Publish** and `/e/your-link` is live.
 
 ## 10. The public page
 
-`hodlc.lpc.cm/e/your-link` is the page you send people to. It opens on your
+`hodlekki.org/e/your-link` is the page you send people to. It opens on your
 hero image across the full first screen, with the animated event colours and
 spotlights layered over it in a calm, readable order. The event name is printed
 large and expressively: a short two-word name such as **Chara Night** is set
@@ -473,7 +473,7 @@ and get one text message — nobody has to watch the page.
 
 ### Their private link
 
-The link they saved is `hodlc.lpc.cm/me/<their code>`. It shows their seat,
+The link they saved is `hodlekki.org/me/<their code>`. It shows their seat,
 and lets them:
 
 - see whether they are **confirmed** or **on the waitlist**;
@@ -1410,7 +1410,7 @@ for a night when the cron job is not running; it cannot double-send.
 **The cron job.** Add this once in cPanel → Cron Jobs:
 
 ```
-*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/special_events.php >/dev/null 2>&1
+*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/special_events.php >/dev/null 2>&1
 ```
 
 It creates the reminders that are due, releases abandoned karaoke holds and

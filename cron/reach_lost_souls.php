@@ -4,7 +4,7 @@
 // follow-up and sends every Reach department member one in-app digest, so
 // someone claims or reassigns them. Each lead is re-alerted at most once
 // per overdue window (tracked in reach_leads.lost_alert_at).
-// Crontab: 0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/reach_lost_souls.php
+// Crontab: 0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/reach_lost_souls.php
 
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only.\n"); }
 

@@ -174,7 +174,7 @@ function buildPoster(){
   const showDetails = $('#toggleDetails').is(':checked');
   const showBanner = $('#toggleBanner').is(':checked');
 
-  const url = ev && ev.registration_url ? ev.registration_url : 'https://hodlc.lpc.cm';
+  const url = ev && ev.registration_url ? ev.registration_url : <?= json_encode(site_origin()) ?>;
   const cat = ev && ev.category ? ev.category.replace(/_/g,' ') : 'Event';
 
   const html = `
@@ -272,7 +272,7 @@ function buildPoster(){
         <span class="w-16 h-[2px] gold-line rounded-full"></span>
         <span class="font-sans text-white/55 text-[12px] tracking-[0.3em] uppercase">${esc(brand)}</span>
         <span class="font-sans text-white/30 text-[12px] tracking-[0.3em] uppercase">·</span>
-        <span class="font-sans text-white/40 text-[12px] tracking-[0.2em] uppercase">hodlc.lpc.cm</span>
+        <span class="font-sans text-white/40 text-[12px] tracking-[0.2em] uppercase"><?= htmlspecialchars(site_host(), ENT_QUOTES, 'UTF-8') ?></span>
       </div>
       <div class="font-serif-it italic text-white/45 text-sm">We look forward to seeing you</div>
     </div>

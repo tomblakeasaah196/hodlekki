@@ -44,7 +44,7 @@ bare `php` on that box is not necessarily 8.3:
 
 ```bash
 /usr/local/bin/ea-php83 \
-  /home/smartqaq/public_html/hodlc.lpc.cm/bin/generate_vapid_keys.php \
+  /home/smartqaq/public_html/hodlekki/bin/generate_vapid_keys.php \
   "mailto:asah.tomf@gmail.com"
 ```
 
@@ -75,7 +75,7 @@ of nightly SQL dumps.
 cPanel → Cron Jobs, every minute (this is the one genuinely required step):
 
 ```
-* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php >/dev/null 2>&1
+* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/push_worker.php >/dev/null 2>&1
 ```
 
 In normal operation this worker finds nothing to do — see §3. It exists for
@@ -85,7 +85,7 @@ answered 429 or 5xx, for a run that died half way, and for pruning the queue.
 ### 1.4 Check it
 
 ```bash
-/usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/push_worker.php --status
+/usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/push_worker.php --status
 ```
 
 ```

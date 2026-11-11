@@ -15,7 +15,7 @@
 // drops out of the list, so if they drift a second time they are announced
 // again — which is what we want.
 //
-// Crontab: 15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlc.lpc.cm/cron/assimilation_watchlists.php >/dev/null 2>&1
+// Crontab: 15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/assimilation_watchlists.php >/dev/null 2>&1
 
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only.\n"); }
 

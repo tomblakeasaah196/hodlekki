@@ -106,9 +106,8 @@ function reach_sync_campaign_fields(PDO $pdo, int $campaign_id, string $tier): v
 }
 
 function reach_absolute_url(string $path): string {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host = $_SERVER['HTTP_HOST'] ?? 'hodlc.lpc.cm';
-    return $scheme . '://' . $host . $path;
+    require_once __DIR__ . '/../includes/site_url.php';
+    return site_origin() . $path;
 }
 
 // QR data URL. Uses the public Google Chart API (chs) as a zero-dep

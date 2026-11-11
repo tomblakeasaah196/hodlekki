@@ -39,7 +39,7 @@ set -euo pipefail
 export HOME="${HOME:-/home/smartqaq}"
 
 REPO=/home/smartqaq/repositories/hodlekki
-DEPLOYPATH=/home/smartqaq/public_html/hodlc.lpc.cm
+DEPLOYPATH=/home/smartqaq/public_html/hodlekki
 PHP=/usr/local/bin/ea-php83
 COMPOSER=/home/smartqaq/composer.phar
 LOCKFILE=/home/smartqaq/.deploy.lock
@@ -83,6 +83,11 @@ mkdir -p "$DEPLOYPATH"
 tar cf - --exclude-from="$REPO/.deployignore" -C "$REPO" . \
   | ( cd "$DEPLOYPATH" && tar xpf - --no-overwrite-dir )
 echo "[deploy] tar -> $DEPLOYPATH done"
+
+# 2b. Origin lock: only Cloudflare may reach the site (bin/edge_lock.sh). On
+#     when the docroot .env has EDGE_TOKEN, off when it has none. Run from the
+#     repo checkout, so the script itself is always the version just pulled.
+bash "$REPO/bin/edge_lock.sh" "$DEPLOYPATH"
 
 # 3. Refresh Composer dependencies. -d allow_url_fopen=On because this host's
 #    CLI php.ini disables it and Composer needs it to reach packagist.

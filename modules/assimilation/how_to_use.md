@@ -379,3 +379,9 @@ People assigned to you show their **full name and phone number**, so you can
 be sure who you are calling. People in the unassigned pool show only first
 name and last initial until you claim them. Your profile photo appears next
 to "Signed in as" when you have one on your profile.
+
+## The site's address
+
+The public Assimilation page and its share card use **hodlekki.org** (the site
+moved from hodlc.lpc.cm in November 2026), taken from `SITE_URL` in `.env`. Old
+links on hodlc.lpc.cm redirect to the same page for a month after the move.
