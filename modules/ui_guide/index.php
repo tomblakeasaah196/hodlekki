@@ -19,12 +19,7 @@ require_once __DIR__ . '/../../includes/header.php';
 
 $uiGuideAllowed = ui_nav_can_access('ui_guide', ui_nav_context($pdo));
 if (!$uiGuideAllowed) {
-    echo '<div class="ui-page ui-page--narrow">' . ui_empty([
-        'icon' => 'lock-keyhole',
-        'title' => 'This page is for system administrators',
-        'text' => 'It shows the building blocks of the app. Everything you need is in the menu.',
-        'actions' => ui_button('Go to your portal', ['variant' => 'primary', 'href' => '/modules/member_portal/index.php']),
-    ]) . '</div>';
+    echo ui_no_access('It shows the building blocks of the app, for the system administrators. Everything you need is in the menu.');
     require_once __DIR__ . '/../../includes/footer.php';
     exit;
 }

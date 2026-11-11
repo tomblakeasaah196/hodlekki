@@ -106,16 +106,21 @@ function ui_shell_open(PDO $pdo, array $page): void
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#FFFFFF">
+<?php
+    // First in <head>: the PWA head partial, which also carries the error
+    // monitor's browser capture (a sync, same-origin script) — it must load
+    // before any page script so it sees their errors.
+    require dirname(__DIR__) . '/pwa_head.php';
+?>
     <title><?= ui_e($page['title']) ?> · HOD Lekki</title>
     <meta name="robots" content="noindex, nofollow">
-    <meta name="theme-color" content="#FFFFFF">
     <meta name="csrf-token" content="<?= ui_e(csrf_token()) ?>">
     <link rel="preload" href="/assets/ui/fonts/inter-latin.v1.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="<?= ui_e(ui_asset('/assets/ui/app.css')) ?>">
 <?php foreach ($page['styles'] as $href): ?>
     <link rel="stylesheet" href="<?= ui_e(strncmp($href, '/assets/', 8) === 0 && strpos($href, '?') === false ? ui_asset($href) : $href) ?>">
 <?php endforeach; ?>
-<?php require dirname(__DIR__) . '/pwa_head.php'; ?>
 <?php if ($page['mode'] === 'legacy'): ?>
     <!-- Legacy pages run inline scripts that need jQuery while the page parses. -->
     <script src="<?= ui_e(ui_asset('/assets/ui/vendor/jquery-3.7.1.min.js')) ?>"></script>

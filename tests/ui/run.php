@@ -77,7 +77,7 @@ foreach ($registry as $item) {
         $badIcon[] = $item['key'] . ':' . $item['icon'];
     }
     $path = parse_url($item['href'], PHP_URL_PATH);
-    if (!is_file($root . $path)) {
+    if (empty($item['when_exists']) && !is_file($root . $path)) {
         $badHref[] = $item['href'];
     }
 }
@@ -173,9 +173,12 @@ ok("{$checked} decisions match the old sidebar", $mismatch === [], implode('; ',
 ok('the design system page is for Super Admins only',
     ui_nav_can_access('ui_guide', ['roles' => ['Super_Admin'], 'is_super_admin' => true, 'dept_ids' => [], 'dept_roles' => []])
     && !ui_nav_can_access('ui_guide', ['roles' => ['Resident_Pastor'], 'is_super_admin' => false, 'dept_ids' => [1], 'dept_roles' => []]));
+ok('System Health is for Super Admins only (monitor_user_can() today)',
+    ui_nav_can_access('system_health', ['roles' => ['Super_Admin'], 'is_super_admin' => true, 'dept_ids' => [], 'dept_roles' => []])
+    && !ui_nav_can_access('system_health', ['roles' => ['Resident_Pastor'], 'is_super_admin' => false, 'dept_ids' => [1], 'dept_roles' => []]));
 ok('an unknown key is refused', !ui_nav_can_access('nonexistent', ['roles' => ['Super_Admin'], 'is_super_admin' => true, 'dept_ids' => [], 'dept_roles' => []]));
 $covered = array_keys(old_sidebar(['roles' => [], 'is_super_admin' => false, 'dept_ids' => [], 'dept_roles' => [], 'assim_nav' => false, 'se_nav' => false]));
-$untested = array_diff($keys, $covered, ['ui_guide']);
+$untested = array_diff($keys, $covered, ['ui_guide', 'system_health']);
 ok('every registry entry is covered by the parity matrix', $untested === [], implode(', ', $untested));
 
 /* ---------------------------------------------------------------------- */
@@ -240,7 +243,10 @@ $cspSource = (string) file_get_contents($root . '/includes/security_headers.php'
 ok('the strict policy never allows unsafe-inline', strpos($cspSource, "'unsafe-inline'") === false);
 ok('the strict policy never allows unsafe-eval', strpos($cspSource, "'unsafe-eval'") === false);
 ok('extra sources cannot inject a directive', strpos($cspSource, "preg_match('/[;,\\s]/', \$source)") !== false);
-ok('violations are reported', strpos($cspSource, 'report-uri /api/csp_report.php') !== false);
+ok('violations are reported to one configurable path', strpos($cspSource, "'report-uri ' . HOD_CSP_REPORT_PATH") !== false
+    && strpos($cspSource, 'report-to hod-csp') !== false);
+$reportSource = (string) file_get_contents($root . '/api/csp_report.php');
+ok('CSP reports never go to error_log (the monitor imports every error_log line)', strpos($reportSource, 'error_log(') === false);
 
 /* ---------------------------------------------------------------------- */
 suite('5. component helpers');

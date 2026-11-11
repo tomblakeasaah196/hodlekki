@@ -357,6 +357,21 @@ function ui_tabs(array $tabs, string $active, string $label = 'Sections'): strin
     return $html . '</div>';
 }
 
+/**
+ * The standard "no access" state for a page the person may not open: a calm
+ * explanation and a way on. Echo it inside the shell, then require the footer
+ * and exit (the permissions matrix's page gate uses exactly this).
+ */
+function ui_no_access(?string $text = null, string $title = 'This page is not open to you'): string
+{
+    return '<div class="ui-page ui-page--narrow">' . ui_empty([
+        'icon' => 'lock-keyhole',
+        'title' => $title,
+        'text' => $text ?? 'If you need it for your work, ask your head of department or a pastor to give you access.',
+        'actions' => ui_button('Go to your portal', ['variant' => 'primary', 'href' => '/modules/member_portal/index.php']),
+    ]) . '</div>';
+}
+
 /** Hidden CSRF input for a classic form post (fetch/jQuery get the header automatically). */
 function ui_csrf_field(): string
 {

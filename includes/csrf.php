@@ -126,6 +126,10 @@ function csrf_valid(): bool
 
 function csrf_is_exempt(string $path): bool
 {
+    // Browsers send CSP reports themselves, never with the page's token.
+    if (defined('HOD_CSP_REPORT_PATH') && $path === HOD_CSP_REPORT_PATH) {
+        return true;
+    }
     foreach (CSRF_EXEMPT_PREFIXES as $prefix) {
         if (strncmp($path, $prefix, strlen($prefix)) === 0) {
             return true;

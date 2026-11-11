@@ -6,10 +6,10 @@ return [
     '/assets/js/modal-manager.js' => '27413937905b',
     '/assets/js/tab-deeplink.js' => '007f7df13420',
     '/assets/ui/app.css' => '0264917889d3',
-    '/assets/ui/icons.svg' => '029a855b1db0',
+    '/assets/ui/icons.svg' => '4c619399f535',
     '/assets/ui/js/legacy.js' => 'f26c58951edf',
     '/assets/ui/js/pages/ui-guide.js' => '3ae37ab91654',
     '/assets/ui/js/shell.js' => '0b25bf5ac118',
-    '/assets/ui/js/ui.js' => '5d64279e4806',
+    '/assets/ui/js/ui.js' => '3128902443dc',
     '/assets/ui/vendor/jquery-3.7.1.min.js' => 'fc9a93dd241f',
 ];

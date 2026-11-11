@@ -16,6 +16,14 @@ if (defined('HOD_SECURITY_HEADERS')) {
 }
 define('HOD_SECURITY_HEADERS', true);
 
+/**
+ * Where browsers send Content-Security-Policy violation reports. ONE place:
+ * the error and health monitor owns what happens to them (api/csp_report.php
+ * hands each report to includes/monitor/intake.php when that exists). Change
+ * the path here and nowhere else.
+ */
+const HOD_CSP_REPORT_PATH = '/api/csp_report.php';
+
 function security_send_baseline_headers(): void
 {
     if (PHP_SAPI === 'cli' || headers_sent()) {
@@ -100,7 +108,13 @@ function security_send_csp(string $mode, string $nonce, array $extra = []): void
     if ($https) {
         $policy[] = 'upgrade-insecure-requests';
     }
-    $policy[] = 'report-uri /api/csp_report.php';
+    // report-to (Reporting API) where supported, report-uri everywhere else.
+    $policy[] = 'report-uri ' . HOD_CSP_REPORT_PATH;
+    $policy[] = 'report-to hod-csp';
 
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    if ($host !== '' && preg_match('/^[A-Za-z0-9.-]+(:\d+)?$/', $host)) {
+        header('Reporting-Endpoints: hod-csp="' . ($https ? 'https' : 'http') . '://' . $host . HOD_CSP_REPORT_PATH . '"');
+    }
     header('Content-Security-Policy: ' . implode('; ', $policy));
 }

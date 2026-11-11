@@ -308,7 +308,19 @@
             err.code = 'NETWORK';
             throw err;
         }).catch(function (err) {
-            if (!opts.quiet && err && err.name !== 'AbortError') toast(err.message, 'danger');
+            if (err && err.name !== 'AbortError') {
+                // For the error and health monitor (assets/js/monitor.js may
+                // listen): which endpoint failed and how. The path only — no
+                // query string, no payload, no personal data.
+                try {
+                    window.dispatchEvent(new CustomEvent('hod:api-error', { detail: {
+                        path: new URL(url, window.location.href).pathname,
+                        action: opts.action || null,
+                        code: err.code || 'UNKNOWN'
+                    } }));
+                } catch (e) { /* never mask the real error */ }
+                if (!opts.quiet) toast(err.message, 'danger');
+            }
             throw err;
         });
     }
@@ -730,6 +742,11 @@
             tab.setAttribute('aria-selected', on ? 'true' : 'false');
             tab.tabIndex = on ? 0 : -1;
             if (on && focus) tab.focus();
+            // On a phone the tab bar scrolls sideways: bring the chosen tab in.
+            if (on && list.scrollWidth > list.clientWidth) {
+                var tr = tab.getBoundingClientRect(), lr = list.getBoundingClientRect();
+                if (tr.left < lr.left || tr.right > lr.right) list.scrollLeft += (tr.left - lr.left) - 16;
+            }
             var panel = document.getElementById(tab.getAttribute('aria-controls')) ||
                 document.querySelector('[data-tab-panel="' + CSS.escape(tab.getAttribute('data-tab')) + '"]');
             if (panel) {

@@ -45,6 +45,8 @@ function ui_nav_sections(): array
  * keywords  extra words the search should find it by
  * tabs      tab id => label, for the search's "#tab=" deep links
  * badge     optional: fn(PDO, array $ctx): int — a count shown on the link
+ * when_exists  true: listed only once the href's file exists (a module whose
+ *           screens land in a later PR keeps its place here meanwhile)
  */
 function ui_nav_registry(): array
 {
@@ -140,6 +142,11 @@ function ui_nav_registry(): array
         ['key' => 'alerts', 'label' => 'Alerts Centre', 'icon' => 'bell-ring', 'href' => '/modules/alerts/index.php', 'section' => 'stewardship',
             'match' => ['alerts'], 'keywords' => ['push', 'notifications', 'broadcast', 'announce', 'pwa', 'app', 'devices']],
 
+        // The error and health monitor (its screens arrive with the monitor's
+        // PR 2; until then the entry stays hidden). Gate: monitor_user_can()
+        // in that module — Super Admin today, see ui_nav_can_access().
+        ['key' => 'system_health', 'label' => 'System Health', 'icon' => 'activity', 'href' => '/modules/monitor/index.php', 'section' => 'system',
+            'match' => ['monitor'], 'keywords' => ['errors', 'monitor', 'health', 'uptime', 'logs', 'status', 'alerts'], 'when_exists' => true],
         ['key' => 'ui_guide', 'label' => 'Design System', 'icon' => 'palette', 'href' => '/modules/ui_guide/index.php', 'section' => 'system',
             'match' => ['ui_guide'], 'keywords' => ['ui', 'components', 'design', 'style guide', 'tokens']],
     ];
@@ -311,6 +318,7 @@ function ui_nav_can_access(string $key, array $ctx): bool
             return $stewardship && ui_nav_has($ctx, ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD']);
         case 'roles':
         case 'ui_guide':
+        case 'system_health':
             return !empty($ctx['is_super_admin']);
         case 'security':
         case 'alerts':
@@ -353,6 +361,9 @@ function ui_nav_visible(PDO $pdo, string $currentModule): array
     }
 
     foreach (ui_nav_registry() as $item) {
+        if (!empty($item['when_exists']) && !is_file(dirname(__DIR__, 2) . parse_url($item['href'], PHP_URL_PATH))) {
+            continue;
+        }
         if (!ui_nav_can_access($item['key'], $ctx)) {
             continue;
         }

@@ -177,6 +177,7 @@ echo them. Every helper escapes what it prints and drops `on*` attributes.
 | Avatar | `.ui-avatar --xs/--sm/--lg/--xl`, `--square` | `ui_avatar($name, $photo, 'sm')` | Initials on a colour that is always that person's. |
 | Stat | `.ui-stat` in `.ui-card` | `ui_stat(['label' => …, 'value' => …, 'delta' => 6.2])` | `href` makes the tile a link. |
 | Empty state | `.ui-empty` | `ui_empty(['icon' => …, 'title' => …, 'text' => …, 'actions' => …])` | Always offer the next step. |
+| No access | — | `echo ui_no_access();` then the footer and `exit` | The one "this page is not open to you" state, for every page gate. |
 | Loading | `.ui-skeleton` (`--text/--title/--circle/--block`), `.ui-spinner`, `.ui-loading` | — | Nothing under 100 ms; inline spinner up to 1 s; skeleton beyond. |
 | Progress / steps | `progress.ui-progress` (`--sm`, tones), `ol.ui-steps` › `.ui-step` (`.is-done`, `aria-current="step"`) | — | `<progress>` needs no style attribute. |
 | Banner | `.ui-banner --info/--success/--warning/--danger` | `ui_banner('warning', ['title' => …, 'text' => …])` | In-page messages that stay. |
@@ -241,8 +242,11 @@ pages read from header.php (`$firstName`, `$currentModule`,
   function's body; keep the signature and both shells and the search follow.
   `$ctx` comes from `ui_nav_context($pdo)` (roles, live department seats,
   the Assimilation and Special Events flags) — extend it there.
+- `when_exists: true` keeps a module's place in the registry before its
+  page ships (the monitor's **System Health**, `/modules/monitor/`): the
+  entry appears once the file exists.
 - Hiding a link is not a permission. Every module page and API still checks
-  access itself.
+  access itself, and refuses with `ui_no_access()`.
 
 ## 7. Security: CSP and CSRF
 
@@ -259,8 +263,12 @@ strict-origin-when-cross-origin`, `X-Frame-Options: SAMEORIGIN`,
   PWA boot blocks in `includes/pwa_head.php`); images `self data: blob:`;
   fonts, connections, media `self`; `object-src 'none'`, `base-uri 'self'`,
   `form-action 'self'`, `frame-ancestors 'self'`. Violations are reported
-  to `/api/csp_report.php` → the PHP error log. Add a third-party source
-  only through `$ui['csp']`, and only if it cannot be self-hosted.
+  (`report-uri` and `report-to`) to `HOD_CSP_REPORT_PATH`
+  (`includes/security_headers.php`, the one place to change it), which
+  hands them to the error and health monitor (`monitor_intake_csp()`).
+  They are never written to `error_log`: the monitor imports every
+  `error_log` line as a server error. Add a third-party source only through
+  `$ui['csp']`, and only if it cannot be self-hosted.
 - `mode => 'legacy'` (pages not rebuilt yet): `object-src 'none'; base-uri
   'self'; frame-ancestors 'self'` — what cannot break their inline handlers.
 
@@ -281,6 +289,12 @@ every same-origin POST form — on legacy pages as well. On the server:
 - The older per-module tokens (`sms_csrf`, `charis_csrf`, `bible_csrf`,
   `hymnal`, `csrf_token` in Requisitions …) keep working until their module
   moves to this one.
+
+**Errors in the browser** belong to the error and health monitor:
+`assets/js/monitor.js`, loaded by `includes/pwa_head.php`, which the shell
+prints first in `<head>` so it sees errors in every later script. Do not add
+another `window.onerror`. `HOD.api` also fires `hod:api-error` on `window`
+(`detail: {path, action, code}`, no payload) for each failed call.
 
 ## 8. Offline and the service worker
 
