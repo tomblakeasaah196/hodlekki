@@ -68,6 +68,11 @@ function ui_nav_registry(): array
             'match' => ['regions'], 'keywords' => ['regions', 'hubs', 'locations', 'broadcast'], 'tabs' => ['hub' => 'My Region']],
         ['key' => 'idi', 'label' => 'Data Insights (IDI)', 'icon' => 'chart-column', 'href' => '/modules/idi/index.php', 'section' => 'command',
             'match' => ['idi'], 'keywords' => ['idi', 'analytics', 'insights', 'data', 'reports', 'statistics']],
+        // Mail (docs/MAIL.md): shown to people who work from a mailbox, and to mail admins and export approvers
+        // (the Mailboxes screen is reached from the Mail page). The badge: unread Inbox conversations.
+        ['key' => 'mail', 'label' => 'Mail', 'icon' => 'mail', 'href' => '/modules/mail/index.php', 'section' => 'command',
+            'match' => ['mail'], 'keywords' => ['mail', 'email', 'inbox', 'mailbox', 'mailboxes', 'messages'],
+            'badge' => 'ui_nav_badge_mail', 'badge_title' => 'Unread conversations in your mailboxes'],
 
         ['key' => 'congregation', 'label' => 'Congregation', 'icon' => 'users', 'href' => '/modules/congregation/index.php', 'section' => 'growth',
             'match' => ['congregation'], 'keywords' => ['members', 'people', 'database', 'roster', 'directory']],
@@ -190,12 +195,25 @@ function ui_nav_context(PDO $pdo): array
         error_log('ui_nav_context special events: ' . $e->getMessage());
     }
 
+    // Mail: anyone who works from a mailbox (its own grants, through the mail module's one decision, which asks
+    // can()), plus mail admins and export approvers. Safe before the mail tables exist.
+    $mailNav = false;
+    try {
+        if (!function_exists('mail_nav_visible')) {
+            require_once dirname(__DIR__) . '/mail/bootstrap.php';
+        }
+        $mailNav = mail_nav_visible($uid);
+    } catch (Throwable $e) {
+        error_log('ui_nav_context mail: ' . $e->getMessage());
+    }
+
     $seats = $perm['seats'] ?? [];
     $ctx = [
         'user_id' => $uid,
         'perm' => $perm,
         'assim_team' => $assimTeam,
         'se_crew' => $seCrew,
+        'mail_nav' => $mailNav,
         'is_super_admin' => !empty($perm['breakglass']),
         'dept_ids' => array_values(array_unique(array_column($seats, 'department_id'))),
         'seat_keys' => array_values(array_unique(array_column($seats, 'seat_key'))),
@@ -233,8 +251,17 @@ function ui_nav_can_access(string $key, array $ctx): bool
     if ($key === 'special_events') {
         return !empty($ctx['se_crew']);
     }
+    if ($key === 'mail') {
+        return !empty($ctx['mail_nav']);
+    }
 
     return false;
+}
+
+/** Mail: unread Inbox conversations in the mailboxes this person works from (cached 30 s). */
+function ui_nav_badge_mail(PDO $pdo, array $ctx): int
+{
+    return function_exists('mail_nav_unread') ? mail_nav_unread((int) $ctx['user_id']) : 0;
 }
 
 /** Reach: unassigned leads + this person's overdue follow-ups. */
