@@ -33,6 +33,8 @@ function monitor_cron_jobs(): array
             'line' => '0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/reach_lost_souls.php >/dev/null 2>&1'],
         'assimilation_watchlists' => ['label' => 'Assimilation watchlists (07:15)', 'daily' => '07:15',
             'line' => '15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/assimilation_watchlists.php >/dev/null 2>&1'],
+        'permissions_daily'       => ['label' => 'Roles: end dates and reminders (00:10)', 'daily' => '00:10',
+            'line' => '10 0 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/permissions_daily.php >/dev/null 2>&1'],
         'monitor'                 => ['label' => 'This monitor', 'every' => 1,
             'line' => '* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/monitor.php >/dev/null 2>&1'],
     ];

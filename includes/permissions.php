@@ -637,8 +637,58 @@ function perm_apply_grant(array &$ctx, string $module, array $g, array $deptIds,
     }
 }
 
-/** The signed-in person's context, built once per request. */
-function perm_current(): ?array
+/**
+ * Everything a role ALONE gives (plus what every signed-in member has): the
+ * "view as role" subject. A cell scoped to "your departments" reaches only
+ * the holder's own records here, because a role carries no department.
+ */
+function perm_resolve_role(PDO $pdo, int $roleId, ?string $today = null): array
+{
+    $ctx = [
+        'user_id' => 0, 'today' => $today ?? perm_today(), 'ready' => false, 'breakglass' => false,
+        'role_ids' => [], 'seats' => [], 'seat_depts' => [], 'abilities' => [], 'sources' => [],
+    ];
+    if ($roleId <= 0 || !perm_ready($pdo)) {
+        return $ctx;
+    }
+    $ctx['ready'] = true;
+    try {
+        $stmt = $pdo->prepare('SELECT COALESCE(is_break_glass, 0) FROM roles WHERE id = ?');
+        $stmt->execute([$roleId]);
+        $bg = $stmt->fetchColumn();
+        if ($bg === false) {
+            return $ctx;
+        }
+        $ctx['role_ids'] = [$roleId];
+        $ctx['breakglass'] = (int) $bg === 1;
+        $stmt = $pdo->prepare(
+            "SELECT role_id, seat_key, module_key, level, can_approve, can_export, can_manage, scope, view_scope
+               FROM perm_grants
+              WHERE (role_id = ? AND seat_key = '') OR (role_id = 0 AND seat_key = ?)"
+        );
+        $stmt->execute([$roleId, PERM_EVERYONE]);
+        $grants = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        error_log('permissions: could not read role ' . $roleId . ': ' . $e->getMessage());
+        return $ctx;
+    }
+    $modules = perm_modules();
+    foreach ($grants as $g) {
+        if (isset($modules[(string) $g['module_key']])) {
+            perm_apply_grant($ctx, (string) $g['module_key'], $g, [], false,
+                (int) $g['role_id'] > 0 ? 'role:' . $roleId : 'everyone');
+        }
+    }
+    foreach ($ctx['abilities'] as $module => $abilities) {
+        foreach ($abilities as $ability => $scope) {
+            $ctx['abilities'][$module][$ability] = perm_scope_normalise($scope);
+        }
+    }
+    return $ctx;
+}
+
+/** The signed-in person's OWN context, never a view-as one (the roles screen, Stop, fits-within). */
+function perm_real_current(): ?array
 {
     $uid = (int) ($_SESSION['user_id'] ?? 0);
     $pdo = perm_pdo();
@@ -654,6 +704,74 @@ function perm_current(): ?array
         }
     }
     return $state['contexts'][$key];
+}
+
+/**
+ * The signed-in person's context, built once per request. While they "view
+ * as" a person or a role (Roles & permissions → People / Roles), it is the
+ * read-only view-as context instead (perm_view_as_context()).
+ */
+function perm_current(): ?array
+{
+    $real = perm_real_current();
+    $va = perm_view_as();
+    if ($real === null || $va === null) {
+        return $real;
+    }
+    // Only while the viewer may still open Roles & permissions.
+    if (!$real['breakglass'] && !perm_ctx_can($real, 'roles', 'view')) {
+        unset($_SESSION['perm_view_as']);
+        return $real;
+    }
+    $state = &perm_state();
+    $key = 'as|' . $real['user_id'] . '|' . $va['kind'] . ':' . $va['id'] . '|' . perm_today();
+    if (!isset($state['contexts'][$key])) {
+        $state['contexts'][$key] = perm_view_as_context(perm_pdo(), $real, $va['kind'], $va['id']);
+    }
+    return $state['contexts'][$key];
+}
+
+/** What the signed-in person is viewing as: ['kind' => 'person'|'role', 'id' => int, 'label' => string], or null. */
+function perm_view_as(): ?array
+{
+    $va = $_SESSION['perm_view_as'] ?? null;
+    if (!is_array($va) || !in_array($va['kind'] ?? '', ['person', 'role'], true) || (int) ($va['id'] ?? 0) <= 0) {
+        return null;
+    }
+    return ['kind' => (string) $va['kind'], 'id' => (int) $va['id'], 'label' => (string) ($va['label'] ?? '')];
+}
+
+/**
+ * View as a person or a role: the subject's access CUT DOWN to what the viewer
+ * holds (nobody sees more than they have), and read-only — only "view" is
+ * kept, so can() refuses create/edit/delete/approve/export/manage. The ids
+ * stay the viewer's, so pages that show "my" things show the viewer's own.
+ */
+function perm_view_as_context(PDO $pdo, array $viewer, string $kind, int $id): array
+{
+    $subject = $kind === 'role' ? perm_resolve_role($pdo, $id, $viewer['today']) : perm_resolve($pdo, $id, $viewer['today']);
+    $everything = ['church' => true, 'depts' => [], 'own' => true];
+    $ctx = $subject;
+    $ctx['user_id'] = (int) $viewer['user_id'];
+    $ctx['ready'] = $viewer['ready'] && $subject['ready'];
+    $ctx['breakglass'] = false;
+    $ctx['view_as'] = ['kind' => $kind, 'id' => $id];
+    $ctx['abilities'] = [];
+    foreach (perm_modules() as $module => $def) {
+        if (PERM_LEVELS[$def['max'] ?? 'none'] < 1) {
+            continue;
+        }
+        $theirs = $subject['breakglass'] ? $everything : perm_ctx_scope($subject, $module, 'view');
+        $mine = $viewer['breakglass'] ? $everything : perm_ctx_scope($viewer, $module, 'view');
+        if (perm_scope_is_none($theirs) || perm_scope_is_none($mine)) {
+            continue;
+        }
+        $scope = perm_scope_intersect($theirs, $mine);
+        if (!perm_scope_is_none($scope)) {
+            $ctx['abilities'][$module]['view'] = $scope;
+        }
+    }
+    return $ctx;
 }
 
 // --------------------------------------------------------------------------

@@ -1,208 +1,205 @@
 <?php
 // /api/roles_api.php
-require_once '../includes/db.php';
-header('Content-Type: application/json');
+//
+// Roles & permissions (modules/roles/). Reading needs roles: View (Super
+// Admins, the Resident Pastor); every change needs roles: Manage (Super Admins)
+// AND fits within the editor's own access (includes/permissions/admin.php).
+// Decided on the person's OWN access, never a "view as" one: while viewing as
+// someone, every change here is refused (view-as is read-only).
+//
+// Every change writes perm_history (role_assignment_logs is retired: kept for
+// the old rows, written by nothing). Freezing accounts lives in the Security
+// Centre.
+//
+// Responses: {status: 'success', …} or {status: 'error', code, message[, link]}.
 
-// 1. Ultimate Security Gate: SUPER ADMIN ONLY
-// Roles & permissions: viewing needs roles / view, every change roles / manage
-// (lead decision 7: Super Admins manage; the Resident Pastor may view).
-$roles_action = $_POST['action'] ?? $_GET['action'] ?? '';
-$roles_level = in_array($roles_action, ['fetch_master_roster', 'fetch_audit_logs'], true) ? 'view' : 'manage';
-if (!isset($_SESSION['user_id']) || !can('roles', $roles_level)) {
-    echo json_encode(['status' => 'error', 'message' => 'CRITICAL CLASSIFIED: Only Super Admins can access the Identity & Access Management core.']);
+require_once '../includes/db.php';
+require_once '../includes/permissions/expiry.php';
+csrf_require();
+
+$action = (string) ($_POST['action'] ?? $_GET['action'] ?? '');
+$isForm = $_SERVER['REQUEST_METHOD'] === 'POST' && empty($_SERVER['HTTP_X_CSRF_TOKEN'])
+    && stripos((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') === false;
+
+/** Stop "view as" (the shell's banner posts a plain form here; the screen uses HOD.api). */
+if ($action === 'view_as_stop') {
+    if (!empty($_SESSION['user_id'])) {
+        perm_view_as_stop($pdo);
+    }
+    if ($isForm) {
+        header('Location: /modules/roles/index.php', true, 303);
+        exit;
+    }
+    header('Content-Type: application/json');
+    echo json_encode(['status' => 'success', 'message' => 'Back to your own view.']);
     exit;
 }
 
-$admin_id = $_SESSION['user_id'];
-$action = $_POST['action'] ?? $_GET['action'] ?? '';
+header('Content-Type: application/json');
+header('Cache-Control: no-store');
+
+function roles_out(array $data): void
+{
+    echo json_encode(['status' => 'success'] + $data, JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function roles_fail(string $message, string $code = 'error', int $http = 200, ?string $link = null): void
+{
+    http_response_code($http);
+    echo json_encode(['status' => 'error', 'code' => $code, 'message' => $message] + ($link ? ['link' => $link] : []));
+    exit;
+}
+
+if (empty($_SESSION['user_id'])) {
+    roles_fail('Please sign in again.', 'SIGNED_OUT', 401);
+}
+$real = perm_real_current();
+if ($real === null || !$real['ready']) {
+    roles_fail('Roles & permissions is being set up. Try again after the next deploy.', 'not_ready');
+}
+$canView = $real['breakglass'] || perm_ctx_can($real, 'roles', 'view');
+$canManage = $real['breakglass'] || perm_ctx_can($real, 'roles', 'manage');
+if (!$canView) {
+    roles_fail('Roles & permissions is not open to you.', 'FORBIDDEN', 403);
+}
+
+// Reads and "view as" need View. Renewing a seat needs View plus the right to
+// appoint that seat (checked in perm_seat_renew). Everything else needs Manage,
+// and passes fits-within inside admin.php.
+$reads = ['matrix', 'roles', 'people_search', 'person', 'seats', 'history', 'impact', 'view_as_start'];
+if (!in_array($action, $reads, true)) {
+    if ($action !== 'seat_renew' && !$canManage) {
+        roles_fail('Only a Super Admin can change roles and permissions.', 'FORBIDDEN', 403);
+    }
+    if (perm_view_as() !== null) {
+        roles_fail('Stop viewing as someone first.', 'view_as');
+    }
+}
+
+$in = static fn (string $k, $d = '') => $_POST[$k] ?? $_GET[$k] ?? $d;
+$int = static fn (string $k): int => (int) ($_POST[$k] ?? $_GET[$k] ?? 0);
 
 try {
     switch ($action) {
+        case 'matrix':
+            roles_out(perm_matrix_data($pdo, $real) + ['can_manage' => $canManage]);
 
-        // ==========================================
-        // ACTION 1: FETCH MASTER ROSTER & FLAGS
-        // ==========================================
-        case 'fetch_master_roster':
-            // Fetches all users, their global roles, custom tags, and security flags
-            $stmt = $pdo->query("
-                SELECT u.id, u.first_name, u.last_name, u.email, u.phone, u.spiritual_status, u.attendance_status,
-                       GROUP_CONCAT(CONCAT(r.role_name, ':', ur.is_primary, ':', IFNULL(ur.custom_title, '')) SEPARATOR '|') as role_data,
-                       MAX(ur.is_frozen) as account_frozen
-                FROM users u
-                LEFT JOIN user_roles ur ON u.id = ur.user_id
-                LEFT JOIN roles r ON ur.role_id = r.id
-                GROUP BY u.id
-                ORDER BY u.first_name ASC
-            ");
-            $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            // Fetch standard roles for the assignment dropdown
-            $roles = $pdo->query("SELECT id, role_name FROM roles WHERE COALESCE(is_archived, 0) = 0 ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
-
-            echo json_encode(['status' => 'success', 'users' => $users, 'roles' => $roles]);
-            break;
-
-        // ==========================================
-        // ACTION 2: ASSIGN SYSTEM ROLE (With Hard Blocks)
-        // ==========================================
-        case 'assign_role':
-            $target_id = $_POST['user_id'] ?? '';
-            $role_id = $_POST['role_id'] ?? '';
-            $is_primary = isset($_POST['is_primary']) ? 1 : 0;
-
-            if (empty($target_id) || empty($role_id)) {
-                echo json_encode(['status' => 'error', 'message' => 'User and Role selections are mandatory.']);
-                exit;
+        case 'roles':
+            $presets = [];
+            foreach (perm_presets() as $key => $p) {
+                $presets[] = ['key' => $key, 'label' => $p['label'], 'info' => $p['info']];
             }
+            roles_out(['roles' => perm_roles_list($pdo), 'presets' => $presets, 'can_manage' => $canManage]);
 
-            // A. Fetch Target User Data to run the Hard Blocks
-            $uStmt = $pdo->prepare("SELECT first_name, last_name, phone, email, spiritual_status FROM users WHERE id = ?");
-            $uStmt->execute([$target_id]);
-            $user = $uStmt->fetch(PDO::FETCH_ASSOC);
+        case 'people_search':
+            roles_out(['people' => perm_people_search($pdo, (string) $in('q'))]);
 
-            // BLOCK 1: Unknown / Incomplete Profiles (Question 9 - Option A)
-            $is_unknown = (stripos($user['last_name'], 'Unknown') !== false || stripos($user['first_name'], 'Unknown') !== false);
-            $missing_contact = (empty($user['phone']) && empty($user['email']));
-            
-            if ($is_unknown || $missing_contact) {
-                echo json_encode([
-                    'status' => 'blocked', 
-                    'message' => 'Action Blocked: Profile is incomplete. Name and contact details are required for leadership roles.',
-                    'action_link' => '/modules/congregation/index.php?edit=' . $target_id,
-                    'action_text' => 'Update Profile in Congregation'
-                ]);
-                exit;
+        case 'person':
+            roles_out(perm_person_overview($pdo, $int('user_id')) + ['can_manage' => $canManage]);
+
+        case 'seats':
+            $modules = [];
+            foreach (perm_modules() as $key => $def) {
+                $modules[] = ['key' => $key, 'label' => $def['label'], 'group' => $def['group'], 'partitioned' => !empty($def['partitioned'])];
             }
+            roles_out(perm_seats_overview($pdo) + ['modules' => $modules, 'can_manage' => $canManage,
+                'can_roll' => $real['breakglass'] || perm_ctx_can($real, 'departments', 'manage')]);
 
-            // BLOCK 2: Membership/Spiritual Status Check (Question 3 - Option B)
-            if ($user['spiritual_status'] !== 'Worker') {
-                echo json_encode([
-                    'status' => 'blocked', 
-                    'message' => 'Action Blocked: User is currently a ' . str_replace('_', ' ', $user['spiritual_status']) . '. They must be officially upgraded to a Worker first.',
-                    'action_link' => '/modules/congregation/index.php?edit=' . $target_id,
-                    'action_text' => 'Upgrade Status in Congregation'
-                ]);
-                exit;
-            }
+        case 'history':
+            $f = ['person' => $int('person'), 'role' => $int('role'), 'module' => (string) $in('module'),
+                'type' => (string) $in('type'), 'from' => (string) $in('from'), 'to' => (string) $in('to')];
+            roles_out(perm_history_list($pdo, $f, 50, max(0, $int('offset'))));
 
-            // B. Role Stacking Logic (Question 2 - Option C)
-            // If setting as primary, demote any existing primary roles for this user
-            if ($is_primary) {
-                $pdo->prepare("UPDATE user_roles SET is_primary = 0 WHERE user_id = ?")->execute([$target_id]);
-            }
+        case 'impact':
+            roles_out(['people' => perm_holder_reach($pdo, (string) $in('holder'))]);
 
-            // Insert or Update the Role
-            $stmt = $pdo->prepare("
-                INSERT INTO user_roles (user_id, role_id, is_primary) 
-                VALUES (?, ?, ?) 
-                ON DUPLICATE KEY UPDATE is_primary = VALUES(is_primary)
-            ");
-            $stmt->execute([$target_id, $role_id, $is_primary]);
+        case 'view_as_start':
+            $va = perm_view_as_start($pdo, $real, (string) $in('kind'), $int('id'));
+            roles_out(['view_as' => $va, 'message' => 'Viewing as ' . $va['label'] . '.']);
 
-            // C. Audit Trail (Question 7 - Option A)
-            $rStmt = $pdo->prepare("SELECT role_name FROM roles WHERE id = ?");
-            $rStmt->execute([$role_id]);
-            $role_name = $rStmt->fetchColumn();
+        case 'seat_renew':
+            $new = perm_seat_renew($pdo, $real, $int('record_id'));
+            roles_out(['ends_on' => $new, 'message' => 'Renewed until ' . perm_date_text($new) . '.']);
 
-            $log = $pdo->prepare("INSERT INTO role_assignment_logs (target_user_id, role_id, action_type, action_details, performed_by) VALUES (?, ?, 'Granted', ?, ?)");
-            $log->execute([$target_id, $role_id, "Granted $role_name role (Primary: " . ($is_primary ? 'Yes' : 'No') . ")", $admin_id]);
+        // ---------------------------------------------------------------- changes
+        case 'cell_set':
+            $n = perm_cells_set($pdo, $real, [[
+                'holder' => (string) $in('holder'), 'module' => (string) $in('module'),
+                'cell' => ['level' => $in('level', 0), 'approve' => $in('approve', 0), 'export' => $in('export', 0),
+                    'manage' => $in('manage', 0), 'scope' => $in('scope', 'church'), 'view_scope' => $in('view_scope', '')],
+            ]]);
+            $h = perm_holder_parse((string) $in('holder'));
+            $cell = perm_cell_get($pdo, $h, (string) $in('module'));
+            roles_out(['changed' => $n, 'cell' => $cell, 'message' => $n ? 'Saved.' : 'No change.']);
 
-            // NOTIFICATION TRIGGER: Inform the user of their new clearance
-            $cleanRole = str_replace('_', ' ', $role_name);
-            $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'System Clearance Updated', ?, '/modules/profile/index.php')");
-            $notifStmt->execute([$target_id, "You have been granted the '{$cleanRole}' system role by an administrator. Please log out and back in to see your new modules."]);
+        case 'column':
+            $changes = perm_column_changes($pdo, (string) $in('holder'), (string) $in('op'), (string) $in('from'));
+            $n = perm_cells_set($pdo, $real, $changes, 'roles_screen', 'column: ' . $in('op'));
+            roles_out(['changed' => $n, 'message' => $n . ' ' . ($n === 1 ? 'cell' : 'cells') . ' changed.']);
 
-            echo json_encode(['status' => 'success', 'message' => "Role successfully assigned to {$user['first_name']}."]);
-            break;
+        case 'group_set':
+            $changes = perm_group_changes((string) $in('holder'), (string) $in('group'), [
+                'level' => $in('level', 0), 'scope' => $in('scope', 'church'),
+                'approve' => $in('approve', 0), 'export' => $in('export', 0), 'manage' => $in('manage', 0),
+            ]);
+            $n = perm_cells_set($pdo, $real, $changes, 'roles_screen', 'group: ' . $in('group'));
+            roles_out(['changed' => $n, 'message' => $n . ' ' . ($n === 1 ? 'cell' : 'cells') . ' changed.']);
 
-        // ==========================================
-        // ACTION 3: ADD CUSTOM TITLE TAG (Hybrid Roles)
-        // ==========================================
-        case 'assign_custom_title':
-            $target_id = $_POST['user_id'] ?? '';
-            $role_id = $_POST['role_id'] ?? ''; // Which base role this title attaches to
-            $title = trim($_POST['custom_title'] ?? '');
+        case 'role_create':
+            $id = perm_role_create($pdo, $real, (string) $in('label'), (string) $in('description'),
+                (string) $in('preset', 'blank'), $int('copy_from'));
+            roles_out(['role_id' => $id, 'message' => 'Role created.']);
 
-            $stmt = $pdo->prepare("UPDATE user_roles SET custom_title = ? WHERE user_id = ? AND role_id = ?");
-            $stmt->execute([$title, $target_id, $role_id]);
+        case 'role_update':
+            perm_role_update($pdo, $real, $int('role_id'), (string) $in('label'), (string) $in('description'));
+            roles_out(['message' => 'Role saved.']);
 
-            $log = $pdo->prepare("INSERT INTO role_assignment_logs (target_user_id, role_id, action_type, action_details, performed_by) VALUES (?, ?, 'Title_Added', ?, ?)");
-            $log->execute([$target_id, $role_id, "Added custom display tag: '$title'", $admin_id]);
+        case 'role_archive':
+            $archive = (string) $in('archive', '1') !== '0';
+            perm_role_archive($pdo, $real, $int('role_id'), $archive);
+            roles_out(['message' => $archive ? 'Role archived.' : 'Role restored.']);
 
-            echo json_encode(['status' => 'success', 'message' => "Custom title tag attached."]);
-            break;
+        case 'user_role_add':
+            perm_user_role_add($pdo, $real, $int('user_id'), $int('role_id'), (string) $in('starts_on'), (string) $in('ends_on'),
+                (string) $in('custom_title'));
+            roles_out(['message' => 'Role given.']);
 
-        // ==========================================
-        // ACTION 4: REVOKE ROLE
-        // ==========================================
-        case 'revoke_role':
-            $target_id = $_POST['user_id'] ?? '';
-            $role_id = $_POST['role_id'] ?? '';
+        case 'user_role_remove':
+            perm_user_role_remove($pdo, $real, $int('user_id'), $int('role_id'), (string) $in('reason'));
+            roles_out(['message' => 'Role removed.']);
 
-            // Fetch role name for logging and notification before deletion
-            $rStmt = $pdo->prepare("SELECT role_name FROM roles WHERE id = ?");
-            $rStmt->execute([$role_id]);
-            $role_name = $rStmt->fetchColumn();
+        case 'user_role_dates':
+            perm_user_role_dates($pdo, $real, $int('user_id'), $int('role_id'), (string) $in('starts_on'), (string) $in('ends_on'),
+                (string) $in('custom_title'));
+            roles_out(['message' => 'Dates saved.']);
 
-            $pdo->prepare("DELETE FROM user_roles WHERE user_id = ? AND role_id = ?")->execute([$target_id, $role_id]);
+        case 'user_role_renew':
+            $new = perm_user_role_renew($pdo, $real, $int('user_id'), $int('role_id'));
+            roles_out(['ends_on' => $new, 'message' => 'Renewed until ' . perm_date_text($new) . '.']);
 
-            $log = $pdo->prepare("INSERT INTO role_assignment_logs (target_user_id, role_id, action_type, action_details, performed_by) VALUES (?, ?, 'Revoked', 'System role revoked', ?)");
-            $log->execute([$target_id, $role_id, $admin_id]);
+        case 'seat_type_set':
+            perm_seat_type_update($pdo, $real, (string) $in('seat_key'), [
+                'label' => $in('label'), 'seat_rank' => $in('seat_rank'), 'max_holders' => $in('max_holders', ''),
+                'covers_sub_units' => $in('covers_sub_units', 0), 'can_appoint' => $in('can_appoint', 0),
+            ]);
+            roles_out(['message' => 'Seat saved.']);
 
-            // NOTIFICATION TRIGGER: Alert the user that access was removed
-            $cleanRole = str_replace('_', ' ', $role_name);
-            $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'System Clearance Revoked', ?, '/modules/profile/index.php')");
-            $notifStmt->execute([$target_id, "Your '{$cleanRole}' system privileges have been formally revoked. Contact an administrator if you believe this is an error."]);
+        case 'dept_seat_set':
+            perm_dept_seat_set($pdo, $real, $int('department_id'), (string) $in('seat_key'),
+                (string) $in('enabled', '1') !== '0', $in('max_holders', ''));
+            roles_out(['message' => 'Saved.']);
 
-            echo json_encode(['status' => 'success', 'message' => 'Role completely revoked.']);
-            break;
-
-        // ==========================================
-        // ACTION 5: FETCH AUDIT LOGS (Tab 2)
-        // ==========================================
-        case 'fetch_audit_logs':
-            $stmt = $pdo->query("
-                SELECT l.*, 
-                       t.first_name as target_fname, t.last_name as target_lname,
-                       p.first_name as admin_fname, p.last_name as admin_lname,
-                       r.role_name
-                FROM role_assignment_logs l
-                JOIN users t ON l.target_user_id = t.id
-                JOIN users p ON l.performed_by = p.id
-                LEFT JOIN roles r ON l.role_id = r.id
-                ORDER BY l.created_at DESC LIMIT 100
-            ");
-            echo json_encode(['status' => 'success', 'logs' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
-            break;
-
-        // ==========================================
-        // ACTION 6: FREEZE/UNFREEZE ACCOUNT (Manual Review for Relocated)
-        // ==========================================
-        case 'toggle_freeze':
-            $target_id = $_POST['user_id'] ?? '';
-            $is_frozen = $_POST['freeze_status'] ?? 0;
-
-            $pdo->prepare("UPDATE user_roles SET is_frozen = ? WHERE user_id = ?")->execute([$is_frozen, $target_id]);
-
-            $action = $is_frozen ? 'Frozen' : 'Unfrozen';
-            $log = $pdo->prepare("INSERT INTO role_assignment_logs (target_user_id, action_type, action_details, performed_by) VALUES (?, ?, ?, ?)");
-            $log->execute([$target_id, $action, "Account privileges $action manually.", $admin_id]);
-
-            // NOTIFICATION TRIGGER: Inform the user of their account status
-            $status_word = $is_frozen ? 'suspended' : 'restored';
-            $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Account Status Alert', ?, '/modules/profile/index.php')");
-            $notifStmt->execute([$target_id, "Your administrative account privileges have been {$status_word}."]);
-
-            echo json_encode(['status' => 'success', 'message' => "Account privileges have been $action."]);
-            break;
+        case 'owner_set':
+            perm_owner_set($pdo, $real, (string) $in('module'), $int('department_id'), (string) $in('owns', '1') !== '0');
+            roles_out(['message' => 'Saved.']);
 
         default:
-            echo json_encode(['status' => 'error', 'message' => 'Invalid IAM command.']);
-            break;
+            roles_fail('Unknown action. Reload the page.', 'action');
     }
-
-} catch (PDOException $e) {
-    error_log("IAM API Error: " . $e->getMessage());
-    echo json_encode(['status' => 'error', 'message' => 'System error. Contact Database Admin.']);
+} catch (PermAdminError $e) {
+    roles_fail($e->getMessage(), $e->errorCode, 200, $e->link);
+} catch (Throwable $e) {
+    error_log('roles_api ' . $action . ': ' . $e->getMessage());
+    roles_fail('That did not save. Try again; if it keeps failing, tell the church office.', 'server', 500);
 }
-?>
