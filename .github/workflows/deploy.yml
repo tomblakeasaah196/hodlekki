@@ -191,7 +191,7 @@ jobs:
           # No MySQL and no network: the database half runs on in-memory
           # SQLite built from the real migration. Without pdo_sqlite that half
           # would print SKIP and pass, so refuse to run without it.
-          if ! php -m | grep -qix 'pdo_sqlite'; then
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
             echo "::error::pdo_sqlite is missing — the Bible database tests would be skipped"
             exit 1
           fi
@@ -215,7 +215,7 @@ jobs:
           # No MySQL and no network: the database half runs on in-memory
           # SQLite built from the real migration. Without pdo_sqlite that half
           # would print SKIP and pass, so refuse to run without it.
-          if ! php -m | grep -qix 'pdo_sqlite'; then
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
             echo "::error::pdo_sqlite is missing — the Hymnary database tests would be skipped"
             exit 1
           fi
@@ -249,7 +249,7 @@ jobs:
           # predicate and the as-at-date report status on in-memory SQLite.
           # Without pdo_sqlite the script prints SKIP and exits 0, so refuse to
           # run without it.
-          if ! php -m | grep -qix 'pdo_sqlite'; then
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
             echo "::error::pdo_sqlite is missing — the Sunday ladder tests would be skipped"
             exit 1
           fi
@@ -265,7 +265,7 @@ jobs:
           # (includes/auth_helpers.php) against SQLite built from the real
           # migration, through a real PHP session. Both print SKIP and exit 0
           # without pdo_sqlite, so refuse to run without it.
-          if ! php -m | grep -qix 'pdo_sqlite'; then
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
             echo "::error::pdo_sqlite is missing — the dashboard and sign-in tests would be skipped"
             exit 1
           fi
@@ -279,7 +279,7 @@ jobs:
           # No MySQL: the perm_* schema and the day-one matrix are built on
           # SQLite from the real migration files, and every difference
           # between today's rules and can() must be one the owner decided.
-          if ! php -m | grep -qix 'pdo_sqlite'; then
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
             echo "::error::pdo_sqlite is missing — the permissions tests would be skipped"
             exit 1
           fi
@@ -295,7 +295,7 @@ jobs:
           # absence ladders on the REAL Charis AWOL engine, against SQLite
           # built from the real migration (includes/campaigns/). It prints
           # SKIP and exits 0 without pdo_sqlite, so refuse to run without it.
-          if ! php -m | grep -qix 'pdo_sqlite'; then
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
             echo "::error::pdo_sqlite is missing — the email and automation tests would be skipped"
             exit 1
           fi
@@ -319,7 +319,7 @@ jobs:
           # tests/ui/run.php renders the shell against SQLite and pins the
           # navigation's access decisions to the old sidebar's; without
           # pdo_sqlite the render half could not run.
-          if ! php -m | grep -qix 'pdo_sqlite'; then
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
             echo "::error::pdo_sqlite is missing — the shell render test would not run"
             exit 1
           fi
@@ -351,7 +351,7 @@ jobs:
           # child PHP processes (warnings, uncaught exceptions, out of memory,
           # cron heartbeats, the log reader not double counting). The same
           # suite runs on MySQL 8 and MariaDB 10.11 in the integration job.
-          if ! php -m | grep -qix 'pdo_sqlite'; then
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
             echo "::error::pdo_sqlite is missing — the monitor's database tests cannot run"
             exit 1
           fi

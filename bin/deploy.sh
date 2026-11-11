@@ -135,18 +135,21 @@ echo "[deploy] composer install done"
 # 7. Clear the host's NGINX cache. cPanel runs NGINX in front of LiteSpeed
 #    and keeps its own copy of static files, so without this a new sw.js or
 #    asset can be served stale for hours after a deploy. Never fatal.
-#    The first deploys with this step logged a failure, while the same call
-#    from cPanel worked. The webhook runs this script from a web request whose
-#    CGI variables (REQUEST_METHOD, HTTP_*, ...) are the likely cause, so uapi
-#    gets a clean environment; on failure its own output goes to the log.
+#    The first version logged a failure on every deploy while the same call
+#    from cPanel worked. Likely cause: it piped uapi into `grep -q`, which
+#    exits at the first match; uapi then dies of SIGPIPE and, under pipefail,
+#    the whole test counts as failed. So: no pipe (the output is captured
+#    first and matched in bash), a clean environment (the webhook runs this
+#    from a web request), and on failure uapi's own words go to the log.
 UAPI=/usr/local/cpanel/bin/uapi
 if [ -x "$UAPI" ]; then
     me="$(id -un)"
     nginx_out="$(env -i HOME="/home/$me" USER="$me" LOGNAME="$me" PATH=/usr/local/bin:/usr/bin:/bin "$UAPI" --output=json NginxCaching clear_cache 2>&1)" || true
-    if printf '%s' "$nginx_out" | grep -Eq '"status" *: *1'; then
+    nginx_flat="$(printf '%s' "$nginx_out" | tr -d '[:space:]')"
+    if [[ "$nginx_flat" == *'"status":1'* ]]; then
         echo "[deploy] nginx cache cleared"
     else
-        echo "[deploy] WARNING: nginx cache clear failed (not fatal): $(printf '%s' "$nginx_out" | tr -s '[:space:]' ' ' | cut -c1-300)"
+        echo "[deploy] WARNING: nginx cache clear failed (not fatal): ${nginx_flat:0:300}"
     fi
 fi
 
