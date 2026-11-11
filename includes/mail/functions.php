@@ -113,11 +113,10 @@ if (!function_exists('mail_info')) {
      * line, everything else behind an (i)). Always placed where the component takes HTML (an `actions` slot or
      * raw markup), never inside an escaped `text`.
      *
-     * TODO(mail): return ui_info($text) once the foundation's ui_info() is on main (the lead will say). Until then
-     * the explanation stays in the code and nothing is printed.
+     * The foundation's ui_info() (docs/UI.md, "Writing: short copy"); nothing where it is not loaded (CLI).
      */
     function mail_info(string $text): string
     {
-        return '';
+        return function_exists('ui_info') ? ui_info($text) : '';
     }
 }
