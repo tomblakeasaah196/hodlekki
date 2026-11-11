@@ -28,7 +28,9 @@ $root = dirname(__DIR__);
 function ui_manifest_hash(string $path): string
 {
     $bytes = (string) file_get_contents($path);
-    if (preg_match('/\.(css|js|svg|json|txt)$/', $path)) {
+    // .mjs too: the vendored qrcode module is an ES module, and a Windows
+    // checkout gives it CRLF like any other text file.
+    if (preg_match('/\.(css|js|mjs|svg|json|txt)$/', $path)) {
         $bytes = str_replace("\r\n", "\n", $bytes);
     }
 
@@ -44,6 +46,9 @@ $globs = [
     '/assets/ui/js/*.js',
     '/assets/ui/js/pages/*.js',
     '/assets/ui/vendor/*.js',
+    '/assets/ui/vendor/*/*.js',
+    '/assets/ui/vendor/*/*.css',
+    '/assets/ui/vendor/*/*.mjs',
 ];
 $singles = [
     '/assets/js/global-search.js',

@@ -194,7 +194,7 @@
             var filtered = state.errors.status !== 'open' || errorFilters().q || errorFilters().kind;
             target.appendChild(empty(filtered ? 'search' : 'circle-check',
                 filtered ? 'No problems match' : 'No open problems',
-                filtered ? 'Try another status or clear the search.' : 'When the site meets an error it appears here within a minute, with everything needed to fix it.'));
+                filtered ? 'Try another status or clear the search.' : 'New errors appear here within a minute.'));
             if (pager) pager.hidden = true;
             return;
         }
@@ -385,7 +385,7 @@
             row.appendChild(b);
         });
         actions.appendChild(row);
-        actions.appendChild(el('p', 'ui-hint', 'A problem marked fixed reopens by itself if it happens again, and you are told.'));
+        actions.appendChild(el('p', 'ui-hint', 'It reopens by itself if it happens again.'));
         body.appendChild(actions);
 
         var notes = section('Notes');
@@ -743,7 +743,7 @@
 
     HOD.actions.on('monitor.recipient-remove', function (button) {
         var email = button.getAttribute('data-email');
-        HOD.confirm({ title: 'Stop alerts to ' + email + '?', message: 'This address will get no more alert emails or morning summaries. You can add it again later.',
+        HOD.confirm({ title: 'Stop alerts to ' + email + '?', message: 'No more alerts or summaries. You can add it again later.',
             confirmLabel: 'Remove address', tone: 'danger' }).then(function (yes) {
             if (!yes) return;
             HOD.busy(button, true);
@@ -786,7 +786,7 @@
     });
 
     HOD.actions.on('monitor.wall-rotate', function (button) {
-        HOD.confirm({ title: 'Make a new live wall link?', message: 'Screens showing the current link stop updating until they are given the new one.',
+        HOD.confirm({ title: 'Make a new live wall link?', message: 'Screens on the old link stop updating.',
             confirmLabel: 'Make a new link', tone: 'danger' }).then(function (yes) {
             if (!yes) return;
             HOD.busy(button, true);

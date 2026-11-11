@@ -8,24 +8,6 @@ assimilation.php | paragraph | Enter the phone number the church has for you. On
 assimilation.php | paragraph | Saving this closes the follow-up and tells your leaders why. Bless them before you drop.
 assimilation.php | paragraph | You are all caught up. Keep praying for the ones you have called.
 auth/setup_password.php | paragraph | For accounts that have never had a password. Enter your registered email to create one.
-modules/library/index.php | paragraph | Browse our collection of physical books, e-books, and audiobooks designed to build your faith, leadership, and purpose.
-modules/monitor/index.php | banner-text | The monitor's cron job runs the health checks every five minutes; the first appear within five minutes. "Run the checks now" on the Health tab runs them at once.
-modules/monitor/index.php | button | Make a new link
-modules/monitor/index.php | button | Run the checks now
-modules/monitor/index.php | button | See the health checks
-modules/monitor/index.php | button | Send a test alert
-modules/monitor/index.php | empty-text | Add the address that should hear about problems first. Alerts reach Super Admins' bells either way.
-modules/monitor/index.php | empty-text | Its tables are not in the database yet. They arrive with the next deploy (bin/deploy.sh runs db/migrate.php); this page fills in as soon as they do.
-modules/monitor/index.php | empty-text | They run every five minutes once the monitor's cron job is in cPanel → Cron Jobs. "Run the checks now" runs them once from here.
-modules/monitor/index.php | empty-text | When the site meets an error it appears here within a minute, with everything needed to fix it.
-modules/monitor/index.php | paragraph | A full-screen view for a TV or a spare screen: health, errors as they happen, uptime and speed. It needs no sign-in; the link itself is the key, so share it only with the team.
-modules/monitor/index.php | paragraph | Checked from GitHub's machines (the outside probe, about every hour): both addresses, the certificates, the mail records and the origin lock. A server that is down cannot receive the report, so a gap in the bars is itself a warning.
-modules/monitor/index.php | paragraph | Each bar is an hour, oldest on the left. Warnings, notices and slow pages are not counted here.
-modules/monitor/index.php | paragraph | Measured in members' own browsers as Google does (Core Web Vitals): the figure is what 75% of visits were at least as fast as. Good: loading under 2.5 s, response to a tap under 200 ms, layout shift under 0.10, first byte under 0.8 s.
-modules/monitor/index.php | paragraph | New errors, red health checks and the morning summary. An address gets nothing until its owner clicks the confirmation link. Super Admins always get the bell and phone notifications.
-modules/monitor/index.php | paragraph | Sends a test email to every confirmed address and a bell to every Super Admin.
-modules/monitor/index.php | title | The monitor is being set up
-modules/monitor/wall.php | paragraph | No open problems. When the site meets an error, it appears here within seconds.
 parent_portal.php | paragraph | Here's what your little ones have been up to in Junior Church. Browse their attendance, lessons, and take-home resources below.
 parent_portal.php | paragraph | See what your child has been learning, their attendance, and take-home resources from Junior Church.
 parent_portal.php | paragraph | We couldn't find any children linked to your profile. Please contact the Junior Church team.

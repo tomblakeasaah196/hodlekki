@@ -280,6 +280,24 @@ if (!extension_loaded('pdo_sqlite')) {
     ok('closing again prints nothing', true);
     ok('no inline event handler in the shell', !preg_match('/\son[a-z]+="/i', $html));
     ok('no style attribute in the shell', strpos($html, ' style="') === false);
+
+    // The public layout (signed-out pages such as the Library).
+    $_SESSION = ['_csrf' => $_SESSION['_csrf']];
+    require_once $root . '/includes/ui/public.php';
+    ob_start();
+    ui_public_open(['title' => 'Charis Library', 'mode' => 'strict', 'actions' => '<a href="/auth/login.php">Sign in</a>', 'head' => '<meta property="og:title" content="X">']);
+    echo '<p>content</p>';
+    ui_public_close();
+    $pub = (string) ob_get_clean();
+    ui_public_close();
+    ok('the public layout renders a titled page with its head tags and bar actions',
+        strpos($pub, '<title>Charis Library · HOD Lekki</title>') !== false
+        && strpos($pub, '<meta property="og:title" content="X">') !== false
+        && strpos($pub, 'class="ui-public-bar__actions"><a href="/auth/login.php">Sign in</a>') !== false);
+    ok('the public layout has no members\' navigation', strpos($pub, 'ui-sidebar') === false && strpos($pub, 'ui-bottombar') === false);
+    ok('the public layout carries the CSRF token, the toasts and the boot data once',
+        strpos($pub, 'name="csrf-token"') !== false && substr_count($pub, 'id="ui-toasts"') === 1 && substr_count($pub, 'id="hod-ui"') === 1);
+    ok('the public layout has no inline handler or style attribute', !preg_match('/\son[a-z]+="/i', $pub) && strpos($pub, ' style="') === false);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -321,6 +339,39 @@ foreach ($strictFiles as $path => $src) {
     }
     ok("strict page {$path} is clean", $problems === [], implode(', ', $problems));
 }
+
+// Every module page must require the shell by a path that resolves from its
+// own folder (modules/dashboard/ once required 'includes/header.php' and
+// answered HTTP 500 while Departments linked to it).
+$badRequire = [];
+foreach (glob($root . '/modules/*/index.php') ?: [] as $page) {
+    $src = (string) file_get_contents($page);
+    if (!preg_match_all("/\brequire(?:_once)?\b\s*\(?\s*([^;\n]*header\.php[^;\n]*?)\)?\s*;/", $src, $req)) {
+        continue;
+    }
+    foreach ($req[1] as $expr) {
+        $ok = strpos($expr, '__DIR__') !== false || preg_match("#['\"]\\.\\./\\.\\./includes/header\\.php['\"]#", $expr);
+        if (!$ok) {
+            $badRequire[] = substr($page, strlen($root) + 1) . ': ' . trim($expr);
+        }
+    }
+}
+ok('every module requires the shell by a path that resolves from its folder', $badRequire === [], implode('; ', $badRequire));
+// Every public entry point sends the baseline security headers: either it
+// loads includes/db.php (or the shell) unconditionally at the top level, or it
+// calls security_send_baseline_headers() itself (login and connect once sent
+// none on a plain GET).
+$noHeaders = [];
+foreach (array_merge(glob($root . '/*.php') ?: [], glob($root . '/auth/*.php') ?: []) as $entry) {
+    $src = (string) file_get_contents($entry);
+    $loadsDb = (bool) preg_match("#^require_once __DIR__ \\. '(/\\.\\.)?/includes/(db|header)\\.php';#m", $src);
+    if (!$loadsDb && strpos($src, 'security_send_baseline_headers()') === false) {
+        $noHeaders[] = substr($entry, strlen($root) + 1);
+    }
+}
+ok('every root and /auth/ entry point sends the baseline security headers', $noHeaders === [], implode(', ', $noHeaders));
+ok('the old /modules/dashboard/ URL redirects to the dashboard',
+    strpos((string) file_get_contents($root . '/modules/dashboard/index.php'), "header('Location: /index.php'") !== false);
 
 $allowedCdn = array_values(array_filter(array_map('trim', file($root . '/tests/ui/tailwind_cdn_allowlist.txt') ?: []),
     static fn ($l) => $l !== '' && $l[0] !== '#'));

@@ -254,6 +254,8 @@ jobs:
             exit 1
           fi
           php tests/status_ladder_test.php
+          # Who may read and post on an Academy cohort's noticeboard.
+          php tests/academy_forum_access_test.php
 
       - name: Dashboard numbers and sign-in tests
         run: |

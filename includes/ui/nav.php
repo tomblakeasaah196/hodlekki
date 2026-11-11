@@ -67,7 +67,8 @@ function ui_nav_registry(): array
         ['key' => 'regions', 'label' => 'Regional Hubs', 'icon' => 'map-pin', 'href' => '/modules/regions/index.php', 'section' => 'command',
             'match' => ['regions'], 'keywords' => ['regions', 'hubs', 'locations', 'broadcast'], 'tabs' => ['hub' => 'My Region']],
         ['key' => 'idi', 'label' => 'Data Insights (IDI)', 'icon' => 'chart-column', 'href' => '/modules/idi/index.php', 'section' => 'command',
-            'match' => ['idi'], 'keywords' => ['idi', 'analytics', 'insights', 'data', 'reports', 'statistics']],
+            'match' => ['idi'], 'keywords' => ['idi', 'analytics', 'insights', 'data', 'reports', 'statistics'],
+            'tabs' => ['congregation' => 'Congregation', 'attendance' => 'Events', 'embrace' => 'Embrace', 'operations' => 'Units & Academy', 'charis' => 'Charis', 'pastoral' => 'Pastoral']],
         // Mail (docs/MAIL.md): shown to people who work from a mailbox, and to mail admins and export approvers
         // (the Mailboxes screen is reached from the Mail page). The badge: unread Inbox conversations.
         ['key' => 'mail', 'label' => 'Mail', 'icon' => 'mail', 'href' => '/modules/mail/index.php', 'section' => 'command',
