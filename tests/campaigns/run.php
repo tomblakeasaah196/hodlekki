@@ -831,6 +831,36 @@ ct_confirm($p, 100, 'grace.real@gmail.com', false);
 ct_eq('confirmed → nothing to do', 'none', email_prompt_state($p, 100));
 
 // ===========================================================================
+ct_section('16b2. Capture from Connect and Embrace forms');
+// ===========================================================================
+$cf = ct_db();
+ct_at('2026-11-22 10:00');
+ct_user($cf, 110, 'Kola', '1st_Timer', ['email' => 'kola@gmail.com']);
+email_capture_after_save($cf, 110, 'Kola@Gmail.com', 'connect', null, true, ['ip' => '102.1.1.1', 'user_agent' => 'Phone']);
+ct_eq('a Connect card with an email starts confirmation', 'kola@gmail.com', email_address_state($cf, 110)['pending']);
+ct_eq('…and the confirm email is queued', 1, ct_count($cf, 'email_outbox', "flow = 'confirm_email' AND user_id = 110"));
+$kc = email_consent_current($cf, 110);
+ct_ok('…with their own "yes" (the Connect wording, their IP)', $kc['action'] === 'granted' && $kc['method'] === 'connect_form'
+    && $kc['ip'] === '102.1.1.1' && $kc['recorded_by'] === null);
+ct_at('2026-11-22 10:05');
+email_capture_after_save($cf, 110, 'kola@gmail.com', 'embrace', 900, false);
+ct_eq('saving the record again never re-sends the link', 1, ct_count($cf, 'email_outbox', "flow = 'confirm_email' AND user_id = 110"));
+ct_user($cf, 111, 'Lara', '1st_Timer');
+email_capture_after_save($cf, 111, 'lara@yahoo.com', 'embrace', 901, true);
+$lc = email_consent_current($cf, 111);
+ct_ok('an Embrace worker records a spoken yes, with their name and the script', $lc['method'] === 'embrace_entry'
+    && (int) $lc['recorded_by'] === 901 && $lc['ip'] === null
+    && $cf->query('SELECT body FROM email_consent_texts WHERE id = ' . (int) $lc['text_id'])->fetchColumn() === EMAIL_CONSENT_NEWS_SPOKEN_TEXT);
+ct_user($cf, 112, 'Musa', '1st_Timer');
+email_capture_after_save($cf, 112, 'musa@hodlekki.org', 'embrace', 901, true);
+ct_ok('a church address is ignored (no link, no consent)', email_address_state($cf, 112)['pending'] === null && email_consent_state($cf, 112) === 'none');
+email_capture_after_save($cf, 112, '', 'embrace', 901, true);
+ct_eq('no email, nothing recorded', 'none', email_consent_state($cf, 112));
+email_capture_after_save($cf, 111, 'lara.new@yahoo.com', 'embrace', 901, false);
+ct_eq('a changed address starts a new link', 'lara.new@yahoo.com', email_address_state($cf, 111)['pending']);
+ct_eq('…and an unticked box withdraws nothing', 'granted', email_consent_state($cf, 111));
+
+// ===========================================================================
 ct_section('16c. Sign-in with a personal email');
 // ===========================================================================
 ct_user($p, 101, 'Femi', 'Member', ['email' => 'femi@hodlc.com']);
