@@ -378,5 +378,44 @@ $gone = array_diff($allowedCdn, $tailwindCdn);
 ok('no new page loads the Tailwind CDN', $newCdn === [], implode(', ', $newCdn));
 ok('the allow-list names only pages that still use it (remove the ones you rebuilt)', $gone === [], implode(', ', $gone));
 
+/* ---------------------------------------------------------------------- */
+suite('8. view transitions never leak "AbortError: Transition was skipped"');
+
+// Page-to-page transitions are opted into by @view-transition in pwa.css,
+// which only includes/pwa_head.php loads. A skipped transition rejects the
+// ViewTransition's promises; unhandled, the error monitor logged one per
+// page view. pwa_head.php handles them on pageswap and pagereveal.
+$pwaHead = (string) file_get_contents($root . '/includes/pwa_head.php');
+ok('pwa_head.php handles skipped page transitions on pageswap and pagereveal',
+    strpos($pwaHead, "addEventListener('pageswap'") !== false
+    && strpos($pwaHead, "addEventListener('pagereveal'") !== false
+    && (bool) preg_match("/\\['ready', 'finished', 'updateCallbackDone'\\][\\s\\S]{0,200}\\.catch\\(/", $pwaHead));
+$vtCss = [];
+$vtJs = [];
+$it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+foreach ($it as $file) {
+    $path = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
+    if (preg_match('#^(vendor|node_modules|\.git|\.tailwind|tests)/#', $path) || strpos($path, '/vendor/') !== false) {
+        continue;
+    }
+    if (preg_match('/\.(css|php)$/', $path) && strpos((string) file_get_contents($file->getPathname()), '@view-transition') !== false) {
+        $vtCss[] = $path;
+    }
+    if (preg_match('/\.(js|php)$/', $path)) {
+        $src = (string) file_get_contents($file->getPathname());
+        // Every script-started transition handles its promises within the same statement.
+        if (preg_match_all('/startViewTransition\s*\(/', $src, $calls, PREG_OFFSET_CAPTURE)) {
+            foreach ($calls[0] as [$call, $at]) {
+                if (!preg_match('/\.catch\s*\(/', substr($src, $at, 600))) {
+                    $vtJs[] = $path;
+                }
+            }
+        }
+    }
+}
+ok('only pwa.css (loaded with the pwa_head.php guard) opts pages into view transitions',
+    array_diff($vtCss, ['assets/css/pwa.css']) === [], implode(', ', array_diff($vtCss, ['assets/css/pwa.css'])));
+ok('every document.startViewTransition() call handles its promises (.catch)', $vtJs === [], implode(', ', array_unique($vtJs)));
+
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed === 0 ? 0 : 1);
