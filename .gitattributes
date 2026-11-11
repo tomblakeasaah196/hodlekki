@@ -1,0 +1,5 @@
+# Shell scripts run on the Linux server: always LF, whatever the editor or
+# core.autocrlf says (a CRLF bin/deploy.sh stopped deploys on 11 Nov 2026).
+*.sh text eol=lf
+.deployignore text eol=lf
+bin/retired_files.txt text eol=lf
