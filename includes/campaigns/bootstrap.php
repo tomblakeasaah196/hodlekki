@@ -46,3 +46,4 @@ require_once __DIR__ . '/journey.php';
 require_once __DIR__ . '/absence.php';
 require_once __DIR__ . '/defaults.php';
 require_once __DIR__ . '/coverage.php';
+require_once __DIR__ . '/identity.php';

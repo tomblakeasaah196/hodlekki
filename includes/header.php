@@ -36,6 +36,20 @@ if (!empty($_SESSION['must_change_password'])) {
     exit;
 }
 
+// Everyone needs a confirmed personal email (docs/EMAIL.md). With none and no
+// recent link, every page sends them to the prompt, which (like
+// change_password.php) never includes this file. The answer is cached in the
+// session for 5 minutes, so this costs nothing on most page views.
+require_once __DIR__ . '/campaigns/util.php';
+require_once __DIR__ . '/campaigns/addresses.php';
+require_once __DIR__ . '/campaigns/identity.php';
+$emailPrompt = email_prompt_state_cached($pdo, (int) $_SESSION['user_id']);
+if ($emailPrompt === 'required') {
+    $emailPromptNext = auth_safe_next((string) ($_SERVER['REQUEST_URI'] ?? ''));
+    header('Location: /auth/add_email.php' . ($emailPromptNext !== null ? '?next=' . rawurlencode($emailPromptNext) : ''));
+    exit;
+}
+
 require_once __DIR__ . '/ui/shell.php';
 
 // ------------------------------------------------------------------------
@@ -77,3 +91,8 @@ $uiPage = ui_page_config(isset($ui) && is_array($ui) ? $ui : [], $uiModuleKey);
 $moduleTitle = $uiPage['title'];
 
 ui_shell_open($pdo, $uiPage);
+
+// A confirmation link is waiting: a reminder at the top of every page.
+if ($emailPrompt === 'banner') {
+    echo email_prompt_banner($pdo, (int) $_SESSION['user_id']);
+}

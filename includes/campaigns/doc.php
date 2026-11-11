@@ -47,6 +47,12 @@ function email_doc_url_ok(string $url): bool
     if (str_starts_with($url, 'tel:')) {
         return (bool) preg_match('/^tel:\+?[0-9]{3,20}$/', $url);
     }
+    // A local copy of the site (SITE_URL http://127.0.0.1:…) links to itself
+    // over plain http; every other link must be https.
+    $origin = site_origin();
+    if (str_starts_with($origin, 'http://') && str_starts_with($url, $origin . '/')) {
+        return true;
+    }
     $parts = parse_url($url);
     return is_array($parts) && ($parts['scheme'] ?? '') === 'https' && !empty($parts['host'])
         && !isset($parts['user']) && !isset($parts['pass'])

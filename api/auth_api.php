@@ -29,9 +29,12 @@ try {
     //    SELECT * (rather than a fixed column list) so this endpoint keeps
     //    working if it is deployed before db/migrate.php adds the new
     //    account-security columns.
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email LIMIT 1");
-    $stmt->execute(['email' => $email]);
-    $user = $stmt->fetch();
+    //    A confirmed personal email signs in first; otherwise users.email (the
+    //    church sign-in name). docs/EMAIL.md, "Sign-in and reset".
+    require_once '../includes/campaigns/bootstrap.php';
+    $lookup = email_signin_lookup($pdo, $email);
+    $user = $lookup['user'] ?? false;
+    $user = $user ?: false;
 
     $securityOn = security_schema_ready($pdo);
 
@@ -100,6 +103,20 @@ try {
         // Unknown email (or pre-migration): generic error, no enumeration.
         security_record_attempt($pdo, null, $email, false, 'unknown_email');
         echo json_encode(['status' => 'error', 'message' => 'Invalid email or password.']);
+        exit;
+    }
+
+    // 8b. The old church sign-in name of someone who has moved to their
+    //     personal email (owner's decision: names work until each person has
+    //     moved). Only said after the right password, so the masked address is
+    //     never shown to someone who merely knows a sign-in name.
+    if (!empty($lookup['moved_to'])) {
+        security_record_attempt($pdo, (int) $user['id'], $email, false, 'signin_name_moved');
+        echo json_encode([
+            'status'  => 'error',
+            'code'    => 'MOVED',
+            'message' => 'You now sign in with your personal email (' . $lookup['moved_to'] . ') and the same password.',
+        ]);
         exit;
     }
 

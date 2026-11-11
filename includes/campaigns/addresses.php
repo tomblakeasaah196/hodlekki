@@ -305,6 +305,9 @@ function email_capture_start(PDO $pdo, int $userId, string $rawEmail, string $so
             'now'        => true,
         ]);
         $outboxId = $queued['id'] ?? null;
+        if (empty($queued['ok'])) {
+            error_log('[email] could not queue the confirmation email for user ' . $userId . ': ' . ($queued['message'] ?? $queued['code'] ?? 'unknown'));
+        }
     }
 
     return ['ok' => true, 'address_id' => $addressId, 'email' => $email, 'token' => $token,

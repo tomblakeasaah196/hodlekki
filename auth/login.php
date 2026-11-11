@@ -166,10 +166,10 @@ if (!empty($_COOKIE[SECURITY_SIGNOUT_COOKIE])) {
 
                     <form id="loginForm" class="space-y-5">
                         <div>
-                            <label for="email" class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">Email Address</label>
-                            <input type="email" id="email" name="email" required 
+                            <label for="email" class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">Email</label>
+                            <input type="email" id="email" name="email" required autocomplete="username"
                                 class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-hodBlue focus:border-transparent transition-all bg-gray-50 hover:bg-white focus:bg-white outline-none text-gray-800 shadow-sm"
-                                placeholder="yourname@domain.com">
+                                placeholder="Your personal email or church sign-in name">
                         </div>
 
                         <div>
@@ -180,6 +180,9 @@ if (!empty($_COOKIE[SECURITY_SIGNOUT_COOKIE])) {
                             <input type="password" id="password" name="password" required 
                                 class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-hodBlue focus:border-transparent transition-all bg-gray-50 hover:bg-white focus:bg-white outline-none text-gray-800 shadow-sm"
                                 placeholder="••••••••">
+                            <div class="mt-2 text-right">
+                                <a href="/auth/forgot_password.php" class="text-xs font-semibold text-gray-500 hover:text-gray-900 transition-colors underline underline-offset-4">Forgot your password?</a>
+                            </div>
                         </div>
 
                         <label for="remember" class="flex items-start gap-3 cursor-pointer select-none">

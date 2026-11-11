@@ -30,6 +30,10 @@ $_ENV['MAIL_FROM_ADDRESS'] = 'system@hodlekki.org';
 $_ENV['MAIL_USERNAME'] = 'system@hodlekki.org';
 $_ENV['SMS_VAULT_KEY'] = str_repeat('0', 64);   // keeps sms_functions.php from loading db.php
 
+require_once __DIR__ . '/../../includes/security_helpers.php';   // the one password policy (starts a CLI session)
+require_once __DIR__ . '/../../includes/auth_helpers.php';
+require_once __DIR__ . '/../../includes/ui/bootstrap.php';
+require_once __DIR__ . '/../../includes/ui/components.php';
 require_once __DIR__ . '/../../includes/sms_functions.php';
 require_once __DIR__ . '/../../includes/campaigns/bootstrap.php';
 require_once __DIR__ . '/lib.php';
@@ -799,6 +803,85 @@ ct_eq('reached by email (Ada: confirmed + yes; a 3rd Timer is still in the pipel
 ct_eq('unsubscribed (Halima, and Ijeoma who has no address)', 2, $cov['first_timers']['unsubscribed']);
 ct_ok('the rest split into SMS-only and unreachable', $cov['first_timers']['sms_only'] + $cov['first_timers']['unreachable']
     + $cov['first_timers']['news'] + $cov['first_timers']['unsubscribed'] === $cov['first_timers']['total']);
+
+// ===========================================================================
+ct_section('16b. The sign-in email prompt');
+// ===========================================================================
+$p = ct_db();
+ct_user($p, 100, 'Grace', 'Member', ['email' => 'grace@hodlc.com']);
+ct_at('2026-11-20 09:00');
+ct_eq('no email at all → the prompt is required', 'required', email_prompt_state($p, 100));
+ct_eq('before the migration nobody is stopped', 'none', email_prompt_state($bare, 100));
+email_capture_start($p, 100, 'grace.o@gmail.com', 'signin_prompt', 100, ['send' => false]);
+ct_eq('a link sent → in with a banner', 'banner', email_prompt_state($p, 100));
+$_SESSION['csrf_token'] = $_SESSION['csrf_token'] ?? null;
+$banner = email_prompt_banner($p, 100);
+ct_ok('the banner names the address and resends in one tap', str_contains($banner, 'grace.o@gmail.com')
+    && str_contains($banner, 'value="resend"') && str_contains($banner, '_csrf'));
+ct_at('2026-11-28 09:00');
+ct_eq('a week later without confirming → required again', 'required', email_prompt_state($p, 100));
+email_prompt_skip($p, 100, 100);
+ct_eq('"I don\'t have an email" lets them in', 'none', email_prompt_state($p, 100));
+ct_at('2027-03-01 09:00');
+ct_eq('…and is asked again after 90 days', 'required', email_prompt_state($p, 100));
+email_setting_set($p, 'signin_prompt', '0');
+ct_eq('the switch turns the prompt off', 'none', email_prompt_state($p, 100));
+email_setting_set($p, 'signin_prompt', '1');
+ct_confirm($p, 100, 'grace.real@gmail.com', false);
+ct_eq('confirmed → nothing to do', 'none', email_prompt_state($p, 100));
+
+// ===========================================================================
+ct_section('16c. Sign-in with a personal email');
+// ===========================================================================
+ct_user($p, 101, 'Femi', 'Member', ['email' => 'femi@hodlc.com']);
+ct_user($p, 102, 'Bisi', 'Member', ['email' => 'bisi.home@yahoo.com']);
+$l = email_signin_lookup($p, 'GRACE.REAL@gmail.com');
+ct_ok('the confirmed personal email signs in (any case)', $l['user'] !== null && (int) $l['user']['id'] === 100 && $l['via'] === 'personal');
+$old = email_signin_lookup($p, 'grace@hodlc.com');
+ct_ok('the old sign-in name finds them, but says they have moved', (int) $old['user']['id'] === 100 && $old['moved_to'] === 'g•••@gmail.com');
+ct_eq('someone who has not moved still signs in with their name', null, email_signin_lookup($p, 'femi@hodlc.com')['moved_to']);
+ct_confirm($p, 102, 'bisi.new@gmail.com', false);
+ct_eq('a personal address on file is never "moved"', null, email_signin_lookup($p, 'bisi.home@yahoo.com')['moved_to']);
+ct_eq('an unknown identifier finds nobody', null, email_signin_lookup($p, 'nobody@gmail.com')['user']);
+ct_eq('a masked address', 'a•••@gmail.com', email_mask('ada.obi@gmail.com'));
+
+// ===========================================================================
+ct_section('16d. Forgot password');
+// ===========================================================================
+ct_at('2027-03-01 10:00');
+ct_eq('unknown person: the same answer, nothing sent', false, email_reset_request($p, 'nobody@gmail.com', '1.1.1.1')['sent']);
+ct_eq('no confirmed email: nothing sent', false, email_reset_request($p, 'femi@hodlc.com', '1.1.1.2')['sent']);
+$req = email_reset_request($p, 'grace@hodlc.com', '1.1.1.3');
+ct_ok('the old sign-in name may ask; the link goes to the confirmed email', $req['sent'] === true);
+$resetMail = $p->query("SELECT * FROM email_outbox WHERE flow = 'password_reset' ORDER BY id DESC LIMIT 1")->fetch();
+ct_ok('…as account mail, first in line, to grace.real@gmail.com', $resetMail['to_email'] === 'grace.real@gmail.com'
+    && $resetMail['lane'] === 'transactional' && $resetMail['purpose'] === 'account');
+ct_ok('…carrying the link', str_contains((string) $resetMail['html'], 'https://hodlekki.org/auth/reset_password.php?t=' . $req['token']));
+ct_eq('the raw token is never stored', 0, ct_count($p, 'auth_reset_tokens', 'token_hash = ?', [$req['token']]));
+ct_eq('the link opens the form', 'valid', email_reset_peek($p, $req['token'])['state']);
+ct_eq('mismatch is refused', 'MISMATCH', email_reset_complete($p, $req['token'], 'Abcdefgh12!x', 'Abcdefgh12!y')['code'] ?? null);
+ct_eq('a weak password is refused by the one policy', 'WEAK', email_reset_complete($p, $req['token'], 'abc', 'abc')['code'] ?? null);
+$req2 = email_reset_request($p, 'grace.real@gmail.com', '1.1.1.3');
+ct_eq('a newer link replaces the older one', 'used', email_reset_peek($p, $req['token'])['state']);
+$good = 'Hallelujah-2027!';
+ct_eq('a good password is saved', true, email_reset_complete($p, $req2['token'], $good, $good)['ok']);
+ct_ok('…and works', password_verify($good, (string) $p->query('SELECT password_hash FROM users WHERE id = 100')->fetchColumn()));
+ct_eq('…the link works once', 'USED', email_reset_complete($p, $req2['token'], $good, $good)['code'] ?? null);
+ct_eq('…and a "password changed" notice goes to the confirmed email', 1, ct_count($p, 'email_outbox', "flow = 'password_changed' AND to_email = 'grace.real@gmail.com'"));
+$req3 = email_reset_request($p, 'grace.real@gmail.com', '1.1.1.4');
+ct_at('2027-03-01 10:31');
+ct_eq('after 30 minutes the link has expired', 'EXPIRED', email_reset_complete($p, $req3['token'], $good, $good)['code'] ?? null);
+ct_eq('a third request for one identifier within the hour still goes', false,
+    email_reset_request($p, 'grace.real@gmail.com', '1.1.1.5')['throttled']);
+ct_eq('the fourth is throttled (with the same answer on the page)', true,
+    email_reset_request($p, 'grace.real@gmail.com', '1.1.1.7')['throttled']);
+for ($i = 0; $i < 10; $i++) {
+    email_reset_request($p, "probe{$i}@gmail.com", '9.9.9.9');
+}
+ct_eq('ten requests from one address in an hour, then throttled', true, email_reset_request($p, 'grace@hodlc.com', '9.9.9.9')['throttled']);
+$p->exec("UPDATE users SET account_status = 'suspended' WHERE id = 102");
+ct_at('2027-03-01 12:00');
+ct_eq('a suspended account gets no link', false, email_reset_request($p, 'bisi.new@gmail.com', '1.1.1.6')['sent']);
 
 // ===========================================================================
 ct_section('17. Every function the module calls exists');
