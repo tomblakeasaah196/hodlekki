@@ -94,6 +94,35 @@ replies addressed to **embrace@hodlekki.org**. The `MAIL_*` settings are in
 Accounts and pasted into `.env` by hand. Check it with
 `/usr/local/bin/ea-php83 bin/mail_test.php you@example.com` from the docroot.
 
+## The system monitor (November 2026)
+
+Errors, health, alerts and real-user speed (`docs/monitor.md`). The code and
+its tables arrive with a normal deploy and start recording at once. The owner's
+steps, once:
+
+1. **Cron**, every minute (cPanel → Cron Jobs):
+   `* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/monitor.php >/dev/null 2>&1`
+2. **Alert emails:** `/usr/local/bin/ea-php83 bin/monitor.php recipient-add you@example.com`
+   from the docroot in cPanel → Terminal; the address receives nothing until its
+   confirmation link is clicked. `bin/monitor.php test-alert` proves the email
+   and the bell both arrive.
+3. **The outside probe:** `MONITOR_PROBE_SECRET` (64 hex characters) in the
+   docroot `.env` AND as the GitHub Actions secret of the same name; optionally
+   the server's IP as the secret `ORIGIN_IP` (origin-lock and origin-certificate
+   checks). Then GitHub → Actions → "Outside probe" → Run workflow. It runs
+   hourly (~720 Actions minutes a month).
+4. **Recommended:** Cloudflare → Notifications → passive origin monitoring
+   (free), for minute-level "origin unreachable" emails.
+5. **Optional:** cPanel → MultiPHP INI Editor → Editor Mode → hodlekki.org:
+   `auto_prepend_file = "/home/smartqaq/public_html/hodlekki/includes/monitor/prepend.php"`
+   (full detail on the public pages that never load db.php). Remove the line to
+   undo it. Health → "PHP (web)" shows whether it is on.
+
+The monitor keeps its spool and heartbeats in `/home/smartqaq/.hodlekki_monitor/`
+(outside the docroot) and reads `~/deploy.log` (the deployed commit, failed
+deploys) and `~/backups/hodlc/` (JBS HQ's nightly backups of this site). To
+switch it off without a deploy: `MONITOR_ENABLED=0` in `.env`.
+
 ## Why a webhook and not cPanel's UAPI
 
 I first wired this against cPanel's `VersionControl::update` UAPI. That
@@ -152,6 +181,8 @@ Go to https://github.com/tomblakeasaah196/hodlekki → Settings.
 | Name                    | Value                                          |
 | ----------------------- | ---------------------------------------------- |
 | `DEPLOY_WEBHOOK_SECRET` | The same 64-char hex you just put into `.env`. |
+| `MONITOR_PROBE_SECRET`  | The outside probe's key: the same value as `MONITOR_PROBE_SECRET` in `.env` (see "The system monitor"). |
+| `ORIGIN_IP`             | Optional: the server's own IP, for the probe's origin-lock check. |
 
 **Secrets and variables → Actions → Variables tab:**
 

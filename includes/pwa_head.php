@@ -71,6 +71,12 @@ if (!defined('PWA_HEAD_RENDERED')) {
         [414, 736, 3], [414, 896, 3], [428, 926, 3], [430, 932, 3], [440, 956, 3],
         [768, 1024, 2], [810, 1080, 2], [834, 1112, 2], [834, 1194, 2], [1024, 1366, 2],
     ];
+
+    // The error + speed monitor's browser half (includes/monitor/browser.php):
+    // a same-origin script with data-* settings, safe under any CSP. Printed
+    // first so it sees errors thrown by the inline scripts that follow.
+    require_once __DIR__ . '/monitor/browser.php';
+    echo monitor_browser_tag();
     ?>
     <!-- ================= HOD Lekki — installable app ================= -->
     <link rel="manifest" href="/manifest.php">

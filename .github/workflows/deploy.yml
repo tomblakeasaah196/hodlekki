@@ -313,6 +313,28 @@ jobs:
         # notification payloads, and what the service worker may keep.
         run: php tests/pwa/run.php
 
+      - name: The system monitor tests
+        run: |
+          set -euo pipefail
+
+          # No MySQL, no network, no email: the database half runs on SQLite
+          # built from the real migration, and the capture runs for real in
+          # child PHP processes (warnings, uncaught exceptions, out of memory,
+          # cron heartbeats, the log reader not double counting). The same
+          # suite runs on MySQL 8 and MariaDB 10.11 in the integration job.
+          if ! php -m | grep -qix 'pdo_sqlite'; then
+            echo "::error::pdo_sqlite is missing — the monitor's database tests cannot run"
+            exit 1
+          fi
+          php tests/monitor/run.php
+
+          # The browser half runs on every page of the site: a syntax error in
+          # it would silently stop all error and speed reporting.
+          if ! out=$(node --check assets/js/monitor.js 2>&1); then
+            echo "::error file=assets/js/monitor.js::$(echo "$out" | grep -m1 -E 'SyntaxError|Error' || echo 'does not parse')"
+            exit 1
+          fi
+
       - name: Secret sweep (block obvious leaks)
         run: |
           set -euo pipefail
@@ -335,12 +357,12 @@ jobs:
             fail=1
           fi
 
-          # Special Events secrets must come from $_ENV, never be inlined.
-          if grep -rnE "(SE_HASH_PEPPER|ABLY_API_KEY)['\"]?\s*(=>|=|,)\s*['\"][A-Za-z0-9+/=_-]{16,}" \
-                --include='*.php' --include='*.js' --include='*.mjs' \
+          # Special Events and monitor secrets must come from $_ENV, never be inlined.
+          if grep -rnE "(SE_HASH_PEPPER|ABLY_API_KEY|MONITOR_SECRET|MONITOR_PROBE_SECRET)['\"]?\s*(=>|=|,)\s*['\"][A-Za-z0-9+/=_-]{16,}" \
+                --include='*.php' --include='*.js' --include='*.mjs' --include='*.yml' \
                 --exclude-dir=vendor --exclude-dir=node_modules \
                 --exclude='.env.example' . ; then
-            echo "::error::Hardcoded SE_HASH_PEPPER or ABLY_API_KEY found in tree"
+            echo "::error::Hardcoded SE_HASH_PEPPER, ABLY_API_KEY or MONITOR_*SECRET found in tree"
             fail=1
           fi
 
@@ -389,7 +411,8 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: pdo_mysql, pcntl
+          # pdo_sqlite: the monitor suite's capture test runs child processes on SQLite.
+          extensions: pdo_mysql, pcntl, pdo_sqlite, sqlite3
           coverage: none
 
       - name: Migrations apply, and apply again (idempotent)
@@ -406,6 +429,19 @@ jobs:
           SE_TEST_DB_PASS: root
           SE_TEST_DB_NAME: se_it
         run: php tests/special_events/integration/run.php
+
+      - name: The system monitor on this engine
+        # The whole monitor suite again, its database half on this real engine:
+        # the migration as db/migrate.php runs it (twice, to prove it is
+        # idempotent), both upsert spellings, and every query the monitor makes.
+        env:
+          MONITOR_TEST_MYSQL_DSN: 'mysql:host=127.0.0.1;port=3306;dbname=monitor_it;charset=utf8mb4'
+          MONITOR_TEST_MYSQL_USER: root
+          MONITOR_TEST_MYSQL_PASS: root
+        run: |
+          set -euo pipefail
+          php -r '$p = new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"); $p->exec("CREATE DATABASE IF NOT EXISTS monitor_it CHARACTER SET utf8mb4");'
+          php tests/monitor/run.php
 
   deploy:
     name: Deploy via webhook

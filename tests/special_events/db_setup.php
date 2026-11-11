@@ -210,7 +210,7 @@ foreach ($files as $file) {
     // ADD YOUR MARKER WHEN YOU ADD A MODULE. Only markers verified to apply on
     // BOTH engines belong here — a marker added without checking MariaDB as
     // well as MySQL turns this shared gate red on somebody else's pull request.
-    $isModule = str_contains($name, '_se_') || str_contains($name, '_hymnal_');
+    $isModule = str_contains($name, '_se_') || str_contains($name, '_hymnal_') || str_contains($name, '_monitor_');
 
     $sql = (string) file_get_contents($file);
     try {

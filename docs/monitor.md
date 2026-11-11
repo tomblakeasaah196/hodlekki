@@ -1,0 +1,353 @@
+# The system monitor
+
+Errors, health and real-user speed for hodlekki.org, in one place: every PHP
+error, browser error and CSP violation the site meets, grouped and counted;
+every background job, queue, certificate and backup checked; the site seen from
+outside; members' real loading times on phones and computers. When something
+breaks, the right people hear about it once, and every problem can be handed to
+Claude as a complete, private brief ("Fix with AI").
+
+It was built in two pull requests. **This one is the engine**: capture, storage,
+checks, the outside probe, alerts, the AI briefs, a JSON API, a command line
+and tests. **The screens** (Overview, Errors, Health, Speed, Uptime, Config and
+the live wall) follow on the shared UI components, using the API below.
+
+Models it learned from: JBS HQ's System Health (`ErrorMonitor`, `LogScanner`,
+`HealthChecks` with the warm OPcache rate, `MonitorAlerts`, the watchdog) and
+nfelia.com's plain-PHP monitor (`app/helpers/errors.php`, `app/ops/monitor.php`).
+
+---
+
+## 1. Setting it up (owner)
+
+The code and the tables arrive with a normal deploy; recording starts at once.
+Four steps make it complete, in this order:
+
+1. **Cron** (cPanel → Cron Jobs), every minute:
+   ```
+   * * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/monitor.php >/dev/null 2>&1
+   ```
+   Check it from cPanel → Terminal: `cd ~/public_html/hodlekki && /usr/local/bin/ea-php83 cron/monitor.php` prints one line.
+2. **Who gets emails.** From cPanel → Terminal (the Config screen does the same later):
+   ```
+   /usr/local/bin/ea-php83 bin/monitor.php recipient-add you@example.com
+   ```
+   The address gets a confirmation link and nothing else until it is clicked.
+   Super Admins get the bell and phone notifications without any setup.
+   Prove both with `bin/monitor.php test-alert`.
+3. **The outside probe.** Make a secret (`php -r "echo bin2hex(random_bytes(32));"`), put it in the docroot
+   `.env` as `MONITOR_PROBE_SECRET=…` and in GitHub → Settings → Secrets and variables → Actions as the secret
+   `MONITOR_PROBE_SECRET`. Optionally add the server's IP as the secret `ORIGIN_IP` (enables the origin-lock and
+   origin-certificate checks). Run it once from GitHub → Actions → "Outside probe" → Run workflow.
+4. **Optional, recommended:** Cloudflare → Notifications → *Passive origin monitoring* (free). It emails within
+   minutes when Cloudflare cannot reach the server — the one failure this server cannot report itself.
+5. **Optional:** the prepend (section 3) for full detail on the dozen public pages that never load `db.php`.
+
+`php bin/monitor.php status` shows every check and the open problems at any time.
+
+---
+
+## 2. What it watches
+
+| Group | Check | Red when | Alerts at once |
+|---|---|---|---|
+| Errors | Errors | a fatal in the last hour, or more than 5 new problems in a day | (errors alert themselves, see 5) |
+| From outside | hodlekki.org, connect.hodlekki.org | down from GitHub's machines | yes |
+| | Certificates | Cloudflare's or the origin's under 5 days (amber under 14) | yes |
+| | DNS and mail records | no A, MX or SPF (amber: no DKIM or DMARC) | yes |
+| | Origin lock | a request around Cloudflare is answered (amber: no `EDGE_TOKEN`) | yes |
+| | Outside probe | (amber) no report for 3 runs | — |
+| Background jobs | SMS queue worker, push worker (every minute), Special Events (every 5 min), Reach lost souls (07:00), Assimilation watchlists (07:15) | stopped, or a daily run missed; amber when late, stuck or failed | yes |
+| Messages | SMS sending | queue not moving for 15 min, stuck "sending", wallet under ~100 texts (amber under 500) | yes |
+| | Push notifications | cannot send, or jobs waiting over 15 min | yes |
+| | Email sending | not configured, SMTP refuses the sign-in (tested hourly without sending), 5+ failed sends a day | yes |
+| Server | Database speed | unreachable, or a members query over 1 s | yes |
+| | Disk space | cPanel quota 95% (amber 85%) | yes |
+| | Backups | no database backup in `~/backups/hodlc` within 26 h (amber: half the size of the last, uploads over 8 days) | yes |
+| | PHP (web) | below 8.3, a required extension missing, or `display_errors` on | yes |
+| | Server speed settings | (amber only) OPcache off, full, or below 95% warm hit rate; no early response | — |
+| | Log files | (amber) over 100 MB in all, or one over 50 MB | — |
+| | Last deploy | the last deploy never finished; amber when main is not on the server 30 min later | yes |
+| Real users | Speed on phones, on computers | p75 of LCP, INP, CLS or TTFB in the "poor" band over 7 days (amber: needs improvement) | — |
+
+Facts that are slow to gather (SMTP sign-in, BulkSMS balance, cPanel quota, the
+real-user roll-up) refresh hourly; the rest every 5 minutes. PHP and OPcache are
+read **from a web request** (a page writes `web.json` about every 10 minutes),
+because the cron's command-line PHP has different settings — on this host the
+web PHP has no `fileinfo` and the CLI does.
+
+---
+
+## 3. Capture: how it catches everything
+
+| Layer | Covers | Where |
+|---|---|---|
+| PHP handlers | warnings, notices, deprecations, uncaught exceptions, fatals (memory, time limit), pages slower than 3 s, a heartbeat for every `cron/*.php` | `includes/monitor/capture.php`, installed on line 2 of `includes/db.php` — every API, every ERP page (header.php loads db.php), every cron |
+| Log reader | parse errors, pages that never load db.php, anything before the handlers, every `error_log()` line the code writes (`[mailer] send failed`, BulkSMS problems…) | `includes/monitor/logscan.php`: every `error_log` in the docroot and three levels below (not vendor/ or uploads/), PHP's `error_log` setting, `MONITOR_EXTRA_LOGS` |
+| Prepend (optional) | full detail on the public pages without db.php | cPanel → MultiPHP INI Editor → `auto_prepend_file = "/home/smartqaq/public_html/hodlekki/includes/monitor/prepend.php"` |
+| Browser | JavaScript errors, unhandled rejections, failed script/style/image loads, Core Web Vitals | `assets/js/monitor.js`, one tag printed by `includes/pwa_head.php` on every page with the app shell (ERP, public pages, `/e/`) |
+| CSP reports | violations of a page's Content-Security-Policy | `report-uri /api/monitor_intake.php?k=csp&t=<token>` (`monitor_csp_report_uri()`), or another endpoint calls `monitor_intake_csp($body, $contentType)` |
+| Outside probe | the site as members reach it | `.github/workflows/monitor-probe.yml` → `api/monitor_probe.php` |
+
+**Why db.php and not only `auto_prepend_file`:** db.php deploys itself and
+already runs first on everything that matters, CLI included (a prepend set in
+`.user.ini` never reaches cron jobs); `.user.ini` and `php.ini` are cPanel's
+files and never deployed. The prepend stays an optional extra, and the two are
+idempotent together.
+
+**Rules the capture keeps** (it runs on every request): it never prints and
+never changes what a visitor gets. An uncaught exception is recorded and then
+handed straight back to PHP, which ends the request exactly as before — the 500
+(CLI: exit 255), PHP's own log line, and `error_get_last()` for the shutdown
+functions that check it (the push dispatcher sends nothing after a crashed
+request; the SMS worker logs why its run ended). Nothing is written during
+the request: problems are kept in memory (at most 25, the same one once) and
+written **after the response has been sent**, on the monitor's **own database
+connection**, so a page's rolled-back transaction or a fatal mid-transaction
+cannot take the record with it. A warning the monitor recorded is logged as one
+short `HODMON [E7KQ2M9X] …` line instead of PHP's own (the reader skips the
+marker); fatals and uncaught exceptions, which PHP logs itself, are matched to
+the recorded one within 10 seconds, so nothing is counted twice. `@`-silenced calls stay silent. When the
+database is the problem ("too many connections", a refused connection), events
+go to a spool file outside the docroot and the cron stores them when it
+answers again; after a failed connection the flush does not try again for a
+minute.
+
+The browser script is a plain same-origin file with its settings in `data-*`
+attributes: no inline code, no nonce, so it works under the strictest CSP
+(`script-src 'self'; connect-src 'self'`). It is deliberately not deferred, so
+it sees errors in the inline scripts below it; it is about 6 KB and cached by
+its `?v=`.
+
+---
+
+## 4. Privacy
+
+This database holds real church members. Everything the monitor keeps goes
+through `includes/monitor/redact.php` before it is stored: messages, traces,
+addresses, browser stacks, CSP addresses, log lines — and again the code
+excerpts in a brief.
+
+- Out: email addresses, Nigerian and international phone numbers, long tokens
+  and JWTs, `password=…`/`token=…`/`api_key=…`, `Bearer …`, the session and
+  "stay signed in" cookies, every `.env` value whose name says PASS / SECRET /
+  KEY / TOKEN / PEPPER / VAULT, and the values a database error quotes back
+  (`Duplicate entry '?'`).
+- Page addresses keep their path and the **names** of their parameters only
+  (`/api/events_api.php?action=…&id=…`); tokens, emails and phone numbers in a
+  path become `:token` / `:value`.
+- Stack traces never carry function arguments.
+- People are counted, never named: a signed-in person is a keyed hash of their
+  id; a visitor who is not signed in is a hash of the day, address and browser,
+  so they cannot be followed from one day to the next. Events keep the **role**
+  (`Super_Admin`, `Church_Member`, `guest`) — that is what "which role was
+  affected" needs.
+- No IP address, cookie, request body, header or full user agent is stored
+  (the browser is kept as "Chrome 131 · Android"). Rate limiting hashes the
+  address with the minute, in files that are deleted after three minutes.
+- The live wall and the alert emails carry counts, states and redacted titles,
+  nothing else.
+
+---
+
+## 5. Alerts — never a storm
+
+Two channels:
+
+- **The bell, and so a phone notification**, for every active Super_Admin: a
+  `system_notifications` row each, which the normal fan-out pushes (never a
+  direct push — AGENTS.md).
+- **Email**, through `hod_send_mail()`, to the addresses in `monitor_recipients`
+  their owners **confirmed**. Adding an address sends a link; opening it shows a
+  button, and only the button's POST confirms (a mail scanner that follows
+  links cannot). Every email has a personal stop link. Owner only for now.
+
+What is sent:
+
+| What | When |
+|---|---|
+| New or returning errors | one message per cron run listing all of them: server fatal/error at once; a browser error once 3 people met it; warnings, CSP reports and slow pages only in the summary. A problem marked fixed that happens again reopens and is announced again. |
+| Spikes | at least 20 in the last hour and 5× the usual rate; at most every 6 hours per problem |
+| Health | an urgent check (table in 2) turning red, again every 6 hours while red, and when it recovers |
+| Morning summary | 08:00 Lagos (`digest_hour`), once a day: checks not green, new problems, the most frequent open ones, yesterday's deploys |
+| Watchdog | the monitor's own cron silent for 20 minutes (or never run, 2 hours after install) — noticed by ordinary page visits, at most every 6 hours |
+| Test | `bin/monitor.php test-alert` or the Config screen |
+
+Caps: 6 alert emails and 3 bells an hour (summary, watchdog, confirmations and
+tests aside). What does not fit waits for the next run, in one message.
+
+---
+
+## 6. Fix with AI
+
+`monitor_brief($db, $id)` (`bin/monitor.php brief <id>`, API `?action=brief&id=`)
+turns a problem into a Markdown prompt to paste into Claude:
+
+- the system in one paragraph (plain PHP 8.3, file-per-URL, cPanel/LiteSpeed,
+  Cloudflare; read AGENTS.md first);
+- **what happened** — class and redacted message;
+- **where** — page / API / cron / browser, the request (`POST /api/x.php?action=…`),
+  `file:line`, the pages it happened on;
+- **when and how often** — first and last seen with their releases, totals for
+  24 h and 7 days, the hourly shape, "started N minutes after the deploy of
+  `61b8516` …", regressions, before/after a fix;
+- **who** — number of people and the roles (never a person), browsers;
+- a plain-English hint for errors this site meets (missing migration, fileinfo
+  on the web PHP, an API answering HTML, …);
+- recent occurrences with their reference codes, the stack trace, **the code
+  around each of the site's own frames** (±6 lines, as deployed now), recent
+  deploys, the team's notes;
+- the task: root cause, smallest safe fix, keep AGENTS.md's rules (degrade
+  before the migration, prepared statements, no personal data), a test, how to
+  confirm it stopped.
+
+`monitor_export_open()` (`bin/monitor.php export file.md`, API `?action=export`)
+puts every open problem in one file, worst first, with a numbered list on top.
+
+---
+
+## 7. Live wall
+
+Shared hosting has no websockets, and a held-open connection per screen would
+pin one of the host's few PHP processes. So the monitor writes a small JSON
+snapshot to `live/monitor/<key>.json` whenever something new is recorded (at
+most every 5 seconds) and on every cron run, and LiteSpeed serves it as a
+static file (`live/.htaccess`: JSON only, no-cache) — the Special Events polling
+design. The wall polls it every few seconds without starting PHP, through
+Cloudflare. The key is random (`monitor_state.wall_key`), known to the signed-in
+wall and to a revocable TV link (key in the URL fragment); "rotate" makes a new
+one and deletes the old file. Ably (`SE_REALTIME_DRIVER`) stays unused.
+
+---
+
+## 8. Outside probe
+
+`.github/workflows/monitor-probe.yml`, hourly at :17 and on demand: status and
+first-byte time of both sites (a "Database Connection Failed" page counts as
+down), Cloudflare's certificate and — with `ORIGIN_IP` — the origin
+certificate, A/MX/SPF/DKIM/DMARC through 1.1.1.1 and 8.8.8.8 (the server's own
+resolver may answer from cPanel's local zone), and the origin lock (a request
+to `ORIGIN_IP` with the site's name must get 403). It posts the result to
+`api/monitor_probe.php` signed with `MONITOR_PROBE_SECRET`
+(`X-Monitor-Signature: sha256=HMAC("<timestamp>\n<body>")`, within 10 minutes,
+each signature once), along with main's commit (so "deploy behind main" can be
+seen). The job fails when a site is down, which GitHub emails.
+
+Cost: one ~20-second job an hour, billed as a minute: ~720 Actions minutes a
+month on this private repository (`*/30` doubles it). A Cloudflare challenge on
+GitHub's address would show as HTTP 403 "down"; allow the probe's user agent
+(`hodlekki-outside-probe/1.0`) in a WAF skip rule if that happens.
+
+---
+
+## 9. Real-user speed
+
+`monitor.js` measures each page view as Google's web-vitals library does: LCP
+(the last candidate before the first input), INP (the slowest interaction,
+leaving out one in 50), CLS (the largest session window), TTFB and FCP, with
+the device class (phone, tablet, desktop) and connection type, and sends them
+once when the page is hidden. Pages restored from the back/forward cache and
+prerendered time are handled. Reports go to the spool (no database connection
+per page view); the cron stores them in `monitor_rum` (14 days) and rolls them
+up hourly into `monitor_rum_daily` (p75 and good / needs improvement / poor
+per day, page, device, metric). `MONITOR_RUM_SAMPLE` thins them if traffic grows.
+
+---
+
+## 10. Data
+
+`db/migrations/20261125090000_monitor_core.sql` — forward-only, idempotent, all
+tables prefixed `monitor_`, nothing altered elsewhere; times are Lagos
+`DATETIME`s written by PHP, so the same SQL runs on MySQL, MariaDB and SQLite.
+
+| Table | Holds | Kept |
+|---|---|---|
+| `monitor_error_groups` | one row per problem (fingerprint: kind, class, normalised message, file, line), status new / investigating / fixed / ignored, counts, releases, regressions, spikes | fixed/ignored: 90 days after last seen |
+| `monitor_error_events` | occurrences: reference code, request, role, hashed person, device, browser, trace (≤ 50 per problem, ≤ 20 an hour; fatal always) | 30 days |
+| `monitor_error_hourly` / `_people` / `_paths` | trend lines, distinct people per day, pages | 90 days |
+| `monitor_error_notes` | the team's notes and the monitor's own (regressions, spikes) | with the problem |
+| `monitor_checks`, `monitor_check_history` | each check's state, and every change | history 90 days |
+| `monitor_probes` | the outside probe's results | 90 days |
+| `monitor_rum`, `monitor_rum_daily` | real-user speed | 14 / 400 days |
+| `monitor_recipients`, `monitor_alert_log` | who gets emails; every alert sent | log 90 days |
+| `monitor_state` | settings and bookkeeping (log positions, wall key, digest hour) | — |
+
+Outside the database, in `/home/smartqaq/.hodlekki_monitor/` (never under
+`public_html`; `MONITOR_DATA_DIR`): the spool, cron heartbeats (`beats/*.json`),
+`web.json`, `release.json` (the deployed commit, read from `~/deploy.log`),
+rate-limit counters, the cron lock.
+
+Everything degrades before the migration: until the tables exist, the capture
+spools, the API answers `FEATURE_NOT_READY`, the cron says so and exits.
+
+---
+
+## 11. API (for the screens)
+
+`api/monitor_api.php` — signed-in, `monitor_user_can($pdo, 'monitor.view')`
+(Super_Admin from the live roles table until the permissions module defines
+`can()`; changes need `monitor.manage`). Writes are POST with the platform's
+`csrf_require()` once it exists, else `X-Monitor-CSRF` (from `summary`).
+
+GET: `summary` (the wall snapshot + recipients count + csrf), `errors`
+(status, kind, q, sort, page), `error&id=` (group, stats, events, notes, hint),
+`brief&id=`, `export` (.md download), `checks`, `speed` (days, device),
+`uptime` (days), `deploys`, `recipients`, `settings`, `wall`.
+POST: `set_status` (new / investigating / fixed / ignored, note), `add_note`,
+`scan_now`, `run_checks`, `recipient_add`, `recipient_remove`,
+`settings_save` (digest hour), `wall_rotate`, `test_alert`.
+Recipient, settings and wall changes go to the Security Centre's audit log.
+
+---
+
+## 12. Command line
+
+`php bin/monitor.php status | errors [all|fixed|ignored] | brief <id> | export [file] | fixed <id> [note] | checks | scan | recipients | recipient-add <email> | recipient-remove <id> | test-alert | digest | wall`
+(from the docroot, `/usr/local/bin/ea-php83 bin/monitor.php …`).
+`php cron/monitor.php --status | --checks | --digest`.
+
+---
+
+## 13. Switches and troubleshooting
+
+- `MONITOR_ENABLED=0` in `.env`: nothing is recorded or sent; the browser tag is left out. No deploy needed.
+- `MONITOR_BROWSER=0`: only the browser script is left out.
+- The monitor's own problems: `HODMON …` lines in the error logs; its cron's
+  output with `php cron/monitor.php`.
+- A check says "unknown": read its detail — usually it is waiting for its first
+  facts (a page visit for PHP, the probe's first report, a daily job's first run).
+
+---
+
+## 14. Tests
+
+`php tests/monitor/run.php` — about 370 checks, no MySQL, no network, no email:
+the migration's shape; redaction; grouping, regressions, spikes, caps and the
+spool; **the capture in real child PHP processes** (warnings, `@`, deprecations,
+an uncaught exception and exit code 255, out of memory, cron heartbeats, the log
+reader not counting anything twice); log parsing and incremental reading; every
+health check's verdict; the browser intake, CSP formats and rate limit; the
+probe's signatures and replays; alerts (confirmation, one message per run, the
+hourly cap under an error storm, health transitions, the summary, stop links);
+the AI brief (sections, code excerpts, no personal data); the wall snapshot;
+and that every function the monitor calls exists. CI runs it in the lint job on
+SQLite, and again in the integration job on **MySQL 8.0 and MariaDB 10.11**
+(`MONITOR_TEST_MYSQL_DSN`), where `_monitor_` also makes the migration fatal.
+`node --check assets/js/monitor.js` runs in the lint job.
+
+---
+
+## 15. Files
+
+`includes/monitor/` — `capture.php` (handlers; db.php line 2), `prepend.php`,
+`redact.php`, `keys.php` (secret, hashes, intake tokens, probe signature),
+`store.php` (record, spool, flush, web facts), `logscan.php`, `checks.php`,
+`rum.php`, `intake.php`, `probe.php`, `brief.php`, `alerts.php`, `wall.php`,
+`browser.php` (the tag), `bootstrap.php` (everything + `monitor_user_can()`).
+`api/monitor_api.php`, `api/monitor_intake.php`, `api/monitor_probe.php`,
+`cron/monitor.php`, `bin/monitor.php`, `monitor_confirm.php` (+
+`assets/css/monitor_public.css`), `assets/js/monitor.js`,
+`.github/workflows/monitor-probe.yml`, `db/migrations/20261125090000_monitor_core.sql`,
+`tests/monitor/`. Touched: `includes/db.php` (install + the connection-failure
+note), `includes/pwa_head.php` (the tag), `.github/workflows/deploy.yml`,
+`tests/special_events/db_setup.php` (the `_monitor_` marker).

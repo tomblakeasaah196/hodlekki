@@ -1,6 +1,13 @@
 <?php
 // /includes/db.php
 
+// 0. The error monitor, before anything else can go wrong (docs/monitor.md):
+//    every page, API endpoint and cron job that loads this file reports its PHP
+//    warnings, uncaught exceptions, fatal errors and slow requests. Installing
+//    does no I/O; anything found is written after the response has been sent.
+require_once __DIR__ . '/monitor/capture.php';
+hod_monitor_install();
+
 // 1. Start the session globally if it hasn't been started yet
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -61,6 +68,10 @@ try {
     $pdo->exec("SET time_zone = '+01:00';");
     
 } catch (\PDOException $e) {
+    // The monitor keeps this in its spool (the database is the problem) and
+    // records it once the database answers again.
+    hod_monitor_note('fatal', 'Database Connection Failed: ' . $e->getMessage());
+
     // A cron job (CLI) must fail loudly: the JSON below went to stdout with exit
     // code 0, so a worker whose database connection failed looked like a run
     // that did nothing, every minute, with nothing in any log.

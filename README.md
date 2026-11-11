@@ -190,7 +190,13 @@ GitHub Secrets / Variables), and rollback instructions live in
 15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/assimilation_watchlists.php >/dev/null 2>&1
 */5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/special_events.php >/dev/null 2>&1
 * * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/push_worker.php >/dev/null 2>&1
+* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/monitor.php >/dev/null 2>&1
 ```
+
+`monitor.php` is the system monitor ([docs/monitor.md](docs/monitor.md)): it
+reads the error logs, runs the health checks (including whether every job
+above ran on time), sends the alerts and the 08:00 morning summary, and
+refreshes the live wall. If it stops, ordinary page visits notice and alert.
 
 `sms_queue_worker.php` sends queued SMS for ~55 s (about one per second),
 then fetches delivery reports for messages still awaiting one. Overlapping
@@ -286,7 +292,7 @@ assets/         Static CSS / JS / images shipped to the browser.
 auth/           Login, logout, first-time password setup.
 cron/           CLI jobs (sms_queue_worker.php, reach_lost_souls.php 07:00,
                 assimilation_watchlists.php 07:15, special_events.php */5,
-                push_worker.php every minute).
+                push_worker.php and monitor.php every minute).
 includes/       Shared PHP: db.php, header.php, functions.php, PDF helpers,
                 sms_functions.php, sms_vault_key.php, push_*.php, pwa_*.php.
 modules/        One folder per ERP module; each has index.php as the view.
