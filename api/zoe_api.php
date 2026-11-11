@@ -11,11 +11,10 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // 2. Zoe RBAC 
-$is_zoe_admin = in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD']);
+$is_zoe_admin = can('zoe', 'manage');   // the 'zoe' row of the permission matrix
 
 // Check if user is officially in Zoe (Worker or Volunteer)
 $rosterCheck = $pdo->prepare("SELECT id FROM zoe_roster WHERE user_id = ? AND is_active = 1");

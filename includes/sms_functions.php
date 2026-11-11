@@ -20,7 +20,6 @@ require_once __DIR__ . '/sms_vault_key.php';  // defines SMS_VAULT_KEY + sms_vau
 require_once __DIR__ . '/sms_status.php';     // sms_map_dlr_status(), sms_explain_code()
 
 const SMS_DEFAULT_BASE      = 'https://www.bulksmsnigeria.com/api/v2';
-const SMS_ALLOWED_ROLES     = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head'];
 const SMS_GATEWAYS          = ['direct-refund', 'direct-corporate', 'otp', 'dual-backup'];
 const SMS_SIGN_MODES        = ['prefix', 'none'];   // where the sender name goes in the text ('' = prefix)
 const SMS_DEFAULT_UNIT_PRICE = 6.49;  // ₦ per SMS unit when Settings has no price (BulkSMS list price, ex VAT)
@@ -37,19 +36,19 @@ const SMS_WORKER_LOCK       = 'hod_sms_queue_worker';
 /* ============================================================================
  * ACCESS
  * ========================================================================== */
+// Who may use SMS Studio is the 'sms_studio' row of the permission matrix.
 function sms_user_can_send() {
-    if (empty($_SESSION['roles']) || !is_array($_SESSION['roles'])) return false;
-    foreach ($_SESSION['roles'] as $r) {
-        if (in_array($r['role_name'] ?? '', SMS_ALLOWED_ROLES, true)) return true;
-    }
-    return false;
+    return function_exists('can') && can('sms_studio', 'view');
 }
+// Gateway settings: can('sms_studio', 'manage').
+function sms_user_can_manage() {
+    return function_exists('can') && can('sms_studio', 'manage');
+}
+// The wallet override and deleting anyone's template stay with Super Admins
+// (a break-glass role), as before.
 function sms_user_is_super_admin() {
-    if (empty($_SESSION['roles']) || !is_array($_SESSION['roles'])) return false;
-    foreach ($_SESSION['roles'] as $r) {
-        if (($r['role_name'] ?? '') === 'Super_Admin') return true;
-    }
-    return false;
+    $ctx = function_exists('perm_current') ? perm_current() : null;
+    return $ctx !== null && !empty($ctx['breakglass']);
 }
 
 /* ============================================================================

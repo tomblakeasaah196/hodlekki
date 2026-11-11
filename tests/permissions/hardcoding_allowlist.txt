@@ -1,0 +1,38 @@
+# /tests/permissions/hardcoding_allowlist.txt
+#
+# Files the hard-coding sweep (hardcoding_scan.php) tolerates role names,
+# department names/ids or seat values in — because what they decide is NOT
+# access. Every line says why, and every line has an owner to remove it.
+# A file here may still never read $_SESSION['roles'] or 'active_role'.
+#
+# path | reason
+
+# Notification audiences: who is TOLD about something (not who may do it).
+# Permissions PR 3 moves each to perm_holders() / perm_module_leaders().
+api/announcements_api.php | notify approvers of a new announcement (PR 3: perm_holders)
+api/assets_api.php | notify the managing department's leaders (PR 3)
+api/congregation_api.php | notify Charis leaders when a member is pushed to Charis (PR 3)
+api/embrace_public_api.php | notify Embrace leaders / IDI of a public connect card (PR 3)
+api/events_api.php | notify an event's department leaders, Embrace leaders, IDI (PR 3)
+api/finance_api.php | notify finance approvers (PR 3)
+api/library_api.php | notify Charis library leaders (PR 3)
+api/member_portal_api.php | notify finance / Zoe leaders (PR 3)
+api/parent_portal_api.php | notify Junior Church leaders (PR 3)
+api/pastoral_api.php | notify pastors of a new submission (PR 3)
+api/profile_api.php | notify IDI / Charis leaders / pastors of profile changes (PR 3)
+api/public_sermons_api.php | notify Envision leaders of a public comment (PR 3)
+api/reach_api.php | notify Embrace leaders / IDI on a hand-off (PR 3)
+includes/special_events/after_event.php | notify Reach / Embrace leaders after an event (PR 3)
+includes/monitor/alerts.php | who receives monitor alerts (the monitor's own file; PR 3 or the monitor chat)
+includes/campaigns/automation.php | who hears an automation team alert; marked in the file as the perm_holders() swap point (PR 3, with the email chat)
+
+# Pick lists and rosters shown on screen (not gates).
+api/regions_api.php | who may be chosen to lead a region (display list; PR 3)
+api/zoe_api.php | lists the Zoe department's people next to the zoe_roster (display; PR 3)
+
+# The Departments roster editor speaks the roster's own seat values (labels,
+# ordering, which seats a form may set). PR 3 reads them from perm_seat_types.
+api/department_api.php | roster editor seat values (PR 3: seat-type pickers)
+api/department_export_excel.php | roster export columns by seat (PR 3)
+includes/department_helpers.php | seat labels and roster ordering (PR 3)
+modules/departments/index.php | roster editor seat values in the page script (PR 3)

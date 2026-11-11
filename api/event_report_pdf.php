@@ -18,8 +18,8 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../includes/db.php';
 
 if (!isset($_SESSION['user_id'])) { header('Location: /auth/login.php'); exit; }
-$roles = array_column($_SESSION['roles'] ?? [], 'role_name');
-$is_privileged = array_intersect($roles, ['Super_Admin','Resident_Pastor','Assoc_Pastor','Director','HOD','Sub_Unit_Head','Admin']) !== [];
+// Access: Events & Attendance export in the permission matrix.
+$is_privileged = can('events', 'export');
 if (!$is_privileged) { http_response_code(403); die('Access Denied.'); }
 
 $autoload = __DIR__ . '/../vendor/autoload.php';

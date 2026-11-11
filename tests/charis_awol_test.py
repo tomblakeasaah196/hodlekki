@@ -57,12 +57,13 @@ require("charis_can_configure_awol" in helpers,
         "helpers must provide charis_can_configure_awol authorization check")
 require("charis_can_configure_awol" in api,
         "API must enforce charis_can_configure_awol before saving config")
-require("Super_Admin" in helpers,
-        "charis_can_configure_awol must permit Super Admins")
-require("'Director'" in helpers and "'HOD'" in helpers,
-        "charis_can_configure_awol must check active leadership status")
-require("charis" in helpers.lower() and "idi" in helpers.lower() and "welfare" in helpers.lower(),
-        "charis_can_configure_awol must verify department is Charis, IDI, or Welfare")
+# Since roles & permissions PR 2 the AWOL rule is the 'charis' manage cell of
+# the permission matrix (Super Admins via break-glass; day one the Director and
+# HOD seats of the departments that own Charis) — no role names in the code.
+require("perm_ctx_can($ctx, 'charis', 'manage')" in helpers,
+        "charis_can_configure_awol must ask the permission matrix (charis / manage)")
+require("$bg ||" in helpers,
+        "charis_can_configure_awol must permit Super Admins (break-glass)")
 
 # 4. CALCULATION LOGIC & LAGOS TIMEZONE
 require("Africa/Lagos" in helpers,

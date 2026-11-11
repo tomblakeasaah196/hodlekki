@@ -118,21 +118,10 @@ const CHARIS_AWOL_EXCLUDED_ATTENDANCE_STATUSES = [
     'Attends_Another_Church',
 ];
 
-/** @return string[] */
-function charis_session_role_names(?array $roles = null): array
-{
-    $roles = $roles ?? ($_SESSION['roles'] ?? []);
-    $names = [];
-    foreach ($roles as $role) {
-        $name = is_array($role) ? ($role['role_name'] ?? '') : (string) $role;
-        if ($name !== '') $names[] = $name;
-    }
-    return array_values(array_unique($names));
-}
-
 /**
- * Return true if the user is authorized to edit the shared AWOL configuration:
- * Super Admins, and active Directors or HODs in IDI/Charis/Welfare departments.
+ * May this person change the shared AWOL configuration? The permission matrix
+ * decides: can('charis', 'manage') — day one, the Director / HOD seats of the
+ * departments that own Charis, and Super Admins (break-glass).
  */
 function charis_can_configure_awol(PDO $pdo, $userOrContext, ?array $roles = null): bool
 {
@@ -147,104 +136,50 @@ function charis_can_configure_awol(PDO $pdo, $userOrContext, ?array $roles = nul
     } else {
         $userId = (int) $userOrContext;
     }
-
-    $roleNames = charis_session_role_names($roles);
-    if (in_array('Super_Admin', $roleNames, true)) {
-        return true;
+    if ($userId <= 0) {
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
     }
-    if ($userId <= 0) return false;
-
-    $stmt = $pdo->prepare("
-        SELECT ud.role_in_dept
-          FROM user_departments ud
-          JOIN departments d ON d.id = ud.department_id
-         WHERE ud.user_id = ?
-           AND ud.is_active = 1
-           AND (
-                ud.department_id IN (1, 10)
-                OR d.name LIKE '%Charis%'
-                OR d.name LIKE '%Welfare%'
-                OR d.name = 'IDI'
-           )
-           AND ud.role_in_dept IN ('Director', 'HOD')
-         LIMIT 1
-    ");
-    $stmt->execute([$userId]);
-    return (bool) $stmt->fetchColumn();
+    return charis_access_context($pdo, $userId)['can_configure_awol'];
 }
 
 /**
- * Return the one access decision used by the page, API, and PDF.
- *
- * The sidebar exposes Charis to pastors and active members of departments 1
- * (IDI) and 10 (Charis). Name matching keeps access intact if those department
- * IDs differ on an older installation. A Director/HOD badge only grants Charis
- * management rights when it belongs to one of those departments; leadership
- * in an unrelated department must not expose confidential welfare records.
+ * The one access decision used by the page, API, and PDFs, read from the
+ * permission matrix for the user asked about ($roles is ignored, kept so
+ * callers stay valid):
+ *   can_access          can('charis', 'view')
+ *   is_manager          can('charis', 'approve') — assign and approve cases, stamps
+ *   is_pastor           can('pastoral_notes') — may read notes marked for pastors
+ *   can_configure_awol  can('charis', 'manage')
+ *   is_team_member      seated in a department that owns Charis
+ * Leadership in an unrelated department never opens confidential welfare
+ * records: seats count only in the departments that own the module.
  *
  * @return array{can_access:bool,is_manager:bool,is_pastor:bool,is_super_admin:bool,is_team_member:bool,can_configure_awol:bool}
  */
 function charis_access_context(PDO $pdo, int $userId, ?array $roles = null): array
 {
-    $roleNames = charis_session_role_names($roles);
-    $isSuper   = in_array('Super_Admin', $roleNames, true);
-    $isPastor  = in_array('Resident_Pastor', $roleNames, true)
-        || in_array('Assoc_Pastor', $roleNames, true);
-
-    $isTeamMember = false;
-    $isTeamManager = false;
-    if ($userId > 0) {
-        $stmt = $pdo->prepare("
-            SELECT ud.role_in_dept
-              FROM user_departments ud
-              JOIN departments d ON d.id = ud.department_id
-             WHERE ud.user_id = ?
-               AND ud.is_active = 1
-               AND (
-                    ud.department_id IN (1, 10)
-                    OR d.name LIKE '%Charis%'
-                    OR d.name LIKE '%Welfare%'
-                    OR d.name = 'IDI'
-               )
-        ");
-        $stmt->execute([$userId]);
-        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $departmentRole) {
-            $isTeamMember = true;
-            if (in_array($departmentRole, ['Director', 'HOD'], true)) {
-                $isTeamManager = true;
-            }
-        }
+    $none = ['can_access' => false, 'is_manager' => false, 'is_pastor' => false, 'is_super_admin' => false,
+        'is_team_member' => false, 'can_configure_awol' => false];
+    if ($userId <= 0 || !function_exists('perm_resolve')) {
+        return $none;
     }
-
+    $ctx = perm_resolve($pdo, $userId);
+    $bg = $ctx['breakglass'];
     return [
-        'can_access'         => $isSuper || $isPastor || $isTeamMember,
-        'is_manager'         => $isSuper || $isPastor || $isTeamManager,
-        'is_pastor'          => $isPastor,
-        'is_super_admin'     => $isSuper,
-        'is_team_member'     => $isTeamMember,
-        'can_configure_awol' => $isSuper || $isTeamManager,
+        'can_access'         => $bg || perm_ctx_can($ctx, 'charis', 'view'),
+        'is_manager'         => $bg || perm_ctx_can($ctx, 'charis', 'approve'),
+        'is_pastor'          => perm_ctx_can($ctx, 'pastoral_notes', 'view'),
+        'is_super_admin'     => $bg,
+        'is_team_member'     => charis_is_team_worker($pdo, $userId),
+        'can_configure_awol' => $bg || perm_ctx_can($ctx, 'charis', 'manage'),
     ];
 }
 
+/** Seated in a department that owns Charis (who a case or task can go to). */
 function charis_is_team_worker(PDO $pdo, int $userId): bool
 {
-    if ($userId <= 0) return false;
-    $stmt = $pdo->prepare("
-        SELECT 1
-          FROM user_departments ud
-          JOIN departments d ON d.id = ud.department_id
-         WHERE ud.user_id = ?
-           AND ud.is_active = 1
-           AND (
-                ud.department_id IN (1, 10)
-                OR d.name LIKE '%Charis%'
-                OR d.name LIKE '%Welfare%'
-                OR d.name = 'IDI'
-           )
-         LIMIT 1
-    ");
-    $stmt->execute([$userId]);
-    return (bool) $stmt->fetchColumn();
+    return $userId > 0 && function_exists('perm_module_team')
+        && in_array($userId, perm_module_team($pdo, 'charis'), true);
 }
 
 function charis_welfare_assignment_access(

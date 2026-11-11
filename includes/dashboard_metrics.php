@@ -34,19 +34,50 @@ const DASH_TIER_CARDS = [
     'member'     => ['alerts'],
 ];
 
-/** The dashboard tier for $_SESSION['active_role'], as the dashboard has always split it. */
-function dash_tier(string $activeRole): string
+/**
+ * The dashboard tier and the departments it covers, from the permission
+ * matrix (module 'dashboard') — never a role name:
+ *   leadership  the church-wide dashboard (day one: pastors, Super Admins)
+ *   director    a department dashboard through a leadership seat ranked at or
+ *               above $directorRank (Director, Pastor in charge)
+ *   hod         a department dashboard through a lower leadership seat (HOD,
+ *               Deputy HOD)
+ *   member      everyone else: their alerts
+ *
+ * @param array|null $ctx a resolved context (perm_current() / perm_resolve())
+ * @return array{0:string, 1:int[]} [tier, departments led]
+ */
+function dash_tier_for(?array $ctx, int $directorRank): array
 {
-    if (in_array($activeRole, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'], true)) {
-        return 'leadership';
+    if ($ctx === null || empty($ctx['ready'])) {
+        return ['member', []];
     }
-    if ($activeRole === 'Director') {
-        return 'director';
+    if (!empty($ctx['breakglass']) || perm_ctx_can($ctx, 'dashboard', 'view', 'church')) {
+        return ['leadership', []];
     }
-    if ($activeRole === 'HOD') {
-        return 'hod';
+    $depts = perm_ctx_scope($ctx, 'dashboard', 'view')['depts'];
+    $top = [];
+    $mid = [];
+    foreach ($ctx['seats'] ?? [] as $seat) {
+        if (empty($seat['is_leader']) || !in_array($seat['department_id'], $depts, true)) {
+            continue;
+        }
+        if ($seat['seat_rank'] >= $directorRank) {
+            $top[] = $seat['department_id'];
+        } else {
+            $mid[] = $seat['department_id'];
+        }
     }
-    return 'member';
+    $pick = $top !== [] ? ['director', $top] : ($mid !== [] ? ['hod', $mid] : ['member', []]);
+    $pick[1] = array_values(array_unique($pick[1]));
+    sort($pick[1]);
+    return $pick;
+}
+
+/** The rank that makes a department dashboard a Director-level one (the director seat type's). */
+function dash_director_rank(PDO $pdo): int
+{
+    return function_exists('perm_seat_types') ? (int) (perm_seat_types($pdo)['director']['seat_rank'] ?? 50) : 50;
 }
 
 /** How many Sundays the Sunday card's breakdown lists. */

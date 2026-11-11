@@ -7,7 +7,7 @@ require_once '../../includes/push_helpers.php';
 // this page can reach every member at once. Checked against the live roles
 // table, never $_SESSION['active_role'] — the member can switch that
 // themselves from their profile.
-if (!isset($_SESSION['user_id']) || !security_is_admin($pdo)) {
+if (!isset($_SESSION['user_id']) || !can('alerts')) {
     echo "<div class='min-h-screen flex items-center justify-center bg-gray-50'><div class='bg-white p-8 rounded-3xl shadow-xl text-center max-w-md border border-red-100'><svg class='w-16 h-16 text-red-500 mx-auto mb-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z'></path></svg><h2 class='text-2xl font-black text-gray-900 mb-2'>CLEARANCE REQUIRED</h2><p class='text-gray-500 mb-6'>The Alerts Centre is restricted to Super Admins and the Resident Pastor.</p><a href='/index.php' class='bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-black transition-all inline-block'>Return to Dashboard</a></div></div>";
     require_once '../../includes/footer.php';
     exit;

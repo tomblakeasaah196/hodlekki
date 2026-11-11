@@ -8,8 +8,8 @@ require_once __DIR__ . '/db.php';
 
 if (!isset($_SESSION['user_id'])) { header('Location: /auth/login.php'); exit; }
 
-$session_roles = array_column($_SESSION['roles'] ?? [], 'role_name');
-$is_privileged = array_intersect($session_roles, ['Super_Admin','Resident_Pastor','Assoc_Pastor','Director','HOD']) !== [];
+// Charis export in the permission matrix (it used to be any Director/HOD role).
+$is_privileged = function_exists('can') && can('charis', 'export');
 if (!$is_privileged) { http_response_code(403); die('<h2 style="font-family:sans-serif;color:#c00">Access Denied.</h2>'); }
 
 $autoload = __DIR__ . '/../vendor/autoload.php';

@@ -257,22 +257,16 @@ function assim_volunteer_guide(PDO $pdo): string {
 // WHO CAN SEE WHAT
 // ==========================================================================
 
-// Super Admin and the pastors, plus any active Director or HOD of any
-// department — they carry the shepherding responsibility for their people.
-function assim_is_manager(PDO $pdo, int $user_id, string $active_role): bool {
-    if (in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'], true)) {
-        return true;
-    }
-    if ($user_id <= 0) {
+// Managers: whoever the permission matrix lets manage Assimilation (day one:
+// the pastors, and every live Director or HOD seat in any department — they
+// carry the shepherding responsibility for their people). Read for the user
+// asked about; $active_role is ignored and kept so callers stay valid.
+function assim_is_manager(PDO $pdo, int $user_id, string $active_role = ''): bool {
+    if ($user_id <= 0 || !function_exists('perm_resolve')) {
         return false;
     }
-    $stmt = $pdo->prepare("
-        SELECT 1 FROM user_departments
-         WHERE user_id = ? AND is_active = 1 AND role_in_dept IN ('HOD', 'Director')
-         LIMIT 1
-    ");
-    $stmt->execute([$user_id]);
-    return (bool) $stmt->fetchColumn();
+    $ctx = perm_resolve($pdo, $user_id);
+    return $ctx['breakglass'] || perm_ctx_can($ctx, 'assimilation', 'manage');
 }
 
 function assim_is_team_member(PDO $pdo, int $user_id): bool {
@@ -289,18 +283,9 @@ function assim_can_view(PDO $pdo, int $user_id, string $active_role): bool {
 }
 
 // Everyone who should hear about a new drift, a return home or an
-// unclaimed case: Super Admins, pastors and every active Director/HOD.
+// unclaimed case: the people who can manage Assimilation, Super Admins included.
 function assim_manager_ids(PDO $pdo): array {
-    $ids = $pdo->query("
-        SELECT DISTINCT ud.user_id FROM user_departments ud
-         WHERE ud.is_active = 1 AND ud.role_in_dept IN ('HOD', 'Director')
-    ")->fetchAll(PDO::FETCH_COLUMN);
-    $roles = $pdo->query("
-        SELECT DISTINCT ur.user_id FROM user_roles ur
-          JOIN roles r ON r.id = ur.role_id
-         WHERE r.role_name IN ('Super_Admin', 'Resident_Pastor', 'Assoc_Pastor')
-    ")->fetchAll(PDO::FETCH_COLUMN);
-    return array_values(array_unique(array_map('intval', array_merge($ids, $roles))));
+    return function_exists('perm_holders') ? perm_holders($pdo, 'assimilation', 'manage', null, true) : [];
 }
 
 // The volunteer roster, with the workload numbers the Team tab shows.

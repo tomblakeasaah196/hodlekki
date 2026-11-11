@@ -7,12 +7,10 @@
  * are all rendered from ui_nav_registry(). Adding a module means adding ONE
  * entry here (and its icon to assets/ui/src/icons/ if it is new).
  *
- * Who sees what is decided by ONE function, ui_nav_can_access(). It is the
- * seam for the roles × modules permission matrix: replace its body, keep its
- * signature, and both shells and the search follow. Today it reproduces,
- * rule for rule, the gates that were hard-coded in includes/header.php
- * (tests/ui/run.php pins them). Hiding a link is not a permission: every
- * module and API still checks access itself.
+ * Who sees what is decided by ONE function, ui_nav_can_access(), which asks
+ * the roles × modules permission matrix (includes/permissions.php): both
+ * shells and the search follow it. Hiding a link is not a permission: every
+ * module and API checks can() itself.
  */
 
 if (defined('HOD_UI_NAV')) {
@@ -153,9 +151,11 @@ function ui_nav_registry(): array
 }
 
 /**
- * Everything the access rules need about the signed-in person, read once
- * per request: their roles, live department seats, and the two module
- * helpers (Assimilation, Special Events) that decide visibility themselves.
+ * Everything the navigation needs about the signed-in person, read once per
+ * request: their resolved permissions (includes/permissions.php — roles, live
+ * department seats, the matrix) and the two module rosters that open a module
+ * on their own (Assimilation volunteers, Special Events crew). The other keys
+ * are kept for code that has read them from header.php for years.
  */
 function ui_nav_context(PDO $pdo): array
 {
@@ -165,164 +165,73 @@ function ui_nav_context(PDO $pdo): array
     }
 
     $uid = (int) ($_SESSION['user_id'] ?? 0);
-    $roles = [];
-    foreach ((array) ($_SESSION['roles'] ?? []) as $role) {
-        if (is_array($role) && isset($role['role_name'])) {
-            $roles[] = (string) $role['role_name'];
-        }
-    }
+    $perm = function_exists('perm_current') ? perm_current() : null;
 
-    // The Departments module is gated on a LIVE leadership seat: relieving
-    // somebody of duty clears is_active on their roster row and the link
-    // goes on their very next page load.
-    $deptIds = [];
-    $deptRoles = [];
+    // Assimilation's volunteer roster is the module's own list of who helps.
+    $assimTeam = false;
     try {
-        $stmt = $pdo->prepare('SELECT department_id, role_in_dept FROM user_departments WHERE user_id = ? AND is_active = 1');
-        $stmt->execute([$uid]);
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $deptIds[] = (int) $row['department_id'];
-            $deptRoles[] = (string) $row['role_in_dept'];
-        }
-    } catch (Throwable $e) {
-        error_log('ui_nav_context departments: ' . $e->getMessage());
-    }
-
-    // Assimilation is not department-scoped: Super Admins, pastors, every
-    // active Director/HOD, and anyone on the Assimilation team.
-    $assimNav = false;
-    $assimManager = false;
-    try {
-        if (!function_exists('assim_is_manager')) {
+        if (!function_exists('assim_is_team_member')) {
             require_once dirname(__DIR__) . '/assimilation_helpers.php';
         }
-        $assimManager = assim_is_manager($pdo, $uid, $_SESSION['active_role'] ?? '');
-        $assimNav = $assimManager || assim_is_team_member($pdo, $uid);
+        $assimTeam = assim_is_team_member($pdo, $uid);
     } catch (Throwable $e) {
         error_log('ui_nav_context assimilation: ' . $e->getMessage());
     }
 
-    // Special Events: Envision's studio, plus crew on any live event. Inside
-    // try/catch so a missing se_* table can never break the navigation.
-    $seNav = false;
+    // Special Events crew on a live event, from the module's own crew table.
+    // Inside try/catch so a missing se_* table can never break the navigation.
+    $seCrew = false;
     try {
-        if (!function_exists('se_nav_visible')) {
+        if (!function_exists('se_is_crew')) {
             require_once dirname(__DIR__) . '/special_events/bootstrap.php';
         }
-        $seNav = (bool) se_nav_visible($pdo, $uid, se_session_roles());
+        $seCrew = se_is_crew($pdo, $uid);
     } catch (Throwable $e) {
         error_log('ui_nav_context special events: ' . $e->getMessage());
     }
 
-    return $ctx = [
+    $seats = $perm['seats'] ?? [];
+    $ctx = [
         'user_id' => $uid,
-        'roles' => $roles,
-        'is_super_admin' => in_array('Super_Admin', $roles, true),
-        'dept_ids' => $deptIds,
-        'dept_roles' => $deptRoles,
-        'assim_nav' => $assimNav,
-        'assim_manager' => $assimManager,
-        'se_nav' => $seNav,
+        'perm' => $perm,
+        'assim_team' => $assimTeam,
+        'se_crew' => $seCrew,
+        'is_super_admin' => !empty($perm['breakglass']),
+        'dept_ids' => array_values(array_unique(array_column($seats, 'department_id'))),
+        'seat_keys' => array_values(array_unique(array_column($seats, 'seat_key'))),
     ];
+    $ctx['assim_manager'] = $perm !== null && perm_ctx_can($perm, 'assimilation', 'manage') || !empty($perm['breakglass']);
+    $ctx['assim_nav'] = ui_nav_can_access('assimilation', $ctx);
+    $ctx['se_nav'] = ui_nav_can_access('special_events', $ctx);
+
+    return $ctx;
 }
 
-/**
- * The rule header.php has always used: Super Admin sees everything; else any
- * of the roles, or an active seat in any of the departments.
- */
-function ui_nav_has(array $ctx, array $roles, array $deptIds = []): bool
+/** The permission module behind a navigation entry (the same key, except where noted). */
+function ui_nav_module(string $key): string
 {
-    if (!empty($ctx['is_super_admin'])) {
-        return true;
-    }
-    if (array_intersect($roles, (array) $ctx['roles'])) {
-        return true;
-    }
-
-    return $deptIds !== [] && (bool) array_intersect($deptIds, (array) $ctx['dept_ids']);
+    return ['system_health' => 'monitor'][$key] ?? $key;
 }
 
 /**
- * THE ACCESS DECISION for a navigation entry. One function, swappable.
- *
- * Department ids are today's: 1 IDI, 2 Embrace, 3 Envision, 4 River of Life,
- * 7 Zoe, 8 Reach, 10 Charis, 11 Junior Church, 13 Camp David. Where the old
- * sidebar showed a link only inside a section that had its own gate, the
- * section's gate is part of the rule (e.g. Departments needs the Core
- * Operations gate AND a live leadership seat) so nobody's menu changes.
+ * THE ACCESS DECISION for a navigation entry: the permission matrix
+ * (perm_ctx_nav_visible(): the link shows when the person may do something
+ * beyond their own records, or the page is member-facing), plus the two
+ * module rosters. No role name and no department number is consulted here;
+ * tests/permissions/ compares the result with the old sidebar, person by
+ * person, and every difference is one the owner decided.
  */
 function ui_nav_can_access(string $key, array $ctx): bool
 {
-    $P = ['Resident_Pastor', 'Assoc_Pastor'];
-    $PD = ['Resident_Pastor', 'Assoc_Pastor', 'Director'];
-    // Mirrors SMS_ALLOWED_ROLES in includes/sms_functions.php.
-    $SMS = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head'];
-
-    $coreOperations = ui_nav_has($ctx, array_merge($PD, $SMS), [1, 3, 13]);
-    $stewardship = ui_nav_has($ctx, $PD);
-
-    switch ($key) {
-        case 'member_portal':
-        case 'profile':
-        case 'bible':
-        case 'hymnal':
-        case 'regions':
-        case 'academy':
-            return true;
-
-        case 'dashboard':
-            return ui_nav_has($ctx, $PD, [1]);
-        case 'idi':
-        case 'congregation':
-            return ui_nav_has($ctx, $P, [1]);
-        case 'reach':
-            return ui_nav_has($ctx, $P, [1, 8]);
-        case 'embrace':
-            return ui_nav_has($ctx, $P, [1, 2]);
-        case 'assimilation':
-            return !empty($ctx['assim_nav']);
-        case 'charis':
-            return ui_nav_has($ctx, $P, [1, 10]);
-
-        case 'junior_church':
-            return ui_nav_has($ctx, $P, [1, 11]);
-        case 'river_of_life':
-            return ui_nav_has($ctx, $P, [1, 4]);
-        case 'envision':
-            return ui_nav_has($ctx, $P, [1, 3]);
-        case 'special_events':
-            return !empty($ctx['se_nav']);
-        case 'zoe':
-            return ui_nav_has($ctx, $P, [1, 7]);
-
-        case 'departments':
-            return $coreOperations && (
-                ui_nav_has($ctx, $P)
-                || (bool) array_intersect((array) $ctx['dept_roles'], ['Director', 'HOD', 'Sub_Unit_Head'])
-            );
-        case 'tribes':
-            return ui_nav_has($ctx, $P, [1, 13]);
-        case 'events':
-        case 'pastoral':
-        case 'announcements':
-        case 'testimonies':
-            return ui_nav_has($ctx, $PD, [1]);
-        case 'sms_studio':
-            return ui_nav_has($ctx, $SMS);
-        case 'assets':
-            return ui_nav_has($ctx, $PD, [1, 3]);
-
-        case 'finance':
-            return $stewardship;
-        case 'requisition':
-            return $stewardship && ui_nav_has($ctx, ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD']);
-        case 'roles':
-        case 'ui_guide':
-        case 'system_health':
-            return !empty($ctx['is_super_admin']);
-        case 'security':
-        case 'alerts':
-            return ui_nav_has($ctx, ['Resident_Pastor']);
+    $perm = $ctx['perm'] ?? null;
+    if (is_array($perm) && function_exists('perm_ctx_nav_visible') && perm_ctx_nav_visible($perm, ui_nav_module($key))) {
+        return true;
+    }
+    if ($key === 'assimilation') {
+        return !empty($ctx['assim_team']);
+    }
+    if ($key === 'special_events') {
+        return !empty($ctx['se_crew']);
     }
 
     return false;
@@ -340,7 +249,9 @@ function ui_nav_badge_reach(PDO $pdo, array $ctx): int
 /** Assimilation: overdue follow-ups, plus the pool and untouched watch list for managers. */
 function ui_nav_badge_assimilation(PDO $pdo, array $ctx): int
 {
-    require_once dirname(__DIR__) . '/assimilation_helpers.php';
+    if (!function_exists('assim_sidebar_counts')) {
+        require_once dirname(__DIR__) . '/assimilation_helpers.php';
+    }
     $counts = assim_sidebar_counts($pdo, (int) $ctx['user_id']);
 
     return (int) $counts['my_overdue']

@@ -11,22 +11,12 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // Check Clearance: Super Admin, Pastors, or Envision Department
-$has_clearance = false;
-if (in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'])) {
-    $has_clearance = true;
-} else {
-    $deptStmt = $pdo->prepare("
-        SELECT d.id FROM departments d 
-        JOIN user_departments ud ON d.id = ud.department_id 
-        WHERE ud.user_id = ? AND ud.is_active = 1 AND d.name LIKE '%Envision%'
-    ");
-    $deptStmt->execute([$user_id]);
-    if ($deptStmt->fetch()) $has_clearance = true;
-}
+// Envision: the 'envision' row of the permission matrix (pastors, and the
+// seats of the department that owns it).
+$has_clearance = can('envision', 'view');
 
 if (!$has_clearance) {
     echo json_encode(['status' => 'error', 'message' => 'Access Denied: Envision clearance required.']);
@@ -73,16 +63,16 @@ try {
             $roster = $rosterStmt->fetchAll(PDO::FETCH_ASSOC);
 
             // D. Fetch Available members (Strictly NOT on the roster yet)
+            // The Envision team (seated in a department that owns Envision)
+            // who are not on the crew roster yet.
+            $team = array_map('intval', perm_module_team($pdo, 'envision'));
             $available = $pdo->query("
-                SELECT u.id, u.first_name, u.last_name 
+                SELECT u.id, u.first_name, u.last_name
                 FROM users u
-                JOIN user_departments ud ON u.id = ud.user_id
-                JOIN departments d ON ud.department_id = d.id
-                WHERE d.name LIKE '%Envision%' AND ud.is_active = 1
+                WHERE u.id IN (" . ($team ? implode(',', $team) : '0') . ")
                 AND u.id NOT IN (SELECT user_id FROM envision_roster)
                 ORDER BY u.first_name ASC
             ")->fetchAll(PDO::FETCH_ASSOC);
-
             echo json_encode([
                 'status' => 'success',
                 'stats' => $stats,

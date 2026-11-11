@@ -131,3 +131,14 @@ you which layout was used.
 * **A seat is changed, never vacated by accident.** `set_leader` (and the
   leadership block of `save_department`) is the only way a seat moves, and old
   and new are written in one transaction.
+
+## Who can change what (since November 2026)
+
+Access follows Roles & permissions: pastors manage every department; a Pastor in charge,
+Director or HOD manages their own department and its sub-units; ministry years and the
+rollover need **Departments: Manage**. Putting someone in a seat follows the rank rule:
+you may only appoint, change or remove seats ranked **below** your own in that department
+(Super Admins and holders of Roles & permissions: Manage excepted). An HOD therefore no
+longer appoints the Director. A Deputy HOD (up to two per department) appoints nobody.
+Appointing a leader no longer gives them a church-wide role: their access comes from the
+seat, and ends with it.

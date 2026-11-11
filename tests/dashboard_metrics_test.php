@@ -31,6 +31,7 @@ if (!extension_loaded('pdo_sqlite')) {
 date_default_timezone_set('Africa/Lagos');
 
 require_once __DIR__ . '/../includes/dashboard_metrics.php';
+require_once __DIR__ . '/../includes/permissions.php';
 
 $passed = 0;
 $failed = 0;
@@ -293,10 +294,23 @@ ok('…including a trailing newline', $threw);
 // ---------------------------------------------------------------------------
 echo "Tiers\n";
 // ---------------------------------------------------------------------------
-same('pastors and admins', ['leadership', 'leadership', 'leadership'],
-    [dash_tier('Super_Admin'), dash_tier('Resident_Pastor'), dash_tier('Assoc_Pastor')]);
-same('directors, HODs, everyone else', ['director', 'hod', 'member', 'member'],
-    [dash_tier('Director'), dash_tier('HOD'), dash_tier('Church_Member'), dash_tier('Member')]);
+// The tier comes from the permission matrix (a resolved context), not a role
+// name: church-wide dashboard = leadership; a department dashboard through a
+// seat ranked at or above the Director seat = director; a lower leadership
+// seat = hod; nothing beyond your own alerts = member.
+$tierCtx = static function (array $view, array $seats = [], bool $bg = false): array {
+    return ['ready' => true, 'user_id' => 1, 'breakglass' => $bg, 'seats' => $seats,
+        'abilities' => $view === [] ? [] : ['dashboard' => ['view' => $view]]];
+};
+$church = ['church' => true, 'depts' => [], 'own' => true];
+$dept2 = ['church' => false, 'depts' => [2], 'own' => true];
+$own = ['church' => false, 'depts' => [], 'own' => true];
+$seat = static fn (int $d, int $rank, bool $leader = true): array => ['department_id' => $d, 'seat_rank' => $rank, 'is_leader' => $leader];
+same('church-wide and break-glass', [['leadership', []], ['leadership', []]],
+    [dash_tier_for($tierCtx($church), 50), dash_tier_for($tierCtx([], [], true), 50)]);
+same('director seat, HOD seat, own only, nobody', [['director', [2]], ['hod', [2]], ['member', []], ['member', []]],
+    [dash_tier_for($tierCtx($dept2, [$seat(2, 50)]), 50), dash_tier_for($tierCtx($dept2, [$seat(2, 40)]), 50),
+     dash_tier_for($tierCtx($own), 50), dash_tier_for(null, 50)]);
 same('leadership cards', ['workforce', 'pipeline', 'followups', 'pending_qa', 'sunday'], DASH_TIER_CARDS['leadership']);
 
 echo "\n{$passed} passed, {$failed} failed\n";

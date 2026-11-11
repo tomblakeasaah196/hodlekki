@@ -21,13 +21,8 @@ require_once '../includes/db.php';
 
 /* ---- Auth Gate (same RBAC as export_event_excel.php) ---- */
 if (!isset($_SESSION['user_id'])) { http_response_code(401); die('Unauthorized. Please log in.'); }
-$allowed_roles = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head'];
-$is_authorized = false;
-if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
-    foreach ($_SESSION['roles'] as $role) {
-        if (in_array($role['role_name'], $allowed_roles)) { $is_authorized = true; break; }
-    }
-}
+// Access: Events & Attendance (export) in the permission matrix (Roles & permissions).
+$is_authorized = can('events', 'export');
 if (!$is_authorized) { http_response_code(403); die('Access Denied. You do not have clearance to export event data.'); }
 
 /* ---- Params ---- */

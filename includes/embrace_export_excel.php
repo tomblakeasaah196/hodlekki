@@ -197,7 +197,7 @@ function embrace_export_stream_excel(PDO $pdo, string $startDate, string $endDat
     $visitors = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $ids = array_map(fn($v) => (int) $v['id'], $visitors);
-    $notesByVisitor = embrace_notes_for_visitors($pdo, $ids);
+    $notesByVisitor = embrace_notes_for_visitors($pdo, $ids, (int) ($_SESSION['user_id'] ?? 0));
     $workersByVisitor = embrace_worker_history_for_visitors($pdo, $ids);
 
     $columns = embrace_export_columns();

@@ -116,7 +116,7 @@ function bible_boot_payload(PDO $pdo, int $userId): array
         ], bible_books())),
         'counts'       => bible_kjv_counts(),
         'colors'       => BIBLE_HL_COLORS,
-        'is_admin'     => function_exists('security_is_admin') && security_is_admin($pdo, $userId),
+        'is_admin'     => function_exists('can') && can('bible', 'manage'),
         'today'        => bible_today(),
     ];
 }

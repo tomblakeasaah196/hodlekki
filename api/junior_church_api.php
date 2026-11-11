@@ -16,6 +16,16 @@ if (!isset($_SESSION['user_id'])) {
 
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
+// Access: the 'junior_church' row of the permission matrix (pastors, and the
+// seats of the departments that own it). Children's records: until roles &
+// permissions PR 2 this endpoint was open to every signed-in member.
+api_require_can('junior_church', 'view');
+$jc_level = ['save_child' => 'edit', 'create_service' => 'create', 'upload_curriculum' => 'create',
+    'delete_curriculum' => 'delete', 'mark_attendance' => 'edit', 'mark_all_present' => 'edit'][$action] ?? null;
+if ($jc_level !== null) {
+    api_require_can('junior_church', $jc_level);
+}
+
 /**
  * Helper: Secure File Uploader for Documents & Media
  */
@@ -59,14 +69,13 @@ try {
             $children = $childrenStmt->fetchAll(PDO::FETCH_ASSOC);
 
             // B. Fetch Junior Church Workers (Department ID = 11)
+            $team = array_map('intval', perm_module_team($pdo, 'junior_church'));
             $teachersStmt = $pdo->query("
-                SELECT u.id, u.first_name, u.last_name 
+                SELECT u.id, u.first_name, u.last_name
                 FROM users u
-                JOIN user_departments ud ON u.id = ud.user_id
-                WHERE ud.department_id = 11 AND ud.is_active = 1
+                WHERE u.id IN (" . ($team ? implode(',', $team) : '0') . ")
                 ORDER BY u.first_name ASC
-            ");
-            $teachers = $teachersStmt->fetchAll(PDO::FETCH_ASSOC);
+            ");            $teachers = $teachersStmt->fetchAll(PDO::FETCH_ASSOC);
 
             // C. Fetch all adult members (To populate the 'Select Parent' dropdown)
             $parentsStmt = $pdo->query("SELECT id, first_name, last_name, phone FROM users ORDER BY first_name ASC");
@@ -238,8 +247,7 @@ try {
             $stmt->execute([$title, $description, $upload['success'], $upload['type']]);
 
             // NOTIFICATION TRIGGER: Alert all Junior Church Teachers (Dept ID 11)
-            $teacherStmt = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 11 AND is_active = 1");
-            $teachers = $teacherStmt->fetchAll(PDO::FETCH_COLUMN);
+            $teachers = perm_module_team($pdo, 'junior_church');
 
             if (!empty($teachers)) {
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Curriculum Uploaded', ?, '/modules/junior_church/index.php')");

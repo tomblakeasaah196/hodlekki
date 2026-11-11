@@ -204,6 +204,65 @@ foreach (ui_nav_registry() as $item) {
 }
 
 // ---------------------------------------------------------------------------
+section('No access decision is hard-coded (the CI sweep)');
+require_once __DIR__ . '/hardcoding_scan.php';
+$findings = perm_hardcoding_findings($root);
+ok('no role name, department number/name, active role or session role list decides access',
+    $findings === [], implode('; ', array_slice($findings, 0, 8)));
+$allowSrc = (string) file_get_contents(__DIR__ . '/hardcoding_allowlist.txt');
+foreach (preg_split('/\R/', $allowSrc) as $line) {
+    $line = trim($line);
+    if ($line !== '' && $line[0] !== '#') {
+        [$p, $why] = array_map('trim', explode('|', $line, 2) + [1 => '']);
+        ok("allowlisted {$p} exists and says why", is_file($root . '/' . $p) && $why !== '');
+    }
+}
+
+// ---------------------------------------------------------------------------
+section('Tribes no longer errors for Directors and HODs');
+$tribes = '';   // the code, comments stripped
+foreach (token_get_all((string) file_get_contents($root . '/api/tribes_api.php')) as $tok) {
+    if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+        $tribes .= is_array($tok) ? $tok[1] : $tok;
+    }
+}
+ok('tribes_api reads no departments.director_id / hod_id', !str_contains($tribes, 'director_id') && !str_contains($tribes, 'hod_id'));
+ok('tribes_api asks the matrix', str_contains($tribes, "api_require_can('tribes', 'view')")
+    && str_contains($tribes, "can('tribes', 'view', 'church')"));
+$tDir = perm_test_person($pdo, 'TribesDirector');
+perm_test_seat($pdo, $tDir, 13, 'Director');
+ok('a Director seat holder may open Tribes (their own tribe)', perm_ctx_can($r($tDir), 'tribes', 'view'));
+ok('but has no church-wide Tribes view (the branch that used to error)', !perm_ctx_can($r($tDir), 'tribes', 'view', 'church'));
+
+// ---------------------------------------------------------------------------
+section('Appointing: only seats ranked below your own (decision 6)');
+$appointHod = perm_test_person($pdo, 'AppointHod');
+perm_test_seat($pdo, $appointHod, 10, 'HOD');
+$appointDeputy = perm_test_person($pdo, 'AppointDeputy');
+perm_test_seat($pdo, $appointDeputy, 10, 'Deputy_HOD');
+ok('Resident Pastor (80) appoints a Pastor in charge (60)', perm_ctx_can_appoint($pdo, $r($rp), 10, 'pastor_in_charge'));
+ok('an HOD (40) appoints a worker', perm_ctx_can_appoint($pdo, $r($appointHod), 10, 'worker'));
+ok('an HOD cannot appoint the Director (50)', !perm_ctx_can_appoint($pdo, $r($appointHod), 10, 'director'));
+ok('an HOD cannot appoint in another department', !perm_ctx_can_appoint($pdo, $r($appointHod), 8, 'worker'));
+ok('a Deputy HOD appoints nobody', !perm_ctx_can_appoint($pdo, $r($appointDeputy), 10, 'worker'));
+ok('a Super Admin appoints anything', perm_ctx_can_appoint($pdo, $r($sa), 10, 'pastor_in_charge'));
+
+// ---------------------------------------------------------------------------
+section('The global Director / HOD roles retire (decision 2)');
+$retired = perm_test_person($pdo, 'RetiredDirector');
+perm_test_role($pdo, $retired, 'Director');
+$before = (int) $pdo->query("SELECT COUNT(*) FROM perm_history WHERE change_type = 'user_role.remove'")->fetchColumn();
+$pdo->exec(perm_test_migration('20261126090500_perm_retire_global_roles.sql'));
+eq('no Director / HOD role rows remain', 0, (int) $pdo->query(
+    "SELECT COUNT(*) FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.role_name IN ('Director', 'HOD')")->fetchColumn());
+eq('both roles archived', 2, (int) $pdo->query("SELECT COUNT(*) FROM roles WHERE role_name IN ('Director', 'HOD') AND is_archived = 1")->fetchColumn());
+ok('one history row per removed role row', (int) $pdo->query("SELECT COUNT(*) FROM perm_history WHERE change_type = 'user_role.remove'")->fetchColumn() > $before);
+$after = (int) $pdo->query('SELECT COUNT(*) FROM perm_history')->fetchColumn();
+$pdo->exec(perm_test_migration('20261126090500_perm_retire_global_roles.sql'));
+eq('re-running it adds nothing', $after, (int) $pdo->query('SELECT COUNT(*) FROM perm_history')->fetchColumn());
+perm_reset();
+
+// ---------------------------------------------------------------------------
 section('Renames change nothing');
 $before = [$r($rp)['abilities'], $r($reachHod)['abilities'], $r($charisDir)['abilities']];
 $pdo->exec("UPDATE roles SET role_name = 'Senior_Pastor', label = 'Senior Pastor' WHERE role_name = 'Resident_Pastor'");

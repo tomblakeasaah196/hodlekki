@@ -1,6 +1,8 @@
 <?php
 // /modules/events/index.php
 require_once '../../includes/header.php';
+// Access: the 'events' row of the permission matrix (Roles & permissions).
+require_can('events');
 ?>
 <link rel="stylesheet" href="https://cdn.quilljs.com/1.3.7/quill.snow.css">
 <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
@@ -264,9 +266,9 @@ require_once '../../includes/header.php';
                     </div>
                     <div class="flex items-center gap-3">
                         <button onclick="closeEventAction()" id="btnCloseEventAction" class="flex-1 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2.5 rounded-xl font-bold border border-red-200 transition-colors">Officially Close</button>
-                        <?php if (isset($_SESSION['roles'])) { $sa=false; foreach($_SESSION['roles'] as $r){ if($r['role_name']==='Super_Admin'){$sa=true;break;} } if($sa): ?>
+                        <?php if (can('events.unlock', 'edit')): ?>
                         <button onclick="unlockEventAction()" id="btnUnlockEventAction" class="hidden flex-1 bg-green-50 text-green-700 hover:bg-green-600 hover:text-white px-4 py-2.5 rounded-xl font-bold border border-green-200 transition-colors">Unlock</button>
-                        <?php endif; } ?>
+                        <?php endif; ?>
                     </div>
                     <span id="cfgClosedBadge" class="hidden block text-center text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-700 py-1 rounded">Closed</span>
                 </div>

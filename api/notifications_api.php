@@ -57,8 +57,9 @@ try {
             $notif_id = $_POST['id'] ?? '';
             if ($notif_id) {
                 // Marks specific notification as read
-                $stmt = $pdo->prepare("UPDATE system_notifications SET is_read = 1 WHERE id = ?");
-                $stmt->execute([$notif_id]);
+                // Only a notification addressed to you (it used to be any id).
+                $stmt = $pdo->prepare("UPDATE system_notifications SET is_read = 1 WHERE id = ? AND user_id = ?");
+                $stmt->execute([$notif_id, $user_id]);
             }
             echo json_encode(['status' => 'success']);
             break;

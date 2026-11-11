@@ -1,6 +1,8 @@
 <?php
 // /modules/envision/index.php
-require_once '../../includes/header.php'; 
+require_once '../../includes/header.php';
+// Access: the 'envision' row of the permission matrix (Roles & permissions).
+require_can('envision');
 
 if (!isset($_SESSION['user_id'])) {
     echo "<script>window.location.href = '/auth/login.php';</script>";

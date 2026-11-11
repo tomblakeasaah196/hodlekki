@@ -63,29 +63,15 @@ $currentModule = basename(dirname($_SERVER['PHP_SELF']));
 $isDashboard = ($_SERVER['PHP_SELF'] == '/index.php' || $currentModule == 'dashboard');
 $uiModuleKey = $_SERVER['PHP_SELF'] == '/index.php' ? 'index.php' : $currentModule;
 
+// Access is decided by can() (includes/permissions.php); these are the
+// navigation's answers, kept under the names pages have read for years.
 $uiNavCtx = ui_nav_context($pdo);
 $user_dept_ids = $uiNavCtx['dept_ids'];
-$user_dept_roles = $uiNavCtx['dept_roles'];
 $is_super_admin = $uiNavCtx['is_super_admin'];
 $assim_nav = $uiNavCtx['assim_nav'];
 $assim_manager = $uiNavCtx['assim_manager'];
 $se_nav = $uiNavCtx['se_nav'];
-
-$pastors = ['Resident_Pastor', 'Assoc_Pastor'];
-$pastors_directors = ['Resident_Pastor', 'Assoc_Pastor', 'Director'];
-$sms_roles = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head']; // mirrors SMS_ALLOWED_ROLES in includes/sms_functions.php
-$can_view_departments = ui_nav_has($uiNavCtx, $pastors)
-    || (bool) array_intersect($user_dept_roles, ['Director', 'HOD', 'Sub_Unit_Head']);
-
-if (!function_exists('userHasNavAccess')) {
-    /** Kept for older pages: roles or active department seats; Super Admin always. */
-    function userHasNavAccess($allowed_roles = [], $allowed_dept_ids = [])
-    {
-        global $pdo;
-
-        return ui_nav_has(ui_nav_context($pdo), (array) $allowed_roles, (array) $allowed_dept_ids);
-    }
-}
+$can_view_departments = ui_nav_can_access('departments', $uiNavCtx);
 
 $uiPage = ui_page_config(isset($ui) && is_array($ui) ? $ui : [], $uiModuleKey);
 $moduleTitle = $uiPage['title'];

@@ -9,12 +9,13 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // Permission Helper
-$is_leadership = in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director']);
-$is_super_admin = ($active_role === 'Super_Admin');
+// Leadership reads every entry (pastoral / view church-wide); setting a
+// priority is pastoral / manage. Everyone else sees their own.
+$is_leadership = can('pastoral', 'view', 'church');
+$is_super_admin = can('pastoral', 'manage');
 
 try {
     switch ($action) {

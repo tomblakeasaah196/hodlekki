@@ -70,6 +70,7 @@ function &perm_state(): array
         'owners' => null,
         'seat_types' => null,
         'dept_seats' => null,
+        'roster_years' => null,
         'person_depts' => [],
         'breakglass_used' => [],
         'breakglass_hooked' => false,
@@ -84,7 +85,7 @@ function perm_reset(): void
     $keep = ['pdo' => $state['pdo'], 'today' => $state['today'], 'strict' => $state['strict']];
     $state = array_merge($state, [
         'contexts' => [], 'ready' => null, 'config' => null, 'tree' => null, 'owners' => null,
-        'seat_types' => null, 'dept_seats' => null, 'person_depts' => [], 'breakglass_used' => [],
+        'seat_types' => null, 'dept_seats' => null, 'roster_years' => null, 'person_depts' => [], 'breakglass_used' => [],
     ], $keep);
 }
 
@@ -380,11 +381,18 @@ function perm_live_seats(PDO $pdo, ?int $userId, string $today, ?int $deptId = n
         }
     }
 
-    $sql = "SELECT ud.user_id, ud.department_id, ud.role_in_dept, COALESCE(ud.end_date, y.end_date) AS ends_on
-              FROM user_departments ud
-              LEFT JOIN ministry_years y ON y.id = ud.ministry_year_id
-             WHERE ud.is_active = 1
-               AND COALESCE(ud.roster_status, 'Active') = 'Active'";
+    // Ministry years (roster_status, the year's end date) arrived in a later
+    // migration than the roster itself; read them only where they exist.
+    $years = perm_roster_has_years($pdo);
+    $sql = $years
+        ? "SELECT ud.user_id, ud.department_id, ud.role_in_dept, COALESCE(ud.end_date, y.end_date) AS ends_on
+             FROM user_departments ud
+             LEFT JOIN ministry_years y ON y.id = ud.ministry_year_id
+            WHERE ud.is_active = 1
+              AND COALESCE(ud.roster_status, 'Active') = 'Active'"
+        : "SELECT ud.user_id, ud.department_id, ud.role_in_dept, NULL AS ends_on
+             FROM user_departments ud
+            WHERE ud.is_active = 1";
     $params = [];
     if ($userId !== null) {
         $sql .= ' AND ud.user_id = ?';
@@ -419,11 +427,29 @@ function perm_live_seats(PDO $pdo, ?int $userId, string $today, ?int $deptId = n
             'seat_key' => (string) $type['seat_key'],
             'seat_rank' => (int) $type['seat_rank'],
             'covers_sub_units' => (int) $type['covers_sub_units'] === 1,
+            'is_leader' => (int) $type['is_leader'] === 1,
             'can_appoint' => (int) $type['can_appoint'] === 1,
             'ends_on' => $ends,
         ];
     }
     return $out;
+}
+
+/** Does the roster carry ministry years (roster_status, ministry_year_id, end_date)? */
+function perm_roster_has_years(PDO $pdo): bool
+{
+    $state = &perm_state();
+    if ($state['roster_years'] === null) {
+        try {
+            $pdo->query('SELECT ud.roster_status, ud.ministry_year_id, ud.end_date, y.end_date
+                           FROM user_departments ud LEFT JOIN ministry_years y ON y.id = ud.ministry_year_id LIMIT 0')
+                ->closeCursor();
+            $state['roster_years'] = true;
+        } catch (Throwable $e) {
+            $state['roster_years'] = false;
+        }
+    }
+    return $state['roster_years'];
 }
 
 /** department id => seat key => enabled (missing = enabled). */
@@ -795,8 +821,10 @@ function perm_where(string $module, string $level, array $cols): array
             $params = array_merge($params, $scope['depts']);
         }
         if (!empty($cols['person'])) {
+            $pdo = perm_pdo();
+            $live = ($pdo && perm_roster_has_years($pdo)) ? " AND COALESCE(pud.roster_status, 'Active') = 'Active'" : '';
             $parts[] = $cols['person'] . " IN (SELECT pud.user_id FROM user_departments pud
-                                               WHERE pud.is_active = 1 AND COALESCE(pud.roster_status, 'Active') = 'Active'
+                                               WHERE pud.is_active = 1{$live}
                                                  AND pud.department_id IN ({$in}))";
             $params = array_merge($params, $scope['depts']);
         }
@@ -836,6 +864,27 @@ function perm_nav_visible(string $module): bool
 {
     $ctx = perm_current();
     return $ctx !== null && perm_ctx_nav_visible($ctx, $module);
+}
+
+/**
+ * For pages, after includes/header.php: the shell's standard "not open to you"
+ * state (ui_no_access(), docs/UI.md) and the footer, then stop.
+ */
+function require_can(string $module, string $level = 'view', $target = null): void
+{
+    if (can($module, $level, $target)) {
+        return;
+    }
+    if (!headers_sent()) {
+        http_response_code(403);
+    }
+    if (function_exists('ui_no_access')) {
+        echo ui_no_access();
+        require __DIR__ . '/footer.php';
+    } else {
+        echo 'This page is not open to you.';
+    }
+    exit;
 }
 
 /** For endpoints: 401 signed out, 403 refused, in the JSON shape every API uses. */
@@ -909,6 +958,60 @@ function perm_breakglass_flush(): void
 }
 
 // --------------------------------------------------------------------------
+// Appointing seats (lead decision 6)
+// --------------------------------------------------------------------------
+
+/** The stable seat key for a value stored in user_departments.role_in_dept (null if none). */
+function perm_seat_key_for(PDO $pdo, string $rosterValue): ?string
+{
+    foreach (perm_seat_types($pdo) as $key => $type) {
+        if ((string) $type['roster_value'] === $rosterValue) {
+            return (string) $key;
+        }
+    }
+    return null;
+}
+
+/**
+ * May this person put someone in (renew, or end) a $seatKey seat of
+ * department $deptId? Only a seat ranked BELOW your own standing there:
+ * your highest live seat covering that department (if that seat type may
+ * appoint) or your highest role appoint_rank (Resident Pastor 80, Assoc Pastor
+ * 70 on day one). Super Admins and holders of "Roles & permissions: Manage"
+ * are exempt. You also need Departments edit for that department.
+ */
+function perm_ctx_can_appoint(PDO $pdo, array $ctx, int $deptId, string $seatKey): bool
+{
+    if (!$ctx['ready']) {
+        return false;
+    }
+    if ($ctx['breakglass'] || perm_ctx_can($ctx, 'roles', 'manage')) {
+        return true;
+    }
+    $target = perm_seat_types($pdo)[$seatKey]['seat_rank'] ?? null;
+    if ($target === null || !perm_ctx_can($ctx, 'departments', 'edit', $deptId)) {
+        return false;
+    }
+    $standing = 0;
+    foreach ($ctx['seats'] as $seat) {
+        if (!empty($seat['can_appoint']) && in_array($deptId, $seat['covers'] ?? [$seat['department_id']], true)) {
+            $standing = max($standing, (int) $seat['seat_rank']);
+        }
+    }
+    if ($ctx['role_ids'] !== []) {
+        try {
+            $stmt = $pdo->prepare('SELECT MAX(COALESCE(appoint_rank, 0)) FROM roles WHERE id IN ('
+                . implode(',', array_fill(0, count($ctx['role_ids']), '?')) . ')');
+            $stmt->execute($ctx['role_ids']);
+            $standing = max($standing, (int) $stmt->fetchColumn());
+        } catch (Throwable $e) {
+            error_log('permissions: appoint rank: ' . $e->getMessage());
+        }
+    }
+    return $standing > (int) $target;
+}
+
+// --------------------------------------------------------------------------
 // Who holds what (notification audiences, the mailbox, the parity report)
 // --------------------------------------------------------------------------
 
@@ -930,6 +1033,63 @@ function perm_seat_holders(PDO $pdo, string $seatKey, ?int $deptId = null): arra
         return [];
     }
     $ids = array_values(array_unique($ids));
+    sort($ids);
+    return $ids;
+}
+
+/**
+ * A module's team: everyone with a live seat in a department that OWNS the
+ * module (perm_module_owners; "every department" rows are ignored — that is
+ * not a team). Used for "who can this be assigned to" lists: Reach leads,
+ * Charis cases, Embrace follow-ups, rosters.
+ *
+ * @return int[] user ids
+ */
+function perm_module_team(PDO $pdo, string $module): array
+{
+    if (!perm_ready($pdo)) {
+        return [];
+    }
+    $owners = array_values(array_filter(perm_module_owners($pdo)[$module] ?? [], static fn (int $d): bool => $d > 0));
+    $ids = [];
+    try {
+        foreach ($owners as $dept) {
+            foreach (perm_live_seats($pdo, null, perm_today(), $dept) as $seat) {
+                $ids[$seat['user_id']] = true;
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('permissions: module team: ' . $e->getMessage());
+        return [];
+    }
+    $ids = array_keys($ids);
+    sort($ids);
+    return $ids;
+}
+
+/** The people in LEADERSHIP seats of the departments that own $module (who hear about its work). */
+function perm_module_leaders(PDO $pdo, string $module): array
+{
+    if (!perm_ready($pdo)) {
+        return [];
+    }
+    $ids = [];
+    try {
+        foreach (perm_module_owners($pdo)[$module] ?? [] as $dept) {
+            if ($dept <= 0) {
+                continue;
+            }
+            foreach (perm_live_seats($pdo, null, perm_today(), $dept) as $seat) {
+                if (!empty($seat['is_leader'])) {
+                    $ids[$seat['user_id']] = true;
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('permissions: module leaders: ' . $e->getMessage());
+        return [];
+    }
+    $ids = array_keys($ids);
     sort($ids);
     return $ids;
 }

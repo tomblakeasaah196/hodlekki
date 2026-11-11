@@ -1,6 +1,8 @@
 <?php
 // /modules/assets/index.php
-require_once '../../includes/header.php'; 
+require_once '../../includes/header.php';
+// Access: the 'assets' row of the permission matrix (Roles & permissions).
+require_can('assets');
 
 // Security Check (Frontend fallback)
 if (!isset($_SESSION['user_id'])) {

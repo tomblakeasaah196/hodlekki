@@ -25,7 +25,7 @@ $SMS_STATUSES = ['Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer', 'Member', 'Wo
 
 // Assimilation lists show who has been absent, so only Assimilation managers get them.
 require_once __DIR__ . '/../../includes/assimilation_helpers.php';
-$CAN_ASSIM = assim_is_manager($pdo, (int)$_SESSION['user_id'], (string)($_SESSION['active_role'] ?? ''));
+$CAN_ASSIM = assim_is_manager($pdo, (int)$_SESSION['user_id']);
 $ASSIM_DEPTS = $ASSIM_REGIONS = [];
 if ($CAN_ASSIM) {
     $ASSIM_DEPTS   = $pdo->query("SELECT id, name FROM departments ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);

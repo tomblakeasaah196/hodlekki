@@ -9,17 +9,8 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $my_user_id = $_SESSION['user_id'];
-$admin_roles = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director'];
-$is_admin = false;
-
-if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
-    foreach ($_SESSION['roles'] as $role) {
-        if (in_array($role['role_name'], $admin_roles) || strpos($role['role_name'], 'IDI') !== false) {
-            $is_admin = true;
-            break;
-        }
-    }
-}
+// Region administration: regions / manage in the permission matrix.
+$is_admin = can('regions', 'manage');
 ?>
 
 <!-- Dependencies -->

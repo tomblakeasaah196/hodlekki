@@ -17,11 +17,10 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id     = (int) $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'] ?? '';
 $action      = $_POST['action'] ?? $_GET['action'] ?? '';
 
 try {
-    $is_manager = assim_is_manager($pdo, $user_id, $active_role);
+    $is_manager = assim_is_manager($pdo, $user_id);
     $is_team    = assim_is_team_member($pdo, $user_id);
 } catch (PDOException $e) {
     error_log('Assimilation gate: ' . $e->getMessage());

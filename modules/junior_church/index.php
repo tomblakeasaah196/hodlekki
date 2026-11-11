@@ -1,6 +1,8 @@
 <?php
 // /modules/junior_church/index.php
 require_once '../../includes/header.php';
+// Access: the 'junior_church' row of the permission matrix (Roles & permissions).
+require_can('junior_church');
 if (!isset($_SESSION['user_id'])) {
     echo "<script>window.location.href = '/auth/login.php';</script>";
     exit;

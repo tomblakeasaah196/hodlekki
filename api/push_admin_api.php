@@ -29,10 +29,11 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = (int) $_SESSION['user_id'];
 
-if (!security_is_admin($pdo)) {
+if (!can('alerts', 'view')
+    || (in_array($_POST['action'] ?? $_GET['action'] ?? '', ['set_switch', 'broadcast'], true) && !can('alerts', 'manage'))) {
     echo json_encode([
         'status'  => 'error',
-        'message' => 'The Alerts Centre is restricted to Super Admins and the Resident Pastor.',
+        'message' => 'The Alerts Centre is not open to you.',
     ]);
     exit;
 }

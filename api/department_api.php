@@ -29,18 +29,15 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id     = (int) $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'] ?? 'Member';
 $action      = $_POST['action'] ?? $_GET['action'] ?? '';
 
-// Leadership-only module (unchanged from the previous release).
-if (!in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD'], true)) {
-    echo json_encode(['status' => 'error', 'message' => 'Access Denied. Department management is restricted to leadership.']);
-    exit;
-}
-
-$RANK_ROLES  = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'];
-$is_rank     = in_array($active_role, $RANK_ROLES, true);
-$can_roll    = in_array($active_role, ['Super_Admin', 'Resident_Pastor'], true);
+// Who may use Departments, and how far, is the 'departments' row of the
+// permission matrix: view (every department), edit (the departments in your
+// scope — church-wide for pastors), manage (ministry years and rollover).
+// Putting someone in a seat also follows the rank rule (dept_may_appoint).
+api_require_can('departments', 'view');
+$is_rank  = can('departments', 'edit', 'church');   // every department, new departments
+$can_roll = can('departments', 'manage');            // ministry years and the rollover
 
 if (!dept_schema_ready($pdo)) {
     echo json_encode(['status' => 'error', 'message' => dept_schema_message(), 'code' => 'schema']);
@@ -51,15 +48,30 @@ if (!dept_schema_ready($pdo)) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Global role ladder, used to propagate leadership roles to user_roles. */
-function syncGlobalRole(PDO $pdo, $user_id, $role_name): void
+/**
+ * May the signed-in person put someone in (or take someone out of) a seat
+ * stored as $rosterValue in this department? Lead decision 6: only a seat
+ * ranked below their own standing there (perm_ctx_can_appoint()).
+ * Appointing no longer writes any global role (decision 2): a seat gives
+ * access through the permission matrix, and only while it is live.
+ */
+function dept_may_appoint(PDO $pdo, int $dept_id, string $rosterValue): bool
 {
-    if (!$user_id) {
-        return;
+    $key = perm_seat_key_for($pdo, $rosterValue);
+    $ctx = perm_current();
+    return $key !== null && $ctx !== null && perm_ctx_can_appoint($pdo, $ctx, $dept_id, $key);
+}
+
+/** The people in a department's leadership seats this year (who hear about roster changes). */
+function dept_leader_ids(PDO $pdo, int $dept_id, int $except = 0): array
+{
+    $ids = [];
+    foreach (perm_live_seats($pdo, null, perm_today(), $dept_id) as $seat) {
+        if (!empty($seat['is_leader']) && $seat['user_id'] !== $except) {
+            $ids[$seat['user_id']] = true;
+        }
     }
-    $roles = ['Super_Admin' => 1, 'Resident_Pastor' => 2, 'Assoc_Pastor' => 3, 'Director' => 4, 'HOD' => 5, 'Worker' => 6];
-    $role_id = $roles[$role_name] ?? 6;
-    $pdo->prepare("INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)")->execute([$user_id, $role_id]);
+    return array_keys($ids);
 }
 
 function dept_notify(PDO $pdo, $user_id, string $title, string $message, string $link = '/modules/departments/index.php'): void
@@ -201,7 +213,6 @@ function dept_set_leader(PDO $pdo, array $ctx, array $dept, string $role, ?int $
         }
 
         dept_put_roster_row($pdo, $ctx, $new_user_id, $dept_id, $role, 'Primary', true);
-        syncGlobalRole($pdo, $new_user_id, $role);
 
         $out['incoming'] = trim($person['first_name'] . ' ' . $person['last_name']);
         dept_notify(
@@ -283,21 +294,15 @@ try {
             unset($m);
 
             // Pick lists
+            // Pastor in charge candidates: holders of a pastoral role (a role
+            // with an appointing rank). Director candidates: any worker — a
+            // Director is a seat, not a role, since lead decision 2.
             $pastors = $pdo->query(
                 "SELECT DISTINCT u.id, u.first_name, u.last_name, u.gender
                    FROM users u
-                   JOIN user_roles ur ON u.id = ur.user_id
+                   JOIN user_roles ur ON u.id = ur.user_id AND COALESCE(ur.is_frozen, 0) = 0
                    JOIN roles r ON ur.role_id = r.id
-                  WHERE r.role_name IN ('Resident_Pastor', 'Assoc_Pastor')
-                  ORDER BY u.first_name ASC"
-            )->fetchAll(PDO::FETCH_ASSOC);
-
-            $directors = $pdo->query(
-                "SELECT DISTINCT u.id, u.first_name, u.last_name, u.gender
-                   FROM users u
-                   JOIN user_roles ur ON u.id = ur.user_id
-                   JOIN roles r ON ur.role_id = r.id
-                  WHERE r.role_name = 'Director'
+                  WHERE COALESCE(r.appoint_rank, 0) > 0
                   ORDER BY u.first_name ASC"
             )->fetchAll(PDO::FETCH_ASSOC);
 
@@ -307,8 +312,9 @@ try {
                   WHERE spiritual_status IN ('Worker', 'Member')
                   ORDER BY first_name ASC, last_name ASC"
             )->fetchAll(PDO::FETCH_ASSOC);
+            $directors = $all_workers;
 
-            $scope = dept_manageable_ids($pdo, $user_id, $active_role);
+            $scope = dept_manageable_ids($pdo, $user_id);
 
             echo json_encode([
                 'status'              => 'success',
@@ -359,7 +365,7 @@ try {
                 dept_fail('Department name is required.');
             }
 
-            $scope = dept_manageable_ids($pdo, $user_id, $active_role);
+            $scope = dept_manageable_ids($pdo, $user_id);
 
             $ap_id  = empty($_POST['assoc_pastor_id']) ? null : (int) $_POST['assoc_pastor_id'];
             $dir_id = empty($_POST['director_id'])     ? null : (int) $_POST['director_id'];
@@ -414,8 +420,8 @@ try {
                 if (!array_key_exists($field, $_POST)) {
                     continue;
                 }
-                if ($role === 'Assoc_Pastor' && !in_array($active_role, $RANK_ROLES, true)) {
-                    continue;   // only a Pastor / Super Admin appoints the Pastor in Charge
+                if (!dept_may_appoint($pdo, (int) $dept['id'], $role)) {
+                    continue;   // only seats ranked below your own (lead decision 6)
                 }
                 $result = dept_set_leader($pdo, $ctx, $dept, $role, $new_id);
                 if ($result['changed']) {
@@ -481,7 +487,7 @@ try {
                 }
             }
 
-            $scope = dept_manageable_ids($pdo, $user_id, $active_role);
+            $scope = dept_manageable_ids($pdo, $user_id);
 
             // Sub-units of this department, counted for the same year.
             $subStmt = $pdo->prepare(
@@ -580,7 +586,7 @@ try {
             if (!$dept_id || !$worker_id) {
                 dept_fail('Department and person are required.');
             }
-            if (!in_array($role, ['Worker', 'Member', 'Sub_Unit_Head'], true)) {
+            if (!in_array($role, ['Worker', 'Member', 'Sub_Unit_Head', 'Deputy_HOD'], true)) {
                 dept_fail('That role cannot be assigned here. Use Edit Settings to appoint leadership.');
             }
 
@@ -591,9 +597,12 @@ try {
             if (!$dept) {
                 dept_fail('That department no longer exists.');
             }
-            $scope = dept_manageable_ids($pdo, $user_id, $active_role);
+            $scope = dept_manageable_ids($pdo, $user_id);
             if (!dept_can_manage($scope, $dept_id)) {
                 dept_fail('You can only manage departments you lead.');
+            }
+            if (!dept_may_appoint($pdo, $dept_id, $role)) {
+                dept_fail('You can only appoint seats ranked below your own in this department.');
             }
 
             $userStmt = $pdo->prepare("SELECT gender, first_name, last_name FROM users WHERE id = ?");
@@ -628,7 +637,6 @@ try {
 
             $pdo->beginTransaction();
             dept_put_roster_row($pdo, $ctx, $worker_id, $dept_id, $role, $membership, true);
-            syncGlobalRole($pdo, $worker_id, $role);
             $pdo->commit();
 
             dept_notify(
@@ -641,14 +649,7 @@ try {
             );
 
             // Alert the department's leadership.
-            $leaderStmt = $pdo->prepare(
-                "SELECT user_id FROM user_departments
-                  WHERE department_id = ? AND ministry_year_id = ?
-                    AND role_in_dept IN ('HOD', 'Director') AND roster_status = 'Active'
-                    AND user_id <> ?"
-            );
-            $leaderStmt->execute([$dept_id, $year['id'], $worker_id]);
-            foreach ($leaderStmt->fetchAll(PDO::FETCH_COLUMN) as $leader_id) {
+            foreach (dept_leader_ids($pdo, $dept_id, $worker_id) as $leader_id) {
                 dept_notify(
                     $pdo,
                     $leader_id,
@@ -699,12 +700,15 @@ try {
             $year = dept_year_by_id($pdo, (int) $record['ministry_year_id']) ?: dept_active_year($pdo);
             dept_require_live_year($year);
 
-            $scope = dept_manageable_ids($pdo, $user_id, $active_role);
+            $scope = dept_manageable_ids($pdo, $user_id);
             if (!dept_can_manage($scope, (int) $record['department_id'])) {
                 dept_fail('You can only manage departments you lead.');
             }
             if (in_array($record['role_in_dept'], DEPT_LEADER_ROLES, true)) {
                 dept_fail('Leadership seats are changed with Edit Settings → Leadership, so the seat is never left empty by accident.');
+            }
+            if (!dept_may_appoint($pdo, (int) $record['department_id'], (string) $record['role_in_dept'])) {
+                dept_fail('You can only change seats ranked below your own in this department.');
             }
 
             $pdo->prepare(
@@ -754,7 +758,7 @@ try {
             $year = dept_year_by_id($pdo, (int) $record['ministry_year_id']) ?: dept_active_year($pdo);
             dept_require_live_year($year);
 
-            $scope = dept_manageable_ids($pdo, $user_id, $active_role);
+            $scope = dept_manageable_ids($pdo, $user_id);
             if (!dept_can_manage($scope, (int) $record['department_id'])) {
                 dept_fail('You can only manage departments you lead.');
             }
@@ -792,12 +796,12 @@ try {
                 dept_fail('That department no longer exists.');
             }
 
-            $scope = dept_manageable_ids($pdo, $user_id, $active_role);
+            $scope = dept_manageable_ids($pdo, $user_id);
             if (!dept_can_manage($scope, $dept_id)) {
                 dept_fail('You can only manage departments you lead.');
             }
-            if ($role === 'Assoc_Pastor' && !$is_rank) {
-                dept_fail('Only a Super Admin or a Pastor can appoint the Pastor in Charge.');
+            if (!dept_may_appoint($pdo, $dept_id, $role)) {
+                dept_fail('You can only appoint seats ranked below your own in this department.');
             }
 
             $ctx = [
@@ -1030,7 +1034,7 @@ try {
                 $seen[$person . ':' . $dept_id] = true;
 
                 $role = $a['role_in_dept'] ?? 'Member';
-                if (!in_array($role, ['Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head', 'Worker', 'Member'], true)) {
+                if (!in_array($role, ['Assoc_Pastor', 'Director', 'HOD', 'Deputy_HOD', 'Sub_Unit_Head', 'Worker', 'Member'], true)) {
                     $role = 'Member';
                 }
                 $membership = in_array($role, DEPT_LEADER_ROLES, true)
@@ -1041,7 +1045,6 @@ try {
                 $installed++;
                 if (in_array($role, DEPT_LEADER_ROLES, true)) {
                     $leaders++;
-                    syncGlobalRole($pdo, $person, $role);
                 }
             }
 

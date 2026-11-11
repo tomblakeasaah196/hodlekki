@@ -204,3 +204,9 @@ UPDATE users
    SET account_status = 'active', locked_until = NULL, failed_login_count = 0
  WHERE email = 'you@example.com';
 ```
+
+## Who can use the Security Centre (since November 2026)
+
+Clearance is the **Security Centre** row of Roles & permissions (day one: the Resident
+Pastor, and Super Admins). "Super Admin" now means a role marked break-glass in Roles &
+permissions — the guard that stops the last Super Admin being suspended counts those.

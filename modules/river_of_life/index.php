@@ -1,6 +1,8 @@
 <?php
 // /modules/river_of_life/index.php
-require_once '../../includes/header.php'; 
+require_once '../../includes/header.php';
+// Access: the 'river_of_life' row of the permission matrix (Roles & permissions).
+require_can('river_of_life');
 
 if (!isset($_SESSION['user_id'])) {
     echo "<script>window.location.href = '/auth/login.php';</script>";

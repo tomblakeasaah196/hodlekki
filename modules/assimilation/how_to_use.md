@@ -385,3 +385,10 @@ to "Signed in as" when you have one on your profile.
 The public Assimilation page and its share card use **hodlekki.org** (the site
 moved from hodlc.lpc.cm in November 2026), taken from `SITE_URL` in `.env`. Old
 links on hodlc.lpc.cm redirect to the same page for a month after the move.
+
+## Who manages Assimilation (since November 2026)
+
+Managers are whoever **Roles & permissions** gives **Assimilation: Manage** — on day one
+the pastors and every live Director or HOD seat in any department, exactly as before.
+Volunteers are still the Assimilation team list on the Team tab. Nobody needs to sign
+out and back in after a change: it applies on the next page load.

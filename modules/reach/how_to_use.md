@@ -153,3 +153,13 @@ from hodlc.lpc.cm in November 2026). They are built from `SITE_URL` in `.env`,
 not from the address someone happens to be using, so a link shared from
 connect.hodlekki.org or an old bookmark still opens the real site. Links already
 sent on the old address keep working for a month while it redirects.
+
+## Who can use Reach (since November 2026)
+
+Access comes from **Roles & permissions**, not from fixed role names. On day one:
+the pastors, and everyone seated in the department that owns Reach (the Reach
+department) can open Reach, log follow-ups, manage campaigns and export. Assigning
+leads and changing Reach settings needs **Reach: Manage** — the pastors and the Reach
+department's Director and HOD. "Who can a lead be assigned to" is everyone seated in a
+department that owns Reach. Moving someone in the Departments roster changes this on
+their next page load.

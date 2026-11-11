@@ -199,27 +199,11 @@ try {
     }
 
     // 16. Determine Redirect URL (Dashboard Access Matrix)
-    $has_dashboard_access = false;
-    $dashboard_roles = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director'];
-
-    // Check if they have a qualifying role
-    if (!empty($roles)) {
-        foreach ($roles as $r) {
-            if (in_array($r['role_name'], $dashboard_roles)) {
-                $has_dashboard_access = true;
-                break;
-            }
-        }
-    }
-
-    // Check if they are in the IDI department (ID: 1)
-    if (!$has_dashboard_access) {
-        $deptCheck = $pdo->prepare("SELECT 1 FROM user_departments WHERE user_id = ? AND department_id = 1 AND is_active = 1");
-        $deptCheck->execute([$user['id']]);
-        if ($deptCheck->fetch()) {
-            $has_dashboard_access = true;
-        }
-    }
+    // The dashboard when the permission matrix gives you more than your own
+    // alerts on it (church-wide, or a department you lead); else the Portal.
+    $landing = perm_resolve($pdo, (int) $user['id']);
+    $has_dashboard_access = $landing['breakglass']
+        || perm_scope_beyond_own(perm_ctx_scope($landing, 'dashboard', 'view'));
 
     // Set the final destination based on their access
     $target_redirect = $has_dashboard_access ? '/index.php' : '/modules/member_portal/index.php';
