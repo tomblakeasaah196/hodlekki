@@ -106,3 +106,18 @@ if (!function_exists('mail_nav_unread')) {
         }
     }
 }
+
+if (!function_exists('mail_info')) {
+    /**
+     * The (i) that holds a screen's longer explanation (owner's short-copy rule: a short title, at most one short
+     * line, everything else behind an (i)). Always placed where the component takes HTML (an `actions` slot or
+     * raw markup), never inside an escaped `text`.
+     *
+     * TODO(mail): return ui_info($text) once the foundation's ui_info() is on main (the lead will say). Until then
+     * the explanation stays in the code and nothing is printed.
+     */
+    function mail_info(string $text): string
+    {
+        return '';
+    }
+}
