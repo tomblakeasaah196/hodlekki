@@ -217,16 +217,16 @@ try {
             $anniversaries = $annivStmt->fetchAll(PDO::FETCH_ASSOC);
 
             // C. Fetch all Charis Workers
-            $workersStmt = $pdo->query("
-                SELECT DISTINCT u.id, u.first_name, u.last_name 
-                FROM users u
-                JOIN user_departments ud ON u.id = ud.user_id
-                JOIN departments d ON ud.department_id = d.id
-                WHERE (ud.department_id IN (1, 10) OR d.name LIKE '%Charis%' OR d.name LIKE '%Welfare%' OR d.name = 'IDI')
-                  AND ud.is_active = 1
-                ORDER BY u.first_name ASC, u.last_name ASC
-            ");
-            $charis_workers = $workersStmt->fetchAll(PDO::FETCH_ASSOC);
+            // The Charis team: everyone seated in a department that owns Charis.
+            $charis_ids = perm_module_team($pdo, 'charis');
+            $charis_workers = [];
+            if ($charis_ids) {
+                $workersStmt = $pdo->prepare("SELECT u.id, u.first_name, u.last_name FROM users u
+                                               WHERE u.id IN (" . implode(',', array_fill(0, count($charis_ids), '?')) . ")
+                                               ORDER BY u.first_name ASC, u.last_name ASC");
+                $workersStmt->execute($charis_ids);
+                $charis_workers = $workersStmt->fetchAll(PDO::FETCH_ASSOC);
+            }
 
             // D. Fetch Upcoming AND Past Church Events
             $eventsStmt = $pdo->query("
@@ -502,14 +502,7 @@ try {
             $new_expense_id = $pdo->lastInsertId();
 
             // NOTIFICATION TRIGGER: Alert the Charis Director/HOD
-            $dirStmt = $pdo->query("
-                SELECT ud.user_id 
-                FROM user_departments ud 
-                JOIN departments d ON ud.department_id = d.id 
-                WHERE (d.name LIKE '%Charis%' OR d.name LIKE '%Welfare%') 
-                AND ud.role_in_dept IN ('Director', 'HOD') AND ud.is_active = 1
-            ");
-            $directors = $dirStmt->fetchAll(PDO::FETCH_COLUMN);
+            $directors = perm_holders($pdo, 'charis', 'manage');   // Charis leadership
             
             if (!empty($directors)) {
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Expense Request', ?, '/modules/finance/index.php')");
@@ -806,13 +799,7 @@ try {
             
             if ($stmt->rowCount() > 0) {
                 // NOTIFICATION TRIGGER: Alert the Charis Admins
-                $adminStmt = $pdo->query("
-                    SELECT ud.user_id 
-                    FROM user_departments ud 
-                    JOIN departments d ON ud.department_id = d.id 
-                    WHERE d.name LIKE '%Charis%' AND ud.role_in_dept IN ('HOD', 'Director') AND ud.is_active = 1
-                ");
-                $admins = $adminStmt->fetchAll(PDO::FETCH_COLUMN);
+                $admins = perm_holders($pdo, 'charis', 'manage');   // Charis leadership
                 
                 if (!empty($admins)) {
                     $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Library Extension Request', 'A member has requested a due date extension for a library book.', '/modules/charis/index.php')");
@@ -1287,16 +1274,8 @@ try {
             }
 
             if ($assignmentStatus === 'Requested') {
-                $managerStmt = $pdo->query("
-                    SELECT DISTINCT ud.user_id
-                      FROM user_departments ud
-                      JOIN departments d ON d.id = ud.department_id
-                     WHERE ud.is_active = 1
-                       AND ud.role_in_dept IN ('Director', 'HOD')
-                       AND (ud.department_id IN (1,10) OR d.name LIKE '%Charis%' OR d.name LIKE '%Welfare%' OR d.name = 'IDI')
-                ");
                 $notifyStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Welfare Case Request', 'A Charis worker requested a welfare case. Review it in the Welfare master list.', '/modules/charis/index.php')");
-                foreach ($managerStmt->fetchAll(PDO::FETCH_COLUMN) as $managerId) {
+                foreach (perm_holders($pdo, 'charis', 'manage') as $managerId) {
                     if ((int) $managerId !== $user_id) $notifyStmt->execute([$managerId]);
                 }
             }
@@ -1933,12 +1912,10 @@ try {
             $event_id = filter_var($_POST['event_id'] ?? '', FILTER_VALIDATE_INT);
             if (!$event_id) exit(json_encode(['status' => 'error', 'message' => 'Event ID required.']));
 
-            $isFinanceDir = ((int)$user_id === 22);
-            if (!$isFinanceDir && isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
-                foreach ($_SESSION['roles'] as $r) {
-                    if (in_array($r['role_name'] ?? '', ['Director','HOD','Super_Admin'])) { $isFinanceDir = true; break; }
-                }
-            }
+            // The Finance Director's countersign is finance.countersign / approve:
+            // the Finance department's Director seat (and, on day one, every
+            // Director / HOD seat, as before). No account id lives in code.
+            $isFinanceDir = can('finance.countersign', 'approve');
             if (!$isFinanceDir) exit(json_encode(['status' => 'error', 'message' => 'Only the Finance Director can countersign.']));
 
             $hodCheck = $pdo->prepare("SELECT hod_stamp_at FROM charis_event_completion_stamps WHERE event_id = ?");
@@ -1994,7 +1971,7 @@ try {
         // ACTION: SAVE AWOL CONFIGURATION
         // =====================================================================================
         case 'save_awol_config':
-            if (!charis_can_configure_awol($pdo, $current_user_id, $roles) && empty($charis_access['can_configure_awol'])) {
+            if (!charis_can_configure_awol($pdo, (int) $user_id) && empty($charis_access['can_configure_awol'])) {
                 http_response_code(403);
                 echo json_encode(['status' => 'error', 'message' => 'Unauthorized to configure AWOL Monitoring. Super Admin or IDI/Charis/Welfare Director/HOD access required.']);
                 exit;

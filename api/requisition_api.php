@@ -31,7 +31,6 @@ if ($is_post && !in_array($action, ['fetch_form_data', 'fetch_my_requisitions', 
 }
 
 $user_id    = (int)$_SESSION['user_id'];
-$active_role = $_SESSION['active_role'] ?? 'Member';
 
 // ============================================================
 // HELPER FUNCTIONS
@@ -61,78 +60,71 @@ function maskIP(string $ip): string {
     return substr($ip, 0, 8) . '****';
 }
 
-/** Get Finance Department ID dynamically */
+// ------------------------------------------------------------
+// Who may do what is the permission matrix (Roles & permissions):
+//   requisition           view (own / your departments / church), create
+//                         (submit for a department), approve (stage 1 for a
+//                         department; church-wide = the final approval),
+//                         export (PDFs, within what you can view)
+//   requisition.disburse  the Finance Director: the Director seat of the
+//                         department that owns it (Finance)
+// These helpers keep their old names so the actions below read the same.
+// ------------------------------------------------------------
+
+/** The department that owns disbursement (Finance), or 0. */
 function getFinanceDeptId(PDO $pdo): int {
-    $stmt = $pdo->query("SELECT id FROM departments WHERE name = 'Finance' AND type = 'Administrative' LIMIT 1");
-    return (int)($stmt->fetchColumn() ?: 0);
-}
-
-/** Get Finance Director user ID dynamically */
-function getFinanceDirectorId(PDO $pdo): int {
-    $finance_dept_id = getFinanceDeptId($pdo);
-    if (!$finance_dept_id) return 0;
-    $stmt = $pdo->prepare("
-        SELECT user_id FROM user_departments
-        WHERE department_id = ? AND role_in_dept = 'Director' AND is_active = 1
-        LIMIT 1
-    ");
-    $stmt->execute([$finance_dept_id]);
-    return (int)($stmt->fetchColumn() ?: 0);
-}
-
-/** Get Resident Pastor user ID dynamically */
-function getResidentPastorId(PDO $pdo): int {
-    $stmt = $pdo->query("
-        SELECT ur.user_id FROM user_roles ur
-        JOIN roles r ON ur.role_id = r.id
-        WHERE r.role_name = 'Resident_Pastor'
-        LIMIT 1
-    ");
-    return (int)($stmt->fetchColumn() ?: 0);
-}
-
-/** Check if current session user has a specific global role */
-function hasRole(string $role_name): bool {
-    if (!isset($_SESSION['roles']) || !is_array($_SESSION['roles'])) return false;
-    foreach ($_SESSION['roles'] as $r) {
-        if ($r['role_name'] === $role_name) return true;
+    foreach (perm_module_owners($pdo)['requisition.disburse'] ?? [] as $dept) {
+        if ($dept > 0) return (int) $dept;
     }
-    return false;
+    return 0;
 }
 
-function isSuperAdmin(): bool   { return hasRole('Super_Admin'); }
-function isResidentPastor(): bool { return hasRole('Resident_Pastor'); }
-function isDirector(): bool     { return hasRole('Director'); }
-function isHOD(): bool          { return hasRole('HOD'); }
-function isAssocPastor(): bool  { return hasRole('Assoc_Pastor'); }
+/** The Finance Director (who batches and disburses), or 0. */
+function getFinanceDirectorId(PDO $pdo): int {
+    return (int) (perm_holders($pdo, 'requisition.disburse', 'edit')[0] ?? 0);
+}
 
-/** Get department IDs where user is actively a Director */
+/** The first person who gives the final, church-wide approval (notified on submit), or 0. */
+function getResidentPastorId(PDO $pdo): int {
+    foreach (perm_holders($pdo, 'requisition', 'approve') as $uid) {
+        if (perm_ctx_can(perm_resolve($pdo, $uid), 'requisition', 'approve', 'church')) return (int) $uid;
+    }
+    return 0;
+}
+
+function isSuperAdmin(): bool       { $c = perm_current(); return $c !== null && $c['breakglass']; }
+/** Final approval (and the signature vault): approve church-wide. */
+function isResidentPastor(): bool   { return can('requisition', 'approve', 'church'); }
+/** Stage-one approval for one's own departments. */
+function isDirector(): bool         { return perm_scope_beyond_own(perm_scope('requisition', 'approve')); }
+
+/** May this person see that requisition (header row)? */
+function requisition_visible(PDO $pdo, array $header, int $user_id, bool $isFinanceDirector): bool {
+    if ((int) $header['submitted_by'] === $user_id || can('requisition', 'view', (int) $header['department_id'])) {
+        return true;
+    }
+    return $isFinanceDirector && in_array($header['status'], ['Approved', 'Batched', 'Disbursed'], true);
+}
+
+/** Department ids the person approves for at stage one. */
 function getUserDirectorDeptIds(PDO $pdo, int $user_id): array {
-    $stmt = $pdo->prepare("
-        SELECT department_id FROM user_departments
-        WHERE user_id = ? AND role_in_dept = 'Director' AND is_active = 1
-    ");
-    $stmt->execute([$user_id]);
-    return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    return perm_scope('requisition', 'approve')['depts'];
 }
 
-/** Get departments where user can submit requisitions */
+/** Departments the person may submit a requisition for. */
 function getUserSubmittableDepts(PDO $pdo, int $user_id): array {
-    if (isSuperAdmin() || isResidentPastor()) {
+    $scope = perm_scope('requisition', 'create');
+    if ($scope['church']) {
         return $pdo->query("SELECT id, name FROM departments ORDER BY name ASC")->fetchAll();
     }
-    $stmt = $pdo->prepare("
-        SELECT DISTINCT d.id, d.name
-        FROM user_departments ud
-        JOIN departments d ON ud.department_id = d.id
-        WHERE ud.user_id = ? AND ud.is_active = 1
-          AND ud.role_in_dept IN ('HOD','Director','Assoc_Pastor')
-        ORDER BY d.name ASC
-    ");
-    $stmt->execute([$user_id]);
+    if ($scope['depts'] === []) {
+        return [];
+    }
+    $stmt = $pdo->prepare("SELECT id, name FROM departments WHERE id IN ("
+        . implode(',', array_fill(0, count($scope['depts']), '?')) . ") ORDER BY name ASC");
+    $stmt->execute($scope['depts']);
     return $stmt->fetchAll();
 }
-
 /**
  * Generate a unique, department-scoped reference number.
  * Uses lockless predictive formatting, but must be checked for unique constraints at insert.
@@ -212,11 +204,9 @@ function notify(PDO $pdo, int $user_id, string $title, string $message, string $
 // ============================================================
 $is_super_admin      = isSuperAdmin();
 $is_resident_pastor  = isResidentPastor();
-$is_finance_director = ((int)getFinanceDirectorId($pdo) === $user_id);
+$is_finance_director = can('requisition.disburse', 'edit');
 $is_director         = isDirector();
-$is_hod              = isHOD();
-$is_assoc_pastor     = isAssocPastor();
-$can_submit          = $is_super_admin || $is_resident_pastor || $is_director || $is_hod || $is_assoc_pastor;
+$can_submit          = perm_scope_beyond_own(perm_scope('requisition', 'create'));
 
 // ============================================================
 // MAIN DISPATCH
@@ -258,7 +248,6 @@ try {
                     'is_resident_pastor'  => $is_resident_pastor,
                     'is_finance_director' => $is_finance_director,
                     'is_director'         => $is_director,
-                    'is_hod'              => $is_hod,
                     'can_submit'          => $can_submit,
                 ],
             ]);
@@ -296,13 +285,8 @@ try {
             if (!$dept) exit(json_encode(['status'=>'error','message'=>'Department not found.']));
 
             if (!$is_super_admin && !$is_resident_pastor) {
-                $accChk = $pdo->prepare("
-                    SELECT id FROM user_departments
-                    WHERE user_id = ? AND department_id = ? AND is_active = 1
-                      AND role_in_dept IN ('HOD','Director','Assoc_Pastor')
-                ");
-                $accChk->execute([$user_id, $dept_id]);
-                if (!$accChk->fetch()) {
+                // Submitting for a department is requisition / create for it.
+                if (!can('requisition', 'create', (int) $dept_id)) {
                     exit(json_encode(['status'=>'error','message'=>'You are not authorised to submit for this department.']));
                 }
             }
@@ -345,10 +329,9 @@ try {
             }
             unset($itm);
 
-            // Strictly check if the submitter is the actual Director of this department, no exceptions.
-            $dirChk = $pdo->prepare("SELECT id FROM user_departments WHERE user_id = ? AND department_id = ? AND role_in_dept = 'Director' AND is_active = 1");
-            $dirChk->execute([$user_id, $dept_id]);
-            $is_dir_of_dept = (bool)$dirChk->fetch();
+            // A submitter who validates for this very department (stage one)
+            // skips straight to the final approval.
+            $is_dir_of_dept = in_array((int) $dept_id, getUserDirectorDeptIds($pdo, $user_id), true);
 
             $initial_status = $is_dir_of_dept ? 'Pending_Pastor' : 'Pending_Director';
             $now            = date('Y-m-d H:i:s');
@@ -489,13 +472,14 @@ try {
                     );
                 }
             } else {
-                $dStmt = $pdo->prepare("
-                    SELECT ud.user_id FROM user_departments ud
-                    WHERE ud.department_id = ? AND ud.role_in_dept = 'Director' AND ud.is_active = 1
-                ");
-                $dStmt->execute([$dept_id]);
-                $directors = $dStmt->fetchAll(PDO::FETCH_COLUMN);
-
+                // Stage-one validators for this department (not those who
+                // approve church-wide: they see it at the final stage).
+                $directors = [];
+                foreach (perm_holders($pdo, 'requisition', 'approve', (int) $dept_id) as $holder) {
+                    if (!perm_ctx_can(perm_resolve($pdo, $holder), 'requisition', 'approve', 'church')) {
+                        $directors[] = $holder;
+                    }
+                }
                 foreach ($directors as $dir_id) {
                     notify($pdo, (int)$dir_id,
                         'New Requisition Awaiting Your Validation',
@@ -504,7 +488,7 @@ try {
                 }
 
                 if (empty($directors)) {
-                    $admins = $pdo->query("SELECT ur.user_id FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE r.role_name = 'Super_Admin'")->fetchAll(PDO::FETCH_COLUMN);
+                    $admins = array_diff(perm_holders($pdo, 'roles', 'manage', null, true), []);   // Super Admins
                     foreach ($admins as $a_id) {
                         notify($pdo, (int)$a_id,
                             'Requisition Needs Director Assignment',
@@ -675,6 +659,12 @@ try {
             $hStmt->execute([$req_id]);
             $header = $hStmt->fetch();
             if (!$header) exit(json_encode(['status'=>'error','message'=>'Requisition not found.']));
+            // Only a requisition you may see: your own, your departments', the
+            // final approvers', and the Finance Director's approved ones. (It
+            // used to return any requisition by id — a closed hole.)
+            if (!requisition_visible($pdo, $header, $user_id, $is_finance_director)) {
+                exit(json_encode(['status'=>'error','message'=>'Requisition not found.']));
+            }
 
             $iStmt = $pdo->prepare("
                 SELECT ri.*, fc.category_name

@@ -159,36 +159,16 @@ function dept_year_heading(array $year): string
 }
 
 /**
- * Department ids the signed-in user may CHANGE, or null for "all of them".
- * Ranking roles see everything; a Director / HOD / Sub-Unit Head only sees the
- * departments they actually lead this year (plus their sub-units). This is what
- * makes relieving someone of duty take effect immediately, whatever global
- * role they still carry.
+ * Department ids the signed-in user may CHANGE, or null for "all of them":
+ * the edit scope of the 'departments' row of the permission matrix (pastors
+ * church-wide; a leadership seat its own department and sub-units). Relieving
+ * someone of a seat takes this away on their next request. $active_role is
+ * ignored and kept so callers stay valid.
  */
-function dept_manageable_ids(PDO $pdo, int $user_id, string $active_role): ?array
+function dept_manageable_ids(PDO $pdo, int $user_id, string $active_role = ''): ?array
 {
-    if (in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'], true)) {
-        return null;
-    }
-
-    $stmt = $pdo->prepare(
-        "SELECT DISTINCT department_id
-           FROM user_departments
-          WHERE user_id = ? AND is_active = 1
-            AND role_in_dept IN ('Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head')"
-    );
-    $stmt->execute([$user_id]);
-    $ids = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
-
-    if ($ids) {
-        // A leader also oversees the sub-units hanging off their department.
-        $in  = implode(',', array_fill(0, count($ids), '?'));
-        $sub = $pdo->prepare("SELECT id FROM departments WHERE parent_id IN ($in)");
-        $sub->execute($ids);
-        $ids = array_values(array_unique(array_merge($ids, array_map('intval', $sub->fetchAll(PDO::FETCH_COLUMN)))));
-    }
-
-    return $ids;
+    $scope = function_exists('perm_scope') ? perm_scope('departments', 'edit') : ['church' => false, 'depts' => []];
+    return $scope['church'] ? null : $scope['depts'];
 }
 
 function dept_can_manage(?array $scope, int $dept_id): bool

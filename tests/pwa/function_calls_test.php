@@ -188,13 +188,15 @@ foreach ([
 }
 ok('a subtree can opt out of the pull gesture', str_contains($runtime, "closest('[data-no-pull]')"));
 
-suite('the Alerts Centre is gated like the Security Centre');
+suite('the Alerts Centre is gated by the permission matrix');
 $alerts = (string) file_get_contents($repoRoot . '/modules/alerts/index.php');
 $adminApi = (string) file_get_contents($repoRoot . '/api/push_admin_api.php');
-// Both check the live roles table, never $_SESSION['active_role'], which the
-// member can switch from their own profile screen.
-ok('the page checks the live roles table', str_contains($alerts, 'security_is_admin($pdo)'));
-ok('the endpoint checks it too', str_contains($adminApi, 'security_is_admin($pdo)'));
+// Both ask can('alerts', …) — roles and seats read live from the database —
+// never $_SESSION['active_role'] (roles & permissions PR 2). Broadcasting and
+// the switches need alerts / manage.
+ok('the page asks the permission matrix', str_contains($alerts, "can('alerts')"));
+ok('the endpoint asks it too, manage for broadcasts and switches',
+    str_contains($adminApi, "can('alerts', 'view')") && str_contains($adminApi, "can('alerts', 'manage')"));
 // The naive substring check fails on the comments in those files, which say
 // in words what the code must never do. php_strip_whitespace() drops comments,
 // so what is left is only what actually runs.

@@ -215,12 +215,9 @@ ok('user agent is truncated to the column width', strlen(security_user_agent()) 
 echo "\n--- session hash ---\n";
 ok('hash is sha256 hex or empty when no session', in_array(strlen(security_current_session_hash()), [0, 64], true));
 
-echo "\n--- admin role set ---\n";
-$adminRoles = security_admin_roles();
-ok('Super_Admin has Security Centre clearance', in_array('Super_Admin', $adminRoles, true));
-ok('Resident_Pastor has Security Centre clearance', in_array('Resident_Pastor', $adminRoles, true));
-ok('Assoc_Pastor does NOT', !in_array('Assoc_Pastor', $adminRoles, true));
-ok('Church_Member does NOT', !in_array('Church_Member', $adminRoles, true));
+// Who has Security Centre clearance is no longer a list of role names here:
+// it is the 'security' row of the permission matrix (tests/permissions/run.php
+// checks the Resident Pastor holds it and others do not).
 
 echo "\n========================================\n";
 echo "  passed: {$passed}   failed: {$failed}\n";

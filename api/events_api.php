@@ -113,23 +113,11 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // 3. RBAC Check (Only authorized leadership can manage events and take attendance)
-$allowed_roles = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head'];
-$is_authorized = false;
-
-if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
-    foreach ($_SESSION['roles'] as $role) {
-        if (in_array($role['role_name'], $allowed_roles)) {
-            $is_authorized = true;
-            break;
-        }
-    }
-}
-
-if (!$is_authorized) {
+// Access: Events & Attendance in the permission matrix (Roles & permissions).
+if (!can('events', 'view')) {
     echo json_encode(['status' => 'error', 'message' => 'Access Denied. You do not have clearance to manage events.']);
     exit;
 }
@@ -144,12 +132,7 @@ try {
         // ACTION 1: FETCH DASHBOARD EVENTS (Tab 1 - Master List & KPIs)
         // =====================================================================================
         case 'fetch_events':
-            $is_pastor = false;
-            if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
-                foreach ($_SESSION['roles'] as $role) {
-                    if (in_array($role['role_name'], ['Resident_Pastor', 'Assoc_Pastor', 'Super_Admin'])) $is_pastor = true;
-                }
-            }
+            $is_pastor = can('events.private_notes', 'view');
             $pastor_column = $is_pastor ? ", e.pastor_private_notes" : "";
 
             $stmt = $pdo->query("
@@ -1124,7 +1107,9 @@ try {
             $event_id = $_POST['event_id'] ?? '';
             $notes = trim($_POST['report_notes'] ?? '');
 
-            if (isset($_POST['pastor_private_notes'])) {
+            // Pastors' private notes: written only by those who may read them
+            // (it used to be anyone with Events — a closed hole).
+            if (isset($_POST['pastor_private_notes']) && can('events.private_notes', 'edit')) {
                 $private_notes = trim($_POST['pastor_private_notes']);
                 $stmt = $pdo->prepare("UPDATE events SET report_notes = ?, pastor_private_notes = ? WHERE id = ?");
                 $stmt->execute([$notes, $private_notes, $event_id]);
@@ -1133,12 +1118,7 @@ try {
                 $stmt->execute([$notes, $event_id]);
             }
 
-            $pastorStmt = $pdo->query("
-                SELECT user_id FROM user_roles
-                JOIN roles ON user_roles.role_id = roles.id
-                WHERE roles.role_name IN ('Resident_Pastor', 'Assoc_Pastor', 'Super_Admin')
-            ");
-            $pastors = $pastorStmt->fetchAll(PDO::FETCH_COLUMN);
+            $pastors = perm_holders($pdo, 'events.private_notes', 'view', null, true);
 
             if (!empty($pastors)) {
                 $evtStmt = $pdo->prepare("SELECT title FROM events WHERE id = ?");
@@ -1172,13 +1152,7 @@ try {
         // ACTION 8.5: UNLOCK EVENT (SUPER ADMIN ONLY)
         // =====================================================================================
         case 'unlock_event':
-            $is_super_admin = false;
-            if (isset($_SESSION['roles'])) {
-                foreach ($_SESSION['roles'] as $role) {
-                    if ($role['role_name'] === 'Super_Admin') { $is_super_admin = true; break; }
-                }
-            }
-            if (!$is_super_admin) {
+            if (!can('events.unlock', 'edit')) {
                 echo json_encode(['status' => 'error', 'message' => 'Action restricted to Super Administrators only.']);
                 exit;
             }

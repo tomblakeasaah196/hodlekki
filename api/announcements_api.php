@@ -10,11 +10,12 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
-// 2. Permission Check (Admins, Pastors, and HODs can manage announcements)
-$can_manage = in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD']);
+// 2. Every member may read and submit; approving, archiving and deleting is
+//    announcements / approve in the permission matrix.
+api_require_can('announcements', 'view');
+$can_manage = can('announcements', 'approve');
 
 try {
     switch ($action) {
@@ -63,6 +64,15 @@ try {
 
             if ($id) {
                 // Update
+                // Only your own announcement while it is pending, unless you
+                // approve announcements (it used to be any announcement by id).
+                $own = $pdo->prepare("SELECT submitted_by, status FROM announcements WHERE id = ?");
+                $own->execute([$id]);
+                $row = $own->fetch(PDO::FETCH_ASSOC);
+                if (!$row || (!$can_manage && ((int) $row['submitted_by'] !== (int) $user_id || $row['status'] !== 'Pending'))) {
+                    echo json_encode(['status' => 'error', 'message' => 'You can only change your own announcement while it is pending.']);
+                    exit;
+                }
                 $stmt = $pdo->prepare("UPDATE announcements SET title = ?, content = ?, target_event_id = ? WHERE id = ?");
                 $stmt->execute([$title, $content, $event_id, $id]);
                 $msg = "Announcement updated.";

@@ -3,45 +3,10 @@
 require_once '../../includes/header.php';
 require_once '../../includes/department_helpers.php';
 
-// Leadership only. Rank roles always get in; a Director / HOD / Sub-Unit Head
-// needs a live seat in the current ministry year, which is exactly what the
-// module's remove/relieve actions take away.
-$dept_role_ok = in_array($_SESSION['active_role'] ?? '', ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'], true);
-$dept_seat_ok = false;
-if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
-    foreach ($_SESSION['roles'] as $r) {
-        if (($r['role_name'] ?? '') === 'Super_Admin') {
-            $dept_role_ok = true;
-        }
-    }
-}
-if (!$dept_seat_ok && isset($pdo)) {
-    $seatStmt = $pdo->prepare(
-        "SELECT COUNT(*) FROM user_departments
-          WHERE user_id = ? AND is_active = 1
-            AND role_in_dept IN ('Director', 'HOD', 'Sub_Unit_Head')"
-    );
-    $seatStmt->execute([$_SESSION['user_id']]);
-    $dept_seat_ok = ((int) $seatStmt->fetchColumn()) > 0;
-}
-if (!$dept_role_ok && !$dept_seat_ok) {
-    ?>
-    <div class="max-w-2xl mx-auto mt-10 bg-white border border-gray-100 rounded-3xl p-8 shadow-sm text-center animate-fade-in-up">
-        <div class="w-14 h-14 mx-auto bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mb-4">
-            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-        </div>
-        <h2 class="text-2xl font-display font-bold text-gray-900">Department management is restricted</h2>
-        <p class="text-gray-500 mt-3 text-sm leading-relaxed">
-            This module is for the Pastor in Charge, Directors and HODs of the current ministry year.
-            If you have just been relieved of a department role, access is removed automatically —
-            the same role can be given back at any time by the church leadership.
-        </p>
-        <a href="/modules/dashboard/index.php" class="inline-block mt-6 bg-hodBlue hover:bg-[#152750] text-white px-6 py-3 rounded-xl font-bold shadow-md transition-all">Back to Dashboard</a>
-    </div>
-    <?php
-    require_once '../../includes/footer.php';
-    exit;
-}
+// Leadership only: the 'departments' row of the permission matrix (pastors,
+// and a live leadership seat in the current ministry year — relieving someone
+// of a seat takes this away on their next page load).
+require_can('departments', 'view');
 
 // The schema probe only ever runs on this page, never in the shared header.
 $dept_schema_ok = dept_schema_ready($pdo);

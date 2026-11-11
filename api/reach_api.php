@@ -16,24 +16,11 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id     = (int) $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'] ?? '';
 $action      = $_POST['action'] ?? $_GET['action'] ?? '';
 
-$has_clearance = false;
-if (in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'], true)) {
-    $has_clearance = true;
-} else {
-    $deptStmt = $pdo->prepare("
-        SELECT d.id FROM departments d
-        JOIN user_departments ud ON d.id = ud.department_id
-        WHERE ud.user_id = ? AND ud.is_active = 1
-          AND (d.name LIKE '%Reach%' OR d.name LIKE '%Evangelism%')
-    ");
-    $deptStmt->execute([$user_id]);
-    if ($deptStmt->fetch()) {
-        $has_clearance = true;
-    }
-}
+// Reach: the 'reach' row of the permission matrix (pastors, and the seats of
+// the department that owns Reach). Managers (assign, settings): reach / manage.
+$has_clearance = can('reach', 'view');
 
 if (!$has_clearance) {
     echo json_encode([
@@ -202,7 +189,7 @@ function reach_deny(string $message = 'Only Reach HODs, Directors and pastors ca
     exit;
 }
 
-$is_manager = reach_is_manager($pdo, $user_id, $active_role);
+$is_manager = reach_is_manager($pdo, $user_id);
 
 // Defaults to the current month; swaps the ends if they arrive reversed.
 function reach_date_range(): array {

@@ -9,3 +9,7 @@
 # no sign-in check (anyone opening the URL could change every member's email).
 fix_emails.php
 sanitize.php
+
+# 11 Nov 2026 (permissions PR 2): a stale copy of api/event_report_pdf.php that
+# nothing links to, reachable directly with only a role-name check.
+includes/event_report_pdf.php

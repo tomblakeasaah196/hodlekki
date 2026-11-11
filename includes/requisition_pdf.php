@@ -39,9 +39,24 @@ if (!$req_id && !$batch_id) {
     die('No requisition or batch ID provided.');
 }
 
-// ─── Role check ───────────────────────────────────────────
-$session_roles = array_column($_SESSION['roles'] ?? [], 'role_name');
-$is_privileged = array_intersect($session_roles, ['Super_Admin','Resident_Pastor','Assoc_Pastor','Director','HOD']) !== [];
+// ─── Access (permission matrix) ───────────────────────────
+// A requisition PDF: one you may see — your own, your departments' (export),
+// the final approvers' — or, for the Finance Director, an approved one. A
+// batch PDF: disbursement. (It used to be any requisition for any
+// Director/HOD role — a closed hole.)
+$is_privileged = false;
+if ($batch_id) {
+    $is_privileged = can('requisition.disburse', 'view');
+} else {
+    $vis = $pdo->prepare('SELECT department_id, submitted_by, status FROM requisition_headers WHERE id = ?');
+    $vis->execute([$req_id]);
+    $row = $vis->fetch(PDO::FETCH_ASSOC);
+    $is_privileged = $row && (
+        (int) $row['submitted_by'] === $user_id
+        || can('requisition', 'export', (int) $row['department_id'])
+        || (can('requisition.disburse', 'edit') && in_array($row['status'], ['Approved', 'Batched', 'Disbursed'], true))
+    );
+}
 if (!$is_privileged) {
     http_response_code(403);
     die('<h2 style="font-family:sans-serif;color:#c00">Access Denied.</h2>');

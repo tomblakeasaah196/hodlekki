@@ -1,6 +1,8 @@
 <?php
 // /modules/congregation/index.php
-require_once '../../includes/header.php'; 
+require_once '../../includes/header.php';
+// Access: the 'congregation' row of the permission matrix (Roles & permissions).
+require_can('congregation');
 ?>
 
 <!-- Import SheetJS for Excel Exports -->

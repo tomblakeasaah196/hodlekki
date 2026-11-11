@@ -286,6 +286,11 @@ function legacy_abilities(array $p, array $depts, ?string $ar = null): array
         }
     }
 
+    // Notes tagged "Pastors" (Charis: is_pastor || is_super_admin).
+    if ($sr(['Resident_Pastor', 'Assoc_Pastor', 'Super_Admin'])) {
+        $a['pastoral_notes'] = ['view' => $C];
+    }
+
     // --- Academy: admin = pastors or ANY seat, even inactive -----------------
     $a['academy'] = $full($O, 2);
     $academy = legacy_depts_named($depts, ['%Academy%', '%School%']);

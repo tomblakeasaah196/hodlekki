@@ -11,12 +11,10 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
-// 2. Strict Finance RBAC
-$is_finance_admin = in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Director']);
-if (!$is_finance_admin) {
+// 2. Finance: the 'finance' row of the permission matrix.
+if (!can('finance', 'view')) {
     echo json_encode(['status' => 'error', 'message' => 'Access Denied. Financial module is highly restricted.']);
     exit;
 }

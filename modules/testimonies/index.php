@@ -4,7 +4,7 @@ $currentModule = 'testimonies';
 require_once '../../includes/header.php';
 
 // Security Check - Restrict to Admin/Pastors
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['active_role'], ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director'])) {
+if (!isset($_SESSION['user_id']) || !can('testimonies')) {
     echo "<script>window.location.href = '/index.php';</script>";
     exit;
 }

@@ -6,100 +6,15 @@
 // Reading the library is open to every signed-in member. Adding or changing a
 // song is not: what is in the library is what the congregation sings and what
 // the choir rehearses, and a song carries a licence claim the church stands
-// behind. So the Studio is held by:
+// behind. Publishing — making a draft visible to the congregation — is
+// narrower still. Both are rows of the permission matrix (module 'hymnal'):
 //
-//   - the River of Life department, who run music at this centre, and
-//   - Super_Admin, Resident_Pastor and Assoc_Pastor.
+//   Studio   can('hymnal', 'edit')     day one: the department that owns the
+//                                       Hymnary (River of Life, who run music
+//                                       here) and the pastors
+//   Publish  can('hymnal', 'approve')  day one: the pastors
 //
-// Publishing — making a draft visible to the congregation — is narrower still:
-// a pastor or a Super_Admin. The music team prepares; a pastor releases.
-//
-// Roles are read LIVE from the roles table, never from $_SESSION['active_role'],
-// which a member switches themselves from their profile screen (AGENTS.md). The
-// Alerts Centre and the Security Centre are gated the same way and for the same
-// reason.
-
-/** Roles that may open the Studio, beyond River of Life membership. */
-const HYMNAL_STUDIO_ROLES = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'];
-
-/** Roles that may publish a song, or retire one. */
-const HYMNAL_PUBLISH_ROLES = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'];
-
-/**
- * River of Life's department id.
- *
- * Resolved by name, because an id is a fact about one database and this reads
- * better in six months. Department 4 is what it is in production today
- * (api/rol_api.php hardcodes it) and stands as the fallback when the lookup
- * cannot run.
- */
-function hymnal_music_department_id(PDO $pdo): int
-{
-    static $id = null;
-    if ($id !== null) {
-        return $id;
-    }
-    try {
-        $stmt = $pdo->prepare("SELECT id FROM departments WHERE name LIKE ? ESCAPE '!' ORDER BY id LIMIT 1");
-        $stmt->execute(['%River of Life%']);
-        $found = $stmt->fetchColumn();
-        $id = $found === false ? 4 : (int) $found;
-    } catch (Throwable $e) {
-        error_log('Hymnary music department lookup: ' . $e->getMessage());
-        $id = 4;
-    }
-
-    return $id;
-}
-
-/** Is this member serving in River of Life right now, in the live year? */
-function hymnal_in_music_department(PDO $pdo, int $userId): bool
-{
-    if ($userId <= 0) {
-        return false;
-    }
-    try {
-        $stmt = $pdo->prepare(
-            'SELECT 1 FROM user_departments
-              WHERE user_id = ? AND department_id = ? AND is_active = 1
-              LIMIT 1'
-        );
-        $stmt->execute([$userId, hymnal_music_department_id($pdo)]);
-
-        return $stmt->fetchColumn() !== false;
-    } catch (Throwable $e) {
-        error_log('Hymnary department check: ' . $e->getMessage());
-
-        return false;
-    }
-}
-
-/** Live role names for this member, or an empty list if we cannot tell. */
-function hymnal_role_names(PDO $pdo, int $userId): array
-{
-    if ($userId <= 0) {
-        return [];
-    }
-    if (function_exists('security_user_role_names')) {
-        return security_user_role_names($pdo, $userId);
-    }
-    // security_helpers.php is loaded by includes/db.php on every web request;
-    // this path is for a CLI caller that bootstrapped the module alone.
-    try {
-        $stmt = $pdo->prepare(
-            'SELECT r.role_name FROM user_roles ur
-               JOIN roles r ON r.id = ur.role_id
-              WHERE ur.user_id = ? AND COALESCE(ur.is_frozen, 0) = 0'
-        );
-        $stmt->execute([$userId]);
-
-        return $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-    } catch (Throwable $e) {
-        error_log('Hymnary role lookup: ' . $e->getMessage());
-
-        return [];
-    }
-}
+// Read live for the member asked about, never from the session.
 
 /**
  * The one answer the page and every endpoint ask.
@@ -112,12 +27,11 @@ function hymnal_role_names(PDO $pdo, int $userId): array
  */
 function hymnal_clearance(PDO $pdo, int $userId): array
 {
-    $roles = hymnal_role_names($pdo, $userId);
-    $music = hymnal_in_music_department($pdo, $userId);
-    $isRole = static fn(array $allowed): bool => array_intersect($allowed, $roles) !== [];
-
-    $allowed = $music || $isRole(HYMNAL_STUDIO_ROLES);
-    $canPublish = $isRole(HYMNAL_PUBLISH_ROLES);
+    $ctx = ($userId > 0 && function_exists('perm_resolve')) ? perm_resolve($pdo, $userId) : null;
+    $bg = $ctx !== null && $ctx['breakglass'];
+    $allowed = $bg || ($ctx !== null && perm_ctx_can($ctx, 'hymnal', 'edit'));
+    $canPublish = $bg || ($ctx !== null && perm_ctx_can($ctx, 'hymnal', 'approve'));
+    $music = $userId > 0 && function_exists('perm_module_team') && in_array($userId, perm_module_team($pdo, 'hymnal'), true);
 
     if (!$allowed) {
         $why = 'The Studio is for the River of Life department and the pastors. '
@@ -131,13 +45,12 @@ function hymnal_clearance(PDO $pdo, int $userId): array
     return [
         'allowed'     => $allowed,
         'can_publish' => $canPublish,
-        'roles'       => array_values($roles),
+        'roles'       => [],
         'music'       => $music,
         'why'         => $why,
     ];
 }
 
-/** Throwing version for an endpoint, returning the API error shape instead. */
 function hymnal_require_studio(PDO $pdo, int $userId): ?array
 {
     $c = hymnal_clearance($pdo, $userId);

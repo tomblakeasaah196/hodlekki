@@ -11,18 +11,11 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // Check Clearance: Super Admin, Pastors, or River of Life (Dept 4)
-$has_clearance = false;
-if (in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'])) {
-    $has_clearance = true;
-} else {
-    $deptStmt = $pdo->prepare("SELECT id FROM user_departments WHERE user_id = ? AND department_id = 4 AND is_active = 1");
-    $deptStmt->execute([$user_id]);
-    if ($deptStmt->fetch()) $has_clearance = true;
-}
+// River of Life: the 'river_of_life' row of the permission matrix.
+$has_clearance = can('river_of_life', 'view');
 
 if (!$has_clearance) {
     echo json_encode(['status' => 'error', 'message' => 'Access Denied: You must be in the River of Life department to access this module.']);
@@ -78,15 +71,14 @@ try {
 
             // C. Fetch Available Members to add to the Choir
             // We ONLY pull people who are officially in Department 4 (River of Life) but NOT YET in the specific ROL Roster
+            $team = array_map('intval', perm_module_team($pdo, 'river_of_life'));
             $availableStmt = $pdo->query("
-                SELECT u.id, u.first_name, u.last_name, u.gender 
+                SELECT u.id, u.first_name, u.last_name, u.gender
                 FROM users u
-                JOIN user_departments ud ON u.id = ud.user_id
-                WHERE ud.department_id = 4 AND ud.is_active = 1
+                WHERE u.id IN (" . ($team ? implode(',', $team) : '0') . ")
                 AND u.id NOT IN (SELECT user_id FROM river_of_life_roster)
                 ORDER BY u.first_name ASC
-            ");
-            $available_members = $availableStmt->fetchAll(PDO::FETCH_ASSOC);
+            ");            $available_members = $availableStmt->fetchAll(PDO::FETCH_ASSOC);
 
             // D. Get Quick Stats
             $stats = [

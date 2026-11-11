@@ -17,6 +17,18 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = $_SESSION['user_id'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
+// Access: the 'embrace' row of the permission matrix. Until roles & permissions
+// PR 2 this endpoint checked nothing beyond being signed in (lead decision 1).
+// Logging your own assigned follow-up needs only view; the rest need more.
+api_require_can('embrace', 'view');
+$embrace_level = [
+    'add_visitor' => 'create', 'update_visitor' => 'edit', 'assign_followup' => 'manage',
+    'promote_member' => 'approve', 'export_excel' => 'export',
+][$action] ?? null;
+if ($embrace_level !== null) {
+    api_require_can('embrace', $embrace_level);
+}
+
 /**
  * Helper: Process Image Uploads
  */
@@ -184,8 +196,7 @@ try {
             }
 
             // NOTIFICATION TRIGGER
-            $embStmt = $pdo->query("SELECT ud.user_id FROM user_departments ud JOIN departments d ON ud.department_id = d.id WHERE d.name LIKE '%Embrace%' AND ud.role_in_dept IN ('Director', 'HOD') AND ud.is_active = 1");
-            $embrace_leaders = $embStmt->fetchAll(PDO::FETCH_COLUMN);
+            $embrace_leaders = perm_module_leaders($pdo, 'embrace');   // leaders of the owning departments
 
             if (!empty($embrace_leaders)) {
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New First Timer Registered', ?, '/modules/embrace/index.php')");
@@ -293,7 +304,7 @@ try {
 
             // Every note logged on each person, across all their follow-up cycles.
             $ids = array_column($visitors, 'id');
-            $notesByVisitor = embrace_notes_for_visitors($pdo, $ids);
+            $notesByVisitor = embrace_notes_for_visitors($pdo, $ids, (int) $user_id);
             $workersByVisitor = embrace_worker_history_for_visitors($pdo, $ids);
             foreach ($visitors as &$v) {
                 $v['secure_notes'] = $notesByVisitor[(int) $v['id']] ?? [];
@@ -323,7 +334,7 @@ try {
             $archived = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             $ids = array_column($archived, 'id');
-            $notesByVisitor = embrace_notes_for_visitors($pdo, $ids);
+            $notesByVisitor = embrace_notes_for_visitors($pdo, $ids, (int) $user_id);
             $workersByVisitor = embrace_worker_history_for_visitors($pdo, $ids);
             foreach ($archived as &$a) {
                 $a['secure_notes'] = $notesByVisitor[(int) $a['id']] ?? [];
@@ -338,16 +349,14 @@ try {
         // ACTION 3: FETCH EMBRACE WORKERS
         // =====================================================================================
         case 'fetch_workers':
+            // The Embrace team: everyone seated in a department that owns it.
+            $team = array_map('intval', perm_module_team($pdo, 'embrace'));
             $stmt = $pdo->query("
-                SELECT DISTINCT u.id, u.first_name, u.last_name 
-                FROM users u 
-                JOIN user_departments ud ON u.id = ud.user_id 
-                JOIN departments d ON ud.department_id = d.id 
-                WHERE (d.name LIKE '%Embrace%' OR d.name LIKE '%Follow-up%' OR d.name LIKE '%Welcome%') 
-                AND ud.is_active = 1
+                SELECT u.id, u.first_name, u.last_name
+                FROM users u
+                WHERE u.id IN (" . ($team ? implode(',', $team) : '0') . ")
                 ORDER BY u.first_name ASC
-            ");
-            echo json_encode(['status' => 'success', 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+            ");            echo json_encode(['status' => 'success', 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
             break;
 
         // =====================================================================================
@@ -403,9 +412,7 @@ try {
             $fData = $fCheck->fetch(PDO::FETCH_ASSOC);
             
             if($fData && $fData['assigned_worker_id'] != $user_id) {
-                $hodCheck = $pdo->prepare("SELECT ud.id FROM user_departments ud JOIN departments d ON ud.department_id = d.id WHERE ud.user_id = ? AND d.name LIKE '%Embrace%' AND ud.role_in_dept IN ('Director', 'HOD')");
-                $hodCheck->execute([$user_id]);
-                if(!$hodCheck->fetch()) {
+                if (!can('embrace', 'manage')) {   // the assigned worker, or an Embrace manager
                     echo json_encode(['status' => 'error', 'message' => 'Access Denied: You cannot log a result for a task assigned to someone else.']);
                     exit;
                 }
@@ -445,7 +452,7 @@ try {
                     $vName = $vStmt->fetch(PDO::FETCH_ASSOC);
                     $fullName = $vName ? "{$vName['first_name']} {$vName['last_name']}" : "A First Timer";
 
-                    $pastors = $pdo->query("SELECT user_id FROM user_roles JOIN roles ON user_roles.role_id = roles.id WHERE roles.role_name IN ('Resident_Pastor', 'Assoc_Pastor')")->fetchAll(PDO::FETCH_COLUMN);
+                    $pastors = perm_holders($pdo, 'pastoral_notes', 'view');   // the pastors
                     if (!empty($pastors)) {
                         $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Pastoral Attention Required', ?, '/modules/pastoral/index.php')");
                         foreach($pastors as $uid) {
@@ -489,8 +496,7 @@ try {
             }
             ladder_note_change($pdo, (int) $visitor_id, $statusBefore, 'embrace_push', (int) $user_id);
 
-            $idiStmt = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 1 AND is_active = 1");
-            $idi_users = $idiStmt->fetchAll(PDO::FETCH_COLUMN);
+            $idi_users = perm_module_team($pdo, 'idi');   // the department that owns Data Insights
 
             if (!empty($idi_users)) {
                 $uStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");

@@ -23,13 +23,8 @@ $user_id = (int)$_SESSION['user_id'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 /* ---- RBAC (leadership + admins) ---- */
-$allowed_roles = ['Super_Admin','Resident_Pastor','Assoc_Pastor','Director','HOD','Sub_Unit_Head','Admin'];
-$is_authorized = false;
-if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
-    foreach ($_SESSION['roles'] as $r) {
-        if (in_array($r['role_name'], $allowed_roles)) { $is_authorized = true; break; }
-    }
-}
+// Access: Events & Attendance in the permission matrix (Roles & permissions).
+$is_authorized = can('events', 'view');
 if (!$is_authorized) {
     echo json_encode(['status'=>'error','message'=>'Access Denied.']);
     exit;

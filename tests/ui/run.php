@@ -6,10 +6,10 @@
  *   php tests/ui/run.php
  *
  * 1. The navigation registry: unique keys, real files, icons that exist.
- * 2. ui_nav_can_access() gives EXACTLY the answers the old hard-coded
- *    sidebar in includes/header.php gave, for every combination of roles,
- *    department seats and module flags below. The permissions matrix will
- *    replace that function; until it does, nobody's menu may change.
+ * 2. ui_nav_can_access() asks the roles × modules permission matrix (and
+ *    the two module rosters). The old sidebar's answers are compared with it
+ *    person by person in tests/permissions/ (permissions PR 2), where every
+ *    difference must be one the owner decided.
  * 3. Every icon named in PHP or script is in the sprite.
  * 4. CSRF helpers and the Content-Security-Policy builder.
  * 5. The component helpers escape what they print and refuse inline handlers.
@@ -88,99 +88,36 @@ $searchIndex = ui_nav_search_index([]);
 ok('the search index ends with sign-out', end($searchIndex)['url'] === '/auth/logout.php');
 
 /* ---------------------------------------------------------------------- */
-suite('2. access parity with the old sidebar (includes/header.php before the foundation)');
+suite('2. the navigation asks the permission matrix');
 
-/**
- * The old sidebar, transcribed rule for rule (git show 61b8516:includes/header.php).
- * Each value is what decided whether the link rendered, including the
- * section wrapper it sat inside.
- */
-function old_sidebar(array $c): array
-{
-    $has = static function (array $roles, array $depts = []) use ($c): bool {
-        if ($c['is_super_admin']) {
-            return true;
-        }
-        if (array_intersect($roles, $c['roles'])) {
-            return true;
-        }
-        return $depts !== [] && (bool) array_intersect($depts, $c['dept_ids']);
-    };
-    $P = ['Resident_Pastor', 'Assoc_Pastor'];
-    $PD = ['Resident_Pastor', 'Assoc_Pastor', 'Director'];
-    $SMS = ['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head'];
-    $canDepartments = $has($P) || (bool) array_intersect($c['dept_roles'], ['Director', 'HOD', 'Sub_Unit_Head']);
-
-    $units = $has($P, [1, 3, 4, 7, 11]) || $c['se_nav'];
-    $core = $has(array_merge($PD, $SMS), [1, 3, 13]);
-    $stew = $has($PD, []);
-
-    return [
-        'dashboard' => $has($PD, [1]),
-        'member_portal' => true, 'profile' => true, 'bible' => true, 'hymnal' => true, 'regions' => true, 'academy' => true,
-        'idi' => $has($P, [1]),
-        'congregation' => $has($P, [1]),
-        'reach' => $has($P, [1, 8]),
-        'embrace' => $has($P, [1, 2]),
-        'assimilation' => $c['assim_nav'],
-        'charis' => $has($P, [1, 10]),
-        'junior_church' => $units && $has($P, [1, 11]),
-        'river_of_life' => $units && $has($P, [1, 4]),
-        'envision' => $units && $has($P, [1, 3]),
-        'special_events' => $units && $c['se_nav'],
-        'zoe' => $units && $has($P, [1, 7]),
-        'departments' => $core && $canDepartments,
-        'tribes' => $core && $has($P, [1, 13]),
-        'events' => $core && $has($PD, [1]),
-        'sms_studio' => $core && $has($SMS, []),
-        'assets' => $core && $has($PD, [1, 3]),
-        'pastoral' => $core && $has($PD, [1]),
-        'announcements' => $core && $has($PD, [1]),
-        'testimonies' => $core && $has($PD, [1]),
-        'finance' => $stew,
-        'requisition' => $stew && $has(['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD'], []),
-        'roles' => $stew && $c['is_super_admin'],
-        'security' => $stew && $has(['Resident_Pastor'], []),
-        'alerts' => $stew && $has(['Resident_Pastor'], []),
-    ];
-}
-
-$roleSets = [[], ['Church_Member'], ['Resident_Pastor'], ['Assoc_Pastor'], ['Director'], ['HOD'], ['Sub_Unit_Head'],
-    ['Director', 'HOD'], ['Super_Admin'], ['Church_Member', 'Sub_Unit_Head']];
-$deptSets = [[], [1], [2], [3], [4], [7], [8], [10], [11], [13], [2, 8], [3, 13], [99]];
-$deptRoleSets = [[], ['Member'], ['HOD'], ['Director'], ['Sub_Unit_Head']];
-$checked = 0;
-$mismatch = [];
-foreach ($roleSets as $roles) {
-    foreach ($deptSets as $depts) {
-        foreach ($deptRoleSets as $deptRoles) {
-            foreach ([[false, false], [true, false], [false, true]] as [$assim, $se]) {
-                $ctx = [
-                    'user_id' => 1, 'roles' => $roles, 'is_super_admin' => in_array('Super_Admin', $roles, true),
-                    'dept_ids' => $depts, 'dept_roles' => $deptRoles, 'assim_nav' => $assim, 'assim_manager' => false, 'se_nav' => $se,
-                ];
-                foreach (old_sidebar($ctx) as $key => $expected) {
-                    $checked++;
-                    if (ui_nav_can_access($key, $ctx) !== $expected) {
-                        $mismatch[] = $key . ' for ' . json_encode([$roles, $depts, $deptRoles, $assim, $se]);
-                    }
-                }
-            }
-        }
-    }
-}
-ok("{$checked} decisions match the old sidebar", $mismatch === [], implode('; ', array_slice($mismatch, 0, 5)));
-ok('the design system page is for Super Admins only',
-    ui_nav_can_access('ui_guide', ['roles' => ['Super_Admin'], 'is_super_admin' => true, 'dept_ids' => [], 'dept_roles' => []])
-    && !ui_nav_can_access('ui_guide', ['roles' => ['Resident_Pastor'], 'is_super_admin' => false, 'dept_ids' => [1], 'dept_roles' => []]));
-ok('System Health is for Super Admins only (monitor_user_can() today)',
-    ui_nav_can_access('system_health', ['roles' => ['Super_Admin'], 'is_super_admin' => true, 'dept_ids' => [], 'dept_roles' => []])
-    && !ui_nav_can_access('system_health', ['roles' => ['Resident_Pastor'], 'is_super_admin' => false, 'dept_ids' => [1], 'dept_roles' => []]));
-ok('an unknown key is refused', !ui_nav_can_access('nonexistent', ['roles' => ['Super_Admin'], 'is_super_admin' => true, 'dept_ids' => [], 'dept_roles' => []]));
-$covered = array_keys(old_sidebar(['roles' => [], 'is_super_admin' => false, 'dept_ids' => [], 'dept_roles' => [], 'assim_nav' => false, 'se_nav' => false]));
-$untested = array_diff($keys, $covered, ['ui_guide', 'system_health']);
-ok('every registry entry is covered by the parity matrix', $untested === [], implode(', ', $untested));
-
+// The old sidebar, rule for rule, now lives in includes/permissions/legacy_rules.php
+// and tests/permissions/ compares it with the matrix for every kind of person.
+// Here: ui_nav_can_access() routes to perm_ctx_nav_visible() and the rosters.
+require_once $root . '/includes/permissions.php';
+$sc = static fn (bool $church, array $depts = []): array => ['church' => $church, 'depts' => $depts, 'own' => true];
+$own = ['church' => false, 'depts' => [], 'own' => true];
+$navCtx = static fn (array $abilities, bool $bg = false): array => [
+    'perm' => ['ready' => true, 'user_id' => 1, 'breakglass' => $bg, 'abilities' => $abilities,
+        'seats' => [], 'role_ids' => [], 'seat_depts' => [], 'sources' => []],
+    'assim_team' => false, 'se_crew' => false,
+];
+ok('a module the person may use beyond their own records shows', ui_nav_can_access('reach', $navCtx(['reach' => ['view' => $sc(true)]])));
+ok('a department-scoped module shows too', ui_nav_can_access('departments', $navCtx(['departments' => ['edit' => $sc(false, [3])]])));
+ok('own records only: no link', !ui_nav_can_access('pastoral', $navCtx(['pastoral' => ['create' => $own]])));
+ok('member-facing pages always show', ui_nav_can_access('bible', $navCtx([])) && ui_nav_can_access('member_portal', $navCtx([])));
+ok('Announcements shows to those who approve, not to every reader',
+    ui_nav_can_access('announcements', $navCtx(['announcements' => ['approve' => $sc(true)]]))
+    && !ui_nav_can_access('announcements', $navCtx(['announcements' => ['view' => $sc(true)]])));
+ok('break-glass sees the design system and System Health',
+    ui_nav_can_access('ui_guide', $navCtx([], true)) && ui_nav_can_access('system_health', $navCtx([], true)));
+ok('System Health is the monitor module',
+    ui_nav_can_access('system_health', $navCtx(['monitor' => ['view' => $sc(true)]])) && !ui_nav_can_access('system_health', $navCtx([])));
+ok('Assimilation volunteers see Assimilation', ui_nav_can_access('assimilation', ['perm' => null, 'assim_team' => true, 'se_crew' => false]));
+ok('Special Events crew see Special Events', ui_nav_can_access('special_events', ['perm' => null, 'assim_team' => false, 'se_crew' => true]));
+ok('nobody resolved, nothing shows', !ui_nav_can_access('reach', ['perm' => null]));
+ok('an unknown key is refused', !ui_nav_can_access('nonexistent', $navCtx([], true)));
+$unmapped = array_filter($keys, static fn (string $k): bool => !isset(perm_modules()[ui_nav_module($k)]));
+ok('every registry entry has a permission module', $unmapped === [], implode(', ', $unmapped));
 /* ---------------------------------------------------------------------- */
 suite('3. every icon named in code exists');
 
@@ -284,15 +221,26 @@ if (!extension_loaded('pdo_sqlite')) {
 } else {
     // Stand-ins for the two module helpers the navigation consults (their
     // real files need the MySQL schema). Defined first, so nav.php uses them.
-    function assim_is_manager($pdo, $uid, $role): bool { return false; }
     function assim_is_team_member($pdo, $uid): bool { return false; }
-    function se_nav_visible($pdo, $uid, $roles): bool { return false; }
-    function se_session_roles(): array { return []; }
+    function se_is_crew($pdo, $uid): bool { return false; }
+    function assim_sidebar_counts($pdo, $uid): array { return ['my_overdue' => 0, 'pool' => 0, 'watchlist_untouched' => 0]; }
 
+    // The permission matrix from the real migrations, on a small church:
+    // member 7 is HOD of Embrace (department 2) and holds no pastoral role.
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT)');
+    $pdo->exec('CREATE TABLE roles (id INTEGER PRIMARY KEY, role_name TEXT NOT NULL)');
+    $pdo->exec('CREATE TABLE user_roles (user_id INTEGER, role_id INTEGER, is_frozen INTEGER DEFAULT 0)');
+    $pdo->exec('CREATE TABLE departments (id INTEGER PRIMARY KEY, name TEXT NOT NULL)');
     $pdo->exec('CREATE TABLE user_departments (user_id INT, department_id INT, role_in_dept TEXT, is_active INT)');
+    $pdo->exec("INSERT INTO roles (id, role_name) VALUES (1, 'Super_Admin'), (2, 'Resident_Pastor'), (3, 'Assoc_Pastor'), (4, 'Church_Member')");
+    $pdo->exec("INSERT INTO departments (id, name) VALUES (1, 'Information and Data Insights'), (2, 'Embrace'), (8, 'Reach')");
+    $pdo->exec("INSERT INTO users (id, first_name, last_name) VALUES (7, 'Ada', 'Obi')");
+    $pdo->exec('INSERT INTO user_roles (user_id, role_id) VALUES (7, 4)');
     $pdo->exec("INSERT INTO user_departments VALUES (7, 2, 'HOD', 1)");
+    require_once $root . '/tests/permissions/install.php';
+    perm_test_install($pdo);
     $_SESSION = [
         'user_id' => 7, 'first_name' => 'Ada', 'last_name' => 'Obi', 'active_role' => 'Church_Member',
         'roles' => [['role_name' => 'Church_Member']],
@@ -318,7 +266,10 @@ if (!extension_loaded('pdo_sqlite')) {
     ok('no PHP notice or warning while rendering', $notices === [], implode(' | ', array_slice($notices, 0, 3)));
     ok('the page is titled after the module', strpos($html, '<title>Embrace (First Timers) · HOD Lekki</title>') !== false);
     ok('the Embrace link is current', (bool) preg_match('#href="/modules/embrace/index.php" aria-current="page"#', $html));
-    ok('a department seat without a pastoral role does not see Congregation', strpos($html, '/modules/congregation/index.php') === false);
+    // Lead decision 2: an HOD seat carries what the retired global HOD role
+    // gave (Congregation among it), so the link now shows; Finance does not.
+    ok('an HOD seat sees Congregation (decision 2)', strpos($html, '/modules/congregation/index.php') !== false);
+    ok('an HOD seat does not see Finance', strpos($html, '/modules/finance/index.php') === false);
     ok('the CSRF token is in the page', strpos($html, '<meta name="csrf-token" content="' . $_SESSION['_csrf'] . '">') !== false);
     ok('the phone bottom bar is there', strpos($html, 'class="ui-bottombar"') !== false);
     ok('legacy mode still loads jQuery for inline page scripts', strpos($html, '/assets/ui/vendor/jquery-3.7.1.min.js') !== false);

@@ -2,6 +2,8 @@
 // /modules/finance/index.php
 $currentModule = 'finance';
 require_once '../../includes/header.php';
+// Access: the 'finance' row of the permission matrix (Roles & permissions).
+require_can('finance');
 ?>
 
 <div class="max-w-7xl mx-auto space-y-8 pb-10">

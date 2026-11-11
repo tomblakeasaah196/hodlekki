@@ -1780,3 +1780,12 @@ retention period. A direct erasure request remains available in Attendees.
 After-event checklist: recap scene; attendee export; confirm thank-you run;
 review feedback after 48 hours; download the PDF; run hand-off with Follow-up;
 notify leadership; archive after at least seven days.
+
+## Who can use the Studio (since November 2026)
+
+Studio access comes from **Roles & permissions** (module "Special Events"): managers
+have **Manage** (day one: the pastors and the Director/HOD of the department that owns
+Special Events, Envision), other seats in that department may create events, and crew
+on a live event keep their per-event access as before. The Settings field
+"Envision department ID" is no longer used — which department owns the module is set in
+Roles & permissions.

@@ -2,6 +2,8 @@
 // /modules/requisition/index.php  — v2 (all bugs corrected)
 $currentModule = 'requisition';
 require_once '../../includes/header.php';
+// Access: the 'requisition' row of the permission matrix (Roles & permissions).
+require_can('requisition');
 
 // CSRF token
 if (empty($_SESSION['csrf_token'])) {
@@ -9,11 +11,10 @@ if (empty($_SESSION['csrf_token'])) {
 }
 $csrf = $_SESSION['csrf_token'];
 
-// PHP-side role flags (fast, session-only — no DB)
-$s_roles        = array_column($_SESSION['roles'] ?? [], 'role_name');
-$php_pastor     = in_array('Resident_Pastor', $s_roles) || in_array('Super_Admin', $s_roles);
-$php_director   = in_array('Director', $s_roles) || $php_pastor;
-$php_can_submit = $php_director || in_array('HOD', $s_roles) || in_array('Assoc_Pastor', $s_roles);
+// What this person may do here, from the permission matrix (the API checks again).
+$php_pastor     = can('requisition', 'approve', 'church');              // final approval
+$php_director   = perm_scope_beyond_own(perm_scope('requisition', 'approve')); // stage-one validation
+$php_can_submit = perm_scope_beyond_own(perm_scope('requisition', 'create'));
 
 // FIX 4 — safe integer cast
 $my_id_php = (int)($_SESSION['user_id'] ?? 0);

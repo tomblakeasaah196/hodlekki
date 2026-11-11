@@ -4,7 +4,11 @@ require_once '../includes/db.php';
 header('Content-Type: application/json');
 
 // 1. Ultimate Security Gate: SUPER ADMIN ONLY
-if (!isset($_SESSION['user_id']) || $_SESSION['active_role'] !== 'Super_Admin') {
+// Roles & permissions: viewing needs roles / view, every change roles / manage
+// (lead decision 7: Super Admins manage; the Resident Pastor may view).
+$roles_action = $_POST['action'] ?? $_GET['action'] ?? '';
+$roles_level = in_array($roles_action, ['fetch_master_roster', 'fetch_audit_logs'], true) ? 'view' : 'manage';
+if (!isset($_SESSION['user_id']) || !can('roles', $roles_level)) {
     echo json_encode(['status' => 'error', 'message' => 'CRITICAL CLASSIFIED: Only Super Admins can access the Identity & Access Management core.']);
     exit;
 }
@@ -33,7 +37,7 @@ try {
             $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Fetch standard roles for the assignment dropdown
-            $roles = $pdo->query("SELECT id, role_name FROM roles ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+            $roles = $pdo->query("SELECT id, role_name FROM roles WHERE COALESCE(is_archived, 0) = 0 ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
 
             echo json_encode(['status' => 'success', 'users' => $users, 'roles' => $roles]);
             break;

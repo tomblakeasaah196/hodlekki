@@ -13,7 +13,7 @@ $assim_user_id  = (int) $_SESSION['user_id'];
 $assim_manager  = false;
 $assim_on_team  = false;
 try {
-    $assim_manager = assim_is_manager($pdo, $assim_user_id, $_SESSION['active_role'] ?? '');
+    $assim_manager = assim_is_manager($pdo, $assim_user_id);
     $assim_on_team = assim_is_team_member($pdo, $assim_user_id);
 } catch (PDOException $e) {
     error_log('Assimilation module gate: ' . $e->getMessage());

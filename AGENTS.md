@@ -52,9 +52,12 @@ follow-up on a plain PHP 8.3 + MySQL stack.
     silently destroys the session — it never redirects or prints, so the
     existing `!isset($_SESSION['user_id'])` guard in each page/endpoint
     does the rest. Do not add output or redirects to that function.
-- **RBAC roles** (values of `$_SESSION['active_role']`):
-  `Super_Admin`, `Resident_Pastor`, `Assoc_Pastor`, `Church_Member`, plus
-  department-based clearance via the `user_departments` table.
+- **Access: `can($module, $level, $target)` and nothing else** (see "Roles &
+  permissions" below). Pages call `require_can()` after `header.php`;
+  endpoints `api_require_can()`. Never compare a role name, a seat value or a
+  department id/name, and never read `$_SESSION['active_role']` or
+  `$_SESSION['roles']` to decide anything — the CI sweep
+  (`tests/permissions/run.php`) fails on it.
 - **JSON responses:** `echo json_encode(['status' => 'success'|'error', 'message' => ..., 'data' => ...])`.
 - **HTML escaping:** always `htmlspecialchars()` when echoing session or
   DB values into markup (see `includes/header.php:16-18`).
@@ -615,8 +618,8 @@ notification, call `push_send_to_user()` or `push_enqueue()` directly.
   left alone. An element can opt its subtree out of the pull gesture with
   `data-no-pull`.
 - **The Alerts Centre** (`modules/alerts/`, `api/push_admin_api.php`) is gated
-  by `security_is_admin()` against the live roles table, like the Security
-  Centre. Never gate it on `$_SESSION['active_role']` — the member switches
+  by `can('alerts')` (`manage` to broadcast or flip a switch), read live like
+  every permission. Never gate it on `$_SESSION['active_role']` — the member switches
   that themselves. Its broadcast writes `system_notifications` rows rather
   than pushing directly, so quiet hours and opt-outs are honoured by the
   normal fan-out; keep it that way. Every broadcast and switch flip goes to
@@ -790,11 +793,10 @@ reader. Member and office guide: `modules/hymnal/how_to_use.md`.
   display settings are scoped to the caller's user id on reads, updates AND
   deletes. There is no view of one member's favourites for anyone else, pastors
   included; do not add one.
-- **The Studio is gated on live roles, never `$_SESSION['active_role']`** (the
-  member switches that themselves). River of Life (department resolved by name,
-  4 in production) plus `Super_Admin` / `Resident_Pastor` / `Assoc_Pastor` may
-  edit; only the pastoral roles may publish. `api/hymnal_api.php` re-checks on
-  every write — a hidden button is not a permission.
+- **The Studio is `can('hymnal', 'edit')`, publishing `can('hymnal', 'approve')`**
+  (day one: the department that owns the Hymnary — River of Life — may edit;
+  the pastors may edit and publish). `api/hymnal_api.php` re-checks on every
+  write — a hidden button is not a permission.
 - **AI only through `hymnal_ai()`, and it decides nothing.** No personal data
   in a prompt, ever — the only thing sent is the song. A call produces a
   `hymnal_ai_jobs` row and nothing else; it becomes a song only when a person
@@ -1025,6 +1027,43 @@ contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
   integration job; `_campaigns_` is a required migration marker). Run both
   after touching `includes/campaigns/`, `includes/mailer.php` or the crons.
 
+## Roles & permissions (added 2026-11-11)
+
+One access check for the whole platform: `can(string $module, string $level = 'view', $target = null)`
+in `includes/permissions.php` (loaded by `includes/db.php`). Design and day-one
+audit: `permissions-design.md` (shared notes); tests: `tests/permissions/run.php`.
+
+- **Modules** are stable keys in `includes/permissions/modules.php` (with the
+  levels and extras each offers). A new module adds its key there; the
+  matrix grows a row by itself. A key the code asks for but the registry lacks
+  fails closed for everyone, Super Admins included — the tests scan every
+  `can()` call to catch that.
+- **Levels:** view < create < edit < delete, plus approve / export / manage.
+  **Scopes:** own records, the holder's departments, the whole church.
+  **Targets:** `null` (anything), `'church'`, a department id, `perm_person($uid)`.
+  Filter rows with `perm_where()` / `perm_scope()`; find who to notify with
+  `perm_holders()`, `perm_module_leaders()`, `perm_module_team()`; seats by
+  their stable key with `perm_seat_holders()` (keys: `pastor_in_charge`,
+  `director`, `hod`, `deputy_hod`, `sub_unit_head`, `worker`, `member`).
+- **Who holds what** is read live from `user_roles` (unfrozen, not archived,
+  within dates) and the Departments roster (live seats) once per request. A
+  role or roster change applies on the next page load — no signing out.
+- **Seats give access only while live**, in the departments that own a module
+  (`perm_module_owners`, 0 = every department), or in their own department for
+  partitioned modules (dashboard, departments, requisition). Appointing a seat
+  never writes a role (the old `syncGlobalRole()` is gone, and the global
+  Director/HOD roles are retired).
+- **Break-glass:** a role with `roles.is_break_glass` (Super Admin) passes
+  every `can()`; each request that relied on it, and every write by such a
+  person, is logged to `security_audit_log` (`action = 'breakglass'`).
+- **Appointing seats:** only seats ranked below your own standing in that
+  department (`perm_ctx_can_appoint()`); roles carry an `appoint_rank`.
+- `bin/permissions_parity.php` compares the frozen pre-switch rules
+  (`includes/permissions/legacy_rules.php`, reference only — never call it from
+  a page) with `can()` person by person; exit 0 means only decided changes.
+- **Degrade before the migration:** every function is a closed no-op until the
+  `perm_*` tables exist.
+
 ## Departments module (ministry years)
 
 `modules/departments/` is ministry-year aware, and its rules are worth knowing
@@ -1144,9 +1183,10 @@ breaks without noticing:
   MultiPHP INI Editor output. Editing them by hand can break the
   production PHP handler configuration. Only `php.ini` is committed at
   present; `.htaccess` and `.user.ini` are git-ignored.
-- `$_SESSION['active_role']` is set at login and can be switched from
-  the profile screen. Never assume it equals the user's *primary* role —
-  always read from `$_SESSION` at request time, not cache it.
+- `$_SESSION['active_role']` is still set at login (the shell shows it as a
+  label) but decides nothing: there was never a working switch, and its value
+  was simply the person's role with the lowest id. Everything a person holds
+  now counts together through `can()`.
 - `PDO::ATTR_ERRMODE = EXCEPTION` is set globally, so unhandled PDO
   errors will crash the JSON response. Wrap DB calls in try/catch and
   return `['status' => 'error']` to keep API contracts intact.

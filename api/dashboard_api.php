@@ -15,14 +15,14 @@ require_once '../includes/dashboard_metrics.php';
 header('Content-Type: application/json');
 
 // 2. Security Check
-if (!isset($_SESSION['user_id']) || !isset($_SESSION['active_role'])) {
+if (!isset($_SESSION['user_id'])) {
     echo json_encode(['status' => 'error', 'message' => 'Unauthorized access.', 'redirect' => '/auth/login.php']);
     exit;
 }
 
 $user_id = (int) $_SESSION['user_id'];
-$active_role = (string) $_SESSION['active_role'];
-$tier = dash_tier($active_role);
+// The tier and the departments led come from the permission matrix.
+[$tier, $led] = dash_tier_for(perm_current(), dash_director_rank($pdo));
 $today = dash_today();
 $action = $_GET['action'] ?? 'summary';
 
@@ -166,7 +166,6 @@ try {
             case 'team':
             case 'units':
             case 'unit_workers':
-                $led = dash_led_departments($pdo, $user_id, $tier === 'hod' ? 'HOD' : 'Director');
                 $total = dash_workforce($pdo, $led);
                 $rows = [];
                 foreach (dash_workforce_by_department($pdo, $led) as $d) {
@@ -230,7 +229,6 @@ try {
     // =========================================================================
     $response = [
         'status' => 'success',
-        'role' => $active_role,
         'tier' => $tier,
         'user_name' => ($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_name'] ?? ''),
         'metrics' => [],
@@ -284,7 +282,6 @@ try {
 
     // LEVEL 2: DIRECTORS (Unit View)
     elseif ($tier === 'director') {
-        $led = dash_led_departments($pdo, $user_id, 'Director');
         $team = dash_workforce($pdo, $led);
         $response['metrics']['team_size'] = $team;
         $response['metrics']['managed_units'] = count($led);
@@ -296,7 +293,6 @@ try {
 
     // LEVEL 3: HOD (Departmental View)
     elseif ($tier === 'hod') {
-        $led = dash_led_departments($pdo, $user_id, 'HOD');
         $workers = dash_workforce($pdo, $led);
         $response['metrics']['active_workers'] = $workers;
         $response['cards'] = [

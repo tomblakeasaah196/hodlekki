@@ -59,7 +59,41 @@ function embrace_pipeline_sql(PDO $pdo, string $alias = 'u'): string
  * [visitor_id => notes[]]. Visibility is not filtered: every note is shown to
  * every user with Embrace access, including notes flagged "Pastors" only.
  */
-function embrace_notes_for_visitors(PDO $pdo, array $visitorIds): array
+/**
+ * May $viewerId read this note? Its author always; 'All' everyone; 'Pastors'
+ * those who may read notes marked for pastors (pastoral_notes); 'Directors'
+ * Embrace managers; 'Assigned_Worker' the worker on the follow-up, and
+ * managers. visible_to is a JSON list (or one plain value from older rows).
+ */
+function embrace_note_visible(array $note, int $viewerId): bool
+{
+    if ((int) ($note['author_id'] ?? 0) === $viewerId) {
+        return true;
+    }
+    $tags = json_decode((string) ($note['visible_to'] ?? ''), true);
+    if (!is_array($tags)) {
+        $tags = trim((string) ($note['visible_to'] ?? '')) === '' ? ['All'] : [(string) $note['visible_to']];
+    }
+    if ($tags === [] || in_array('All', $tags, true)) {
+        return true;
+    }
+    $can = static fn (string $m, string $l): bool => function_exists('can') && can($m, $l);
+    foreach ($tags as $tag) {
+        if ($tag === 'Pastors' && $can('pastoral_notes', 'view')) {
+            return true;
+        }
+        if ($tag === 'Directors' && $can('embrace', 'manage')) {
+            return true;
+        }
+        if ($tag === 'Assigned_Worker'
+            && ((int) ($note['assigned_worker_id'] ?? 0) === $viewerId || $can('embrace', 'manage'))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function embrace_notes_for_visitors(PDO $pdo, array $visitorIds, ?int $viewerId = null): array
 {
     $ids = [];
     foreach ($visitorIds as $id) {
@@ -78,7 +112,7 @@ function embrace_notes_for_visitors(PDO $pdo, array $visitorIds): array
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
     $stmt = $pdo->prepare("
         SELECT n.id, n.followup_id, n.author_id, n.note_text, n.visible_to, n.created_at,
-               f.visitor_id, u.first_name, u.last_name
+               f.visitor_id, f.assigned_worker_id, u.first_name, u.last_name
         FROM embrace_followup_notes n
         JOIN embrace_followups f ON f.id = n.followup_id
         LEFT JOIN users u ON u.id = n.author_id
@@ -88,8 +122,11 @@ function embrace_notes_for_visitors(PDO $pdo, array $visitorIds): array
     $stmt->execute($ids);
 
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        if ($viewerId !== null && !embrace_note_visible($row, $viewerId)) {
+            continue;
+        }
         $visitorId = (int) $row['visitor_id'];
-        unset($row['visitor_id']);
+        unset($row['visitor_id'], $row['assigned_worker_id']);
         $byVisitor[$visitorId][] = $row;
     }
 

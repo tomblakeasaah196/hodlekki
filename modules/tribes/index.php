@@ -2,7 +2,9 @@
 // /modules/tribes/index.php
 
 // 1. Pull in the centralized Header
-require_once '../../includes/header.php'; 
+require_once '../../includes/header.php';
+// Access: the 'tribes' row of the permission matrix (Roles & permissions).
+require_can('tribes');
 ?>
 
 <div class="max-w-7xl mx-auto space-y-8 pb-10">

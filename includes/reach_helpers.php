@@ -3,7 +3,6 @@
 // Shared by api/reach_api.php, api/reach_public_api.php,
 // modules/reach/index.php and the Reach badge in includes/header.php.
 
-const REACH_DEPT_SQL = "(d.name LIKE '%Reach%' OR d.name LIKE '%Evangelism%')";
 const REACH_OVERDUE_DAYS = 5;
 
 function reach_overdue_days(PDO $pdo): int {
@@ -27,50 +26,41 @@ function reach_overdue_sql(int $days, string $alias = 'l.'): string {
         . " AND ({$alias}last_follow_up_at IS NULL OR {$alias}last_follow_up_at < {$alias}assigned_at))";
 }
 
-// Super Admin, pastors, or HOD/Director of the Reach department.
-function reach_is_manager(PDO $pdo, int $user_id, string $active_role): bool {
-    if (in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'], true)) {
-        return true;
+// Managers (assign leads, settings): whoever the permission matrix lets manage
+// Reach — day one: the pastors and the Reach department's Director / HOD.
+// Read for the user asked about; $active_role is ignored (kept for callers).
+function reach_is_manager(PDO $pdo, int $user_id, string $active_role = ''): bool {
+    if ($user_id <= 0 || !function_exists('perm_resolve')) {
+        return false;
     }
-    $stmt = $pdo->prepare("
-        SELECT 1 FROM user_departments ud
-        JOIN departments d ON d.id = ud.department_id
-        WHERE ud.user_id = ? AND ud.is_active = 1
-          AND ud.role_in_dept IN ('HOD', 'Director') AND " . REACH_DEPT_SQL . "
-        LIMIT 1
-    ");
-    $stmt->execute([$user_id]);
-    return (bool) $stmt->fetchColumn();
+    $ctx = perm_resolve($pdo, $user_id);
+    return $ctx['breakglass'] || perm_ctx_can($ctx, 'reach', 'manage');
 }
 
 function reach_manager_ids(PDO $pdo): array {
-    return $pdo->query("
-        SELECT DISTINCT ud.user_id FROM user_departments ud
-        JOIN departments d ON d.id = ud.department_id
-        WHERE ud.is_active = 1 AND ud.role_in_dept IN ('HOD', 'Director') AND " . REACH_DEPT_SQL
-    )->fetchAll(PDO::FETCH_COLUMN);
+    return function_exists('perm_holders') ? perm_holders($pdo, 'reach', 'manage') : [];
 }
 
+// The Reach team (who a lead can be assigned to): everyone seated in a
+// department that owns Reach in Roles & permissions.
 function reach_members(PDO $pdo): array {
-    return $pdo->query("
-        SELECT DISTINCT u.id, TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) AS name
+    $ids = function_exists('perm_module_team') ? perm_module_team($pdo, 'reach') : [];
+    if (!$ids) {
+        return [];
+    }
+    $stmt = $pdo->prepare("
+        SELECT u.id, TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) AS name
         FROM users u
-        JOIN user_departments ud ON ud.user_id = u.id AND ud.is_active = 1
-        JOIN departments d ON d.id = ud.department_id
-        WHERE " . REACH_DEPT_SQL . "
+        WHERE u.id IN (" . implode(',', array_fill(0, count($ids), '?')) . ")
         ORDER BY name
-    ")->fetchAll(PDO::FETCH_ASSOC);
+    ");
+    $stmt->execute($ids);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function reach_is_member(PDO $pdo, int $user_id): bool {
-    $stmt = $pdo->prepare("
-        SELECT 1 FROM user_departments ud
-        JOIN departments d ON d.id = ud.department_id
-        WHERE ud.user_id = ? AND ud.is_active = 1 AND " . REACH_DEPT_SQL . "
-        LIMIT 1
-    ");
-    $stmt->execute([$user_id]);
-    return (bool) $stmt->fetchColumn();
+    return $user_id > 0 && function_exists('perm_module_team')
+        && in_array($user_id, perm_module_team($pdo, 'reach'), true);
 }
 
 function reach_notify(PDO $pdo, array $user_ids, string $title, string $message, string $link = '/modules/reach/index.php'): void {

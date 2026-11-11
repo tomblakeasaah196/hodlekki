@@ -1,6 +1,8 @@
 <?php
 // /modules/academy/index.php
-require_once '../../includes/header.php'; 
+require_once '../../includes/header.php';
+// Access: the 'academy' row of the permission matrix (Roles & permissions).
+require_can('academy');
 ?>
 
 <style>

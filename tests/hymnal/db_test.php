@@ -15,7 +15,7 @@ hymnal_test_give_role($db, 11, 'Church_Member');
 $db->exec('INSERT INTO user_roles (user_id, role_id, is_frozen) VALUES (15, 2, 1)');
 
 section('who may open the Studio');
-eq('River of Life is found by name', 4, hymnal_music_department_id($db));
+eq('River of Life (found by name) owns the Hymnary', [4], perm_module_owners($db)['hymnal'] ?? []);
 ok('a chorister may open it', hymnal_clearance($db, 7)['allowed']);
 ok('but may not publish', !hymnal_clearance($db, 7)['can_publish']);
 ok('a pastor may open it', hymnal_clearance($db, 9)['allowed']);

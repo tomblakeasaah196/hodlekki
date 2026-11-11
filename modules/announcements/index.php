@@ -1,6 +1,8 @@
 <?php
 // /modules/announcements/index.php
-require_once '../../includes/header.php'; 
+require_once '../../includes/header.php';
+// Access: the 'announcements' row of the permission matrix (Roles & permissions).
+require_can('announcements');
 ?>
 
 <div class="max-w-7xl mx-auto space-y-6 pb-10">

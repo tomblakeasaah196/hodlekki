@@ -13,25 +13,19 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
-// 3. RBAC Check (Leadership & Admin only)
-$allowed_roles = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD'];
-$is_admin = false;
-
-// Check ALL roles the user possesses on their lanyard, not just their primary active one
-if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
-    foreach ($_SESSION['roles'] as $role) {
-        if (in_array($role['role_name'], $allowed_roles)) {
-            $is_admin = true;
-            break; // Found an admin badge! Stop checking.
-        }
-    }
-}
-
+// 3. Access: the 'congregation' row of the permission matrix (day one:
+//    pastors, and the Director / HOD seats — what the retired Director / HOD
+//    roles gave). Adding, changing and deleting members check their own level.
+$is_admin = can('congregation', 'view');
 if (!$is_admin) {
     echo json_encode(['status' => 'error', 'message' => 'Access Denied. You do not have clearance to manage the master congregation database.']);
+    exit;
+}
+$congregation_level = ['create_member' => 'create', 'update_member' => 'edit', 'delete_member' => 'delete'][$action] ?? null;
+if ($congregation_level !== null && !can('congregation', $congregation_level)) {
+    echo json_encode(['status' => 'error', 'message' => 'You do not have clearance for this change.']);
     exit;
 }
 /**
@@ -236,8 +230,7 @@ try {
             $new_user_id = (int)$pdo->lastInsertId();
 
             // NOTIFICATION TRIGGER: Alert IDI (Department ID 1) of the new master roster entry
-            $idiStmt = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 1 AND is_active = 1");
-            $idi_users = $idiStmt->fetchAll(PDO::FETCH_COLUMN);
+            $idi_users = perm_module_team($pdo, 'idi');   // the department that owns Data Insights
 
             if (!empty($idi_users)) {
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Congregation Profile', ?, '/modules/congregation/index.php')");

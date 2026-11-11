@@ -9,14 +9,9 @@
 // Access
 // --------------------------------------------------------------------------
 
-/** Envision. Matched by ID exactly as includes/header.php does (§6.2). */
-const SE_ENVISION_DEPT_ID = 3;
-
-/** Roles that manage every event regardless of department (§6.2). */
-const SE_MANAGER_ROLES = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'];
-
-/** Envision roles in user_departments that grant manager level (§6.2). */
-const SE_MANAGER_DEPT_ROLES = ['HOD', 'Director'];
+// Who manages Special Events, who is a studio member, and which department
+// owns the module are decided by the permission matrix (Roles & permissions,
+// module key special_events) — see se_module_access().
 
 /** Per-event crew roles (§6.2). Order is the order shown in the Studio. */
 const SE_CREW_ROLES = [

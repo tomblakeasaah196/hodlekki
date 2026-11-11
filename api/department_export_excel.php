@@ -24,8 +24,8 @@ if (!isset($_SESSION['user_id'])) {
     die('Unauthorized. Please log in.');
 }
 
-$active_role = $_SESSION['active_role'] ?? 'Member';
-if (!in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD'], true)) {
+// The export follows the permission matrix: departments / export.
+if (!can('departments', 'export')) {
     http_response_code(403);
     die('Access Denied. You do not have clearance to export department rosters.');
 }

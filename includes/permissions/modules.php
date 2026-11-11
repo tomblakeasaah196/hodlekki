@@ -53,6 +53,8 @@ return [
         'own' => 'people assigned to you'],
     'charis' => ['label' => 'Charis (Welfare)', 'group' => 'growth', 'max' => 'delete', 'extras' => ['approve', 'export', 'manage'],
         'partitioned' => false, 'own' => 'cases and tasks assigned to you'],
+    'pastoral_notes' => ['label' => 'Notes marked for pastors (Charis, Embrace)', 'group' => 'growth', 'max' => 'view', 'extras' => [],
+        'partitioned' => false],
     'academy' => ['label' => 'HOD Academy', 'group' => 'growth', 'max' => 'delete', 'extras' => ['approve', 'manage'], 'partitioned' => false,
         'member' => true, 'own' => 'your applications, courses and exams'],
 

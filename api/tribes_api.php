@@ -12,20 +12,48 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
-// 3. RBAC Helper: Can this user view ALL tribes?
-$can_view_global = false;
-if (in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'])) {
-    $can_view_global = true;
-} else if (in_array($active_role, ['Director', 'HOD'])) {
-    // Check if they specifically direct/head the "Tribes" department
-    $deptStmt = $pdo->prepare("SELECT id FROM departments WHERE (director_id = :uid OR hod_id = :uid) AND name LIKE '%Tribe%' LIMIT 1");
-    $deptStmt->execute(['uid' => $user_id]);
-    if ($deptStmt->fetch()) {
-        $can_view_global = true;
+// 3. Access: every member sees and runs their own tribe (user_tribes); the
+//    church-wide picture and new tribes are tribes / view church-wide in the
+//    permission matrix (day one: pastors). The old Director/HOD branch read
+//    departments.director_id / hod_id, columns that do not exist, outside the
+//    try/catch — it failed for every Director or HOD. It is gone.
+api_require_can('tribes', 'view');
+$can_view_global = can('tribes', 'view', 'church');
+
+/** Is this member in that tribe? */
+function tribes_is_mine(PDO $pdo, int $uid, int $tribeId): bool
+{
+    $stmt = $pdo->prepare('SELECT 1 FROM user_tribes WHERE user_id = ? AND tribe_id = ? LIMIT 1');
+    $stmt->execute([$uid, $tribeId]);
+    return (bool) $stmt->fetchColumn();
+}
+
+/**
+ * May this member work on that event? Only a TRIBE event, and only their own
+ * tribe's unless they have the church-wide picture. (save_report used to
+ * overwrite the report notes of any event at all — a closed hole.)
+ */
+function tribes_may_touch_event(PDO $pdo, int $uid, $eventId, bool $global): bool
+{
+    $stmt = $pdo->prepare('SELECT tribe_id FROM events WHERE id = ?');
+    $stmt->execute([(int) $eventId]);
+    $tribeId = $stmt->fetchColumn();
+    if ($tribeId === false || $tribeId === null) {
+        return false;
     }
+    return $global || tribes_is_mine($pdo, $uid, (int) $tribeId);
+}
+
+if ($action === 'create_activity' && !$can_view_global && !tribes_is_mine($pdo, (int) $user_id, (int) ($_POST['tribe_id'] ?? 0))) {
+    echo json_encode(['status' => 'error', 'message' => 'You can only plan activities for your own tribe.']);
+    exit;
+}
+if (in_array($action, ['save_report', 'assign_roster', 'fetch_roster'], true)
+    && !tribes_may_touch_event($pdo, (int) $user_id, $_POST['event_id'] ?? $_GET['event_id'] ?? 0, $can_view_global)) {
+    echo json_encode(['status' => 'error', 'message' => 'That is not one of your tribe\'s events.']);
+    exit;
 }
 
 try {

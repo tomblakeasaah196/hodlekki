@@ -832,13 +832,9 @@ if (!function_exists('security_enforce_session')) {
 // Authorisation helpers for the admin Security Centre
 // --------------------------------------------------------------------------
 
-if (!function_exists('security_admin_roles')) {
-    /** Roles allowed into modules/security + api/security_api.php. */
-    function security_admin_roles(): array
-    {
-        return ['Super_Admin', 'Resident_Pastor'];
-    }
-}
+// Who may use the Security Centre is decided by the permission matrix
+// (module key 'security'), and "Super Admin" means a break-glass role
+// (roles.is_break_glass) — never a role name.
 
 if (!function_exists('security_user_role_names')) {
     /**
@@ -869,23 +865,17 @@ if (!function_exists('security_user_role_names')) {
 
 if (!function_exists('security_is_admin')) {
     /**
-     * Security Centre clearance. Checks the live roles table rather than
-     * trusting $_SESSION['active_role'], which the user can switch themselves.
+     * Security Centre clearance: can('security', 'view') for that person,
+     * read live (roles and seats from the database, never the session).
      */
     function security_is_admin(PDO $pdo, ?int $userId = null): bool
     {
         $userId = $userId ?? (isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : 0);
-        if ($userId <= 0) {
+        if ($userId <= 0 || !function_exists('perm_resolve')) {
             return false;
         }
-
-        $held = security_user_role_names($pdo, $userId);
-        foreach (security_admin_roles() as $allowed) {
-            if (in_array($allowed, $held, true)) {
-                return true;
-            }
-        }
-        return false;
+        $ctx = perm_resolve($pdo, $userId);
+        return $ctx['breakglass'] || perm_ctx_can($ctx, 'security', 'view');
     }
 }
 
@@ -896,7 +886,18 @@ if (!function_exists('security_is_super_admin')) {
         if ($userId <= 0) {
             return false;
         }
-        return in_array('Super_Admin', security_user_role_names($pdo, $userId), true);
+        // A live, unfrozen break-glass role (Super Admin), whatever it is named.
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT COUNT(*) FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+                  WHERE ur.user_id = ? AND COALESCE(ur.is_frozen, 0) = 0 AND COALESCE(r.is_break_glass, 0) = 1"
+            );
+            $stmt->execute([$userId]);
+            return (int) $stmt->fetchColumn() > 0;
+        } catch (Throwable $e) {
+            error_log('security_is_super_admin failed: ' . $e->getMessage());
+            return false;
+        }
     }
 }
 
@@ -905,8 +906,8 @@ if (!function_exists('security_guard_target')) {
      * Guard rails so the Security Centre can't be used to lock everyone out.
      *
      *  - Nobody can revoke or reset themselves from the admin screen.
-     *  - A Resident_Pastor cannot act on a Super_Admin.
-     *  - The last remaining active Super_Admin cannot be revoked or suspended.
+     *  - Only a Super Admin (a break-glass role) can act on another Super Admin.
+     *  - The last remaining active Super Admin cannot be revoked or suspended.
      *
      * @return string|null Error message, or null when the action is allowed.
      */
@@ -935,7 +936,7 @@ if (!function_exists('security_guard_target')) {
                       FROM users u
                       JOIN user_roles ur ON ur.user_id = u.id
                       JOIN roles r       ON r.id = ur.role_id
-                     WHERE r.role_name = 'Super_Admin'
+                     WHERE COALESCE(r.is_break_glass, 0) = 1
                        AND u.account_status = 'active'
                        AND COALESCE(ur.is_frozen, 0) = 0
                        AND u.id <> ?

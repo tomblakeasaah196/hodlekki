@@ -15,11 +15,15 @@
  * The module access level of a user: 'manager', 'studio_member', 'crew_only'
  * or 'none'.
  *
- * $_SESSION['active_role'] MUST NOT decide this (§6.2): a pastor whose active
- * role is "Church_Member" still manages events, so the whole roles list is
- * read, exactly as includes/header.php does.
+ * Decided by the permission matrix (includes/permissions.php), for the user
+ * asked about — not by a role name or a department number:
+ *   manager        can('special_events', 'manage')  (day one: pastors, and the
+ *                  Director / HOD seats of the department that owns the module)
+ *   studio_member  can('special_events', 'view')    (any other seat there)
+ *   crew_only      a non-revoked crew row on a non-archived event (se_crew,
+ *                  the module's own roster)
  *
- * @param array $sessionRoles The user's full role list ($_SESSION['roles']).
+ * $sessionRoles is ignored and kept only so existing callers stay valid.
  */
 function se_module_access(PDO $pdo, int $userId, array $sessionRoles = []): string
 {
@@ -27,95 +31,58 @@ function se_module_access(PDO $pdo, int $userId, array $sessionRoles = []): stri
     if ($userId <= 0) {
         return 'none';
     }
-    // $_SESSION['roles'] holds rows like ['id' => 1, 'role_name' => '...']
-    // (api/auth_api.php), but a caller may pass plain names. Flatten first,
-    // then key the cache off the names.
-    $roles = [];
-    foreach ($sessionRoles as $role) {
-        if (is_string($role)) {
-            $roles[] = $role;
-        } elseif (is_array($role) && isset($role['role_name'])) {
-            $roles[] = (string) $role['role_name'];
+    if (isset($cache[$userId])) {
+        return $cache[$userId];
+    }
+
+    if (function_exists('perm_resolve')) {
+        $ctx = perm_resolve($pdo, $userId);
+        if ($ctx['breakglass'] || perm_ctx_can($ctx, 'special_events', 'manage')) {
+            return $cache[$userId] = 'manager';
+        }
+        if (perm_ctx_can($ctx, 'special_events', 'view')) {
+            return $cache[$userId] = 'studio_member';
         }
     }
 
-    $key = $userId . '|' . implode(',', $roles);
-    if (isset($cache[$key])) {
-        return $cache[$key];
-    }
-    if (array_intersect($roles, SE_MANAGER_ROLES)) {
-        return $cache[$key] = 'manager';
-    }
-
-    try {
-        $deptId = se_envision_department_id($pdo);
-
-        $stmt = $pdo->prepare(
-            "SELECT role_in_dept FROM user_departments
-             WHERE user_id = ? AND department_id = ? AND is_active = 1"
-        );
-        $stmt->execute([$userId, $deptId]);
-        $deptRoles = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-
-        if ($deptRoles) {
-            foreach ($deptRoles as $deptRole) {
-                if (in_array((string) $deptRole, SE_MANAGER_DEPT_ROLES, true)) {
-                    return $cache[$key] = 'manager';
-                }
-            }
-            return $cache[$key] = 'studio_member';
-        }
-
-        // Crew on any non-archived event.
-        if (se_table_exists($pdo, 'se_crew')) {
-            $stmt = $pdo->prepare(
-                "SELECT c.id FROM se_crew c
-                 JOIN se_events e ON e.id = c.event_id
-                 WHERE c.user_id = ? AND c.revoked_at IS NULL AND e.status <> 'archived'
-                 LIMIT 1"
-            );
-            $stmt->execute([$userId]);
-            if ($stmt->fetchColumn() !== false) {
-                return $cache[$key] = 'crew_only';
-            }
-        }
-    } catch (Throwable $e) {
-        // A missing table must never hand out access, nor break the caller.
-        error_log('SE security/module_access: ' . $e->getMessage());
-        return $cache[$key] = 'none';
-    }
-
-    return $cache[$key] = 'none';
+    return $cache[$userId] = se_is_crew($pdo, $userId) ? 'crew_only' : 'none';
 }
 
-/** Envision's department id: se_settings override, else SE_ENVISION_DEPT_ID. */
-function se_envision_department_id(PDO $pdo): int
+/** A non-revoked crew row on any non-archived event. Never throws. */
+function se_is_crew(PDO $pdo, int $userId): bool
 {
-    $configured = se_setting_get($pdo, 'envision_department_id');
-    $id         = is_numeric($configured) ? (int) $configured : 0;
-
-    return $id > 0 ? $id : SE_ENVISION_DEPT_ID;
+    if ($userId <= 0) {
+        return false;
+    }
+    try {
+        if (!se_table_exists($pdo, 'se_crew')) {
+            return false;
+        }
+        $stmt = $pdo->prepare(
+            "SELECT c.id FROM se_crew c
+             JOIN se_events e ON e.id = c.event_id
+             WHERE c.user_id = ? AND c.revoked_at IS NULL AND e.status <> 'archived'
+             LIMIT 1"
+        );
+        $stmt->execute([$userId]);
+        return $stmt->fetchColumn() !== false;
+    } catch (Throwable $e) {
+        // A missing table must never hand out access, nor break the caller.
+        error_log('SE security/is_crew: ' . $e->getMessage());
+        return false;
+    }
 }
 
 /** True when the module link should appear in the ERP sidebar (§21.1). */
 function se_nav_visible(PDO $pdo, int $userId, array $sessionRoles = []): bool
 {
-    return se_module_access($pdo, $userId, $sessionRoles) !== 'none';
+    return se_module_access($pdo, $userId) !== 'none';
 }
 
-/** The roles list from the session, tolerating both shapes used in the app. */
+/** Kept for callers that still pass it; access no longer reads roles. */
 function se_session_roles(): array
 {
-    $roles = $_SESSION['roles'] ?? [];
-    if (!is_array($roles)) {
-        $roles = [];
-    }
-    // A single active role is still a role, in case 'roles' was never set.
-    if (!empty($_SESSION['active_role'])) {
-        $roles[] = $_SESSION['active_role'];
-    }
-
-    return $roles;
+    return [];
 }
 
 // --------------------------------------------------------------------------

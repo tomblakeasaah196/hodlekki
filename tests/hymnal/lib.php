@@ -136,6 +136,10 @@ function hymnal_test_db(bool $withPlatform = true): PDO
         }
         $pdo->exec("INSERT INTO departments (id, name) VALUES (4, 'River of Life')");
         $pdo->exec("INSERT INTO roles (id, role_name) VALUES (1, 'Super_Admin'), (2, 'Resident_Pastor'), (3, 'Assoc_Pastor'), (4, 'Church_Member')");
+        // Studio access is a row of the permission matrix: install it from the
+        // real permission migrations (the seed resolves the names above).
+        require_once __DIR__ . '/../permissions/install.php';
+        perm_test_install($pdo);
     }
 
     return $pdo;

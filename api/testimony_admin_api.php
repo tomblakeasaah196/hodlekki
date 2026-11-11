@@ -11,11 +11,10 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // 2. RBAC: Only Pastors, Directors, and IDI Admins
-$is_admin = in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director']);
+$is_admin = can('testimonies', 'view');   // the 'testimonies' row of the permission matrix
 if (!$is_admin) {
     echo json_encode(['status' => 'error', 'message' => 'Access Denied. This module is restricted to church leadership.']);
     exit;

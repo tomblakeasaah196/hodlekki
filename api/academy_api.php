@@ -12,23 +12,13 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
-// 2. Role-Based Access Control (RBAC): Admin vs. Student
-$is_admin = false;
-if (in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'])) {
-    $is_admin = true;
-} else {
-    // Check if user is officially assigned to the Academy Department
-    $deptStmt = $pdo->prepare("
-        SELECT d.id FROM departments d 
-        JOIN user_departments ud ON d.id = ud.department_id 
-        WHERE ud.user_id = :uid AND (d.name LIKE '%Academy%' OR d.name LIKE '%School%')
-    ");
-    $deptStmt->execute(['uid' => $user_id]);
-    if ($deptStmt->fetch()) $is_admin = true;
-}
+// 2. Admin vs. student: the 'academy' row of the permission matrix. Every
+//    member studies (own records); running the Academy is academy / manage —
+//    day one, the pastors and the seats of the department that owns it.
+api_require_can('academy', 'view');
+$is_admin = can('academy', 'manage');
 
 try {
     switch ($action) {

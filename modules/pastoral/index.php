@@ -3,9 +3,8 @@
 require_once '../../includes/header.php'; 
 
 // Determine roles for UI logic
-$active_role = $_SESSION['active_role'] ?? 'Member';
-$is_leadership = in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor', 'Director']);
-$is_super_admin = ($active_role === 'Super_Admin');
+$is_leadership = can('pastoral', 'view', 'church');
+$is_super_admin = can('pastoral', 'manage');
 ?>
 
 <div class="max-w-7xl mx-auto space-y-6 pb-10">

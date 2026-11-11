@@ -10,6 +10,11 @@
  * ============================================================================
  */
 session_start();
+// Signed in, and allowed by the permission matrix (the page used to have no
+// check at all; its API always did).
+require_once __DIR__ . '/../../includes/db.php';
+if (empty($_SESSION['user_id'])) { header('Location: ' . auth_login_url_for_request()); exit; }
+if (!can('contact_extractor')) { http_response_code(403); exit('This page is not open to you.'); }
 if (empty($_SESSION['ce_csrf'])) $_SESSION['ce_csrf'] = bin2hex(random_bytes(32));
 $CSRF = $_SESSION['ce_csrf'];
 ?>

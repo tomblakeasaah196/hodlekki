@@ -2,6 +2,8 @@
 // /modules/zoe/index.php
 $currentModule = 'zoe';
 require_once '../../includes/header.php';
+// Access: the 'zoe' row of the permission matrix (Roles & permissions).
+require_can('zoe');
 ?>
 
 <div class="max-w-7xl mx-auto space-y-8 pb-10">

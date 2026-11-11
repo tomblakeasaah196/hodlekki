@@ -11,23 +11,12 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-$active_role = $_SESSION['active_role'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
-// Check Clearance: Super Admin, Pastors, or Specific Departments (IDI, Envision, River of Life)
-$has_clearance = false;
-if (in_array($active_role, ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'])) {
-    $has_clearance = true;
-} else {
-    $deptStmt = $pdo->prepare("
-        SELECT d.id FROM departments d 
-        JOIN user_departments ud ON d.id = ud.department_id 
-        WHERE ud.user_id = ? AND ud.is_active = 1 
-        AND (d.name LIKE '%IDI%' OR d.name LIKE '%Envision%' OR d.name LIKE '%River of Life%')
-    ");
-    $deptStmt->execute([$user_id]);
-    if ($deptStmt->fetch()) $has_clearance = true;
-}
+// Clearance: the 'assets' row of the permission matrix (pastors, and the seats
+// of the departments that own Asset Management).
+$has_clearance = can('assets', 'view')
+    && (in_array($action, ['fetch_dashboard'], true) || can('assets', 'edit'));
 
 if (!$has_clearance) {
     echo json_encode(['status' => 'error', 'message' => 'Access Denied: Asset Management requires specific departmental clearance.']);

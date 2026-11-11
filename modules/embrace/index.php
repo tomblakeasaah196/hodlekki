@@ -1,6 +1,8 @@
 <?php
 // /modules/embrace/index.php
-require_once '../../includes/header.php'; 
+require_once '../../includes/header.php';
+// Access: the 'embrace' row of the permission matrix (Roles & permissions).
+require_can('embrace');
 ?>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>

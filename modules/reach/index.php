@@ -1,6 +1,8 @@
 <?php
 // /modules/reach/index.php
 require_once '../../includes/header.php';
+// Access: the 'reach' row of the permission matrix (Roles & permissions).
+require_can('reach');
 
 if (!isset($_SESSION['user_id'])) {
     echo "<script>window.location.href = '/auth/login.php';</script>";
@@ -10,7 +12,7 @@ if (!isset($_SESSION['user_id'])) {
 require_once __DIR__ . '/../../includes/reach_helpers.php';
 $reach_can_assign = false;
 try {
-    $reach_can_assign = reach_is_manager($pdo, (int) $_SESSION['user_id'], $_SESSION['active_role'] ?? '');
+    $reach_can_assign = reach_is_manager($pdo, (int) $_SESSION['user_id']);
 } catch (PDOException $e) {
     error_log('Reach manager check: ' . $e->getMessage());
 }

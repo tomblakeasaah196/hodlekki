@@ -41,7 +41,7 @@ function sms_person_name($first, $last) { return trim(($first ?? '') . ' ' . ($l
 /** Assimilation lists show who has been absent, so they follow Assimilation's own manager rule. */
 function sms_can_use_assimilation(PDO $pdo, int $userId) {
     require_once __DIR__ . '/../includes/assimilation_helpers.php';
-    return assim_is_manager($pdo, $userId, (string)($_SESSION['active_role'] ?? ''));
+    return assim_is_manager($pdo, $userId);
 }
 function sms_assim_rule_param() {
     $raw = json_decode((string)($_POST['rule'] ?? ''), true);

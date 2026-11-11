@@ -608,17 +608,9 @@ function se_capacity_notice_recipients(PDO $pdo, int $eventId): array
             }
         }
 
-        // Module managers, through the same roles table the login reads.
-        $in   = implode(',', array_fill(0, count(SE_MANAGER_ROLES), '?'));
-        $stmt = $pdo->prepare(
-            "SELECT ur.user_id
-               FROM user_roles ur
-               JOIN roles r ON r.id = ur.role_id
-              WHERE r.role_name IN ($in)
-              LIMIT 50"
-        );
-        $stmt->execute(SE_MANAGER_ROLES);
-        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) ?: [] as $id) {
+        // Module managers: whoever the permission matrix lets manage Special
+        // Events (Super Admins included), not a list of role names.
+        foreach (array_slice(perm_holders($pdo, 'special_events', 'manage', null, true), 0, 50) as $id) {
             $ids[(int) $id] = true;
         }
     } catch (Throwable $e) {

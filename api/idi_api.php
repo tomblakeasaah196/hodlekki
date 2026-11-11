@@ -9,25 +9,8 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // 1. STRICT SECURITY GATE: Leadership OR IDI Department
-$allowed_roles = ['Super_Admin', 'Resident_Pastor', 'Assoc_Pastor'];
-$has_access = false;
-
-if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
-    foreach ($_SESSION['roles'] as $role) {
-        if (in_array($role['role_name'], $allowed_roles)) {
-            $has_access = true;
-            break;
-        }
-    }
-}
-
-if (!$has_access) {
-    $deptStmt = $pdo->prepare("SELECT 1 FROM user_departments WHERE user_id = ? AND department_id = 1 AND is_active = 1");
-    $deptStmt->execute([$_SESSION['user_id']]);
-    if ($deptStmt->fetch()) {
-        $has_access = true;
-    }
-}
+// Data Insights: the 'idi' row of the permission matrix.
+$has_access = can('idi', 'view');
 
 if (!$has_access) {
     echo json_encode(['status' => 'error', 'message' => 'CRITICAL CLASSIFIED: Only Leadership and IDI Personnel can access Data Insights.']);

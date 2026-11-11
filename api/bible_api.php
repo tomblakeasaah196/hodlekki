@@ -292,7 +292,7 @@ try {
         // ------------------------------------------------------------------
         case 'admin_status':
         case 'admin_refresh':
-            if (!function_exists('security_is_admin') || !security_is_admin($pdo, $userId)) {
+            if (!can('bible', 'manage')) {
                 bible_fail('Only administrators can see this.', 'FORBIDDEN', 403);
             }
             if ($action === 'admin_refresh') {

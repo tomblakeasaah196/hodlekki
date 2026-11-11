@@ -15,52 +15,10 @@ if (!isset($_SESSION['user_id'])) {
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 $q      = trim((string) ($_POST['q'] ?? $_GET['q'] ?? ''));
 
-// ---------------------------------------------------------------------
-// Role helpers (checks the whole lanyard, mirroring congregation_api.php)
-// ---------------------------------------------------------------------
-function gs_has_role(array $allowed): bool
-{
-    if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
-        foreach ($_SESSION['roles'] as $role) {
-            if (in_array($role['role_name'], $allowed, true)) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-$is_super_admin = gs_has_role(['Super_Admin']);
-
-// Department membership (used to mirror the sidebar's userHasNavAccess)
-$user_dept_ids = [];
-try {
-    $deptStmt = $pdo->prepare("SELECT department_id FROM user_departments WHERE user_id = ? AND is_active = 1");
-    $deptStmt->execute([$_SESSION['user_id']]);
-    $user_dept_ids = array_map('intval', $deptStmt->fetchAll(PDO::FETCH_COLUMN));
-} catch (PDOException $e) {
-    error_log('global_search_api dept lookup: ' . $e->getMessage());
-}
-
-function gs_in_dept(array $dept_ids): bool
-{
-    global $user_dept_ids;
-    foreach ($dept_ids as $id) {
-        if (in_array((int) $id, $user_dept_ids, true)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Same clearance as api/congregation_api.php (leadership & admin only)
-$can_search_people = $is_super_admin
-    || gs_has_role(['Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD']);
-
-// Same clearance as the sidebar's Events link: pastors/directors or IDI (dept 1)
-$can_search_events = $is_super_admin
-    || gs_has_role(['Resident_Pastor', 'Assoc_Pastor', 'Director'])
-    || gs_in_dept([1]);
+// Who may search what is the permission matrix: people = Congregation view,
+// events = Events & Attendance view (Roles & permissions).
+$can_search_people = can('congregation', 'view');
+$can_search_events = can('events', 'view');
 
 try {
     switch ($action) {

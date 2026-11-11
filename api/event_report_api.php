@@ -18,13 +18,8 @@ header('Content-Type: application/json');
 if (!isset($_SESSION['user_id'])) { echo json_encode(['status'=>'error','message'=>'Unauthorized.']); exit; }
 $user_id = (int)$_SESSION['user_id'];
 
-$allowed_roles = ['Super_Admin','Resident_Pastor','Assoc_Pastor','Director','HOD','Sub_Unit_Head','Admin'];
-$is_auth = false;
-if (isset($_SESSION['roles']) && is_array($_SESSION['roles'])) {
-    foreach ($_SESSION['roles'] as $r) {
-        if (in_array($r['role_name'], $allowed_roles)) { $is_auth = true; break; }
-    }
-}
+// Access: Events & Attendance in the permission matrix (Roles & permissions).
+$is_auth = can('events', 'view');
 if (!$is_auth) { echo json_encode(['status'=>'error','message'=>'Access Denied.']); exit; }
 
 /**
