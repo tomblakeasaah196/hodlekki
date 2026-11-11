@@ -1,0 +1,842 @@
+<?php
+// /tests/campaigns/run.php
+//
+// BEHAVIOURAL tests for email and automation (includes/campaigns/): personal
+// addresses, consent, suppression, the hourly budget, the outbox worker, block
+// documents and the renderer, unsubscribe/click/open, bounce reports, the
+// Embrace journey, the Assimilation/Charis absence ladders on the REAL Charis
+// AWOL engine, the one-message-a-day rule, the SMS hand-off and coverage.
+//
+// No MySQL, no network, no PHPMailer: in-memory SQLite built from the real
+// migration, a pinned Lagos clock and a fake mail transport.
+//
+// Run from the repo root:
+//     php tests/campaigns/run.php
+//
+// Exit code 0 = all good, 1 = at least one failure. CLI only.
+
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit("CLI only.\n");
+}
+if (!extension_loaded('pdo_sqlite')) {
+    echo "SKIP: pdo_sqlite is not available in this PHP build.\n";
+    exit(0);
+}
+
+date_default_timezone_set('Africa/Lagos');
+$_ENV['SITE_URL'] = 'https://hodlekki.org';
+$_ENV['MAIL_FROM_ADDRESS'] = 'system@hodlekki.org';
+$_ENV['MAIL_USERNAME'] = 'system@hodlekki.org';
+$_ENV['SMS_VAULT_KEY'] = str_repeat('0', 64);   // keeps sms_functions.php from loading db.php
+
+require_once __DIR__ . '/../../includes/sms_functions.php';
+require_once __DIR__ . '/../../includes/campaigns/bootstrap.php';
+require_once __DIR__ . '/lib.php';
+
+// ===========================================================================
+ct_section('1. Before the migration everything degrades');
+// ===========================================================================
+$bare = ct_db(false);
+ct_eq('campaigns_ready() is false', false, campaigns_ready($bare));
+ct_eq('member_confirmed_email() answers null', null, member_confirmed_email($bare, 5));
+ct_eq('member_by_confirmed_email() answers null', null, member_by_confirmed_email($bare, 'a@gmail.com'));
+ct_eq('campaign_mail_lookup() answers null', null, campaign_mail_lookup($bare, str_repeat('a', 64)));
+ct_eq('enqueue says FEATURE_NOT_READY', 'FEATURE_NOT_READY', email_enqueue($bare, ['lane' => 'transactional'])['code'] ?? null);
+ct_eq('capture says FEATURE_NOT_READY', 'FEATURE_NOT_READY', email_capture_start($bare, 1, 'a@gmail.com', 'profile')['code'] ?? null);
+ct_eq('the worker does nothing', false, email_worker_run($bare)['ran']);
+ct_eq('the tick does nothing', false, automation_tick($bare)['ran']);
+ct_eq('saving a rule says FEATURE_NOT_READY', 'FEATURE_NOT_READY', automation_rule_save($bare, 'embrace', [], 1)['code'] ?? null);
+ct_eq('recording consent is a no-op', 0, email_consent_record($bare, 1, 'withdrawn', 'profile'));
+ct_eq('the budget meters nothing (and refuses nothing)', true, email_budget_take($bare, 'campaign', 500));
+
+$pdo = ct_db();
+ct_eq('after the migration campaigns_ready() is true', true, campaigns_ready($pdo));
+
+// ===========================================================================
+ct_section('2. Personal email: rules');
+// ===========================================================================
+ct_ok('@hodlekki.org is refused', str_contains((string) email_address_problem('pastor@hodlekki.org'), 'outside hodlekki.org'));
+ct_ok('a hodlekki.org subdomain is refused', email_address_problem('x@mail.hodlekki.org') !== null);
+ct_ok('@hodlc.com is refused as a sign-in name', str_contains((string) email_address_problem('grace@hodlc.com'), 'sign-in names'));
+ct_ok('a broken address is refused', email_address_problem('grace@gmail') !== null && email_address_problem('not an email') !== null);
+ct_eq('a Gmail address is fine (any case, any spaces)', null, email_address_problem('  Ada.Obi@Gmail.com '));
+ct_eq('typo hint', 'ada@gmail.com', email_typo_hint('ada@gmial.com'));
+ct_eq('no hint for a good domain', null, email_typo_hint('ada@gmail.com'));
+ct_eq('a sign-in name is not a personal address', false, email_looks_personal('grace@hodlc.com'));
+ct_eq('a Gmail address on file is personal', true, email_looks_personal('Ada@gmail.com'));
+
+// ===========================================================================
+ct_section('3. Capture, confirm, replace, take, expire');
+// ===========================================================================
+ct_at('2026-11-12 09:00');
+ct_user($pdo, 1, 'Ada', '1st_Timer', ['email' => null, 'phone' => '08031234567']);
+ct_user($pdo, 2, 'Grace', 'Member', ['email' => 'grace@hodlc.com']);
+ct_user($pdo, 3, 'Bola', 'Member', ['email' => 'bola.personal@yahoo.com']);
+
+$start = email_capture_start($pdo, 1, 'Ada@Gmail.com', 'connect', null, [
+    'consent' => ['granted' => true, 'method' => 'connect_form', 'text' => EMAIL_CONSENT_NEWS_TEXT, 'ip' => '102.89.1.1'],
+]);
+ct_ok('capture starts', $start['ok'] === true && isset($start['token'], $start['link']));
+ct_eq('the address is stored lower case', 'ada@gmail.com', $start['email']);
+ct_ok('the link points at /email/confirm.php on the site', str_starts_with($start['link'], 'https://hodlekki.org/email/confirm.php?t='));
+ct_eq('the raw token is never stored', 0, ct_count($pdo, 'email_addresses', 'token_hash = ?', [$start['token']]));
+ct_eq('only its sha256 is', 1, ct_count($pdo, 'email_addresses', 'token_hash = ?', [hash('sha256', $start['token'])]));
+$confirmMail = $pdo->query("SELECT * FROM email_outbox WHERE flow = 'confirm_email'")->fetch();
+ct_ok('the confirmation email is queued as account mail, first in line',
+    $confirmMail && $confirmMail['lane'] === 'transactional' && $confirmMail['purpose'] === 'account' && (int) $confirmMail['priority'] === 10);
+ct_ok('it carries the link and the address', str_contains((string) $confirmMail['html'], email_h($start['link']))
+    && str_contains((string) $confirmMail['html'], 'ada@gmail.com'));
+ct_ok('account mail has no unsubscribe link', !str_contains((string) $confirmMail['html'], 'Unsubscribe'));
+ct_eq('consent from the same form is logged with its wording', 'granted', email_consent_state($pdo, 1));
+ct_eq('pending, not yet confirmed', null, member_confirmed_email($pdo, 1));
+ct_eq('the link peeks as pending', 'pending', email_capture_peek($pdo, $start['token'])['state'] ?? null);
+
+$c = email_capture_confirm($pdo, $start['token'], '102.89.1.1');
+ct_eq('confirming works', true, $c['ok']);
+ct_eq('the lookup finds the confirmed address', 'ada@gmail.com', member_confirmed_email($pdo, 1));
+ct_eq('and the person from the address (any case)', 1, member_by_confirmed_email($pdo, 'ADA@gmail.com'));
+ct_eq('a second click says already', true, email_capture_confirm($pdo, $start['token'])['already'] ?? false);
+ct_eq('users.email (empty) gets the confirmed address', 'ada@gmail.com', $pdo->query('SELECT email FROM users WHERE id = 1')->fetchColumn());
+
+ct_at('2026-11-12 09:10');
+$g = email_capture_start($pdo, 2, 'grace.o@gmail.com', 'signin_prompt', null, ['send' => false]);
+email_capture_confirm($pdo, $g['token']);
+ct_eq("a member's sign-in name (@hodlc.com) is NOT replaced", 'grace@hodlc.com', $pdo->query('SELECT email FROM users WHERE id = 2')->fetchColumn());
+ct_eq('but their personal email is confirmed', 'grace.o@gmail.com', member_confirmed_email($pdo, 2));
+
+$state3 = email_address_state($pdo, 3);
+ct_eq('a personal users.email nobody confirmed is "on file"', 'bola.personal@yahoo.com', $state3['on_file']);
+ct_eq('the sign-in name is never "on file"', null, email_address_state($pdo, 2)['on_file']);
+
+ct_at('2026-11-12 09:20');
+$taken = email_capture_start($pdo, 3, 'ada@gmail.com', 'profile', null, ['send' => false]);
+ct_ok("another person's confirmed address is refused up front", $taken['ok'] === false && $taken['code'] === 'INVALID_EMAIL');
+
+// The race the UNIQUE key settles: two people pending on one address.
+$pdo->exec("INSERT INTO email_addresses (user_id, email, status, source, token_hash, token_expires_at, created_at)
+            VALUES (3, 'shared@gmail.com', 'pending', 'profile', '" . hash('sha256', 'tok-bola') . "', '2026-12-01 00:00:00', '2026-11-12 09:00:00'),
+                   (1, 'shared@gmail.com', 'pending', 'profile', '" . hash('sha256', 'tok-ada') . "', '2026-12-01 00:00:00', '2026-11-12 09:00:00')");
+ct_eq('the first to confirm gets it', true, email_capture_confirm($pdo, 'tok-bola')['ok']);
+ct_eq('the second is told it is taken', 'TAKEN', email_capture_confirm($pdo, 'tok-ada')['code'] ?? null);
+ct_eq('and keeps the address they already had', 'ada@gmail.com', member_confirmed_email($pdo, 1));
+
+ct_at('2026-11-12 09:30');
+$new = email_capture_start($pdo, 1, 'ada.new@outlook.com', 'profile', null, ['send' => false]);
+ct_eq('a new address starts pending while the old one still counts', 'ada@gmail.com', member_confirmed_email($pdo, 1));
+email_capture_confirm($pdo, $new['token']);
+ct_eq('confirming the new one replaces the old', 'ada.new@outlook.com', member_confirmed_email($pdo, 1));
+ct_eq('the old one is marked replaced', 'replaced', $pdo->query("SELECT status FROM email_addresses WHERE email = 'ada@gmail.com'")->fetchColumn());
+ct_eq('and is free for someone else', null, member_by_confirmed_email($pdo, 'ada@gmail.com'));
+
+ct_user($pdo, 4, 'Kemi', '2nd_Timer');
+ct_at('2026-11-12 10:00');
+$k = email_capture_start($pdo, 4, 'kemi@gmail.com', 'embrace', 77, ['send' => false]);
+ct_at('2026-11-20 10:00');
+ct_eq('after 7 days the link has expired', 'EXPIRED', email_capture_confirm($pdo, $k['token'])['code'] ?? null);
+ct_eq('and stays unconfirmed', null, member_confirmed_email($pdo, 4));
+
+ct_user($pdo, 5, 'Tolu', '1st_Timer');
+ct_at('2026-11-13 08:00');
+$t1 = email_capture_start($pdo, 5, 'tolu@gmail.com', 'connect');
+$t2 = email_capture_start($pdo, 5, 'tolu@gmail.com', 'connect');
+ct_eq('asking again within a minute is refused politely', 'TOO_SOON', $t2['code'] ?? null);
+foreach (['08:02', '08:04', '08:06', '08:08'] as $m) {
+    ct_at('2026-11-13 ' . $m);
+    email_capture_start($pdo, 5, 'tolu@gmail.com', 'connect');
+}
+ct_at('2026-11-13 08:10');
+ct_eq('the 6th link in a day is refused', 'RATE_LIMITED', email_capture_start($pdo, 5, 'tolu@gmail.com', 'connect')['code'] ?? null);
+ct_eq('resends reuse one pending row', 1, ct_count($pdo, 'email_addresses', "user_id = 5 AND status = 'pending'"));
+ct_eq('only the newest link works', 'used', email_capture_peek($pdo, $t1['token']) === null ? 'used' : 'still valid');
+
+// ===========================================================================
+ct_section('4. Consent');
+// ===========================================================================
+$threw = false;
+try {
+    email_consent_record($pdo, 3, 'granted', 'signin_prompt');
+} catch (InvalidArgumentException $e) {
+    $threw = true;
+}
+ct_ok('a "yes" without the wording shown is refused', $threw);
+$t = email_consent_text_id($pdo, 'news', EMAIL_CONSENT_NEWS_TEXT);
+ct_eq('the same wording is stored once', $t, email_consent_text_id($pdo, 'news', EMAIL_CONSENT_NEWS_TEXT));
+ct_ok('changed wording is a new row', email_consent_text_id($pdo, 'news', EMAIL_CONSENT_NEWS_TEXT . ' ') === $t
+    && email_consent_text_id($pdo, 'news', 'Different words.') !== $t);
+ct_eq('never asked: none', 'none', email_consent_state($pdo, 3));
+ct_eq('no confirmed email → no news by email', 'no_confirmed_email', email_may_send_news($pdo, 4)['reason']);
+ct_eq('confirmed but never said yes → no_consent', 'no_consent', email_may_send_news($pdo, 2)['reason']);
+email_consent_record($pdo, 2, 'granted', 'signin_prompt', ['text' => EMAIL_CONSENT_NEWS_TEXT, 'ip' => '1.2.3.4']);
+ct_eq('after yes → ok', true, email_may_send_news($pdo, 2)['ok']);
+email_consent_record($pdo, 2, 'withdrawn', 'profile');
+ct_eq('the latest answer wins: withdrawn', 'withdrawn', email_may_send_news($pdo, 2)['reason']);
+email_consent_record($pdo, 2, 'granted', 'profile', ['text' => EMAIL_CONSENT_NEWS_TEXT]);
+ct_eq('consent is per channel (SMS untouched)', 'none', email_consent_state($pdo, 2, 'news', 'sms'));
+$row = email_consent_current($pdo, 2);
+ct_ok('the log keeps how and the wording', $row['method'] === 'profile' && (int) $row['text_id'] === $t);
+
+// ===========================================================================
+ct_section('5. Suppression');
+// ===========================================================================
+email_suppress($pdo, 'Dead@Example.com', 'hard_bounce', '550 5.1.1 user unknown');
+ct_eq('a hard bounce suppresses (any case)', true, email_is_suppressed($pdo, 'dead@example.com'));
+ct_eq('a soft bounce does not, yet', false, email_note_soft_bounce($pdo, 'full@example.com', '452 mailbox full'));
+email_note_soft_bounce($pdo, 'full@example.com');
+ct_eq('the third in a row does', true, email_note_soft_bounce($pdo, 'full@example.com'));
+ct_eq('for 7 days', true, email_is_suppressed($pdo, 'full@example.com'));
+ct_at('2026-11-21 08:11');
+ct_eq('then it lapses', false, email_is_suppressed($pdo, 'full@example.com'));
+email_note_delivered($pdo, 'full@example.com');
+ct_eq('a delivery resets the count', 0, (int) $pdo->query("SELECT soft_count FROM email_suppressions WHERE email = 'full@example.com'")->fetchColumn());
+ct_eq('a soft bounce never weakens a hard one', true, email_note_soft_bounce($pdo, 'dead@example.com') && email_is_suppressed($pdo, 'dead@example.com'));
+ct_eq('an admin can release', true, email_suppression_release($pdo, 'dead@example.com', 900, 'They fixed their mailbox'));
+ct_eq('released', false, email_is_suppressed($pdo, 'dead@example.com'));
+
+// ===========================================================================
+ct_section('6. The hourly budget');
+// ===========================================================================
+$b = ct_db();
+email_setting_set($b, 'hourly_cap', '10');
+$h = ct_at('2026-11-16 14:05');
+ct_eq('cap 10 → 9 usable, 5 for bulk', ['cap' => 10, 'usable' => 9, 'bulk' => 5], email_budget_limits($b));
+$took = 0;
+for ($i = 0; $i < 8; $i++) {
+    $took += email_budget_take($b, 'campaign', 1, $h) ? 1 : 0;
+}
+ct_eq('bulk mail stops at its share', 5, $took);
+ct_eq('automations share the same bulk share', false, email_budget_take($b, 'automation', 1, $h));
+ct_eq('a password reset still goes', true, email_budget_take($b, 'transactional', 1, $h));
+ct_eq('so does a mailbox reply', true, email_budget_take($b, 'mailbox', 3, $h));
+ct_eq('…but never past the usable total', false, email_budget_take($b, 'alert', 1, $h));
+email_budget_give_back($b, 'mailbox', 1, $h);
+ct_eq('a slot handed back can be used', true, email_budget_take($b, 'alert', 1, $h));
+ct_eq('the next hour starts fresh', true, email_budget_take($b, 'campaign', 5, $h->modify('+1 hour')));
+ct_eq('Exim\'s refusal is understood', ['cap' => 60], email_parse_cap_refusal('550 Domain hodlekki.org has exceeded the max emails per hour (60/60 (100%)) allowed. Message discarded.'));
+ct_eq('other errors are not', null, email_parse_cap_refusal('550 5.1.1 user unknown'));
+ct_eq("the host's bounce limit stops the hour but teaches no cap", ['cap' => null],
+    email_parse_cap_refusal('550 Domain hodlekki.org has exceeded the max defers and failures per hour (5/5 (100%)) allowed.'));
+$h2 = $h->modify('+2 hours');
+email_budget_refused($b, 8, $h2);
+ct_eq('after a refusal nothing more goes this hour', false, email_budget_take($b, 'transactional', 1, $h2));
+ct_eq('an unbelievable figure (under 10) is not learnt', 10, email_budget_limits($b)['cap']);
+$st = email_budget_status($b, $h->modify('+1 hour'));
+ct_ok('status shows what is left', $st['sent_bulk'] === 5 && $st['left_bulk'] === 0 && $st['refused'] === false);
+
+// ===========================================================================
+ct_section('7. The outbox and its worker');
+// ===========================================================================
+$o = ct_db();
+ct_user($o, 30, 'Uche', 'Member');
+ct_user($o, 31, 'Ife', 'Member');
+ct_at('2026-11-16 09:00');
+ct_confirm($o, 30, 'uche@gmail.com');
+ct_confirm($o, 31, 'ife@gmail.com');
+$camp = email_send_doc($o, ct_doc(), ['id' => 30, 'first_name' => 'Uche'], [
+    'lane' => 'campaign', 'purpose' => 'news', 'flow' => 'campaign', 'to_email' => 'uche@gmail.com', 'track' => true,
+]);
+$reset = email_enqueue($o, ['lane' => 'transactional', 'purpose' => 'account', 'flow' => 'password_reset', 'user_id' => 31,
+    'to_email' => 'ife@gmail.com', 'subject' => 'Reset', 'html' => '<p>reset</p>', 'text' => 'reset']);
+$tx = ct_transport();
+$run = email_worker_run($o, ['endpoints_ready' => true, 'transport' => $tx, 'now' => campaigns_now()]);
+ct_eq('both sent', 2, $run['sent']);
+ct_eq('the reset left first (priority), the campaign after', ['ife@gmail.com', 'uche@gmail.com'],
+    array_map(static fn ($m) => $m['to_email'], $tx['sent']->getArrayCopy()));
+$sentCampaign = $tx['sent'][1];
+$rowCampaign = $o->query('SELECT * FROM email_outbox WHERE id = ' . (int) $camp['id'])->fetch();
+ct_eq('the Message-ID sent is the one recorded at queue time', $rowCampaign['message_id'], $sentCampaign['message_id']);
+ct_ok('it ends in the sender\'s domain', str_ends_with($rowCampaign['message_id'], '@hodlekki.org>'));
+ct_eq('church news carries one-click unsubscribe', '<https://hodlekki.org/email/unsubscribe.php?r=' . $rowCampaign['ref'] . '>',
+    $sentCampaign['headers']['List-Unsubscribe'] ?? null);
+ct_eq('…with the RFC 8058 POST header', 'List-Unsubscribe=One-Click', $sentCampaign['headers']['List-Unsubscribe-Post'] ?? null);
+ct_eq('bulk mail says so', 'bulk', $sentCampaign['headers']['Precedence'] ?? null);
+ct_ok('account mail has no unsubscribe header', !isset($tx['sent'][0]['headers']['List-Unsubscribe']));
+ct_eq('every message asks auto-replies to stay quiet', 'auto-generated', $tx['sent'][0]['headers']['Auto-Submitted'] ?? null);
+ct_eq('every message carries its ref', $rowCampaign['ref'], $sentCampaign['headers']['X-HOD-Ref'] ?? null);
+$look = campaign_mail_lookup($o, email_message_id_hash(strtoupper($rowCampaign['message_id'])));
+ct_ok('the mailbox lookup finds person and flow from the reply\'s Message-ID (any case)',
+    $look !== null && $look['user_id'] === 30 && $look['flow'] === 'campaign');
+ct_eq('a delivered row is sent', 'sent', $rowCampaign['status']);
+
+// Failures
+ct_at('2026-11-16 09:10');
+$tmp = email_enqueue($o, ['lane' => 'automation', 'purpose' => 'news', 'flow' => 'embrace.welcome', 'user_id' => 30,
+    'to_email' => 'uche@gmail.com', 'subject' => 'Hi', 'html' => '<p>hi</p>']);
+$down = email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport([['ok' => false, 'error' => 'SMTP Error: Could not connect to SMTP host. Failed to connect to server']]), 'now' => campaigns_now()]);
+$r = $o->query('SELECT * FROM email_outbox WHERE id = ' . $tmp['id'])->fetch();
+ct_ok('our mail server being down stops the run and costs the message no attempt',
+    $down['stopped'] === 'unavailable' && $r['status'] === 'queued' && (int) $r['attempts'] === 0 && $r['not_before'] === null);
+email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport([['ok' => false, 'error' => '451 4.3.0 Temporary local problem']]), 'now' => campaigns_now()]);
+$r = $o->query('SELECT * FROM email_outbox WHERE id = ' . $tmp['id'])->fetch();
+ct_ok('a temporary failure retries in a minute', $r['status'] === 'queued' && (int) $r['attempts'] === 1 && $r['not_before'] === '2026-11-16 09:11:00');
+ct_eq('not before then', 0, email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport(), 'now' => campaigns_now()])['sent']);
+ct_at('2026-11-16 09:12');
+ct_eq('then it goes', 1, email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport(), 'now' => campaigns_now()])['sent']);
+
+ct_user($o, 32, 'Femi', 'Member');
+ct_confirm($o, 32, 'femi@gmail.com');
+$perm = email_enqueue($o, ['lane' => 'automation', 'purpose' => 'news', 'flow' => 'charis.miss_note', 'user_id' => 32,
+    'to_email' => 'femi@gmail.com', 'subject' => 'Hi', 'html' => '<p>hi</p>']);
+email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport([['ok' => false, 'error' => 'SMTP Error: The following recipients failed: femi@gmail.com: 550 5.1.1 The email account that you tried to reach does not exist']]), 'now' => campaigns_now()]);
+ct_eq('a permanent recipient failure fails the message', 'failed', $o->query('SELECT status FROM email_outbox WHERE id = ' . $perm['id'])->fetchColumn());
+ct_eq('and suppresses the address', true, email_is_suppressed($o, 'femi@gmail.com'));
+
+ct_at('2026-11-16 09:20');
+$capped = email_enqueue($o, ['lane' => 'campaign', 'purpose' => 'news', 'flow' => 'campaign', 'user_id' => 31,
+    'to_email' => 'ife@gmail.com', 'subject' => 'Hi', 'html' => '<p>hi</p>']);
+$capRun = email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport([['ok' => false, 'error' => 'SMTP Error: data not accepted. SMTP server error: DATA END command failed Detail: Domain hodlekki.org has exceeded the max emails per hour (40/40 (100%)) allowed. SMTP code: 550']]), 'now' => campaigns_now()]);
+$cr = $o->query('SELECT * FROM email_outbox WHERE id = ' . $capped['id'])->fetch();
+ct_ok('the host\'s cap puts the email back untouched', $cr['status'] === 'queued' && (int) $cr['attempts'] === 0);
+ct_eq('stops the run', 'cap', $capRun['stopped']);
+ct_eq('and learns the cap', 40, email_budget_limits($o)['cap']);
+ct_eq('the address is NOT blamed', false, email_is_suppressed($o, 'ife@gmail.com'));
+ct_at('2026-11-24 09:21');
+ct_eq('a learnt cap lapses after 7 days', 100, email_budget_limits($o)['cap']);
+ct_at('2026-11-16 09:21');
+ct_eq("the bounce limit is not the recipient's fault either", 'cap', email_classify_failure('550 Domain hodlekki.org has exceeded the max defers and failures per hour (5/5 (100%)) allowed.'));
+ct_eq('a full mailbox at SMTP time is temporary, not a hard bounce', 'temporary', email_classify_failure('552 5.2.2 Mailbox full'));
+
+// Orphans, last-moment checks, the window, the limit, the kill switch
+$o->exec("UPDATE email_outbox SET status = 'sending', locked_at = '2026-11-16 09:00:00' WHERE id = " . (int) $capped['id']);
+ct_at('2026-11-16 10:30');
+$orph = email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport(), 'now' => campaigns_now()]);
+ct_eq('a send interrupted mid-way becomes unknown', 1, $orph['recovered']);
+ct_eq('and is never sent again', 'unknown', $o->query('SELECT status FROM email_outbox WHERE id = ' . $capped['id'])->fetchColumn());
+
+$late = email_enqueue($o, ['lane' => 'campaign', 'purpose' => 'news', 'flow' => 'campaign', 'user_id' => 30,
+    'to_email' => 'uche@gmail.com', 'subject' => 'Hi', 'html' => '<p>hi</p>']);
+email_consent_record($o, 30, 'withdrawn', 'one_click');
+$lateTx = ct_transport();
+email_worker_run($o, ['endpoints_ready' => true, 'transport' => $lateTx, 'now' => campaigns_now()]);
+ct_eq('unsubscribed after queueing → not sent', 'suppressed', $o->query('SELECT status FROM email_outbox WHERE id = ' . $late['id'])->fetchColumn());
+ct_eq('nothing reached the transport', 0, count($lateTx['sent']));
+
+ct_at('2026-11-16 21:30');
+$night = email_enqueue($o, ['lane' => 'automation', 'purpose' => 'news', 'flow' => 'x', 'user_id' => 31,
+    'to_email' => 'ife@gmail.com', 'subject' => 'Hi', 'html' => '<p>hi</p>']);
+$nightReset = email_enqueue($o, ['lane' => 'transactional', 'purpose' => 'account', 'flow' => 'password_reset', 'user_id' => 31,
+    'to_email' => 'ife@gmail.com', 'subject' => 'Reset', 'html' => '<p>reset</p>']);
+$nightRun = email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport(), 'now' => campaigns_now()]);
+ct_ok('at 21:30 a reset still goes but church news waits for 07:00', $nightRun['sent'] === 1 && $nightRun['outside_window'] === 1);
+ct_at('2026-11-17 07:00');
+$held = email_worker_run($o, ['endpoints_ready' => false, 'transport' => ct_transport(), 'now' => campaigns_now()]);
+ct_ok('until the public unsubscribe/click pages are deployed, church news is held', $held['sent'] === 0 && $held['outside_window'] === 1
+    && str_contains($held['message'], 'not deployed'));
+ct_eq('…and this checkout has none yet (they arrive with the screens)', false, email_public_endpoints_ready());
+ct_eq('in the morning it goes', 1, email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport(), 'now' => campaigns_now()])['sent']);
+
+for ($i = 0; $i < 25; $i++) {
+    email_enqueue($o, ['lane' => 'transactional', 'purpose' => 'account', 'flow' => 'bulk_test', 'to_email' => "p{$i}@gmail.com",
+        'subject' => 'x', 'html' => '<p>x</p>']);
+}
+ct_eq('one run sends at most per_minute (20)', 20, email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport(), 'now' => campaigns_now()])['sent']);
+email_setting_set($o, 'paused', '1');
+ct_eq('the kill switch stops everything', false, email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport(), 'now' => campaigns_now()])['ran']);
+email_setting_set($o, 'paused', '0');
+
+$threw = false;
+try {
+    email_enqueue($o, ['lane' => 'transactional', 'purpose' => 'account', 'flow' => 'x', 'to_email' => 'a@gmail.com',
+        'subject' => 'x', 'html' => 'x', 'headers' => ["X-Evil\r\nBcc" => 'all@x.com']]);
+} catch (InvalidArgumentException $e) {
+    $threw = true;
+}
+ct_ok('header injection is refused at the door', $threw);
+ct_eq('church news never goes to @hodlekki.org', 'INVALID_EMAIL', email_enqueue($o, ['lane' => 'campaign', 'purpose' => 'news', 'flow' => 'x',
+    'to_email' => 'media@hodlekki.org', 'subject' => 'x', 'html' => 'x'])['code'] ?? null);
+ct_eq('hod_mail_header_ok refuses From', false, hod_mail_header_ok('From', 'x@y.com'));
+ct_eq('hod_mail_header_ok accepts List-Unsubscribe', true, hod_mail_header_ok('List-Unsubscribe', '<https://hodlekki.org/x>'));
+
+// ===========================================================================
+ct_section('8. Block documents (the sanitiser) and the renderer');
+// ===========================================================================
+$bad = static fn (array $blocks): array => email_doc_validate(['v' => 1, 'subject' => 'S', 'blocks' => $blocks]);
+ct_eq('an unknown block is refused', false, $bad([['type' => 'html', 'html' => '<script>x</script>']])['ok']);
+ct_eq('a javascript: link is refused', false, $bad([['type' => 'button', 'label' => 'Go', 'href' => 'javascript:alert(1)']])['ok']);
+ct_eq('a plain http: link is refused', false, $bad([['type' => 'button', 'label' => 'Go', 'href' => 'http://example.com']])['ok']);
+ct_eq('a data: link in text is refused', false, $bad([['type' => 'text', 'content' => [['k' => 'p', 'r' => [['t' => 'x', 'href' => 'data:text/html,hi']]]]]])['ok']);
+ct_eq('a hot-linked picture is refused', false, $bad([['type' => 'image', 'src' => 'https://evil.example/pixel.gif']])['ok']);
+ct_eq('a picture from our uploads is fine', true, $bad([['type' => 'image', 'src' => 'https://hodlekki.org/uploads/email/2026/11/a.jpg', 'alt' => 'Choir']])['ok']);
+ct_eq('a path trick is refused', false, $bad([['type' => 'image', 'src' => 'https://hodlekki.org/uploads/email/../../.env.png']])['ok']);
+ct_eq('an unknown merge field is refused', false, $bad([['type' => 'heading', 'text' => 'Hi {{password}}']])['ok']);
+ct_eq('a paragraph node that is not p/ul/ol is refused', false, $bad([['type' => 'text', 'content' => [['k' => 'script', 'r' => [['t' => 'x']]]]]])['ok']);
+ct_eq('a footer in the middle is refused', false, $bad([['type' => 'footer'], ['type' => 'heading', 'text' => 'After']])['ok']);
+$v = $bad([['type' => 'heading', 'text' => 'Only a heading']]);
+ct_ok('a missing footer is added at the end', $v['ok'] && end($v['doc']['blocks'])['type'] === 'footer');
+ct_eq('too many blocks are refused', false, $bad(array_fill(0, 61, ['type' => 'divider']))['ok']);
+ct_eq('an unknown scripture is refused', false, $bad([['type' => 'scripture', 'ref' => 'Hezekiah 4:1']])['ok']);
+ct_eq('six verses are fine', true, $bad([['type' => 'scripture', 'ref' => 'Psalm 23:1-6']])['ok']);
+ct_eq('more than six are refused', false, $bad([['type' => 'scripture', 'ref' => 'Psalm 119:1-7']])['ok']);
+ct_eq('a passage across chapters is refused', false, $bad([['type' => 'scripture', 'ref' => 'John 3:36-4:2']])['ok']);
+ct_eq('a known scripture is fine', true, $bad([['type' => 'scripture', 'ref' => 'Psalm 122:1']])['ok']);
+ct_eq('unknown fields are dropped from a block', ['type' => 'divider'], $bad([['type' => 'divider', 'onclick' => 'x']])['doc']['blocks'][0]);
+
+$doc = ['v' => 1, 'subject' => 'Welcome, {{first_name}}', 'preheader' => 'For {{first_name}}', 'blocks' => [
+    ['type' => 'heading', 'text' => 'Hello {{first_name}}', 'level' => 1],
+    ['type' => 'text', 'content' => [
+        ['k' => 'p', 'r' => [['t' => 'Bold ', 'b' => 1], ['t' => 'our site', 'href' => 'https://hodlekki.org/sermons.php']]],
+        ['k' => 'ul', 'items' => [[['t' => 'One']], [['t' => 'Two', 'i' => 1]]]],
+    ]],
+    ['type' => 'button', 'label' => 'Visit', 'href' => 'https://hodlekki.org/', 'style' => 'primary', 'align' => 'center'],
+    ['type' => 'scripture', 'ref' => 'Psalm 122:1'],
+    ['type' => 'footer'],
+]];
+$rendered = email_render($doc, ['first_name' => '<b>Ada</b>'], ['purpose' => 'news', 'ref' => str_repeat('A', 22), 'track' => true]);
+ct_eq('renders', true, $rendered['ok']);
+ct_ok('a name is escaped, never markup', str_contains($rendered['html'], '&lt;b&gt;Ada&lt;/b&gt;') && !str_contains($rendered['html'], '<b>Ada</b>'));
+ct_eq('the subject is merged (plain text)', 'Welcome, <b>Ada</b>', $rendered['subject']);
+ct_eq('both links are tracked, in order', ['https://hodlekki.org/sermons.php', 'https://hodlekki.org/'], $rendered['links']);
+ct_ok('…through the click URL', str_contains($rendered['html'], 'https://hodlekki.org/email/c.php?r=' . str_repeat('A', 22) . '&amp;l=1'));
+ct_ok('the unsubscribe link is never tracked', str_contains($rendered['html'], 'https://hodlekki.org/email/unsubscribe.php?r=' . str_repeat('A', 22)));
+ct_ok('the plain-text twin lists real targets', str_contains($rendered['text'], 'Visit: https://hodlekki.org/')
+    && str_contains($rendered['text'], 'our site (https://hodlekki.org/sermons.php)') && str_contains($rendered['text'], '- One'));
+ct_ok('the layout is a 600px table with MSO ghost tables', str_contains($rendered['html'], 'width="600"') && str_contains($rendered['html'], '<!--[if mso]>'));
+ct_ok('dark mode is declared', str_contains($rendered['html'], 'color-scheme" content="light dark'));
+ct_ok('no script anywhere', stripos($rendered['html'], '<script') === false);
+$kjv = bible_kjv_chapter(19, 122)[0]['t'];
+ct_ok('the scripture is the Bible module\'s KJV, word for word', str_contains($rendered['html'], email_h($kjv)) && str_contains($rendered['html'], 'Psalm 122:1 (KJV)'));
+$multi = email_scripture('Numbers 6:24-26');
+ct_ok('a short passage joins its verses', $multi !== null && str_starts_with($multi['text'], 'The LORD bless thee'));
+$plainRender = email_render($doc, ['first_name' => 'Ada'], ['purpose' => 'account']);
+ct_ok('without a ref nothing is tracked', $plainRender['links'] === [] && !str_contains($plainRender['html'], '/email/c.php'));
+ct_ok('account mail explains itself instead of offering unsubscribe', !str_contains($plainRender['html'], 'Unsubscribe')
+    && str_contains($plainRender['html'], 'about your church account'));
+$opens = email_render($doc, ['first_name' => 'Ada'], ['purpose' => 'news', 'ref' => str_repeat('B', 22), 'track_opens' => true]);
+ct_ok('the open pixel only when asked for', str_contains($opens['html'], '/email/o.php?r=' . str_repeat('B', 22)) && !str_contains($rendered['html'], '/email/o.php'));
+$noName = email_render(ct_doc(), [], ['purpose' => 'news']);
+ct_eq('no first name → "friend"', 'Hello friend', $noName['subject']);
+$evDoc = ct_doc([['type' => 'event', 'event_id' => 5], ['type' => 'footer']]);
+$evHtml = email_render($evDoc, [], ['purpose' => 'news', 'event_resolver' => static fn (int $id) => $id === 5
+    ? ['title' => 'Chara Night', 'tagline' => '', 'when' => 'Saturday 28 November · 6:00 PM', 'venue' => 'Main hall', 'url' => 'https://hodlekki.org/e/chara']
+    : null]);
+ct_ok('an event card renders from Special Events', str_contains($evHtml['html'], 'Chara Night') && str_contains($evHtml['html'], 'https://hodlekki.org/e/chara'));
+$evGone = email_render($evDoc, [], ['purpose' => 'news', 'event_resolver' => static fn (int $id) => null]);
+ct_ok('a cancelled event is left out, not shown wrong', $evGone['ok'] && !str_contains($evGone['html'], 'EVENT'));
+
+// ===========================================================================
+ct_section('9. Unsubscribe, clicks, opens');
+// ===========================================================================
+$u = ct_db();
+ct_user($u, 40, 'Seyi', 'Member');
+ct_at('2026-11-16 09:00');
+ct_confirm($u, 40, 'seyi@gmail.com');
+$q = email_send_doc($u, $doc, ['id' => 40, 'first_name' => 'Seyi'], ['lane' => 'campaign', 'purpose' => 'news', 'flow' => 'campaign',
+    'to_email' => 'seyi@gmail.com', 'track' => true]);
+email_worker_run($u, ['endpoints_ready' => true, 'transport' => ct_transport(), 'now' => campaigns_now()]);
+ct_eq('a click is sent where the email said', 'https://hodlekki.org/', email_track_click($u, $q['ref'], 1));
+ct_eq('an index the email never had goes nowhere', null, email_track_click($u, $q['ref'], 7));
+ct_eq('a made-up ref goes nowhere', null, email_track_click($u, str_repeat('Z', 22), 0));
+ct_ok('the click is recorded', ct_count($u, 'email_events', "kind = 'click'") === 1
+    && $u->query('SELECT clicked_at FROM email_outbox WHERE id = ' . $q['id'])->fetchColumn() !== null);
+email_track_open($u, $q['ref']);
+email_track_open($u, $q['ref']);
+ct_eq('an open is counted once', 1, ct_count($u, 'email_events', "kind = 'open'"));
+ct_eq('one-click unsubscribe works', true, email_unsubscribe($u, $q['ref'], 'one_click', '9.9.9.9')['ok']);
+ct_eq('…and withdraws church news by email', 'withdrawn', email_consent_state($u, 40));
+ct_eq('…remembering which email it came from', (int) $q['id'], (int) email_consent_current($u, 40)['outbox_id']);
+ct_eq('a second click says already', true, email_unsubscribe($u, $q['ref'])['already'] ?? false);
+ct_eq('undo resubscribes', 'granted', (email_resubscribe($u, $q['ref'])['ok'] ? email_consent_state($u, 40) : 'no'));
+ct_eq('an unknown ref is refused', 'UNKNOWN', email_unsubscribe($u, 'nope')['code'] ?? null);
+ct_eq('the pixel is a GIF', 'GIF89a', substr(email_pixel_gif(), 0, 6));
+
+// ===========================================================================
+ct_section('10. Bounce and complaint reports');
+// ===========================================================================
+$ref = $q['ref'];
+$dsnHard = "From: Mail Delivery System <MAILER-DAEMON@server.example>\r\nTo: system@hodlekki.org\r\nSubject: Mail delivery failed\r\n"
+    . "Content-Type: multipart/report; report-type=delivery-status; boundary=\"BOUND\"\r\n\r\n"
+    . "--BOUND\r\nContent-Type: text/plain\r\n\r\nYour message could not be delivered.\r\n"
+    . "--BOUND\r\nContent-Type: message/delivery-status\r\n\r\nReporting-MTA: dns; server.example\r\n\r\n"
+    . "Final-Recipient: rfc822; seyi@gmail.com\r\nAction: failed\r\nStatus: 5.1.1\r\nDiagnostic-Code: smtp; 550 5.1.1 user unknown\r\n"
+    . "--BOUND\r\nContent-Type: text/rfc822-headers\r\n\r\nFrom: system@hodlekki.org\r\nTo: seyi@gmail.com\r\nX-HOD-Ref: {$ref}\r\nMessage-ID: <abc@hodlekki.org>\r\n"
+    . "--BOUND--\r\n";
+$p = email_dsn_parse($dsnHard);
+ct_ok('an RFC 3464 report is read', $p !== null && $p['kind'] === 'bounce' && $p['recipients'][0]['email'] === 'seyi@gmail.com');
+ct_eq('5.1.1 is hard', true, $p['recipients'][0]['hard']);
+ct_eq('our ref is found in the returned headers', $ref, $p['ref']);
+$applied = email_record_bounce($u, $p);
+ct_ok('applying it suppresses the address and marks the email', $applied['suppressed'] === 1 && email_is_suppressed($u, 'seyi@gmail.com')
+    && $u->query('SELECT bounced_at FROM email_outbox WHERE id = ' . $q['id'])->fetchColumn() !== null);
+
+$full = str_replace(['Status: 5.1.1', '550 5.1.1 user unknown'], ['Status: 5.2.2', '552 5.2.2 mailbox full'], $dsnHard);
+ct_eq('a full mailbox (5.2.2) is soft', false, email_dsn_parse($full)['recipients'][0]['hard']);
+$delay = str_replace(['Action: failed', 'Status: 5.1.1'], ['Action: delayed', 'Status: 4.4.1'], $dsnHard);
+ct_eq('a delay is only a delay', 'delay', email_dsn_parse($delay)['kind']);
+$exim = "From: Mail Delivery System <Mailer-Daemon@server.hodlekki.org>\nTo: system@hodlekki.org\nX-Failed-Recipients: gone@yahoo.com\n"
+    . "Subject: Mail delivery failed: returning message to sender\n\nThis message was created automatically by mail delivery software.\n\n"
+    . "A message that you sent could not be delivered to one or more of its\nrecipients. This is a permanent error. The following address(es) failed:\n\n"
+    . "  gone@yahoo.com\n    host mta.yahoo.com said: 554 delivery error: dd This user doesn't have a yahoo.com account\n\n"
+    . "------ This is a copy of the message, including all the headers. ------\n\nX-HOD-Ref: {$ref}\nSubject: Hi\n";
+$pe = email_dsn_parse($exim);
+ct_ok("Exim's own bounce is read", $pe !== null && $pe['recipients'][0]['email'] === 'gone@yahoo.com' && $pe['recipients'][0]['hard'] === true && $pe['ref'] === $ref);
+$arf = "From: feedback@mail.example\nTo: system@hodlekki.org\nContent-Type: multipart/report; report-type=feedback-report; boundary=\"F\"\n\n"
+    . "--F\nContent-Type: text/plain\n\nThis is an abuse report\n--F\nContent-Type: message/feedback-report\n\nFeedback-Type: abuse\nUser-Agent: x\nVersion: 1\n\n"
+    . "--F\nContent-Type: message/rfc822\n\nFrom: system@hodlekki.org\nTo: Seyi <seyi@gmail.com>\nX-HOD-Ref: {$ref}\n\nbody\n--F--\n";
+$pa = email_dsn_parse($arf);
+ct_ok('a spam complaint (ARF) is read', $pa !== null && $pa['kind'] === 'complaint' && $pa['recipients'][0]['email'] === 'seyi@gmail.com');
+email_consent_record($u, 40, 'granted', 'profile', ['text' => EMAIL_CONSENT_NEWS_TEXT]);
+email_record_bounce($u, $pa);
+ct_eq('a complaint withdraws church news', 'withdrawn', email_consent_state($u, 40));
+$capB = str_replace('550 5.1.1 user unknown', '550 Domain hodlekki.org has exceeded the max emails per hour (50/50 (100%)) allowed. Message discarded.', $dsnHard);
+$u->exec("UPDATE email_outbox SET status = 'sent' WHERE id = " . $q['id']);
+$pc = email_dsn_parse($capB);
+ct_eq("the host's cap in a bounce is not the person's fault", 'cap', $pc['kind']);
+$appliedCap = email_record_bounce($u, $pc);
+ct_ok('…the email goes back in the queue for next hour', $appliedCap['requeued']
+    && $u->query('SELECT status FROM email_outbox WHERE id = ' . $q['id'])->fetchColumn() === 'queued');
+ct_eq('an ordinary email is not a report', null, email_dsn_parse("From: a@b.com\nSubject: Hello\n\nJust saying hi"));
+$forged = str_replace($ref, str_repeat('F', 22), $arf);
+email_consent_record($u, 40, 'granted', 'profile', ['text' => EMAIL_CONSENT_NEWS_TEXT]);
+email_suppression_release($u, 'seyi@gmail.com', 900);
+ct_eq('a forged complaint naming no email we sent is ignored', 'unmatched', email_record_bounce($u, email_dsn_parse($forged))['kind']);
+ct_ok('…nothing suppressed, consent untouched', !email_is_suppressed($u, 'seyi@gmail.com') && email_consent_state($u, 40) === 'granted');
+$forgedCap = "From: x@evil.example\nX-Failed-Recipients: a@b.com\n\nexceeded the max emails per hour (1/1 (100%))\nX-HOD-Ref: " . str_repeat('G', 22) . "\n";
+email_record_bounce($u, email_dsn_parse($forgedCap));
+ct_eq('a forged "cap" report teaches nothing', '', email_setting($u, 'learned_cap'));
+
+// ===========================================================================
+ct_section('11. Default rules');
+// ===========================================================================
+$d = ct_db();
+ct_eq('three default rules are created', 3, automation_ensure_defaults($d));
+ct_eq('…once', 0, automation_ensure_defaults($d));
+ct_eq('…all switched off', 0, ct_count($d, 'automation_rules', 'is_enabled = 1'));
+foreach (AUTOMATION_KINDS as $module => $kind) {
+    $check = automation_config_validate($kind, automation_default_config($module));
+    ct_ok("the default {$module} rule is valid", $check['ok'], implode('; ', $check['errors']));
+}
+$journey = automation_rule_get($d, 'embrace');
+ct_eq('the journey has 6 weekly welcomes', 6, count($journey['config']['steps'][0]['series']));
+ct_eq('Monday 10:00', ['weekday' => 1, 'time' => '10:00'], $journey['config']['steps'][0]['when']);
+ct_eq('Wednesday and Saturday reminders', [3, 6], [$journey['config']['steps'][1]['when']['weekday'], $journey['config']['steps'][2]['when']['weekday']]);
+$abs = automation_rule_get($d, 'charis');
+ct_eq('absence: 2 / 4 / 8', [2, 4, 8], array_column($abs['config']['steps'], 'threshold'));
+ct_eq('absence: person, team, pastor', ['member', 'team', 'pastor'], array_column($abs['config']['steps'], 'target'));
+ct_eq('Charis covers members', ['Member', 'Worker', 'Pastor'], $abs['config']['audience']['statuses']);
+ct_eq('Assimilation covers visitors', ['Visitor', 'Non_Member'], automation_rule_get($d, 'assimilation')['config']['audience']['statuses']);
+foreach (automation_default_journey()['steps'][0]['series'] as $i => $week) {
+    ct_ok('week ' . ($i + 1) . ' SMS fits one text', mb_strlen($week['sms']) <= 160 && sms_segments(sms_render($week['sms'], ['first_name' => 'Oluwaseun']))['pages'] <= 1);
+}
+$badCfg = automation_config_validate('absence', ['audience' => ['statuses' => ['Wizard']], 'when' => ['weekday' => 9, 'time' => '25:00'], 'steps' => []]);
+ct_ok('a broken rule is refused with reasons', !$badCfg['ok'] && count($badCfg['errors']) >= 3);
+$v1 = (int) $journey['version'];
+ct_eq('saving bumps the version', true, automation_rule_save($d, 'embrace', $journey['config'], 900, $v1)['ok']);
+ct_eq("saving over someone else's edit is refused", false, automation_rule_save($d, 'embrace', $journey['config'], 900, $v1)['ok']);
+
+// ===========================================================================
+ct_section('12. Embrace first-timer journey');
+// ===========================================================================
+$j = ct_db();
+ct_at('2026-11-15 08:00');
+$sun15 = ct_service($j, '2026-11-15');
+ct_user($j, 10, 'Ada', '1st_Timer', ['created_at' => '2026-11-15 10:00:00', 'phone' => '08031111111']);
+ct_present($j, 10, '2026-11-15', $sun15);
+ct_confirm($j, 10, 'ada@gmail.com');
+ct_user($j, 11, 'Bayo', '1st_Timer', ['created_at' => '2026-11-15 10:00:00', 'phone' => '08031234567']);
+ct_user($j, 12, 'Chika', '1st_Timer', ['created_at' => '2026-11-15 10:00:00']);
+ct_user($j, 13, 'Dupe', '3rd_Timer', ['created_at' => '2026-11-01 10:00:00', 'phone' => '08032222222']);
+ct_user($j, 14, 'Emeka', '1st_Timer', ['created_at' => '2026-11-17 18:00:00', 'phone' => '08033333333']);
+ct_user($j, 15, 'Funke', '1st_Timer', ['created_at' => '2026-09-01 10:00:00', 'phone' => '08034444444']);
+ct_user($j, 16, 'Gbenga', '1st_Timer', ['created_at' => '2026-11-15 10:00:00', 'phone' => '08035555555', 'attendance_status' => 'Relocated']);
+ct_user($j, 18, 'Ijeoma', '1st_Timer', ['created_at' => '2026-11-15 10:00:00', 'phone' => '08037777770']);
+email_consent_record($j, 18, 'withdrawn', 'staff');   // said no to church news, has no confirmed email
+ct_user($j, 17, 'Halima', '2nd_Timer', ['created_at' => '2026-11-08 10:00:00', 'phone' => '08036666666']);
+ct_confirm($j, 17, 'halima@gmail.com');
+email_consent_record($j, 17, 'withdrawn', 'one_click');
+automation_ensure_defaults($j);
+$rule = automation_rule_get($j, 'embrace');
+ct_at('2026-11-16 08:00');
+automation_rule_set_enabled($j, $rule['id'], true, 900, 'include');
+
+ct_at('2026-11-16 09:59');
+ct_eq('nothing before 10:00', [], automation_tick($j, ['now' => campaigns_now()])['runs']);
+ct_at('2026-11-16 10:05');
+$t = automation_tick($j, ['now' => campaigns_now()]);
+ct_eq('Monday 10:05: the welcome runs once', 1, count($t['runs']));
+$dec = [];
+foreach ($t['runs'][0]['decisions'] as $x) {
+    $dec[$x['user_id']] = $x['channel'] . ':' . $x['outcome'];
+}
+ct_eq('Ada (confirmed + yes) gets an email', 'email:queued', $dec[10] ?? null);
+ct_eq('Bayo (no email, a mobile) gets an SMS', 'sms:queued', $dec[11] ?? null);
+ct_eq('Chika (neither) is skipped', 'none:skipped_no_contact', $dec[12] ?? null);
+ct_eq('Halima (unsubscribed) is skipped, not texted', 'none:skipped_consent', $dec[17] ?? null);
+ct_eq('Ijeoma (said no, no email on file) is skipped, not texted', 'none:skipped_consent', $dec[18] ?? null);
+ct_ok('3rd Timers, people who joined later, finished journeys and departed people are left out',
+    !isset($dec[13]) && !isset($dec[14]) && !isset($dec[15]) && !isset($dec[16]));
+$adaMail = $j->query("SELECT * FROM email_outbox WHERE user_id = 10 AND lane = 'automation'")->fetch();
+ct_ok('Ada\'s email is week 1, from the Embrace team, tracked', $adaMail['subject'] === 'Welcome to the family, Ada'
+    && $adaMail['from_name'] === 'HOD Lekki Embrace Team' && $adaMail['flow'] === 'embrace.welcome' && $adaMail['links_json'] !== null);
+ct_ok('the scripture in it is the KJV', str_contains((string) $adaMail['html'], email_h(bible_kjv_chapter(19, 122)[0]['t'])));
+$sms = $j->query("SELECT * FROM sms_campaigns")->fetchAll();
+ct_ok('the SMS goes to SMS Studio as one campaign', count($sms) === 1 && $sms[0]['audience'] === 'automation' && str_contains($sms[0]['body_template'], '{{first_name}}'));
+$queued = json_decode((string) $j->query('SELECT recipient_json FROM sms_queue')->fetchColumn(), true);
+ct_eq('…with the number in SMS Studio\'s form', '2348031234567', $queued['phone'] ?? null);
+ct_eq('…and sms_log is never written here', 0, ct_count($j, 'sms_log'));
+ct_eq('the run is recorded', ['emailed' => 1, 'texted' => 1], array_intersect_key($j->query('SELECT emailed, texted FROM automation_runs')->fetch(), ['emailed' => 1, 'texted' => 1]) === ['emailed' => 1, 'texted' => 1] ? ['emailed' => 1, 'texted' => 1] : 'mismatch');
+ct_eq('a second tick the same morning does nothing', [], automation_tick($j, ['now' => campaigns_now()->modify('+5 minutes')])['runs']);
+ct_eq('even forcing the occasion again cannot double-send', null, automation_run_occasion($j, automation_rule_get($j, 'embrace'),
+    automation_due_occasions(automation_rule_get($j, 'embrace'), campaigns_now())[0]));
+
+ct_at('2026-11-18 12:05');
+$wed = automation_tick($j, ['now' => campaigns_now()]);
+ct_eq('Wednesday 12:05: the midweek reminder', 'midweek', $wed['runs'][0]['decisions'][0]['step'] ?? null);
+ct_eq('Ada, Bayo and Emeka (who joined on Tuesday) get it', 3, $wed['runs'][0]['counts']['emailed'] + $wed['runs'][0]['counts']['texted']);
+ct_ok('a date-bound reminder must leave the same day', $j->query("SELECT send_by FROM email_outbox WHERE flow = 'embrace.midweek'")->fetchColumn() === '2026-11-18 23:59:59');
+
+ct_at('2026-11-23 10:05');
+$mon2 = automation_tick($j, ['now' => campaigns_now()]);
+$dec2 = [];
+foreach ($mon2['runs'][0]['decisions'] as $x) {
+    $dec2[$x['user_id']] = $x['outcome'];
+}
+ct_eq("Ada's second Monday brings the second email", 'Getting to know us, Ada',
+    $j->query("SELECT subject FROM email_outbox WHERE user_id = 10 AND flow = 'embrace.welcome' ORDER BY id DESC LIMIT 1")->fetchColumn());
+ct_eq('Emeka, who joined on a Tuesday, starts at the beginning', 'queued', $dec2[14] ?? null);
+$emekaText = $j->query("SELECT body_template FROM sms_campaigns ORDER BY id DESC")->fetchAll(PDO::FETCH_COLUMN);
+ct_ok("…with week 1's text", in_array(automation_default_journey()['steps'][0]['series'][0]['sms'], $emekaText, true));
+
+$j->exec("UPDATE users SET spiritual_status = '3rd_Timer' WHERE id = 10");
+ct_at('2026-11-30 10:05');
+$mon3 = automation_tick($j, ['now' => campaigns_now()]);
+ct_ok('a 3rd Timer leaves the journey', !in_array(10, array_column($mon3['runs'][0]['decisions'], 'user_id'), true));
+ct_at('2026-12-28 10:05');
+$late = automation_tick($j, ['now' => campaigns_now()]);
+ct_ok('after 6 weeks the journey ends', !in_array(11, array_column($late['runs'][0]['decisions'] ?? [], 'user_id'), true));
+
+// ===========================================================================
+ct_section('13. Absence ladders on the real Charis AWOL engine');
+// ===========================================================================
+$a = ct_db();
+ct_at('2026-09-01 08:00');
+$sundays = [];
+for ($day = campaigns_dt('2026-09-06'); $day <= campaigns_dt('2027-01-31'); $day = $day->modify('+7 days')) {
+    $sundays[$day->format('Y-m-d')] = ct_service($a, $day->format('Y-m-d'));
+}
+$thu = ct_service($a, '2026-10-15', 'Midweek_Service');
+ct_user($a, 50, 'Musa', 'Member', ['phone' => '08037777777', 'region_id' => 1]);   // drifts after 4 Oct
+ct_user($a, 51, 'Nkechi', 'Member', ['phone' => '08038888888']);                   // misses Sundays but comes midweek
+ct_user($a, 52, 'Ola', 'Visitor', ['phone' => '08039999999']);                      // not a Charis status
+foreach ($sundays as $date => $id) {
+    if ($date <= '2026-10-04') {
+        ct_present($a, 50, $date, $id);
+        ct_present($a, 51, $date, $id);
+        ct_present($a, 52, $date, $id);
+    }
+    if ($date >= '2026-11-01') {
+        ct_present($a, 51, $date, $id);   // Nkechi is back from November
+    }
+}
+// Nkechi misses 11 and 18 Oct but comes on Thursday 15 Oct: midweek presence
+// clears the streak (midweek absence never counts), so on 19 Oct she is at 1.
+ct_present($a, 51, '2026-10-15', $thu);
+ct_confirm($a, 50, 'musa@gmail.com');
+automation_ensure_defaults($a);
+$charis = automation_rule_get($a, 'charis');
+ct_at('2026-10-05 08:00');
+automation_rule_set_enabled($a, $charis['id'], true, 900, 'include');
+
+$weekly = static function (PDO $pdo, string $monday): array {
+    ct_at($monday . ' 09:05');
+    $t = automation_tick($pdo, ['now' => campaigns_now()]);
+    $out = [];
+    foreach ($t['runs'] as $run) {
+        foreach ($run['decisions'] as $x) {
+            $out[] = $x['user_id'] . ':' . $x['step'] . ':' . $x['outcome'];
+        }
+    }
+    return $out;
+};
+ct_eq('Mon 12 Oct, one Sunday missed: nothing', [], $weekly($a, '2026-10-12'));
+ct_eq('Mon 19 Oct, two missed: Musa gets "we miss you"; Nkechi\'s Thursday visit cleared hers',
+    ['50:miss_note:queued'], $weekly($a, '2026-10-19'));
+ct_eq('the email went out as Charis', 'charis.miss_note', $a->query('SELECT flow FROM email_outbox WHERE user_id = 50 ORDER BY id DESC LIMIT 1')->fetchColumn());
+ct_eq('Mon 26 Oct: Musa at three (nothing new); Nkechi now two Sundays after her Thursday',
+    ['51:miss_note:queued'], $weekly($a, '2026-10-26'));
+ct_eq('Mon 2 Nov, four missed: the team is told', ['50:team_alert:alerted'], $weekly($a, '2026-11-02'));
+$bell = $a->query("SELECT * FROM system_notifications WHERE user_id = 901")->fetch();
+ct_ok('…the Charis HOD gets a bell naming Musa and the streak', $bell && str_contains($bell['title'], '4 Sundays away: Musa Test')
+    && $bell['link_url'] === '/modules/charis/index.php');
+foreach (['2026-11-09', '2026-11-16', '2026-11-23'] as $m) {
+    $weekly($a, $m);
+}
+ct_eq('Mon 30 Nov, eight missed: his region pastor is told', ['50:pastor_alert:alerted'], $weekly($a, '2026-11-30'));
+ct_eq('…the Orchid pastor, not everyone', 1, ct_count($a, 'system_notifications', "user_id = 902 AND title LIKE '8 Sundays%'"));
+ct_ok('no step ever fired twice for one streak', ct_count($a, 'automation_sends', "user_id = 50 AND outcome IN ('queued', 'alerted')") === 3);
+ct_present($a, 50, '2026-12-06', $sundays['2026-12-06']);
+ct_eq('Musa comes back on 6 Dec: the streak resets, nothing is sent', [], $weekly($a, '2026-12-07'));
+$weekly($a, '2026-12-14');
+ct_eq('…and drifts again: two more missed → a NEW "we miss you"', ['50:miss_note:queued'], $weekly($a, '2026-12-21'));
+ct_eq('Ola (a Visitor) never entered Charis\'s list', 0, ct_count($a, 'automation_sends', 'user_id = 52'));
+
+// Catch-up and "start fresh"
+$f = ct_db();
+ct_at('2026-09-01 08:00');
+foreach (range(0, 15) as $w) {
+    $date = campaigns_dt('2026-09-06')->modify('+' . (7 * $w) . ' days')->format('Y-m-d');
+    $sid = ct_service($f, $date);
+    if ($date <= '2026-09-13') {
+        ct_present($f, 60, $date, $sid);
+        ct_present($f, 61, $date, $sid);
+    }
+}
+ct_user($f, 60, 'Pius', 'Member', ['phone' => '08030000001']);
+ct_user($f, 61, 'Queen', 'Member', ['phone' => '08030000002']);
+automation_ensure_defaults($f);
+$cr = automation_rule_get($f, 'charis');
+$cfg = $cr['config'];
+$cfg['steps'][] = ['key' => 'second_note', 'label' => 'Still missing you', 'target' => 'member', 'threshold' => 6,
+    'email' => $cfg['steps'][0]['email'], 'sms' => 'Hi {{first_name}}, we still miss you.'];
+automation_rule_save($f, 'charis', $cfg, 900);
+// By Mon 2 Nov both are 7 Sundays away (20 Sep … 1 Nov).
+ct_at('2026-11-02 08:00');
+$fresh = automation_rule_set_enabled($f, $cr['id'], true, 900, 'fresh');
+ct_ok('"start fresh" baselines everyone already past a step', $fresh['baselined'] >= 4);
+ct_eq('…so the first check sends nothing', [], $weekly($f, '2026-11-02'));
+ct_eq('…until they cross the next step (8: the pastor)', ['60:pastor_alert:alerted', '61:pastor_alert:alerted'], $weekly($f, '2026-11-09'));
+
+$g2 = ct_db();
+ct_at('2026-09-01 08:00');
+foreach (range(0, 10) as $w) {
+    $date = campaigns_dt('2026-09-06')->modify('+' . (7 * $w) . ' days')->format('Y-m-d');
+    $sid = ct_service($g2, $date);
+    if ($date <= '2026-09-13') {
+        ct_present($g2, 60, $date, $sid);
+    }
+}
+ct_user($g2, 60, 'Pius', 'Member', ['phone' => '08030000001']);
+automation_ensure_defaults($g2);
+automation_rule_save($g2, 'charis', $cfg, 900);
+ct_at('2026-11-02 08:00');
+automation_rule_set_enabled($g2, automation_rule_get($g2, 'charis')['id'], true, 900, 'include');
+$catch = $weekly($g2, '2026-11-02');
+sort($catch);
+ct_eq('"include": 7 away in one go → only the highest step per audience fires',
+    ['60:second_note:queued', '60:team_alert:alerted'], $catch);
+ct_eq('…the lower one is recorded as superseded', 'superseded',
+    $g2->query("SELECT outcome FROM automation_sends WHERE user_id = 60 AND step_key = 'miss_note'")->fetchColumn());
+
+// Away longer than the engine looks back (archive 12 + 8 + 4 weeks): the
+// streak must keep ONE identity, or every step would fire again every week.
+$lng = ct_db();
+ct_at('2026-01-01 08:00');
+for ($day = campaigns_dt('2026-01-04'); $day <= campaigns_dt('2026-12-27'); $day = $day->modify('+7 days')) {
+    $sid = ct_service($lng, $day->format('Y-m-d'));
+    if ($day->format('Y-m-d') <= '2026-02-01') {
+        ct_present($lng, 80, $day->format('Y-m-d'), $sid);
+    }
+}
+ct_user($lng, 80, 'Sola', 'Member', ['phone' => '08030000080', 'created_at' => '2025-06-01 10:00:00']);
+ct_user($lng, 81, 'Taiwo', 'Member', ['phone' => '08030000081', 'created_at' => '2025-06-01 10:00:00']);  // never in church
+automation_ensure_defaults($lng);
+ct_at('2026-11-01 08:00');
+automation_rule_set_enabled($lng, automation_rule_get($lng, 'charis')['id'], true, 900, 'include');
+$firstWeek = $weekly($lng, '2026-11-02');
+ct_eq('long-absent people get each step once…', 6, count($firstWeek));
+ct_eq('…and nothing the next week', [], $weekly($lng, '2026-11-09'));
+ct_eq('…or the week after', [], $weekly($lng, '2026-11-16'));
+
+// ===========================================================================
+ct_section('14. One member-facing message a day, across modules');
+// ===========================================================================
+$x = ct_db();
+ct_at('2026-11-01 08:00');
+foreach (['2026-11-01', '2026-11-08', '2026-11-15'] as $date) {
+    $ids[$date] = ct_service($x, $date);
+}
+ct_user($x, 70, 'Rotimi', '1st_Timer', ['created_at' => '2026-11-01 10:00:00', 'phone' => '08030000070']);
+ct_present($x, 70, '2026-11-01', $ids['2026-11-01']);
+ct_confirm($x, 70, 'rotimi@gmail.com');
+automation_ensure_defaults($x);
+$as = automation_rule_get($x, 'assimilation');
+$acfg = $as['config'];
+$acfg['audience']['statuses'] = ['1st_Timer'];
+automation_rule_save($x, 'assimilation', $acfg, 900);
+ct_at('2026-11-02 08:00');
+automation_rule_set_enabled($x, $as['id'], true, 900, 'include');
+automation_rule_set_enabled($x, automation_rule_get($x, 'embrace')['id'], true, 900, 'include');
+ct_at('2026-11-16 09:05');
+$absRun = automation_tick($x, ['now' => campaigns_now()]);
+ct_eq('09:05 Assimilation reaches Rotimi first', 'queued', $absRun['runs'][0]['decisions'][0]['outcome'] ?? null);
+ct_at('2026-11-16 10:05');
+$welRun = automation_tick($x, ['now' => campaigns_now()]);
+ct_eq('10:05 the Embrace welcome is deferred, not sent the same day', 'deferred', $welRun['runs'][0]['decisions'][0]['outcome'] ?? null);
+ct_eq('one email that day', 1, ct_count($x, 'email_outbox', "user_id = 70 AND lane = 'automation'"));
+ct_at('2026-11-17 00:05');
+ct_eq('not just after midnight', 0, automation_tick($x, ['now' => campaigns_now()])['retried']['retried'] ?? 0);
+ct_at('2026-11-17 08:00');
+ct_eq('nor before the time it was first meant to go (10:00)', 0, automation_tick($x, ['now' => campaigns_now()])['retried']['retried'] ?? 0);
+ct_at('2026-11-17 10:05');
+$retry = automation_tick($x, ['now' => campaigns_now()]);
+ct_eq('the next day at 10:05 the deferred welcome goes', 1, $retry['retried']['retried']);
+ct_eq('…as the series\' next email', 2, ct_count($x, 'email_outbox', "user_id = 70 AND lane = 'automation'"));
+ct_eq('…and the ledger says so', 'queued', $x->query("SELECT outcome FROM automation_sends WHERE user_id = 70 AND step_key = 'welcome'")->fetchColumn());
+$x->prepare('INSERT INTO automation_person_day (user_id, day, rule_id, step_key, created_at) VALUES (70, ?, 99, ?, ?)')
+    ->execute(['2026-11-18', 'other', '2026-11-18 08:00:00']);
+ct_at('2026-11-18 12:05');
+$wedX = automation_tick($x, ['now' => campaigns_now()]);
+ct_eq('a date-bound reminder that loses the day is skipped, not deferred', 'skipped_same_day', $wedX['runs'][0]['decisions'][0]['outcome'] ?? null);
+
+// ===========================================================================
+ct_section('15. Dry runs write nothing');
+// ===========================================================================
+$tables = ['automation_runs', 'automation_sends', 'automation_person_day', 'email_outbox', 'sms_campaigns', 'sms_queue', 'system_notifications'];
+$before = array_map(static fn ($t) => ct_count($a, $t), $tables);
+ct_at('2027-01-04 09:05');
+$dry = automation_tick($a, ['now' => campaigns_now(), 'dry_run' => true]);
+ct_ok('a dry run plans', $dry['ran'] && count($dry['runs']) === 1);
+ct_eq('…and writes nothing', $before, array_map(static fn ($t) => ct_count($a, $t), $tables));
+$preview = automation_preview($a, automation_rule_get($a, 'charis'), campaigns_now());
+ct_ok('the tab preview lists people and channels', isset($preview['counts'], $preview['decisions']));
+
+// ===========================================================================
+ct_section('16. Coverage');
+// ===========================================================================
+$cov = email_coverage($j);
+ct_eq('first timers counted from the Embrace pipeline', 9, $cov['first_timers']['total']);
+ct_eq('confirmed addresses among them', 2, $cov['first_timers']['confirmed']);
+ct_eq('reached by email (Ada: confirmed + yes; a 3rd Timer is still in the pipeline)', 1, $cov['first_timers']['news']);
+ct_eq('unsubscribed (Halima, and Ijeoma who has no address)', 2, $cov['first_timers']['unsubscribed']);
+ct_ok('the rest split into SMS-only and unreachable', $cov['first_timers']['sms_only'] + $cov['first_timers']['unreachable']
+    + $cov['first_timers']['news'] + $cov['first_timers']['unsubscribed'] === $cov['first_timers']['total']);
+
+// ===========================================================================
+ct_section('17. Every function the module calls exists');
+// ===========================================================================
+$files = array_merge(glob(__DIR__ . '/../../includes/campaigns/*.php'), [
+    __DIR__ . '/../../cron/email_worker.php', __DIR__ . '/../../cron/automation_tick.php', __DIR__ . '/../../includes/mailer.php',
+]);
+$optional = ['fastcgi_finish_request', 'litespeed_finish_request', 'push_release_response'];
+$missing = [];
+foreach ($files as $file) {
+    $tokens = token_get_all((string) file_get_contents($file));
+    $prev = null;
+    foreach ($tokens as $i => $tok) {
+        if (is_array($tok) && in_array($tok[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+            continue;
+        }
+        if (is_array($tok) && $tok[0] === T_STRING) {
+            $next = null;
+            for ($k = $i + 1; isset($tokens[$k]); $k++) {
+                if (is_array($tokens[$k]) && $tokens[$k][0] === T_WHITESPACE) {
+                    continue;
+                }
+                $next = $tokens[$k];
+                break;
+            }
+            $prevId = is_array($prev) ? $prev[0] : $prev;
+            if ($next === '(' && !in_array($prevId, [T_FUNCTION, T_NEW, T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_CONST], true)) {
+                $name = $tok[1];
+                if (!function_exists($name) && !in_array($name, $optional, true)) {
+                    $missing[basename($file) . ':' . $name] = true;
+                }
+            }
+        }
+        $prev = $tok;
+    }
+}
+ct_eq('no call to a function that does not exist', [], array_keys($missing));
+
+campaigns_set_clock(false);
+echo "\n{$GLOBALS['ct_passed']} passed, {$GLOBALS['ct_failed']} failed\n";
+exit($GLOBALS['ct_failed'] === 0 ? 0 : 1);

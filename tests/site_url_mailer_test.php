@@ -97,6 +97,12 @@ is_same('a real host keeps certificate checks', false, hod_mail_is_local_host('m
 $unsent = with_env(['MAIL_PASSWORD' => ''] + $mailEnv, [], fn () => hod_send_mail('a@example.com', 'x', '<p>x</p>'));
 is_same('an unconfigured send fails quietly, no exception', false, $unsent['ok']);
 is_same('and says why', true, str_contains((string) $unsent['error'], 'not set up'));
+is_same('the result always carries a message_id key', true, array_key_exists('message_id', $unsent));
+is_same('List-Unsubscribe is an allowed extra header', true, hod_mail_header_ok('List-Unsubscribe', '<https://hodlekki.org/email/unsubscribe.php?r=x>'));
+is_same('a header PHPMailer owns is refused (From)', false, hod_mail_header_ok('From', 'someone@example.com'));
+is_same('a header PHPMailer owns is refused (Bcc)', false, hod_mail_header_ok('bcc', 'all@example.com'));
+is_same('a value with a line break is refused (injection)', false, hod_mail_header_ok('X-HOD-Ref', "abc\r\nBcc: all@example.com"));
+is_same('a name with odd characters is refused', false, hod_mail_header_ok('X Bad:Name', 'v'));
 
 echo "origin lock (bin/edge_lock.sh)\n";
 $bash = trim((string) @shell_exec('command -v bash 2>/dev/null'));

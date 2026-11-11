@@ -285,6 +285,22 @@ jobs:
           fi
           php tests/permissions/run.php
 
+      - name: Email and automation tests
+        run: |
+          set -euo pipefail
+
+          # No MySQL, no network, no PHPMailer: personal addresses, consent,
+          # the hourly budget, the outbox worker (fake transport), block
+          # documents and the renderer, bounces, the Embrace journey and the
+          # absence ladders on the REAL Charis AWOL engine, against SQLite
+          # built from the real migration (includes/campaigns/). It prints
+          # SKIP and exits 0 without pdo_sqlite, so refuse to run without it.
+          if ! php -m | grep -qix 'pdo_sqlite'; then
+            echo "::error::pdo_sqlite is missing — the email and automation tests would be skipped"
+            exit 1
+          fi
+          php tests/campaigns/run.php
+
       - name: SMS Studio helper tests
         # No database, no network: phone normalisation, GSM-7 segment counting,
         # the sender name written into every text, the wallet pre-flight
@@ -458,6 +474,15 @@ jobs:
           set -euo pipefail
           php -r '$p = new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"); $p->exec("CREATE DATABASE IF NOT EXISTS monitor_it CHARACTER SET utf8mb4");'
           php tests/monitor/run.php
+
+      - name: Email and automation on a real database (unique keys with NULLs, the budget, locks)
+        env:
+          SE_TEST_DB_HOST: 127.0.0.1
+          SE_TEST_DB_PORT: '3306'
+          SE_TEST_DB_USER: root
+          SE_TEST_DB_PASS: root
+          SE_TEST_DB_NAME: se_it
+        run: php tests/campaigns/integration.php
 
   deploy:
     name: Deploy via webhook

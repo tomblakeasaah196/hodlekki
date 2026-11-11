@@ -134,18 +134,63 @@ if (!function_exists('hod_mailer')) {
     }
 }
 
+if (!function_exists('hod_mail_header_ok')) {
+    /**
+     * A custom header we are willing to add: a plain name, a one-line value,
+     * and never one PHPMailer sets itself (From, To, Subject, Message-ID…).
+     */
+    function hod_mail_header_ok(string $name, string $value): bool
+    {
+        if (!preg_match('/^[A-Za-z][A-Za-z0-9-]{1,62}$/', $name) || strpbrk($value, "\r\n\0") !== false
+            || strlen($value) > 900) {
+            return false;
+        }
+        $reserved = ['from', 'to', 'cc', 'bcc', 'subject', 'date', 'message-id', 'reply-to', 'sender',
+                     'return-path', 'content-type', 'content-transfer-encoding', 'mime-version'];
+
+        return !in_array(strtolower($name), $reserved, true);
+    }
+}
+
 if (!function_exists('hod_send_mail')) {
     /**
      * Send one email. $to is an address or [address => name]. $html is the body;
      * $text the plain-text part (made from the HTML when omitted).
-     * $options: reply_to, reply_to_name (instead of MAIL_REPLY_TO), from_name.
+     * $options:
+     *   reply_to, reply_to_name  instead of MAIL_REPLY_TO
+     *   from_name                instead of MAIL_FROM_NAME
+     *   headers                  [name => value] extra headers (List-Unsubscribe…);
+     *                            a header that fails hod_mail_header_ok() fails the send
+     *   message_id               '<id@domain>' to use instead of a fresh one, so the
+     *                            caller can record it before sending
+     *   mailer                   a PHPMailer from hod_mailer() with SMTPKeepAlive on,
+     *                            reused for a batch (one SMTP connection); its
+     *                            per-message state is reset here, and the caller
+     *                            closes it with smtpClose()
      *
-     * @return array{ok: bool, error: ?string}
+     * @return array{ok: bool, error: ?string, message_id: ?string}
      */
     function hod_send_mail($to, string $subject, string $html, ?string $text = null, array $options = []): array
     {
+        $messageId = null;
         try {
-            $mail = hod_mailer();
+            $shared = $options['mailer'] ?? null;
+            if ($shared instanceof PHPMailer) {
+                $mail = $shared;
+                $defaults = hod_mail_settings();
+                $mail->clearAllRecipients();
+                $mail->clearReplyTos();
+                $mail->clearCustomHeaders();
+                $mail->clearAttachments();
+                $mail->FromName = $defaults['from_name'];
+                if ($defaults['reply_to'] !== '' && filter_var($defaults['reply_to'], FILTER_VALIDATE_EMAIL)) {
+                    $mail->addReplyTo($defaults['reply_to'], $defaults['reply_to_name']);
+                }
+                $domain = substr(strrchr($defaults['from_address'], '@') ?: '@' . site_host(), 1);
+                $mail->MessageID = sprintf('<%s@%s>', bin2hex(random_bytes(12)), $domain);
+            } else {
+                $mail = hod_mailer();
+            }
             foreach ((is_array($to) ? $to : [$to => '']) as $address => $name) {
                 if (is_int($address)) {
                     [$address, $name] = [$name, ''];
@@ -159,6 +204,20 @@ if (!function_exists('hod_send_mail')) {
                 $mail->clearReplyTos();
                 $mail->addReplyTo((string) $options['reply_to'], (string) ($options['reply_to_name'] ?? ''));
             }
+            if (!empty($options['message_id'])) {
+                $id = (string) $options['message_id'];
+                if (!preg_match('/^<[^<>\s@]+@[^<>\s@]+>$/', $id)) {
+                    throw new RuntimeException('Invalid Message-ID given to hod_send_mail().');
+                }
+                $mail->MessageID = $id;
+            }
+            foreach ((array) ($options['headers'] ?? []) as $name => $value) {
+                if (!hod_mail_header_ok((string) $name, (string) $value)) {
+                    throw new RuntimeException('Refused header: ' . preg_replace('/[^A-Za-z0-9-]/', '?', (string) $name));
+                }
+                $mail->addCustomHeader((string) $name, (string) $value);
+            }
+            $messageId = $mail->MessageID;
             $mail->isHTML(true);
             $mail->Subject = $subject;
             $mail->Body    = $html;
@@ -167,13 +226,19 @@ if (!function_exists('hod_send_mail')) {
             ), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
             $mail->send();
 
-            return ['ok' => true, 'error' => null];
+            return ['ok' => true, 'error' => null, 'message_id' => $messageId];
         } catch (MailerException | RuntimeException $e) {
-            // PHPMailer's messages never contain the password.
+            // PHPMailer's messages never contain the password. ErrorInfo adds the
+            // server's own words ("550 … exceeded the max emails per hour"),
+            // which the exception text leaves out and the outbox needs.
             $reason = $e->getMessage();
+            if (isset($mail) && $mail instanceof PHPMailer && $mail->ErrorInfo !== ''
+                && strlen($mail->ErrorInfo) > strlen($reason)) {
+                $reason = $mail->ErrorInfo;
+            }
             error_log('[mailer] send failed: ' . $reason);
 
-            return ['ok' => false, 'error' => $reason];
+            return ['ok' => false, 'error' => $reason, 'message_id' => $messageId];
         }
     }
 }
