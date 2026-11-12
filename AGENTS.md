@@ -1062,7 +1062,9 @@ Guide and contracts: `docs/EXAMS.md`. Code: `includes/exams/` (entry
   before they have handed in; after, only for the questions they got wrong,
   once `exam_review_state()` opens (the closing time; else the day after the
   training ends; else a tutor's Show answers).
-- Marking never calls the AI (explanations are stored per question).
+- Marking never calls the AI (explanations are stored per question). AI help
+  (`includes/exams/ai.php`) is a written exception: see the Mail section's
+  note on AI. Its calls go through `exams_ai_call()` (guards + usage log).
 - Access: tutors `can('trainings', 'edit', 'church')` (PR 1's staff check);
   learners their own records and an enrolment. Decided only in
   `exams_action()`. A hand-in writes `training_progress` through
@@ -1173,6 +1175,13 @@ after `includes/db.php`), ported from bureau.lpc.cm's Courrier. Tests: `php test
   summaries and drafts send mail text to Gemini only when the paid plan is recorded, the mailbox is switched on
   (any mailbox, personal and pastoral too: the owner widened it on 12 Nov 2026) and the person holds `mail.ai`;
   phone numbers and addresses become placeholders first. AI never sends mail. Do not widen it further without the owner.
+- **Trainings AI help is the second written exception** (owner's answer 12, 12 Nov 2026; docs/EXAMS.md §7):
+  `includes/exams/ai.php` sends Gemini ONLY training content a member of the Academy's staff chose (notes they
+  typed, a PDF they uploaded and which is never stored, the training's own readings and slides, the bank's
+  questions). Never a learner, a name, an enrolment, an attempt or an answer. Everything it makes is a proposal:
+  questions arrive as drafts, explanations are stored only when a tutor confirms them, content only on Apply.
+  Marking never calls it. One shared client (`HOD\Mail\Ai\Gemini`), a daily token cap for the church
+  (`training_ai_requests`), and the /privacy promise ("only the text staff choose is sent") must stay true.
 ## Departments module (ministry years)
 
 `modules/departments/` is ministry-year aware, and its rules are worth knowing

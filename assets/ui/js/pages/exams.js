@@ -30,7 +30,7 @@
        The question bank
        ===================================================================== */
 
-    var bank = { list: [], editing: null, token: null, timer: null };
+    var bank = { list: [], editing: null, token: null, timer: null, picked: {}, approving: [] };
     var STATUS = { approved: ['Ready', 'success'], draft: ['Draft', ''], archived: ['Archived', 'warning'] };
 
     function loadQuestions() {
@@ -55,23 +55,87 @@
             return;
         }
         one('[data-ex-list]').innerHTML = '<div class="ui-table-wrap"><table class="ui-table"><thead><tr>' +
-            '<th scope="col">Question</th><th scope="col">Type</th><th scope="col">Answer</th><th scope="col" class="text-right">Marks</th>' +
+            '<th scope="col"><span class="sr-only">Pick</span></th><th scope="col">Question</th><th scope="col">Type</th><th scope="col">Answer</th><th scope="col" class="text-right">Marks</th>' +
             '<th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>' +
             list.map(function (q) {
                 var s = STATUS[q.status] || [q.status, ''];
-                var next = q.status === 'approved' ? ['draft', 'To draft'] : ['approved', 'Ready'];
-                return '<tr><td><span class="block whitespace-pre-line">' + esc(q.text) + '</span>' +
-                    '<span class="ui-meta">' + esc([q.topic, q.explanation ? '' : 'No explanation', q.in_use ? 'Used in an exam' : ''].filter(Boolean).join(' · ')) + '</span></td>' +
+                var ready = q.status === 'approved'
+                    ? '<button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-action="ex.status" data-id="' + q.id + '" data-to="draft"><span>To draft</span></button>'
+                    : '<button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-action="ex.approve" data-id="' + q.id + '"><span>Ready</span></button>';
+                return '<tr><td>' + (q.status === 'draft' ? '<input type="checkbox" data-action-change="ex.pick-row" value="' + q.id + '" aria-label="Pick this question"' + (bank.picked[q.id] ? ' checked' : '') + '>' : '') + '</td>' +
+                    '<td><span class="block whitespace-pre-line">' + esc(q.text) + '</span>' +
+                    '<span class="ui-meta">' + esc([q.source === 'ai' ? 'AI draft' : '', q.topic, q.explanation ? '' : 'No explanation', q.in_use ? 'Used in an exam' : ''].filter(Boolean).join(' · ')) + '</span></td>' +
                     '<td class="whitespace-nowrap">' + esc(q.type_label) + '</td><td>' + esc(q.answer) + '</td>' +
                     '<td class="text-right tabular-nums">' + q.marks + '</td><td>' + badge(s[0], s[1]) + '</td>' +
                     '<td class="whitespace-nowrap text-right">' +
                     '<button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-action="ex.edit" data-id="' + q.id + '"><span>Edit</span></button>' +
                     (q.status !== 'archived'
-                        ? '<button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-action="ex.status" data-id="' + q.id + '" data-to="' + next[0] + '"><span>' + next[1] + '</span></button>' +
+                        ? ready +
                           '<button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-action="ex.status" data-id="' + q.id + '" data-to="archived"><span>Archive</span></button>'
                         : '<button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-action="ex.status" data-id="' + q.id + '" data-to="draft"><span>Restore</span></button>') +
                     '</td></tr>';
             }).join('') + '</tbody></table></div>';
+    }
+
+    /* ---------- Marking Ready: explanations are written once, here, and checked by a person ---------- */
+
+    function picks() {
+        var ids = Object.keys(bank.picked).filter(function (k) { return bank.picked[k]; }).map(Number);
+        var btn = one('[data-ex-ready-many]');
+        btn.hidden = !ids.length;
+        btn.querySelector('span').textContent = ids.length > 1 ? 'Mark ' + ids.length + ' Ready' : 'Mark Ready';
+        return ids;
+    }
+
+    function pickRow(box) {
+        bank.picked[box.value] = box.checked;
+        picks();
+    }
+
+    function approveStart(ids, btn) {
+        if (btn) HOD.busy(btn, true);
+        call('approve_check', { ids: ids }, { quiet: true }).then(function (res) {
+            var items = res.items || [];
+            var asks = items.some(function (it) { return it.suggested || !it.explanation; });
+            if (!asks) {
+                return approveSave(items.map(function (it) { return { id: it.id, explanation: it.explanation }; }), btn);
+            }
+            bank.approving = items;
+            one('[data-ex-approve-note]').innerHTML = res.ai_error
+                ? '<div class="ui-banner ui-banner--warning mb-3" role="alert">' + HOD.icon('triangle-alert') + '<div class="ui-banner__body"><p class="ui-banner__text">' +
+                  esc('No AI explanations this time: ' + res.ai_error + ' Write your own, or leave them empty.') + '</p></div></div>'
+                : '<p class="ui-meta mb-3">Check each explanation. People who get the question wrong will see it.</p>';
+            one('[data-ex-approve-list]').innerHTML = items.map(function (it) {
+                return '<li class="rounded-ui-lg border border-line p-3"><p class="whitespace-pre-line font-medium">' + esc(it.text) + '</p>' +
+                    '<p class="ui-meta">' + esc(it.type_label + ' · Right: ' + it.answer) + (it.suggested ? ' · ' + badge('AI suggestion', 'info') : '') + '</p>' +
+                    '<label class="ui-label mt-2" for="ex-expl-' + it.id + '">Explanation</label>' +
+                    '<textarea class="ui-textarea" id="ex-expl-' + it.id + '" rows="3" maxlength="2000" data-expl="' + it.id + '">' + esc(it.explanation) + '</textarea></li>';
+            }).join('');
+            HOD.dialog.open('ex-approve', btn);
+        }).catch(function (err) {
+            HOD.toast(err.message, 'danger');
+        }).finally(function () { if (btn) HOD.busy(btn, false); });
+    }
+
+    function approveSave(items, btn) {
+        if (btn) HOD.busy(btn, true);
+        return call('approve', { items: items }).then(function (res) {
+            HOD.dialog.close('ex-approve');
+            HOD.toast(res.message, 'success');
+            bank.picked = {};
+            picks();
+            loadQuestions();
+        }).catch(function () {}).finally(function () { if (btn) HOD.busy(btn, false); });
+    }
+
+    function approveOne(btn) { approveStart([Number(btn.getAttribute('data-id'))], btn); }
+    function approveMany(btn) { approveStart(picks(), btn); }
+
+    function approveConfirm(btn) {
+        approveSave(bank.approving.map(function (it) {
+            var box = one('[data-expl="' + it.id + '"]');
+            return { id: it.id, explanation: box ? box.value : it.explanation };
+        }), btn);
     }
 
     function filter() {
@@ -562,6 +626,10 @@
             HOD.actions.on('ex.type', typeChange);
             HOD.actions.on('ex.save', saveQuestion);
             HOD.actions.on('ex.status', setStatus);
+            HOD.actions.on('ex.pick-row', pickRow);
+            HOD.actions.on('ex.approve', approveOne);
+            HOD.actions.on('ex.ready-many', approveMany);
+            HOD.actions.on('ex.approve-confirm', approveConfirm);
             HOD.actions.on('ex.import-open', importOpen);
             HOD.actions.on('ex.import-check', importCheck);
             HOD.actions.on('ex.import-confirm', importConfirm);

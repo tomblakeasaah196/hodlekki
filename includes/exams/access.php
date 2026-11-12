@@ -74,7 +74,7 @@ function exams_question_row(array $q, array $inUse = []): array
         'id' => $q['id'], 'type' => $q['qtype'], 'type_label' => EXAM_QTYPES[$q['qtype']] ?? $q['qtype'], 'text' => $q['body'],
         'options' => $q['options'], 'correct' => $q['correct'], 'answer' => exam_answer_text($q, $q['correct']),
         'marks' => $q['marks'], 'explanation' => (string) ($q['explanation'] ?? ''), 'topic' => (string) $q['topic'],
-        'status' => $q['status'], 'source' => $q['source'], 'in_use' => isset($inUse[$q['id']]),
+        'status' => $q['status'], 'source' => (string) $q['source'], 'in_use' => isset($inUse[$q['id']]),
     ];
 }
 
@@ -191,6 +191,58 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
             }
             return ['status' => 'success', 'message' => ['approved' => 'Ready to use.', 'draft' => 'Back to draft.', 'archived' => 'Archived.'][$to] ?? 'Saved.',
                     'question' => exams_question_row((array) exam_question_get($pdo, (int) $q['id']))];
+
+        // Marking questions Ready: explanations are written ONCE here (owner's answer 12). Questions without one get
+        // a suggestion from Gemini, in one batch; the tutor checks and edits them, and only 'approve' stores them.
+        case 'approve_check':
+            $qs = [];
+            foreach (array_values(array_unique(array_filter(array_map('intval', (array) ($in['ids'] ?? []))))) as $id) {
+                $q = exam_question_get($pdo, $id);
+                if ($q === null || !exams_may_manage($pdo, $q['training_id'])) {
+                    return $forbidden();
+                }
+                $qs[] = $q;
+            }
+            if ($qs === []) {
+                return $fail('Choose the questions first.');
+            }
+            $need = array_values(array_filter($qs, static fn ($q) => trim((string) ($q['explanation'] ?? '')) === ''));
+            $suggested = [];
+            $aiError = null;
+            if ($need !== []) {
+                require_once __DIR__ . '/ai.php';
+                $aiError = exams_ai_blocked($pdo, $me);
+                if ($aiError === null) {
+                    $r = exams_ai_explanations($pdo, $me, $need);
+                    $suggested = $r['explanations'];
+                    $aiError = $r['error'] ?? null;
+                }
+            }
+            return ['status' => 'success', 'ai_error' => $aiError, 'items' => array_map(static fn ($q) => [
+                'id' => $q['id'], 'text' => $q['body'], 'type_label' => EXAM_QTYPES[$q['qtype']] ?? $q['qtype'], 'answer' => exam_answer_text($q, $q['correct']),
+                'explanation' => trim((string) ($q['explanation'] ?? '')) !== '' ? (string) $q['explanation'] : ($suggested[$q['id']] ?? ''),
+                'suggested' => isset($suggested[$q['id']]) && trim((string) ($q['explanation'] ?? '')) === '',
+            ], $qs)];
+
+        case 'approve':
+            $done = 0;
+            foreach ((array) ($in['items'] ?? []) as $it) {
+                $q = exam_question_get($pdo, (int) ($it['id'] ?? 0));
+                if ($q === null || !exams_may_manage($pdo, $q['training_id'])) {
+                    return $forbidden();
+                }
+                $explanation = exams_text($it['explanation'] ?? '', 2000);
+                if ($explanation !== trim((string) ($q['explanation'] ?? ''))) {
+                    $r = exam_question_save($pdo, (int) $q['id'], null, ['qtype' => $q['qtype'], 'body' => $q['body'], 'options' => $q['options'],
+                        'correct' => $q['correct'], 'marks' => (string) $q['marks'], 'explanation' => $explanation, 'topic' => $q['topic']], $me);
+                    if (!$r['ok']) {
+                        return $fail(implode(' ', $r['errors']));
+                    }
+                }
+                exam_question_set_status($pdo, (int) $q['id'], 'approved', $me);
+                $done++;
+            }
+            return ['status' => 'success', 'message' => $done . ($done === 1 ? ' question is' : ' questions are') . ' ready.', 'count' => $done];
 
         case 'import_check':
             if (!exams_may_manage($pdo, $bank)) {
