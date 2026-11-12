@@ -542,7 +542,9 @@ echo "\nWiring (static; the engine tests above are what prove behaviour)\n";
     ok('the Events profile editor records status changes', $has('api/events_api.php', "'events_profile'"));
     ok('the Congregation editor records status changes', $has('api/congregation_api.php', "'congregation_edit'"));
     ok('Embrace push records status changes', $has('api/embrace_api.php', "'embrace_push'"));
-    ok('the Academy graduation records status changes', $has('api/academy_api.php', "'academy_graduate'"));
+    ok('confirming a Membership Class graduate records the status change',
+        $has('includes/trainings/progress.php', "const TRAININGS_LADDER_SOURCE = 'training_membership'")
+        && $has('includes/trainings/progress.php', 'ladder_note_change($pdo, $uid, $before, TRAININGS_LADDER_SOURCE, $by)'));
     ok('Embrace lists use the shared pipeline predicate', substr_count((string) file_get_contents($root . '/api/embrace_api.php'), 'embrace_pipeline_sql(') === 3);
     ok('the Excel register uses it too', $has('includes/embrace_export_excel.php', 'embrace_pipeline_sql('));
 

@@ -47,7 +47,10 @@ The internal ERP is organised as one directory per module under
   reading plans with streaks, a voice reader (follow-along, sleep timer,
   repeat-to-memorise) and verse images for WhatsApp. Member and setup guide:
   [`modules/bible/how_to_use.md`](modules/bible/how_to_use.md).
-- `academy` — Learning Management System (courses, curricula, PDF ebooks).
+- `academy` — HOD Academy: build trainings (days, weeks or self-paced; live classes,
+  YouTube/Spotify videos, audio, readings, assignments), assign them, mark work and
+  confirm graduates. Learners use `trainings` (My trainings and the catalogue).
+  See AGENTS.md "Trainings".
 - `library` — public sermon audio / video / ebook catalogue.
 - `media` — sermon and radio media management.
 - `junior_church` — kids' ministry curriculum and service files.
@@ -199,6 +202,7 @@ GitHub Secrets / Variables), and rollback instructions live in
 */5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/automation_tick.php >> /home/smartqaq/logs/hod-email.log 2>&1
 30 3 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/email_worker.php --prune >> /home/smartqaq/logs/hod-email.log 2>&1
 */10 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/email_bounces.php >> /home/smartqaq/logs/hod-email.log 2>&1
+30 6 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/trainings_daily.php >/dev/null 2>&1
 ```
 
 `email_worker.php` sends what is due in the email outbox (confirm links and
@@ -319,6 +323,7 @@ assets/         Static CSS / JS / images shipped to the browser.
 auth/           Login, logout, first-time password setup.
 cron/           CLI jobs (sms_queue_worker.php, reach_lost_souls.php 07:00,
                 assimilation_watchlists.php 07:15, permissions_daily.php 00:10,
+                trainings_daily.php 06:30,
                 special_events.php and automation_tick.php every 5 min,
                 email_bounces.php */10, push_worker.php, email_worker.php
                 and monitor.php every minute).

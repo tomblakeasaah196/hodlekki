@@ -53,9 +53,20 @@ foreach ([PERM_TEST_CORE, PERM_TEST_PLATFORM, PERM_TEST_SEED, PERM_TEST_GRANTS] 
 ok('seed is portable (no ON DUPLICATE / INSERT IGNORE)',
     !preg_match('/ON DUPLICATE|INSERT IGNORE/i', perm_test_migration(PERM_TEST_SEED)));
 $cells = (int) $pdo->query('SELECT COUNT(*) FROM perm_grants')->fetchColumn();
-$pdo->exec(perm_test_migration(PERM_TEST_SEED));
-$pdo->exec(perm_test_migration(PERM_TEST_GRANTS));
+$owners = (int) $pdo->query('SELECT COUNT(*) FROM perm_module_owners')->fetchColumn();
+// The whole matrix again, in order (the Trainings file renames the Academy's
+// cells the day-one seed writes, so it runs after the seed, as on a deploy).
+foreach (PERM_TEST_MATRIX as $f) {
+    $pdo->exec(perm_test_migration($f));
+}
 eq('seed re-runs as a no-op', $cells, (int) $pdo->query('SELECT COUNT(*) FROM perm_grants')->fetchColumn());
+eq('…owners too', $owners, (int) $pdo->query('SELECT COUNT(*) FROM perm_module_owners')->fetchColumn());
+eq('Trainings took over the Academy row (no academy cell left)', 0,
+    (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE module_key = 'academy'")->fetchColumn());
+eq('…with every cell it had (2 pastor roles, 7 Academy seats, Everyone)', 10,
+    (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE module_key = 'trainings'")->fetchColumn());
+ok('…and its owner departments', (int) $pdo->query("SELECT COUNT(*) FROM perm_module_owners WHERE module_key = 'trainings'")->fetchColumn() > 0
+    && (int) $pdo->query("SELECT COUNT(*) FROM perm_module_owners WHERE module_key = 'academy'")->fetchColumn() === 0);
 
 // ---------------------------------------------------------------------------
 section('Resolver');
@@ -197,9 +208,8 @@ foreach ($iter as $file) {
 }
 ok('the scan found the call sites (monitor API at least)', $calls >= 3, (string) $calls);
 require_once $root . '/includes/ui/nav.php';
-$navToModule = ['system_health' => 'monitor'];
 foreach (ui_nav_registry() as $item) {
-    $key = $navToModule[$item['key']] ?? $item['key'];
+    $key = ui_nav_module($item['key']);
     ok("nav entry {$item['key']} has a module", isset($modules[$key]));
 }
 

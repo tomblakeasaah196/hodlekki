@@ -142,13 +142,23 @@ try {
         ");
         $insights['operations']['department_health'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Academy Graduation Pipeline
-        $stmt = $pdo->query("
-            SELECT graduation_status, COUNT(*) as total 
-            FROM academy_enrollments 
-            GROUP BY graduation_status
-        ");
-        $insights['academy']['pipeline'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Academy pipeline: Trainings enrolments by stage (the old academy_enrollments
+        // retired on 12 Nov 2026). The chart reads graduation_status / total.
+        // Empty until db/migrate.php has created training_enrolments.
+        try {
+            $stmt = $pdo->query("
+                SELECT CASE WHEN e.confirmed_at IS NOT NULL THEN 'Confirmed'
+                            WHEN e.status = 'completed' THEN 'Completed'
+                            ELSE 'In_Training' END AS graduation_status,
+                       COUNT(*) AS total
+                  FROM training_enrolments e
+                 WHERE e.status <> 'withdrawn'
+                 GROUP BY graduation_status
+            ");
+            $insights['academy']['pipeline'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $insights['academy']['pipeline'] = [];
+        }
 
 
         // ==========================================================

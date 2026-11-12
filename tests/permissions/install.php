@@ -15,7 +15,8 @@ const PERM_TEST_PLATFORM = '20261126090100_perm_platform_columns.sql';
 const PERM_TEST_SEED = '20261126090200_perm_day_one.sql';
 // Matrix cells added after the day-one file shipped (applied in this order).
 const PERM_TEST_GRANTS = '20261126090300_perm_monitor_grant.sql';
-const PERM_TEST_MATRIX = [PERM_TEST_SEED, PERM_TEST_GRANTS, '20261126090400_perm_pastoral_notes.sql'];
+const PERM_TEST_MATRIX = [PERM_TEST_SEED, PERM_TEST_GRANTS, '20261126090400_perm_pastoral_notes.sql',
+    '20261208090200_perm_trainings.sql'];
 
 function perm_test_migration(string $file): string
 {

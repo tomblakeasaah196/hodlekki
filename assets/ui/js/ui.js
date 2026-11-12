@@ -1082,9 +1082,11 @@
     function showTip(target) {
         var text = target.getAttribute('data-tooltip');
         if (!text) return;
-        // Nav labels are already visible unless the sidebar is a rail.
-        if (target.classList.contains('ui-nav__item') && !root.classList.contains('ui-rail')) return;
-        if (target.closest('.ui-sidebar') && !root.classList.contains('ui-rail') && target.getAttribute('data-tooltip-side') === 'right') return;
+        // Nav labels are already visible unless the sidebar is a rail; an entry
+        // with a description (data-tooltip-info) shows it on hover either way.
+        var described = target.hasAttribute('data-tooltip-info');
+        if (target.classList.contains('ui-nav__item') && !root.classList.contains('ui-rail') && !described) return;
+        if (target.closest('.ui-sidebar') && !root.classList.contains('ui-rail') && target.getAttribute('data-tooltip-side') === 'right' && !described) return;
         if (!tipEl) {
             tipEl = document.createElement('div');
             tipEl.className = 'ui-tooltip';

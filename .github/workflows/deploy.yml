@@ -254,8 +254,21 @@ jobs:
             exit 1
           fi
           php tests/status_ladder_test.php
-          # Who may read and post on an Academy cohort's noticeboard.
-          php tests/academy_forum_access_test.php
+
+      - name: Trainings tests (the new HOD Academy)
+        run: |
+          set -euo pipefail
+
+          # No MySQL, no network: the length wizard and templates, items and
+          # media links, Assign and newcomers, invites (through the real email
+          # identity flow), progress, marking, completion and confirming, and
+          # every can() decision of the API, against SQLite built from the
+          # real migrations. It prints SKIP and exits 0 without pdo_sqlite.
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
+            echo "::error::pdo_sqlite is missing — the Trainings tests would be skipped"
+            exit 1
+          fi
+          php tests/trainings/run.php
 
       - name: Dashboard numbers and sign-in tests
         run: |
@@ -334,6 +347,10 @@ jobs:
         # includes/upload_guard.php, and bin/uploads_guard.sh run for real
         # against a scratch docroot: no script file may ever be served from uploads.
         run: php tests/upload_guard/run.php
+
+      - name: Integrations tests (Google OAuth and calls against a fake Google, vault, attendance matching)
+        # No network: Google::fake() answers. Needs pdo_sqlite (the settings table).
+        run: php tests/integrations/run.php
 
       - name: Mail tests (protocol over real sockets, vault, quota, uapi rules, static rules)
         # No database, no network beyond 127.0.0.1: tests/mail/run.php runs unit.php,
@@ -418,11 +435,11 @@ jobs:
           fi
 
           # Special Events and monitor secrets must come from $_ENV, never be inlined.
-          if grep -rnE "(SE_HASH_PEPPER|ABLY_API_KEY|MONITOR_SECRET|MONITOR_PROBE_SECRET)['\"]?\s*(=>|=|,)\s*['\"][A-Za-z0-9+/=_-]{16,}" \
+          if grep -rnE "(SE_HASH_PEPPER|ABLY_API_KEY|MONITOR_SECRET|MONITOR_PROBE_SECRET|GOOGLE_OAUTH_CLIENT_SECRET|INTEGRATIONS_VAULT_KEY)['\"]?\s*(=>|=|,)\s*['\"][A-Za-z0-9+/=_-]{16,}" \
                 --include='*.php' --include='*.js' --include='*.mjs' --include='*.yml' \
                 --exclude-dir=vendor --exclude-dir=node_modules \
                 --exclude='.env.example' . ; then
-            echo "::error::Hardcoded SE_HASH_PEPPER, ABLY_API_KEY or MONITOR_*SECRET found in tree"
+            echo "::error::Hardcoded SE_HASH_PEPPER, ABLY_API_KEY, MONITOR_*SECRET, GOOGLE_OAUTH_CLIENT_SECRET or INTEGRATIONS_VAULT_KEY found in tree"
             fail=1
           fi
 
