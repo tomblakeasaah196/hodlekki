@@ -551,6 +551,13 @@ $builderSrc = (string) file_get_contents($root . '/modules/academy/training.php'
 ok('the builder and the learner page never hard-code an exam path', !str_contains($builderSrc, '/modules/exams/')
     && !str_contains((string) file_get_contents($root . '/modules/trainings/index.php'), '/modules/exams/')
     && str_contains($builderSrc, 'trainings_exam_setup_url('));
+// 12 Nov 2026: the item form's Card picker had id "trb-section", the same as the Edit card dialog, so
+// HOD.dialog.open('trb-section') found the <select> and the dialog never opened (cards could not be renamed).
+preg_match_all("/'id' => '([a-z0-9-]+)'|ui_dialog_start\\('([a-z0-9-]+)'|\\bid=\"([a-z0-9-]+)\"/", $builderSrc, $idm);
+$builderIds = array_values(array_filter(array_merge($idm[1], $idm[2], $idm[3])));
+$dupIds = array_keys(array_filter(array_count_values($builderIds), static fn ($n) => $n > 1));
+ok('every id on the builder page is used once (the Edit card dialog opens)', $dupIds === [] && in_array('trb-section', $builderIds, true),
+    implode(', ', $dupIds));
 eq('an exam item needs no content here (PR 2 sets it up)', 'success', act($pdo, 901, 'publish', ['training_id' => $ex])['status']);
 act($pdo, 901, 'assign', ['training_id' => $ex, 'users' => [904, 902]]);
 $ee = trainings_enrolment_for($pdo, $ex, 904);
