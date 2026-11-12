@@ -1539,6 +1539,244 @@ ct_ok('the cron: CLI only, one run at a time, --dry-run, the sending account, no
 \HOD\Mail\MailServer::use(null);
 
 // ===========================================================================
+ct_section('16k. Email campaigns: audience, who gets what, sending, the report, access');
+// ===========================================================================
+require_once __DIR__ . '/../../includes/campaigns/campaign_actions.php';
+$g = ct_db();
+ct_at('2027-03-01 09:00');
+$g->exec(perm_test_migration('20261207090100_perm_campaigns.sql'));
+perm_use_pdo($g);
+$g->exec("INSERT INTO departments (id, name) VALUES (11, 'Charis Care')");
+$g->exec('UPDATE departments SET parent_id = 10 WHERE id = 11');
+// 1001-1010: one of each way a person can (not) be reached.
+ct_user($g, 1001, 'Ada', 'Member', ['phone' => '08030000001', 'region_id' => 1]);
+ct_user($g, 1002, 'Ben', 'Visitor', ['phone' => '08030000002', 'region_id' => 1]);
+ct_user($g, 1003, 'Cy', 'Visitor', ['phone' => '08030000003']);
+ct_user($g, 1004, 'Dee', 'Member', ['phone' => '08030000004']);
+ct_user($g, 1005, 'Eve', 'Member', ['phone' => '08030000005']);
+ct_user($g, 1006, 'Fay', 'Member', ['phone' => '08030000006']);
+ct_user($g, 1007, 'Gus', 'Member');
+ct_user($g, 1008, 'Hal', 'Member', ['phone' => '08030000008']);
+ct_user($g, 1009, 'Ivy', 'Member', ['phone' => '08030000009', 'attendance_status' => 'Relocated', 'region_id' => 1]);
+ct_user($g, 1010, 'Jo', 'Member', ['phone' => '08030000010']);
+ct_confirm($g, 1001, 'ada@example.com', false);           // a member: news by email without a box
+ct_confirm($g, 1002, 'ben@example.com', true);            // a visitor who said yes
+ct_confirm($g, 1003, 'cy@example.com', false);            // a visitor who did not tick the box
+ct_confirm($g, 1004, 'dee@example.com', true);
+email_consent_record($g, 1004, 'withdrawn', 'one_click', ['email' => 'dee@example.com']);
+ct_confirm($g, 1005, 'eve@example.com', true);
+email_suppress($g, 'eve@example.com', 'hard_bounce', 'test');
+$g->exec("INSERT INTO sms_suppression (phone) VALUES ('2348030000008')");
+email_consent_record($g, 1010, 'withdrawn', 'staff', ['channel' => 'sms']);
+foreach ([1001, 1002, 1003] as $uid) {
+    $g->prepare("INSERT INTO user_departments (user_id, department_id, is_active, role_in_dept) VALUES (?, 10, 1, 'Worker')")->execute([$uid]);
+}
+$g->exec("INSERT INTO user_departments (user_id, department_id, is_active, role_in_dept) VALUES (1004, 11, 1, 'Worker'), (1005, 10, 0, 'Worker')");
+
+$people = campaign_people_rows($g, range(1001, 1010));
+$withText = campaign_reach($g, $people, true);
+$emailOnly = campaign_reach($g, $people, false);
+$chan = static fn (array $r): array => array_map(static fn ($x) => $x['channel'] . (isset($x['reason']) ? ':' . $x['reason'] : ''), $r);
+ct_eq('who gets what, with a text for the rest', [
+    1001 => 'email', 1002 => 'email', 1003 => 'sms', 1004 => 'none:unsubscribed', 1005 => 'sms',
+    1006 => 'sms', 1007 => 'none:no_phone', 1008 => 'none:sms_blocked', 1009 => 'sms', 1010 => 'none:unsubscribed',
+], $chan($withText));
+ct_eq('…and email only', [
+    1001 => 'email', 1002 => 'email', 1003 => 'none:no_consent', 1004 => 'none:unsubscribed', 1005 => 'none:bounced',
+    1006 => 'none:no_email', 1007 => 'none:no_email', 1008 => 'none:no_email', 1009 => 'none:no_email', 1010 => 'none:no_email',
+], $chan($emailOnly));
+$disagree = [];
+foreach ($people as $uid => $p) {
+    $may = email_may_send_news($g, $uid)['ok'];
+    $auto = automation_choose_channel($g, $p, ['step' => ['key' => 'x', 'sms' => 'Hi']])['channel'];
+    if ($may !== ($emailOnly[$uid]['channel'] === 'email') || $auto !== $withText[$uid]['channel']) {
+        $disagree[] = $uid . ': may=' . json_encode($may) . ' auto=' . $auto . ' batch=' . $withText[$uid]['channel'];
+    }
+}
+ct_eq('the batch agrees with email_may_send_news() and automation_choose_channel() for every person', [], $disagree);
+$probeFile = tempnam(sys_get_temp_dir(), 'hodsms') . '.php';
+file_put_contents($probeFile, '<?php $_ENV["SMS_VAULT_KEY"] = str_repeat("0", 64); require ' . var_export(realpath(__DIR__ . '/../../includes/campaigns/bootstrap.php'), true)
+    . '; echo function_exists("sms_normalize_phone") ? "loaded" : "not loaded", " ", automation_sms_phone("08030000001");');
+$probe = (string) shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($probeFile));
+@unlink($probeFile);
+ct_eq('a web request that never loaded SMS Studio still recognises a mobile number', 'not loaded 2348030000001', trim($probe));
+
+ct_ok('everyone: people who left are never in it', !in_array(1009, campaign_audience_ids($g, ['kind' => 'church']), true)
+    && in_array(1010, campaign_audience_ids($g, ['kind' => 'church']), true));
+ct_eq('by status', [1002, 1003], campaign_audience_ids($g, ['kind' => 'statuses', 'statuses' => ['Visitor']]));
+ct_eq('a department takes in its sub-units and only active members', [901, 1001, 1002, 1003, 1004],
+    campaign_audience_ids($g, ['kind' => 'departments', 'ids' => [10]]));
+ct_eq('a regional hub', [1001, 1002], campaign_audience_ids($g, ['kind' => 'regions', 'ids' => [1]]));
+ct_eq('an unknown kind is nobody', [], campaign_audience_ids($g, ['kind' => 'everyone; DROP TABLE users']));
+
+$dept = static fn (array $a, ?int $d) => campaign_audience_check($a, $d, false, [10, 11]);
+ct_ok('a department sender cannot send to everyone', !$dept(['kind' => 'church'], 10)['ok']);
+ct_ok('…nor to another department', !$dept(['kind' => 'departments', 'ids' => [20]], 10)['ok']);
+ct_ok('…nor without saying which department sends it', !$dept(['kind' => 'departments', 'ids' => [10]], null)['ok']);
+ct_ok('…but to their own department, yes', $dept(['kind' => 'departments', 'ids' => [10]], 10)['ok']);
+ct_ok('the whole church may pick any audience', campaign_audience_check(['kind' => 'regions', 'ids' => [1]], null, true, [])['ok']);
+
+$sum = campaign_summary($g, ['kind' => 'statuses', 'statuses' => ['Member', 'Visitor']], true);
+ct_eq('the summary before Send (Ivy left: not counted)', ['total' => 9, 'email' => 2, 'sms' => 3, 'none' => 4],
+    ['total' => $sum['total'], 'email' => $sum['email'], 'sms' => $sum['sms'], 'none' => $sum['none']]);
+ksort($sum['reasons']);
+ct_eq('…with why the rest are not reached', ['no_phone' => 1, 'sms_blocked' => 1, 'unsubscribed' => 2], $sum['reasons']);
+ct_eq('…and how long it takes at the hour\'s budget', 'within the hour', $sum['eta']);
+
+// Write, schedule, expand, send, finish.
+$new = campaign_save($g, null, ['name' => 'Harvest Sunday', 'audience' => ['kind' => 'statuses', 'statuses' => ['Member', 'Visitor']],
+    'sms_fallback' => 1, 'sms_text' => 'Hi {{first_name}}, Harvest Sunday is on 7 March.', 'track_opens' => 1], 900, true, []);
+ct_ok('a campaign starts as a draft', $new['ok'] && campaign_get($g, $new['id'])['status'] === 'draft');
+$cid = $new['id'];
+ct_ok('…an empty email cannot go out', in_array('The email is empty.', campaign_problems($g, campaign_get($g, $cid)), true));
+ct_ok('a text was asked for but is blank: refused', !campaign_save($g, $cid, ['name' => 'X', 'audience' => ['kind' => 'church'], 'sms_fallback' => 1], 900, true, [])['ok']);
+ct_ok('the email is saved through the sanitiser', campaign_save_doc($g, $cid, ct_doc(), 900)['ok']
+    && campaign_get($g, $cid)['subject'] === 'Hello {{first_name}}' && campaign_problems($g, campaign_get($g, $cid)) === []);
+ct_eq("a stale form does not overwrite someone else's change", 'STALE',
+    campaign_save($g, $cid, ['name' => 'Y', 'audience' => ['kind' => 'church']], 900, true, [], '2000-01-01 00:00:00')['code'] ?? null);
+ct_ok('a time in the past is refused', !campaign_send($g, $cid, campaigns_now()->modify('-1 hour'), 900)['ok']);
+ct_ok('…and one too far ahead', !campaign_send($g, $cid, campaigns_now()->modify('+90 days'), 900)['ok']);
+$at = campaigns_now()->modify('+1 day');
+ct_ok('scheduled for tomorrow', campaign_send($g, $cid, $at, 900)['ok'] && campaign_get($g, $cid)['status'] === 'scheduled');
+ct_eq('not due yet: the tick leaves it', 0, campaigns_tick($g)['expanded']);
+ct_at('2027-03-02 09:01');
+ct_eq('due: the tick expands it once', ['expanded' => 1, 'finished' => 0, 'failed' => 0], campaigns_tick($g));
+ct_eq('…a second tick finds nothing to do', 0, campaigns_tick($g)['expanded']);
+ct_eq('…and a racing expansion is refused', null, campaign_expand($g, $cid));
+$c = campaign_get($g, $cid);
+ct_eq('the counts', ['sending', 9, 2, 3, 4], [$c['status'], $c['total'], $c['emailed'], $c['texted'], $c['skipped']]);
+ct_eq('one church-news email per address, in the campaign lane, opens counted', 2,
+    ct_count($g, 'email_outbox', "campaign_id = ? AND lane = 'campaign' AND purpose = 'news' AND html LIKE '%/email/o.php%'", [$cid]));
+ct_eq('every person once, with their channel', 9, ct_count($g, 'email_campaign_people', 'campaign_id = ?', [$cid]));
+ct_ok('the texts went to SMS Studio as one campaign, never to sms_log',
+    ct_count($g, 'sms_campaigns', "id = ? AND audience = 'email_campaign' AND total = 3", [$c['sms_campaign_id']]) === 1
+    && ct_count($g, 'sms_queue', 'campaign_id = ?', [$c['sms_campaign_id']]) === 3 && ct_count($g, 'sms_log') === 0);
+ct_ok('…with the name left for SMS Studio to fill', str_contains((string) $g->query('SELECT body_template FROM sms_campaigns WHERE id = ' . (int) $c['sms_campaign_id'])->fetchColumn(), '{{first_name}}'));
+ct_eq('…and each text linked to its person', 3, ct_count($g, 'email_campaign_people', "campaign_id = ? AND channel = 'sms' AND sms_queue_id IS NOT NULL", [$cid]));
+$locked = campaign_save_doc($g, $cid, ct_doc(), 900);
+ct_ok('a campaign that is going out can no longer change', !$locked['ok'] && ($locked['code'] ?? '') === 'LOCKED');
+
+$tx = ct_transport();
+email_worker_run($g, ['endpoints_ready' => true, 'transport' => $tx, 'now' => campaigns_now()]);
+ct_eq('the worker sends both emails', 2, count($tx['sent']));
+ct_ok('…with one-click unsubscribe and bulk headers', str_contains(json_encode($tx['sent'][0]), 'List-Unsubscribe-Post')
+    && str_contains(json_encode($tx['sent'][0]), 'Precedence'));
+ct_eq('then the tick marks it sent', 1, campaigns_tick($g)['finished']);
+ct_eq('…sent', 'sent', campaign_get($g, $cid)['status']);
+
+$refs = $g->query("SELECT ref FROM email_outbox WHERE campaign_id = {$cid} ORDER BY id")->fetchAll(PDO::FETCH_COLUMN);
+$g->exec("UPDATE email_outbox SET links_json = '[\"https://hodlekki.org/harvest\"]' WHERE campaign_id = {$cid}");
+email_track_click($g, $refs[0], 0);
+email_track_click($g, $refs[0], 0);
+email_track_open($g, $refs[1]);
+email_unsubscribe($g, $refs[1]);
+$rep = campaign_report($g, campaign_get($g, $cid));
+ct_eq('the report: sent, opened, clicked, unsubscribed', ['sent' => 2, 'opened' => 1, 'clicked' => 1, 'unsubscribed' => 1],
+    array_intersect_key($rep['email'], ['sent' => 1, 'opened' => 1, 'clicked' => 1, 'unsubscribed' => 1]));
+ct_eq('…clicks per link count people, not clicks', [['url' => 'https://hodlekki.org/harvest', 'people' => 1]], $rep['links']);
+ct_eq('…texts by status', ['queued' => 3], $rep['sms']);
+$byName = array_column($rep['people'], 'result', 'name');
+ct_eq("…and every person's line", ['Ada Test' => 'Clicked', 'Ben Test' => 'Opened', 'Cy Test' => 'Text waiting',
+    'Dee Test' => 'Unsubscribed', 'Gus Test' => 'No mobile number', 'Hal Test' => 'Number blocked'],
+    array_intersect_key($byName, array_flip(['Ada Test', 'Ben Test', 'Cy Test', 'Dee Test', 'Gus Test', 'Hal Test'])));
+ct_ok('a sent campaign cannot be deleted', !campaign_delete($g, $cid));
+
+// Stop one that is going out.
+$two = campaign_duplicate($g, campaign_get($g, $cid), 900);
+ct_ok('a copy is a fresh draft with the same email', campaign_get($g, $two)['status'] === 'draft'
+    && campaign_get($g, $two)['doc']['subject'] === 'Hello {{first_name}}' && str_starts_with(campaign_get($g, $two)['name'], 'Copy of'));
+campaign_send($g, $two, null, 900);
+ct_eq('send now: queued for the next tick', 'queued', campaign_get($g, $two)['status']);
+campaigns_tick($g);
+$stop = campaign_cancel($g, $two, 900);
+ct_eq('stopping it holds back what has not left', [true, 1, 3, 'cancelled'],
+    [$stop['ok'], $stop['emails'], $stop['texts'], campaign_get($g, $two)['status']]);
+$tx2 = ct_transport();
+email_worker_run($g, ['endpoints_ready' => true, 'transport' => $tx2, 'now' => campaigns_now()]);
+ct_eq('…and the worker sends none of it', 0, count($tx2['sent']));
+
+// A campaign that cannot be expanded fails, and comes back as a draft.
+$three = campaign_duplicate($g, campaign_get($g, $cid), 900);
+$g->prepare("UPDATE email_campaigns SET status = 'queued', doc_json = '{}' WHERE id = ?")->execute([$three]);
+$failRun = campaigns_tick($g);
+ct_eq('a broken campaign fails without sending anything', [1, 'failed', 0],
+    [$failRun['failed'], campaign_get($g, $three)['status'], ct_count($g, 'email_outbox', 'campaign_id = ?', [$three])]);
+ct_ok('…and goes back to a draft with Edit', campaign_unschedule($g, $three, 900) && campaign_get($g, $three)['status'] === 'draft');
+ct_ok('…which can be deleted', campaign_delete($g, $three) && campaign_get($g, $three) === null);
+
+// The test send: account mail to yourself.
+ct_eq('a test needs your own confirmed email', 'Confirm your email in Profile first.', campaign_test_send($g, campaign_get($g, $cid), 902)['message']);
+ct_confirm($g, 902, 'paul@example.com', false);
+$test = campaign_test_send($g, campaign_get($g, $cid), 902);
+ct_ok('…then it is sent, marked as a test, without an unsubscribe link', $test['ok']
+    && ct_count($g, 'email_outbox', "lane = 'test' AND purpose = 'account' AND to_email = 'paul@example.com' AND subject LIKE 'Test: %'") === 1);
+
+// Access, through the real permission engine (migration 20261207090100).
+$as = static function (int $uid): void {
+    $_SESSION['user_id'] = $uid;
+    perm_reset();
+};
+ct_eq('the grants: three roles and three seats', 6, ct_count($g, 'perm_grants', "module_key = 'campaigns'"));
+$g->exec(perm_test_migration('20261207090100_perm_campaigns.sql'));
+ct_eq('…and the migration re-runs as a no-op', 6, ct_count($g, 'perm_grants', "module_key = 'campaigns'"));
+$as(900);
+ct_eq('the Resident Pastor sends to the whole church', ['church' => true, 'depts' => []], campaign_sender());
+ct_eq('…and sees every campaign', 2, count(campaign_action($g, 'list', [], 900)['campaigns']));
+ct_eq('…but email settings are Super Admin only', 'FORBIDDEN', campaign_action($g, 'settings', [], 900)['code'] ?? null);
+$as(901);
+ct_eq('a Charis HOD sends for Charis and its sub-unit', ['church' => false, 'depts' => [10, 11]], campaign_sender());
+$own = campaign_action($g, 'save', ['name' => 'Charis night', 'department_id' => 10, 'audience' => ['kind' => 'departments', 'ids' => [10]]], 901);
+ct_eq('…starts a Charis campaign', 'success', $own['status']);
+ct_eq('…not one for everyone', 'error', campaign_action($g, 'save', ['name' => 'All', 'department_id' => 10, 'audience' => ['kind' => 'church']], 901)['status']);
+ct_eq("…cannot open the church's campaign (it looks missing)", 'NOT_FOUND', campaign_action($g, 'get', ['id' => $cid], 901)['code'] ?? null);
+ct_eq('…lists only Charis campaigns', ['Charis night'], array_column(campaign_action($g, 'list', [], 901)['campaigns'], 'name'));
+ct_eq('…may send, copy and delete their draft', ['send' => true, 'delete' => true, 'copy' => true],
+    array_intersect_key($own['campaign']['can'] ?? [], ['send' => 1, 'delete' => 1, 'copy' => 1]));
+$as(903);
+ct_eq('the Media Director does not see the Charis campaign', [], campaign_action($g, 'list', [], 903)['campaigns']);
+ct_eq('…and cannot change it', 'FORBIDDEN', campaign_action($g, 'save', ['id' => $own['campaign']['id'] ?? 0, 'name' => 'Mine', 'department_id' => 20,
+    'audience' => ['kind' => 'departments', 'ids' => [20]]], 903)['code'] ?? null);
+$as(1001);
+ct_eq('a member cannot start one', 'FORBIDDEN', campaign_action($g, 'save', ['name' => 'Hi', 'audience' => ['kind' => 'church']], 1001)['code'] ?? null);
+ct_user($g, 904, 'Sam', 'Worker');
+$g->exec('INSERT INTO user_roles (user_id, role_id) VALUES (904, 1)');
+$as(904);
+ct_eq('a Super Admin manages the settings', 'success', campaign_action($g, 'settings', [], 904)['status']);
+$bad = campaign_action($g, 'settings_save', ['hourly_cap' => '5', 'window_start' => '20:00', 'window_end' => '07:00', 'postal_line' => ''], 904);
+ct_eq('…which are checked', 3, count($bad['errors'] ?? []));
+campaign_action($g, 'settings_save', ['hourly_cap' => '250', 'window_start' => '06:30', 'window_end' => '21:00', 'postal_line' => 'Lekki', 'paused' => '1'], 904);
+ct_eq('…and saved', ['250', '06:30', '21:00', 'Lekki', '1'], [email_setting($g, 'hourly_cap'), email_setting($g, 'window_start'),
+    email_setting($g, 'window_end'), email_setting($g, 'postal_line'), email_setting($g, 'paused')]);
+ct_ok('campaign writers may use the block editor', email_editor_allowed());
+
+// The screen, its script and its endpoint keep their contracts.
+$root = dirname(__DIR__, 2);
+$page = (string) file_get_contents($root . '/modules/campaigns/index.php');
+$js = (string) file_get_contents($root . '/assets/ui/js/pages/campaigns.js');
+$api = (string) file_get_contents($root . '/api/campaigns_api.php');
+$acts = (string) file_get_contents($root . '/includes/campaigns/campaign_actions.php');
+ct_ok('the endpoint asks Roles & permissions and checks the CSRF token',
+    str_contains($api, "api_require_can('campaigns', 'view');") && str_contains($api, 'csrf_require();'));
+ct_ok('the page is strict, gated, and allows only its own preview frame', str_contains($page, "'mode' => 'strict'")
+    && str_contains($page, "require_can('campaigns', 'view');") && str_contains($page, "'frame-src' => [\"'self'\"]"));
+ct_eq('no inline handler, script or style on the page', 0,
+    preg_match_all('/\son[a-z]+\s*=|<script(?![^>]*type="application\/json")|\sstyle\s*=/i', $page));
+preg_match_all('/[\'"](cam\.[a-z-]+)[\'"]/', $page, $m);
+$used = array_values(array_unique($m[1]));
+preg_match_all("/HOD\\.actions\\.on\\('(cam\\.[a-z-]+)'/", $js, $m);
+$handled = array_values(array_unique($m[1]));
+ct_eq('every action on the page has a handler', [], array_values(array_diff($used, $handled)));
+ct_eq('every handler is used by the page', [], array_values(array_diff($handled, $used)));
+preg_match_all("/call\\('([a-z_]+)'/", $js, $m);
+$calls = array_values(array_unique($m[1]));
+$missing = array_values(array_filter($calls, static fn ($a) => !str_contains($acts, "case '{$a}':")));
+ct_eq('every action the script calls exists in campaign_action() (' . count($calls) . ' actions)', [], $missing);
+ct_ok('the email worker starts due campaigns before it sends, and never on a dry run',
+    preg_match("/if \\(!in_array\\('--dry-run', \\\$args, true\\)\\) \\{\\s*try \\{\\s*\\\$t = campaigns_tick\\(\\\$pdo\\);/", (string) file_get_contents($root . '/cron/email_worker.php')) === 1);
+unset($_SESSION['user_id']);
+perm_use_pdo(null);
+
+// ===========================================================================
 ct_section('17. Every function the module calls exists');
 // ===========================================================================
 $files = array_merge(glob(__DIR__ . '/../../includes/campaigns/*.php'), [

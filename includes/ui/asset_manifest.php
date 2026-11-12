@@ -20,6 +20,7 @@ return [
     '/assets/ui/js/pages/assimilation-find.js' => '3fdbbea18e3d',
     '/assets/ui/js/pages/assimilation.js' => 'aae59c52689a',
     '/assets/ui/js/pages/automation.js' => '1b35aabd9762',
+    '/assets/ui/js/pages/campaigns.js' => '52de1c5cbad8',
     '/assets/ui/js/pages/change-password.js' => 'c42ddc896c22',
     '/assets/ui/js/pages/charis-ops.js' => 'd4be4e7e28b4',
     '/assets/ui/js/pages/charis.js' => '513487868fa8',

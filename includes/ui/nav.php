@@ -120,6 +120,8 @@ function ui_nav_registry(): array
             'match' => ['events'], 'keywords' => ['calendar', 'services', 'check-in', 'checkin', 'attendance']],
         ['key' => 'sms_studio', 'label' => 'SMS Studio', 'icon' => 'message-square-text', 'href' => '/modules/sms_studio/index.php', 'section' => 'operations',
             'match' => ['sms_studio'], 'keywords' => ['text', 'messages', 'bulk sms', 'broadcast'], 'tabs' => ['campaigns' => 'Campaigns', 'history' => 'History']],
+        ['key' => 'campaigns', 'label' => 'Email Campaigns', 'icon' => 'mail', 'href' => '/modules/campaigns/index.php', 'section' => 'operations',
+            'match' => ['campaigns'], 'keywords' => ['email', 'newsletter', 'bulk email', 'broadcast'], 'tabs' => ['reach' => 'Reach']],
         ['key' => 'assets', 'label' => 'Asset Management', 'icon' => 'package', 'href' => '/modules/assets/index.php', 'section' => 'operations',
             'match' => ['assets'], 'keywords' => ['inventory', 'equipment', 'gear'], 'tabs' => ['inventory' => 'Master Inventory', 'logs' => 'Activity Logs']],
         ['key' => 'pastoral', 'label' => 'Pastoral Desk', 'icon' => 'messages-square', 'href' => '/modules/pastoral/index.php', 'section' => 'operations',

@@ -22,15 +22,18 @@ const EMAIL_EDITOR_UPLOAD_MAX   = 5 * 1024 * 1024;
 const EMAIL_EDITOR_IMAGE_WIDTH  = 1200;         // twice the 600 px email width
 const EMAIL_EDITOR_IMAGE_PIXELS = 40000000;     // refuse decompression bombs before decoding
 
-/** May the signed-in person use the editor? Anyone who manages an Automation tab. */
+/** May the signed-in person use the editor? Anyone who manages an Automation tab or writes campaigns. */
 function email_editor_allowed(): bool
 {
+    if (!function_exists('can')) {
+        return false;
+    }
     foreach (EMAIL_EDITOR_MODULES as $module) {
-        if (function_exists('can') && can($module, 'manage')) {
+        if (can($module, 'manage')) {
             return true;
         }
     }
-    return false;
+    return can('campaigns', 'create');
 }
 
 // ---------------------------------------------------------------------------
