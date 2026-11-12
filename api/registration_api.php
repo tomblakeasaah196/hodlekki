@@ -3,6 +3,7 @@
 
 // 1. Core Includes
 require_once '../includes/db.php';
+require_once '../includes/html_allowlist.php';
 header('Content-Type: application/json');
 
 // NOTE: This is a PUBLIC endpoint - we do NOT block on session here.
@@ -128,12 +129,10 @@ function parseMinisters($raw, $legacyImg) {
  */
 function safe_rich($html){
     if(empty($html)) return '';
-    $allowed = ['b','strong','i','em','u','br','p','ul','ol','li'];
-    $html = strip_tags($html, '<' . implode('><', $allowed) . '>');
-    $html = preg_replace('/on\w+="[^"]*"/i', '', $html);
-    $html = preg_replace("/on\w+='[^']*'/i", '', $html);
-    $html = preg_replace('/<(\w+)(?:\s+[^>]*)?>/i', '<$1>', $html);
-    return $html;
+    // The shared DOM allowlist (includes/html_allowlist.php), same tags as before:
+    // a parser, not patterns, decides what is a tag and what is an attribute.
+    $clean = hod_html_allowlist((string) $html, ['b','strong','i','em','u','br','p','ul','ol','li']);
+    return str_contains((string) $html, '<') ? $clean : nl2br($clean, false);
 }
 
 $action = $_POST['action'] ?? $_GET['action'] ?? '';

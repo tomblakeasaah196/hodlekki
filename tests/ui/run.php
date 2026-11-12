@@ -479,6 +479,13 @@ ok('the admin API cleans on save and on read, needs CSRF and asks each level',
     && str_contains($adminApi, 'in_array($status, $statuses, true)'));
 ok('the wall cleans what it sends, rows saved before the allowlist included',
     str_contains($publicApi, "\$t['content_text'] = hod_html_allowlist(\$t['content_text'] ?? '');"));
+$eventsApi = (string) file_get_contents($root . '/api/events_api.php');
+$registrationApi = (string) file_get_contents($root . '/api/registration_api.php');
+ok('an event description is cleaned when it is saved (create and update)',
+    substr_count($eventsApi, "\$description = hod_html_allowlist((string) (\$_POST['description'] ?? ''));") === 2);
+ok('the public register page gets it through the same allowlist, older rows included',
+    str_contains($registrationApi, "hod_html_allowlist((string) \$html, ['b','strong','i','em','u','br','p','ul','ol','li'])")
+    && str_contains($registrationApi, "\$event['description'] = safe_rich(\$event['description'])"));
 
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed === 0 ? 0 : 1);
