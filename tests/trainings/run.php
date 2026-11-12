@@ -799,6 +799,16 @@ ok('the privacy notice says slides go through Microsoft\'s viewer', str_contains
 array_map('unlink', glob($tmpDir . '/*') ?: []);
 rmdir($tmpDir);
 
+// 12 Nov 2026: optional readings point to free books by address; the addresses are links.
+$linked = trainings_view_text("Read it free:\nPDF: https://archive.org/download/x/x.pdf.\nOnline (https://www.gutenberg.org/ebooks/16739)\n\n<script>alert(1)</script> javascript:alert(1) a&b");
+ok('a reading\'s web addresses become links that open in a new tab', str_contains($linked,
+    '<a class="break-all" href="https://archive.org/download/x/x.pdf" target="_blank" rel="noopener noreferrer nofollow">https://archive.org/download/x/x.pdf</a>.<br>')
+    && str_contains($linked, '(<a class="break-all" href="https://www.gutenberg.org/ebooks/16739"'));
+ok('…and everything else stays escaped text (no script, no javascript: link)', str_contains($linked, '&lt;script&gt;alert(1)&lt;/script&gt;')
+    && !str_contains($linked, 'href="javascript') && str_contains($linked, 'a&amp;b') && substr_count($linked, '<a ') === 2);
+eq('an address with a query string keeps it, escaped', '<a class="break-all" href="https://anekopress.com/?p=5130&amp;x=1" target="_blank" rel="noopener noreferrer nofollow">https://anekopress.com/?p=5130&amp;x=1</a>',
+    trainings_view_linkify('https://anekopress.com/?p=5130&x=1'));
+
 // ---------------------------------------------------------------------------
 section('The endpoint, pages and copy');
 $api = (string) file_get_contents($root . '/api/trainings_api.php');
