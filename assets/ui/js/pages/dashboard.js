@@ -10,9 +10,10 @@
     var API = '/api/dashboard_api.php';
     var LIVE_REFRESH_MS = 60000;
     var ICONS = {
-        workforce: 'users', pipeline: 'user-round-plus', followups: 'phone', pending_qa: 'circle-help',
+        workforce: 'users', first_timers: 'user-round-plus', pending_qa: 'circle-help', sms: 'wallet',
         sunday: 'chart-column', team: 'users-round', units: 'building-2', unit_workers: 'users', alerts: 'bell'
     };
+    var TONES = { success: 'ui-badge--success', warning: 'ui-badge--warning', danger: 'ui-badge--danger' };
     var DELTA = { up: 'ui-delta ui-delta--up', down: 'ui-delta ui-delta--down', flat: 'ui-delta ui-delta--flat' };
     var DELTA_ICON = { up: 'trending-up', down: 'trending-down', flat: 'minus' };
 
@@ -36,10 +37,20 @@
         var note = !card.note ? '' : moving
             ? '<span class="ui-stat__meta"><span class="' + DELTA[trend] + '">' + HOD.icon(DELTA_ICON[trend]) + '<span>' + esc(card.note) + '</span></span></span>'
             : '<span class="ui-stat__meta">' + esc(card.note) + '</span>';
+        // A status badge from the server (the SMS wallet: OK / Low / Empty / Check).
+        var badge = card.badge && TONES[card.tone]
+            ? ' <span class="ui-badge ui-badge--dot ' + TONES[card.tone] + ' ml-auto">' + esc(card.badge) + '</span>' : '';
+        var value = typeof card.display === 'string' ? card.display : HOD.format.number(card.value);
+        var inner =
+            '<span class="ui-stat__label">' + HOD.icon(ICONS[card.key] || 'chart-column') + '<span>' + esc(card.title) + '</span>' + liveBadge + badge + '</span>' +
+            '<span class="ui-stat__value">' + esc(value) + '</span>' +
+            note;
+        // A card with its own page (the SMS wallet opens SMS Studio) is a link.
+        if (safeHref(card.href)) {
+            return '<a class="ui-card ui-stat" href="' + esc(card.href) + '">' + inner + '</a>';
+        }
         return '<button type="button" class="ui-card ui-stat" data-action="dash.detail" data-card="' + esc(card.key) + '" data-title="' + esc(card.title) + '" aria-haspopup="dialog">' +
-            '<span class="ui-stat__label">' + HOD.icon(ICONS[card.key] || 'chart-column') + '<span>' + esc(card.title) + '</span>' + liveBadge + '</span>' +
-            '<span class="ui-stat__value">' + esc(HOD.format.number(card.value)) + '</span>' +
-            note +
+            inner +
         '</button>';
     }
 

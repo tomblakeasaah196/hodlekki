@@ -51,7 +51,7 @@ Open **Mail**, then **Mailboxes**.
 - **Reset password**, **Suspend** / **Resume**, **Storage limit**, **Automatic reply**, **Remove mailbox** (type the
   address to confirm: its mail is deleted on the server).
 - **AI in Mail** (Health tab): once the owner confirms the Gemini plan is paid, **Record paid plan**, then **Turn on**
-  per mailbox (never personal or pastoral ones). People also need *AI summaries and draft replies in Mail* in
+  per mailbox (any mailbox, personal and pastoral ones too). People also need *AI summaries and draft replies in Mail* in
   Roles & permissions.
 - **Activity**: every action and whether the server did it. **Health**: what the system checks, and the number of
   slots kept for personal mailboxes.

@@ -1,6 +1,12 @@
 <?php
 // /api/announcements_api.php
+//
+// Announcements (modules/announcements/index.php, assets/ui/js/pages/announcements.js).
+// Access: the 'announcements' row of Roles & permissions. View reads the
+// register, Create submits a notice (it waits as Pending), Approve approves
+// or archives, Delete removes one. Writes need the CSRF token.
 require_once '../includes/db.php';
+csrf_require();
 header('Content-Type: application/json');
 
 // 1. Security Check
@@ -52,14 +58,21 @@ try {
         // ACTION 3: SAVE ANNOUNCEMENT (Create/Update)
         // ==========================================
         case 'save_announcement':
-            $id = $_POST['id'] ?? null;
+            $id = (int) ($_POST['id'] ?? 0) ?: null;
             $title = trim($_POST['title'] ?? '');
             $content = trim($_POST['content'] ?? '');
-            $event_id = $_POST['target_event_id'] ?? null;
+            $event_id = (int) ($_POST['target_event_id'] ?? 0);
 
-            if (empty($title) || empty($content) || empty($event_id)) {
+            if ($title === '' || $content === '' || $event_id <= 0) {
                 echo json_encode(['status' => 'error', 'message' => 'All fields are required.']);
                 exit;
+            }
+            if (mb_strlen($title) > 200) {
+                echo json_encode(['status' => 'error', 'field' => 'title', 'message' => 'Keep the title to 200 characters.']);
+                exit;
+            }
+            if (!$id) {
+                api_require_can('announcements', 'create');
             }
 
             if ($id) {
@@ -104,11 +117,15 @@ try {
         // ACTION 4: APPROVE / ARCHIVE STATUS
         // ==========================================
         case 'update_status':
-            $id = $_POST['id'] ?? '';
+            $id = (int) ($_POST['id'] ?? 0);
             $new_status = $_POST['status'] ?? ''; // 'Approved' or 'Archived'
 
             if (!$can_manage) {
                 echo json_encode(['status' => 'error', 'message' => 'Clearance required to approve announcements.']);
+                exit;
+            }
+            if (!in_array($new_status, ['Approved', 'Archived'], true)) {
+                echo json_encode(['status' => 'error', 'message' => 'Unknown status.']);
                 exit;
             }
 
@@ -142,12 +159,9 @@ try {
         // ACTION 5: DELETE ANNOUNCEMENT
         // ==========================================
         case 'delete_announcement':
-            if (!$can_manage) {
-                echo json_encode(['status' => 'error', 'message' => 'Unauthorized.']);
-                exit;
-            }
+            api_require_can('announcements', 'delete');
             $stmt = $pdo->prepare("DELETE FROM announcements WHERE id = ?");
-            $stmt->execute([$_POST['id']]);
+            $stmt->execute([(int) ($_POST['id'] ?? 0)]);
             echo json_encode(['status' => 'success', 'message' => 'Announcement deleted.']);
             break;
 

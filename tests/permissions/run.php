@@ -304,6 +304,32 @@ eq('same access after renaming a role and two departments', $before,
     [$r($rp)['abilities'], $r($reachHod)['abilities'], $r($charisDir)['abilities']]);
 
 // ---------------------------------------------------------------------------
+section('Announcements and the Pastoral Desk check each write');
+$code = static function (string $file) use ($root): string {
+    $out = '';   // the code, comments stripped
+    foreach (token_get_all((string) file_get_contents($root . $file)) as $tok) {
+        if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+            $out .= is_array($tok) ? $tok[1] : $tok;
+        }
+    }
+    return $out;
+};
+$ann = $code('/api/announcements_api.php');
+ok('announcements_api needs the CSRF token on writes', str_contains($ann, 'csrf_require();'));
+ok('a new notice needs Create, deleting needs Delete',
+    str_contains($ann, "api_require_can('announcements', 'create');") && str_contains($ann, "api_require_can('announcements', 'delete');"));
+ok('a status is Approved or Archived, nothing else', str_contains($ann, "in_array(\$new_status, ['Approved', 'Archived'], true)"));
+$pas = $code('/api/pastoral_api.php');
+ok('pastoral_api needs the CSRF token and the matrix', str_contains($pas, 'csrf_require();') && str_contains($pas, "api_require_can('pastoral');"));
+ok('submitting needs Create, triage needs Edit church-wide',
+    str_contains($pas, "api_require_can('pastoral', 'create');") && str_contains($pas, "\$can_triage = can('pastoral', 'edit', 'church');"));
+ok('the box, status and priority come only from fixed lists',
+    str_contains($pas, 'if (!isset($tabs[$tab]))') && str_contains($pas, "in_array(\$new_status, \$tabs[\$tab]['statuses'], true)")
+    && str_contains($pas, 'in_array($priority, $priorities, true)'));
+ok('an anonymous entry never sends its author to anyone else',
+    str_contains($pas, "if (!empty(\$row['is_anonymous']) && !\$mine)") && str_contains($pas, "\$row['phone'] = null;"));
+
+// ---------------------------------------------------------------------------
 section('Holders and history');
 eq('seat holders by stable key', [$reachHod], perm_seat_holders($pdo, 'hod', 8));
 $holders = perm_holders($pdo, 'reach', 'manage');
@@ -369,6 +395,18 @@ ok('report fits one screen', substr_count($report, "\n") <= 24, (string) substr_
 
 // PR 3: changing the permission data, view-as, end dates.
 require __DIR__ . '/admin_tests.php';
+
+// ---------------------------------------------------------------------------
+section('AI in Mail for every role (owner, 12 Nov 2026)');
+$aiSql = perm_test_migration('20261206090000_perm_ai_for_every_role.sql');
+ok('mail.ai migration is portable (no ON DUPLICATE / INSERT IGNORE)', !preg_match('/ON DUPLICATE|INSERT IGNORE/i', $aiSql));
+$pdo->exec($aiSql);
+$roles = (int) $pdo->query('SELECT COUNT(*) FROM roles')->fetchColumn();
+eq('every role holds mail.ai at view, church-wide', $roles,
+    (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE seat_key = '' AND module_key = 'mail.ai' AND level = 1 AND scope = 'church'")->fetchColumn());
+$pdo->exec($aiSql);
+eq('mail.ai migration re-runs as a no-op', $roles,
+    (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE module_key = 'mail.ai'")->fetchColumn());
 
 echo "\n{$GLOBALS['perm_test_passed']} passed, {$GLOBALS['perm_test_failed']} failed\n";
 exit($GLOBALS['perm_test_failed'] === 0 ? 0 : 1);
