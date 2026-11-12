@@ -7,7 +7,6 @@ assimilation.php | paragraph | Check it and try again, or ask your Assimilation 
 assimilation.php | paragraph | Enter the phone number the church has for you. Only the Assimilation team can open this page.
 assimilation.php | paragraph | Saving this closes the follow-up and tells your leaders why. Bless them before you drop.
 assimilation.php | paragraph | You are all caught up. Keep praying for the ones you have called.
-auth/setup_password.php | paragraph | For accounts that have never had a password. Enter your registered email to create one.
 parent_portal.php | paragraph | Here's what your little ones have been up to in Junior Church. Browse their attendance, lessons, and take-home resources below.
 parent_portal.php | paragraph | See what your child has been learning, their attendance, and take-home resources from Junior Church.
 parent_portal.php | paragraph | We couldn't find any children linked to your profile. Please contact the Junior Church team.
@@ -15,4 +14,3 @@ reach.php | paragraph | Check it and try again, or ask your Reach leader to add 
 reach.php | paragraph | Enter the phone number you&#39;re registered with, so every soul you log is credited to you.
 reach.php | paragraph | We couldn&#39;t find this Reach campaign. Please ask your Reach leader for the current capture link.
 testimonies.php | paragraph | "They triumphed over him by the blood of the Lamb and by the word of their testimony." <span class="text-xs font-bold tracking-widest text-hodRed mt-3 block uppercase">— Revelation 12:11</span>
-verify.php | paragraph | Enter the cryptographic code found on your printed or digital document to verify its authenticity.

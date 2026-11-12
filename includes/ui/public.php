@@ -65,6 +65,7 @@ function ui_public_open(array $page): void
 <?php endforeach; ?>
 </head>
 <body class="ui-public">
+<?php require dirname(__DIR__) . '/pwa_boot.php'; ?>
 <a class="ui-skip" href="#main">Skip to content</a>
 <header class="ui-public-bar">
     <div class="ui-public-bar__inner">

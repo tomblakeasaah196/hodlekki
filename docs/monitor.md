@@ -388,8 +388,8 @@ SQLite, and again in the integration job on **MySQL 8.0 and MariaDB 10.11**
 `rum.php`, `intake.php`, `probe.php`, `brief.php`, `alerts.php`, `wall.php`,
 `browser.php` (the tag), `bootstrap.php` (everything + `monitor_user_can()`).
 `api/monitor_api.php`, `api/monitor_intake.php`, `api/monitor_probe.php`,
-`cron/monitor.php`, `bin/monitor.php`, `monitor_confirm.php` (+
-`assets/css/monitor_public.css`), `assets/js/monitor.js`,
+`cron/monitor.php`, `bin/monitor.php`, `monitor_confirm.php` (on the standalone
+layout, `includes/ui/standalone.php`), `assets/js/monitor.js`,
 `.github/workflows/monitor-probe.yml`, `db/migrations/20261125090000_monitor_core.sql`,
 `tests/monitor/`. Screens: `modules/monitor/index.php`, `modules/monitor/wall.php`,
 `modules/monitor/how_to_use.md`, `assets/ui/js/pages/monitor.js`, `assets/js/monitor_wall.js`,

@@ -1,5 +1,12 @@
 <?php
 // /auth/login.php
+// Sign-in. Rebuilt on the foundation (strict CSP, self-hosted assets, the
+// standalone layout); the behaviour is unchanged: the form posts to
+// /api/auth_api.php, which signs in by confirmed personal email or church
+// sign-in name, locks out after repeated failures, says where a moved
+// sign-in name now lives, keeps the device signed in for 30 days when asked,
+// and answers with where to go next. Script: assets/ui/js/pages/login.js.
+//
 // Baseline security headers (nosniff, referrer, framing, permissions): this
 // page does not load includes/db.php on every request, which is where every
 // other page gets them.
@@ -46,283 +53,81 @@ if (!empty($_COOKIE[SECURITY_SIGNOUT_COOKIE])) {
     $signOutNotice = substr((string) $_COOKIE[SECURITY_SIGNOUT_COOKIE], 0, 300);
     setcookie(SECURITY_SIGNOUT_COOKIE, '', ['expires' => time() - 3600, 'path' => '/']);
 }
+
+require_once __DIR__ . '/../includes/ui/standalone.php';
+
+// The installed app can open here (its start URL bounces signed-out people to
+// sign-in), so this page keeps the launch screen and the install banner.
+ui_standalone_open('Sign in', [
+    'bare' => true,
+    'boot' => true,
+    'quiet' => false,
+    'scripts' => ['/assets/ui/js/pages/login.js'],
+]);
+
+$quote = ['“Let all that you do be done in love.”', '1 Corinthians 16:14'];
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome Home | HOD Lekki Centre</title>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        hodBlue: '#1D356A',
-                        hodRed: '#D11920',
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                        display: ['Montserrat', 'sans-serif'],
-                    },
-                    animation: {
-                        'fade-in': 'fadeIn 1.2s ease-out forwards',
-                        'slide-up': 'slideUp 0.8s ease-out forwards',
-                        'pulse-slow': 'pulse 6s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    },
-                    keyframes: {
-                        fadeIn: {
-                            '0%': { opacity: '0' },
-                            '100%': { opacity: '1' },
-                        },
-                        slideUp: {
-                            '0%': { opacity: '0', transform: 'translateY(30px)' },
-                            '100%': { opacity: '1', transform: 'translateY(0)' },
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    
-    <style>
-        /* Hide scrollbar for clean aesthetic */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    </style>
-    <?php require_once __DIR__ . '/../includes/pwa_head.php'; ?>
-</head>
-<body class="bg-black font-sans relative antialiased overflow-x-hidden no-scrollbar">
-<?php require_once __DIR__ . '/../includes/pwa_boot.php'; ?>
+<div class="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-hodBlue via-[#16294f] to-black p-4 sm:p-8">
+    <div class="ui-card w-full max-w-5xl overflow-hidden shadow-ui-lg md:grid md:min-h-[600px] md:grid-cols-[5fr_7fr]">
 
-    <!-- Fixed Backgrounds so they don't move when scrolling -->
-    <div class="fixed inset-0 z-0">
-        <img src="https://images.unsplash.com/photo-1438232992991-995b7058bbb3?ixlib=rb-4.0.3&auto=format&fit=crop&w=2073&q=80" 
-             alt="Background" 
-             class="w-full h-full object-cover opacity-70 scale-105 transition-transform duration-[30s] hover:scale-100">
-        
-        <div class="absolute inset-0 bg-hodBlue/40 mix-blend-multiply"></div>
-        <div class="absolute inset-0 bg-gradient-to-br from-black/80 via-black/40 to-hodBlue/80"></div>
-    </div>
-
-    <!-- Fixed Ambient Glowing Orbs -->
-    <div class="fixed top-1/4 left-1/4 w-96 h-96 bg-blue-500/30 rounded-full blur-[100px] animate-pulse-slow z-0"></div>
-    <div class="fixed bottom-1/4 right-1/4 w-96 h-96 bg-hodRed/20 rounded-full blur-[100px] animate-pulse-slow z-0" style="animation-delay: 3s;"></div>
-
-    <!-- Scrollable Page Wrapper -->
-    <div class="relative z-10 min-h-screen flex flex-col p-4 sm:p-8">
-        
-        <!-- Main Card (grows organically, margins collapse to allow scrolling) -->
-        <div class="w-full max-w-5xl m-auto flex flex-col md:flex-row rounded-3xl overflow-hidden shadow-2xl backdrop-blur-xl bg-white/10 border border-white/20 animate-slide-up min-h-[600px]">
-            
-            <div class="w-full md:w-5/12 p-8 sm:p-12 flex flex-col justify-between relative order-2 md:order-1 border-t md:border-t-0 md:border-r border-white/10 bg-black/20 md:bg-transparent">
-                
-                <div class="mb-8 hidden md:block">
-                    <h2 class="text-3xl lg:text-4xl font-display font-bold text-white mb-3 tracking-tight">Welcome Home.</h2>
-                    <p class="text-blue-100/90 text-sm lg:text-base leading-relaxed font-light">
-                        Thank you for serving with excellence.
-                    </p>
-                </div>
-
-                <div class="min-h-[140px] flex items-center mt-auto">
-                    <div id="quote-box" class="text-white transition-opacity duration-1000 w-full">
-                        <p id="scripture-text" class="font-display text-lg lg:text-xl font-medium italic leading-snug mb-4 text-white/90">
-                            "Let all that you do be done in love."
-                        </p>
-                        <div class="flex items-center gap-3">
-                            <div class="h-[1px] w-8 bg-hodRed/80"></div>
-                            <p id="scripture-ref" class="text-xs font-semibold tracking-widest text-blue-200 uppercase">
-                                1 Corinthians 16:14
-                            </p>
-                        </div>
-                    </div>
-                </div>
+        <aside class="relative hidden overflow-hidden bg-hodBlue p-10 text-white md:flex md:flex-col md:justify-between lg:p-12" aria-label="Welcome">
+            <picture>
+                <source media="(min-width: 768px)" srcset="/assets/images/hod_lekki.jpeg">
+                <img src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="" class="absolute inset-0 h-full w-full object-cover opacity-50" decoding="async">
+            </picture>
+            <div class="absolute inset-0 bg-gradient-to-br from-black/70 via-black/30 to-hodBlue/90" aria-hidden="true"></div>
+            <div class="relative">
+                <h2 class="font-display text-3xl font-bold tracking-tight lg:text-4xl">Welcome Home.</h2>
+                <p class="mt-3 text-white/85">Thank you for serving with excellence.</p>
             </div>
+            <figure class="relative min-h-[140px] transition-opacity duration-700" data-login-quote>
+                <blockquote class="font-display text-lg font-medium italic leading-snug text-white/90 lg:text-xl" data-quote-text><?= ui_e($quote[0]) ?></blockquote>
+                <figcaption class="mt-4 flex items-center gap-3 text-xs font-semibold uppercase tracking-widest text-white/70">
+                    <span class="h-px w-8 bg-hodRed" aria-hidden="true"></span><span data-quote-ref><?= ui_e($quote[1]) ?></span>
+                </figcaption>
+            </figure>
+        </aside>
 
-            <div class="w-full md:w-7/12 p-8 sm:p-12 lg:p-16 flex flex-col justify-center bg-white/95 order-1 md:order-2 relative shadow-inner">
-                
-                <div class="w-full max-w-sm mx-auto animate-fade-in" style="animation-delay: 0.3s;">
-                    
-                    <div class="flex justify-center md:justify-start mb-10">
-                        <img src="/assets/images/hod_logo.svg" alt="HOD Lekki Centre" class="h-16 object-contain" onerror="this.src='https://placehold.co/150x50?text=HOD+Logo'">
-                    </div>
+        <section class="flex flex-col justify-center p-6 sm:p-10 lg:p-16">
+            <div class="mx-auto w-full max-w-sm">
+                <img src="/assets/images/hod_logo.svg" alt="HOD Lekki Centre" class="mx-auto mb-8 h-14 object-contain md:mx-0" width="160" height="56">
 
-                    <div class="mb-8 text-center md:text-left">
-                        <h1 class="text-2xl font-display font-bold text-gray-900 tracking-tight">Sign In to Workspace</h1>
-                        <p class="text-gray-500 text-sm mt-1">Enter your details to access your dashboard.</p>
-                    </div>
+                <h1 class="ui-h1 text-center md:text-left">Sign In to Workspace</h1>
+                <p class="mb-6 mt-1 text-center text-sm text-ink-muted md:text-left">Enter your details to access your dashboard.</p>
 
-                    <?php if ($signOutNotice !== ''): ?>
-                    <div class="mb-6 p-4 rounded-xl text-sm font-semibold bg-amber-50 text-amber-800 border border-amber-200 shadow-sm flex items-start gap-3">
-                        <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                        <span><?= htmlspecialchars($signOutNotice) ?></span>
-                    </div>
-                    <?php endif; ?>
+<?php if ($signOutNotice !== ''): ?>
+                <div class="mb-5"><?= ui_banner('warning', ['text' => $signOutNotice]) ?></div>
+<?php endif; ?>
+                <div class="mb-5" id="login-alert" aria-live="polite"></div>
 
-                    <div id="alert-box" class="hidden mb-6 p-4 rounded-xl text-sm font-medium transition-all shadow-sm"></div>
-
-                    <form id="loginForm" class="space-y-5">
-                        <div>
-                            <label for="email" class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">Email</label>
-                            <input type="email" id="email" name="email" required autocomplete="username"
-                                class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-hodBlue focus:border-transparent transition-all bg-gray-50 hover:bg-white focus:bg-white outline-none text-gray-800 shadow-sm"
-                                placeholder="Your personal email or church sign-in name">
+                <form class="ui-form" id="login-form" data-action="login.submit" data-ui-validate novalidate>
+                    <?= ui_field('text', ['name' => 'email', 'id' => 'email', 'label' => 'Email', 'required' => true,
+                        'autocomplete' => 'username', 'inputmode' => 'email', 'placeholder' => 'Your personal email or church sign-in name',
+                        'attrs' => ['autocapitalize' => 'none', 'spellcheck' => 'false']]) ?>
+                    <div>
+                        <?= ui_field('password', ['name' => 'password', 'id' => 'password', 'label' => 'Password', 'required' => true,
+                            'autocomplete' => 'current-password', 'placeholder' => '••••••••']) ?>
+                        <div class="mt-2 flex flex-wrap justify-between gap-2 text-sm">
+                            <a class="ui-link font-medium text-hodRed" href="/auth/setup_password.php">First time? Set your password</a>
+                            <a class="ui-link text-ink-muted" href="/auth/forgot_password.php">Forgot your password?</a>
                         </div>
+                    </div>
+                    <label class="ui-check">
+                        <input type="checkbox" name="remember" value="1" checked>
+                        <span>Keep me signed in on this device for 30 days<span class="ui-check__hint">Untick this on a shared or office computer.</span></span>
+                    </label>
+                    <?= ui_button('Authenticate', ['variant' => 'brand', 'type' => 'submit', 'block' => true, 'size' => 'lg', 'attrs' => ['id' => 'login-submit']]) ?>
+                </form>
 
-                        <div>
-                            <div class="flex items-center justify-between mb-2">
-                                <label for="password" class="block text-xs font-semibold text-gray-600 uppercase tracking-wider">Password</label>
-                                <a href="/auth/setup_password.php" class="text-xs font-semibold text-hodRed hover:text-red-700 transition-colors underline decoration-hodRed/30 underline-offset-4">First time? Set your password</a>
-                            </div>
-                            <input type="password" id="password" name="password" required 
-                                class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-hodBlue focus:border-transparent transition-all bg-gray-50 hover:bg-white focus:bg-white outline-none text-gray-800 shadow-sm"
-                                placeholder="••••••••">
-                            <div class="mt-2 text-right">
-                                <a href="/auth/forgot_password.php" class="text-xs font-semibold text-gray-500 hover:text-gray-900 transition-colors underline underline-offset-4">Forgot your password?</a>
-                            </div>
-                        </div>
+                <figure class="mt-8 border-t border-line pt-6 text-center transition-opacity duration-700 md:hidden" data-login-quote>
+                    <blockquote class="font-display italic text-ink-muted" data-quote-text><?= ui_e($quote[0]) ?></blockquote>
+                    <figcaption class="mt-2 text-xs font-semibold uppercase tracking-widest text-ink-subtle" data-quote-ref><?= ui_e($quote[1]) ?></figcaption>
+                </figure>
 
-                        <label for="remember" class="flex items-start gap-3 cursor-pointer select-none">
-                            <input type="checkbox" id="remember" name="remember" value="1" checked
-                                class="mt-0.5 w-4 h-4 shrink-0 accent-hodRed">
-                            <span class="text-sm text-gray-600 leading-snug">
-                                Keep me signed in on this device for 30 days
-                                <span class="block text-xs text-gray-400">Untick this on a shared or office computer.</span>
-                            </span>
-                        </label>
-
-                        <button type="submit" id="submitBtn"
-                            class="w-full bg-hodRed hover:bg-red-700 text-white font-semibold py-3.5 px-4 rounded-xl shadow-lg shadow-red-500/30 hover:shadow-red-500/50 hover:-translate-y-0.5 transition-all flex justify-center items-center gap-2 mt-4">
-                            <span>Authenticate</span>
-                            <svg id="spinner" class="animate-spin hidden h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        </button>
-                    </form>
-                    
-                    <p class="text-center text-xs text-gray-400 mt-10">
-                        &copy; <?php echo date('Y'); ?> Household of David. All rights reserved.
-                    </p>
-                </div>
+                <p class="mt-8 text-center text-xs text-ink-subtle">&copy; <?= date('Y') ?> Household of David. All rights reserved.</p>
             </div>
-        </div>
+        </section>
     </div>
-
-    <script>
-        // 1. Array of 20 Encouraging Scriptures for Service
-        const quotes = [
-            { text: "\"Let all that you do be done in love.\"", ref: "1 Corinthians 16:14" },
-            { text: "\"For God is not unjust so as to overlook your work and the love that you have shown for his name in serving the saints...\"", ref: "Hebrews 6:10" },
-            { text: "\"Whatever you do, work heartily, as for the Lord and not for men.\"", ref: "Colossians 3:23" },
-            { text: "\"And let us not grow weary of doing good, for in due season we will reap, if we do not give up.\"", ref: "Galatians 6:9" },
-            { text: "\"Well done, good and faithful servant. You have been faithful over a little; I will set you over much.\"", ref: "Matthew 25:21" },
-            { text: "\"Do not be slothful in zeal, be fervent in spirit, serve the Lord.\"", ref: "Romans 12:11" },
-            { text: "\"Whoever brings blessing will be enriched, and one who waters will himself be watered.\"", ref: "Proverbs 11:25" },
-            { text: "\"As each has received a gift, use it to serve one another, as good stewards of God's varied grace.\"", ref: "1 Peter 4:10" },
-            { text: "\"But as for me and my house, we will serve the Lord.\"", ref: "Joshua 24:15" },
-            { text: "\"Serve the Lord with gladness! Come into his presence with singing!\"", ref: "Psalm 100:2" },
-            { text: "\"Rendering service with a good will as to the Lord and not to man.\"", ref: "Ephesians 6:7" },
-            { text: "\"For even the Son of Man came not to be served but to serve, and to give his life as a ransom for many.\"", ref: "Mark 10:45" },
-            { text: "\"If anyone serves me, he must follow me; and where I am, there will my servant be also.\"", ref: "John 12:26" },
-            { text: "\"Only fear the Lord and serve him faithfully with all your heart. For consider what great things he has done for you.\"", ref: "1 Samuel 12:24" },
-            { text: "\"Present your bodies as a living sacrifice, holy and acceptable to God, which is your spiritual worship.\"", ref: "Romans 12:1" },
-            { text: "\"But you, take courage! Do not let your hands be weak, for your work shall be rewarded.\"", ref: "2 Chronicles 15:7" },
-            { text: "\"Do not neglect to do good and to share what you have, for such sacrifices are pleasing to God.\"", ref: "Hebrews 13:16" },
-            { text: "\"Remembering before our God and Father your work of faith and labor of love...\"", ref: "1 Thessalonians 1:3" },
-            { text: "\"Therefore, my beloved brothers, be steadfast, immovable, always abounding in the work of the Lord...\"", ref: "1 Corinthians 15:58" },
-            { text: "\"For God has not given us a spirit of fear, but of power and of love and of a sound mind.\"", ref: "2 Timothy 1:7" }
-        ];
-
-        let currentQuote = 0;
-        
-        function rotateQuotes() {
-            const quoteBox = $('#quote-box');
-            
-            // Fade out smoothly
-            quoteBox.css('opacity', '0');
-            
-            setTimeout(() => {
-                // Change text while invisible
-                currentQuote = (currentQuote + 1) % quotes.length;
-                $('#scripture-text').text(quotes[currentQuote].text);
-                $('#scripture-ref').text(quotes[currentQuote].ref);
-                
-                // Fade back in
-                quoteBox.css('opacity', '1');
-            }, 1000); 
-        }
-
-        // Start rotation every 8 seconds
-        setInterval(rotateQuotes, 8000);
-
-        // 2. AJAX Login Submission
-        $('#loginForm').on('submit', function(e) {
-            e.preventDefault(); 
-            
-            const btn = $('#submitBtn');
-            const spinner = $('#spinner');
-            const alertBox = $('#alert-box');
-            const btnText = btn.find('span');
-            
-            // Show loading state
-            btn.prop('disabled', true).addClass('opacity-90');
-            btnText.text('Authenticating...');
-            spinner.removeClass('hidden');
-            alertBox.addClass('hidden').removeClass('bg-red-50 text-red-600 border border-red-200 bg-green-50 text-green-600 border-green-200');
-
-            $.ajax({
-                url: '/api/auth_api.php', // Now using absolute path!
-                type: 'POST',
-                data: $(this).serialize(),
-                dataType: 'json',
-                success: function(response) {
-                    alertBox.removeClass('hidden');
-                    
-                    if(response.status === 'success') {
-                        // Success Styling
-                        alertBox.addClass('bg-green-50 text-green-600 border border-green-200').text(response.message);
-                        btnText.text('Success!');
-                        spinner.addClass('hidden');
-                        
-                        // Redirect dynamically based on backend matrix. When we
-                        // are returning the member to the page they asked for,
-                        // put back the #fragment the browser carried here
-                        // (e.g. a notification's #tab=attendees) — it never
-                        // reaches the server.
-                        let destination = response.redirect;
-                        if (response.returning && window.location.hash && destination.indexOf('#') === -1) {
-                            destination += window.location.hash;
-                        }
-                        setTimeout(() => {
-                            window.location.href = destination;
-                        }, 1000);
-                    } else {
-                        // Error Styling
-                        alertBox.addClass('bg-red-50 text-red-600 border border-red-200').text(response.message);
-                        
-                        // Reset button
-                        btn.prop('disabled', false).removeClass('opacity-90');
-                        btnText.text('Authenticate');
-                        spinner.addClass('hidden');
-                    }
-                },
-                error: function() {
-                    alertBox.removeClass('hidden').addClass('bg-red-50 text-red-600 border border-red-200').text('A network error occurred. Please try again.');
-                    btn.prop('disabled', false).removeClass('opacity-90');
-                    btnText.text('Authenticate');
-                    spinner.addClass('hidden');
-                }
-            });
-        });
-    </script>
-</body>
-</html>
+</div>
+<?php
+ui_standalone_close();
