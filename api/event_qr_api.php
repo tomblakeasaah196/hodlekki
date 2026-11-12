@@ -12,6 +12,14 @@
  */
 
 require_once '../includes/db.php';
+require_once '../includes/html_allowlist.php';
+
+/** An event description as safe HTML for the public register page. */
+function event_qr_description(string $raw): string
+{
+    $clean = hod_html_allowlist($raw);
+    return str_contains($raw, '<') ? $clean : nl2br($clean, false);
+}
 header('Content-Type: application/json');
 
 /* ---- Auth ---- */
@@ -99,7 +107,9 @@ try {
                     'event_date_raw'    => $e['event_date'],
                     'end_date'          => $e['end_date'],
                     'location'          => $e['location'],
-                    'description'       => $e['description'],
+                    // The register page shows this as HTML: allowlisted formatting only, rows saved
+                    // before the allowlist included; a plain-text description keeps its line breaks.
+                    'description'       => event_qr_description((string) ($e['description'] ?? '')),
                     'banner_image_url'  => $e['banner_image_url'],
                     'requires_registration' => $e['requires_registration'],
                     'is_closed'         => $e['is_closed'],
