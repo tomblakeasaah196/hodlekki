@@ -273,6 +273,9 @@ function se_handoff_push(PDO $pdo, array $event, array $options, array $override
     if (!function_exists('reach_notify') && is_file(__DIR__ . '/../reach_helpers.php')) {
         require_once __DIR__ . '/../reach_helpers.php';
     }
+    // Who hears about it comes from the permission engine (loaded by db.php on
+    // the web; CLI callers and the integration harness may not have it yet).
+    require_once __DIR__ . '/../permissions.php';
 
     if (function_exists('reach_notify')) {
         $reachIds = perm_module_leaders($pdo, 'reach', 'hod');
