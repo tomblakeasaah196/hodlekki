@@ -68,10 +68,11 @@ Four steps make it complete, in this order:
 | | DNS and mail records | no A, MX or SPF (amber: no DKIM or DMARC) | yes |
 | | Origin lock | a request around Cloudflare is answered (amber: no `EDGE_TOKEN`) | yes |
 | | Outside probe | (amber) no report for 3 runs | — |
-| Background jobs | SMS queue worker, push worker (every minute), Special Events (every 5 min), Reach lost souls (07:00), Assimilation watchlists (07:15) | stopped, or a daily run missed; amber when late, stuck or failed | yes |
+| Background jobs | SMS queue worker, push worker, email queue worker (every minute), email automation, Special Events (every 5 min), email bounces (every 10 min), Reach lost souls (07:00), Assimilation watchlists (07:15) | stopped, or a daily run missed; amber when late, stuck or failed | yes |
 | Messages | SMS sending | queue not moving for 15 min, stuck "sending", wallet under ~100 texts (amber under 500) | yes |
 | | Push notifications | cannot send, or jobs waiting over 15 min | yes |
 | | Email sending | not configured, SMTP refuses the sign-in (tested hourly without sending), 5+ failed sends a day | yes |
+| | Mail sync | an active mailbox not synced for 10 minutes (one brought in under 10 minutes ago gets that long); amber when one needs a new password or is not on the server | yes |
 | Server | Database speed | unreachable, or a members query over 1 s | yes |
 | | Disk space | cPanel quota 95% (amber 85%); when cPanel answers "0 used" (server quotas off) the home folder is measured with `du`; a figure that cannot be read is amber "Unknown", never 0% | yes |
 | | Backups | no database backup in `~/backups/hodlc` within 26 h (amber: half the size of the last, uploads over 8 days) | yes |

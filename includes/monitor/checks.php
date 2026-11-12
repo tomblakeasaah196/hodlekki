@@ -27,6 +27,12 @@ function monitor_cron_jobs(): array
             'line' => '* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1'],
         'push_worker'             => ['label' => 'Push notification worker', 'every' => 1,
             'line' => '* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/push_worker.php >/dev/null 2>&1'],
+        'email_worker'            => ['label' => 'Email queue worker', 'every' => 1,
+            'line' => '* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/email_worker.php >> /home/smartqaq/logs/hod-email.log 2>&1'],
+        'automation_tick'         => ['label' => 'Email automation (every 5 min)', 'every' => 5,
+            'line' => '0,5,10,15,20,25,30,35,40,45,50,55 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/automation_tick.php >> /home/smartqaq/logs/hod-email.log 2>&1'],
+        'email_bounces'           => ['label' => 'Email bounces (every 10 min)', 'every' => 10,
+            'line' => '*/10 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/email_bounces.php >> /home/smartqaq/logs/hod-email.log 2>&1'],
         'special_events'          => ['label' => 'Special Events (reminders, clean-up)', 'every' => 5,
             'line' => '*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/special_events.php >/dev/null 2>&1'],
         'reach_lost_souls'        => ['label' => 'Reach: lost souls (07:00)', 'daily' => '07:00',
@@ -43,8 +49,8 @@ function monitor_cron_jobs(): array
 /** Checks that alert at once when they turn red (the rest wait for the morning summary). */
 function monitor_urgent_checks(): array
 {
-    return ['cron_sms_queue_worker', 'cron_push_worker', 'cron_special_events', 'cron_reach_lost_souls',
-            'cron_assimilation_watchlists', 'sms', 'push', 'email', 'db', 'disk', 'backups', 'php', 'deploy',
+    return ['cron_sms_queue_worker', 'cron_push_worker', 'cron_email_worker', 'cron_special_events', 'cron_reach_lost_souls',
+            'cron_assimilation_watchlists', 'sms', 'push', 'email', 'mail_sync', 'db', 'disk', 'backups', 'php', 'deploy',
             'outside_site', 'outside_connect', 'tls', 'dns', 'origin_lock'];
 }
 
@@ -277,6 +283,58 @@ function monitor_check_email(array $f, int $now): array
     }
 
     return monitor_check('email', 'Messages', $label, 'ok', $detail . ' No failed sends in the last 24 hours.');
+}
+
+/**
+ * Mail sync (docs/MAIL.md): red when an active mailbox has not synced for 10 minutes (one brought in under 10 minutes
+ * ago gets that long for its first sync), amber when one needs a new password or was never created on the server.
+ * $f: ready, active [name, synced, since, error], stuck [name, status, error]; times are Unix.
+ */
+function monitor_check_mail(array $f, int $now): array
+{
+    $label = 'Mail sync';
+    if (empty($f['ready'])) {
+        return monitor_check('mail_sync', 'Messages', $label, 'ok', 'Mail is not set up on this server yet.');
+    }
+    $limit = 600;
+    $active = $f['active'] ?? [];
+    $stuck = $f['stuck'] ?? [];
+    $names = static fn (array $boxes): string => implode(', ', array_slice(array_column($boxes, 'name'), 0, 3))
+        . (count($boxes) > 3 ? ' and ' . (count($boxes) - 3) . ' more' : '');
+    $error = static fn (?string $e): string => $e !== null && $e !== '' ? ' Last error: ' . mb_substr(monitor_redact($e), 0, 160) . '.' : '';
+    $stuckText = '';
+    if ($stuck) {
+        $reset = array_values(array_filter($stuck, fn ($b) => ($b['status'] ?? '') === 'needs_reset'));
+        $failed = array_values(array_filter($stuck, fn ($b) => ($b['status'] ?? '') !== 'needs_reset'));
+        $stuckText = trim(($reset ? count($reset) . ' need(s) a new password: ' . $names($reset) . '. ' : '')
+            . ($failed ? count($failed) . ' not on the server: ' . $names($failed) . '.' : ''));
+    }
+
+    $late = array_values(array_filter($active, static function (array $b) use ($now, $limit): bool {
+        $at = $b['synced'] ?? $b['since'] ?? null;
+        return $at === null || $now - (int) $at > $limit;
+    }));
+    if ($late) {
+        usort($late, fn ($a, $b) => ($a['synced'] ?? 0) <=> ($b['synced'] ?? 0));
+        $first = $late[0];
+        $detail = count($late) . ' of ' . count($active) . ' active mailbox(es) not synced for 10 minutes: ' . $names($late) . '. '
+            . (($first['synced'] ?? null) !== null ? 'Oldest sync ' . monitor_ago((int) $first['synced'], $now) . '.' : 'Never synced.')
+            . $error($first['error'] ?? null) . ($stuckText !== '' ? ' Also: ' . $stuckText : '');
+
+        return monitor_check('mail_sync', 'Messages', $label, 'bad', $detail,
+            'Mailboxes → Health shows the cause and ~/logs/hod-mail.log each minute\'s error; cPanel → Cron Jobs must run cron/mail_minute.php every minute.');
+    }
+    if ($stuck) {
+        return monitor_check('mail_sync', 'Messages', $label, 'warn', $stuckText . $error($stuck[0]['error'] ?? null),
+            'Mailboxes: Reset password on each one that needs it; a mailbox not on the server shows its error there.');
+    }
+    if (!$active) {
+        return monitor_check('mail_sync', 'Messages', $label, 'ok', 'No mailbox brought in yet.');
+    }
+    $synced = array_filter(array_column($active, 'synced'), fn ($t) => $t !== null);
+
+    return monitor_check('mail_sync', 'Messages', $label, 'ok', count($active) . ' active mailbox(es) synced within 10 minutes'
+        . ($synced ? '; the oldest ' . monitor_ago((int) min($synced), $now) : '') . '.');
 }
 
 /** Database speed: connecting, a simple and a real query, and slow pages. */
@@ -831,6 +889,26 @@ function monitor_refresh_smtp_test(PDO $db): void
     monitor_state_set($db, 'smtp_test', (string) json_encode(['ok' => $ok, 'error' => $error, 'at' => monitor_time()]));
 }
 
+/** The mailboxes the mail minute cron syncs (mail_accounts), or ready false before Mail is installed. */
+function monitor_facts_mail(PDO $pdo): array
+{
+    if (!monitor_table_exists($pdo, 'mail_accounts')) {
+        return ['ready' => false];
+    }
+    $out = ['ready' => true, 'active' => [], 'stuck' => []];
+    $rows = $pdo->query("SELECT display_name, status, last_synced_at, last_error, created_at FROM mail_accounts WHERE status IN ('active', 'needs_reset', 'failed') ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as $r) {
+        $box = ['name' => (string) $r['display_name'], 'error' => $r['last_error'] !== null ? (string) $r['last_error'] : null];
+        if ($r['status'] === 'active') {
+            $out['active'][] = $box + ['synced' => monitor_ts($r['last_synced_at']), 'since' => monitor_ts($r['created_at'])];
+        } else {
+            $out['stuck'][] = $box + ['status' => (string) $r['status']];
+        }
+    }
+
+    return $out;
+}
+
 function monitor_facts_db(PDO $pdo, PDO $db): array
 {
     $f = [];
@@ -1100,6 +1178,7 @@ function monitor_checks_run(PDO $pdo, PDO $db, bool $slow = false): array
     $safe('sms', 'Messages', 'SMS sending', fn () => monitor_check_sms(monitor_facts_sms($pdo, $db), $now));
     $safe('push', 'Messages', 'Push notifications', fn () => monitor_check_push(monitor_facts_push($pdo), $now));
     $safe('email', 'Messages', 'Email sending', fn () => monitor_check_email(monitor_facts_email($db), $now));
+    $safe('mail_sync', 'Messages', 'Mail sync', fn () => monitor_check_mail(monitor_facts_mail($pdo), $now));
     $safe('db', 'Server', 'Database speed', fn () => monitor_check_db(monitor_facts_db($pdo, $db)));
     $safe('disk', 'Server', 'Disk space', fn () => monitor_check_disk(json_decode((string) monitor_state_get($db, 'disk'), true) ?: []));
     $safe('backups', 'Server', 'Backups', fn () => monitor_check_backups(monitor_facts_backups(), $now));
