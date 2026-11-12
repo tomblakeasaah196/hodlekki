@@ -54,26 +54,24 @@ require(not re.search(r'<div\s[^>]*\bclass="[^"]*\bfixed\b', events),
         "Events must not hand-build fixed overlays; use ui_dialog_start()")
 
 # Every authenticated fixed overlay named as a modal must remain discoverable.
+FIXED_MODAL = r'<[^>]+\bid="([^"]*[Mm]odal[^"]*)"[^>]+\bclass="([^"]*\bfixed\b[^"]*)"[^>]*>'
 fixed_modal_count = 0
 modal_sources = sorted((ROOT / "modules").glob("*/index.php"))
 modal_sources.append(ROOT / "includes/charis_modals.php")
 for path in modal_sources:
     source = path.read_text(encoding="utf-8", errors="ignore")
-    for match in re.finditer(
-        r'<[^>]+\bid="([^"]*[Mm]odal[^"]*)"[^>]+\bclass="([^"]*\bfixed\b[^"]*)"[^>]*>',
-        source,
-        re.IGNORECASE,
-    ):
+    for match in re.finditer(FIXED_MODAL, source, re.IGNORECASE):
         fixed_modal_count += 1
         modal_id = match.group(1)
         require("modal" in modal_id.lower(), f"{path}: undiscoverable fixed dialog {modal_id}")
 
-# A floor that only proves the scan still works (a broken pattern finds
-# nothing). The count falls on purpose as pages move to the components'
-# native <dialog> (docs/UI.md), which needs no modal manager: it was 126
-# before batch 1 of the UI migration and 98 after it.
-require(fixed_modal_count >= 20,
-        f"modal scan unexpectedly found only {fixed_modal_count} authenticated overlays")
+# Prove the scan still works with a sample (a broken pattern finds nothing).
+# The count itself falls on purpose as pages move to the components' native
+# <dialog> (docs/UI.md): 126 before the UI migration, 98 after batch 1, 15 by
+# Envision, and 0 once the last legacy page has moved. A count floor broke
+# each time a page moved, so the pattern is tested instead.
+require(re.search(FIXED_MODAL, '<div id="sampleModal" class="fixed inset-0 z-50 hidden">', re.IGNORECASE) is not None,
+        "the modal scan pattern no longer matches a fixed overlay")
 
 if failures:
     for failure in failures:

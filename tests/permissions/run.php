@@ -358,6 +358,27 @@ ok('post type, statuses, marks and roster type come from fixed lists',
     && str_contains($zoeApi, 'in_array($status, $marks, true)') && str_contains($zoeApi, 'in_array($type, $roster_types, true)'));
 
 // ---------------------------------------------------------------------------
+section('Envision checks each write');
+$envApi = '';   // the code, comments stripped
+foreach (token_get_all((string) file_get_contents($root . '/api/envision_api.php')) as $tok) {
+    if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+        $envApi .= is_array($tok) ? $tok[1] : $tok;
+    }
+}
+ok('envision_api needs the CSRF token and asks each level (it was View for all)',
+    str_contains($envApi, 'csrf_require();') && str_contains($envApi, "api_require_can('envision', \$levels[\$action]);")
+    && str_contains($envApi, "'toggle_publish' => 'approve'") && str_contains($envApi, "'delete_comment' => 'delete'")
+    && str_contains($envApi, "'save_radio_config' => 'manage'") && str_contains($envApi, "'test_radio_connection' => 'manage'"));
+ok('cover and audio go through the upload guard; stored paths never come from the request',
+    str_contains($envApi, "hod_upload_store(\$_FILES['cover_image']") && str_contains($envApi, "hod_upload_store(\$_FILES['audio_file']")
+    && !str_contains($envApi, 'existing_cover') && !str_contains($envApi, 'existing_audio') && !str_contains($envApi, 'move_uploaded_file'));
+ok('the YouTube link is rebuilt as an embed address; the stream test speaks http(s) only',
+    str_contains($envApi, "'https://www.youtube.com/embed/' . \$m[1]") && str_contains($envApi, 'CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS'));
+ok('crew roles come from a fixed list; duties go only to the crew',
+    str_contains($envApi, 'in_array($category, $crew_roles, true)') && str_contains($envApi, 'in_array($role, $crew_roles, true)')
+    && str_contains($envApi, "Choose someone on the media crew."));
+
+// ---------------------------------------------------------------------------
 section('Day-one parity of a synthetic church');
 $pdo = perm_test_db();
 $people = [];
