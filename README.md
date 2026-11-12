@@ -316,8 +316,9 @@ assets/         Static CSS / JS / images shipped to the browser.
 auth/           Login, logout, first-time password setup.
 cron/           CLI jobs (sms_queue_worker.php, reach_lost_souls.php 07:00,
                 assimilation_watchlists.php 07:15, permissions_daily.php 00:10,
-                special_events.php */5,
-                push_worker.php and monitor.php every minute).
+                special_events.php and automation_tick.php every 5 min,
+                email_bounces.php */10, push_worker.php, email_worker.php
+                and monitor.php every minute).
 includes/       Shared PHP: db.php, header.php, functions.php, PDF helpers,
                 sms_functions.php, sms_vault_key.php, push_*.php, pwa_*.php.
 modules/        One folder per ERP module; each has index.php as the view.
