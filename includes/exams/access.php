@@ -118,7 +118,10 @@ function exams_take_view(PDO $pdo, array $item, int $userId): array
         return ['state' => 'not_set', 'item' => ['title' => $item['title'], 'training' => $item['training_title']]];
     }
     exam_finalize_due($pdo, $now, (int) $exam['id']);
-    $attempt = exam_attempt_get($pdo, (int) $exam['id'], $userId);
+    $attempts = exam_attempts_of($pdo, (int) $exam['id'], $userId);
+    $attempt = $attempts === [] ? null : $attempts[count($attempts) - 1];
+    $st = exam_attempts_state($exam, $attempts, $now);
+    $best = $st['best'];
     $view = [
         'item' => ['title' => $item['title'], 'training' => $item['training_title']],
         'window' => exam_window($exam, $now),
@@ -126,6 +129,14 @@ function exams_take_view(PDO $pdo, array $item, int $userId): array
         'minutes' => $exam['minutes'], 'questions' => count($exam['question_ids']), 'pass_percent' => $exam['pass_percent'],
         'part_marks' => (bool) $exam['part_marks'],
         'review' => exam_review_state($pdo, $exam, $now),
+        // Retakes (docs/EXAMS.md §3): the take page offers "Try again (attempt N of M)" when can_retake.
+        'attempts_allowed' => $st['allowed'], 'attempts_used' => $st['used'], 'attempts_left' => $st['left'],
+        'attempt_no' => $attempt['attempt_no'] ?? null, 'can_retake' => $st['can_retake'],
+        'best' => $best === null ? null : ['score' => $best['score'], 'max' => $best['max_score'], 'percent' => $best['percent'],
+                                           'passed' => (bool) $best['passed'], 'attempt_no' => $best['attempt_no']],
+        'attempts' => array_map(static fn ($a) => ['attempt_no' => $a['attempt_no'], 'status' => $a['status'], 'score' => $a['score'],
+            'max' => $a['max_score'], 'percent' => $a['percent'], 'passed' => $a['passed'] === null ? null : (bool) $a['passed'],
+            'submitted_at' => $a['submitted_at'], 'best' => $best !== null && $a['id'] === $best['id']], $attempts),
     ];
     if ($attempt === null) {
         return $view + ['state' => 'ready'];

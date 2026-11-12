@@ -3,7 +3,10 @@
 //
 // Exams, "fair and firm" (owner, 12 Nov 2026):
 //   - an exam opens and closes at set times (window_open / window_close);
-//   - ONE attempt per person: UNIQUE (exam_id, user_id), claimed by insert;
+//   - attempts set per exam (1, 2 or 3; owner, 12 Nov 2026): one row per
+//     attempt number, UNIQUE (exam_id, user_id, attempt_no), claimed by
+//     insert; each retake is a fresh paper and timer, the best score counts,
+//     and right answers wait until no attempt is left or the person passed;
 //   - a countdown: the attempt's deadline is fixed on the server when it
 //     starts (the earlier of start + minutes and the window's close) and
 //     answers after it are refused;
@@ -25,6 +28,7 @@
 
 const EXAM_GRACE_SECONDS = 20;     // network slack after the deadline
 const EXAM_MINUTES_MAX   = 300;
+const EXAM_ATTEMPTS_MAX  = 3;
 
 // ---------------------------------------------------------------------------
 // Items and settings
@@ -60,6 +64,8 @@ function exam_decode(array $row): array
     $row['answers_shown_by'] = isset($row['answers_shown_by']) ? (int) $row['answers_shown_by'] : null;
     $row['question_ids'] = array_values(array_map('intval', json_decode((string) $row['question_ids_json'], true) ?: []));
     unset($row['question_ids_json']);
+    // Retakes (migration 20261209090200; one attempt before it runs).
+    $row['attempts_allowed'] = max(1, min(EXAM_ATTEMPTS_MAX, (int) ($row['attempts_allowed'] ?? 1)));
     return $row;
 }
 
@@ -80,9 +86,10 @@ function exam_get_by_id(PDO $pdo, int $id): ?array
     return $row ? exam_decode($row) : null;
 }
 
+/** How many people have started it (each counted once, however many attempts). */
 function exam_attempt_count(PDO $pdo, int $examId): int
 {
-    $stmt = $pdo->prepare('SELECT COUNT(*) FROM training_attempts WHERE exam_id = ?');
+    $stmt = $pdo->prepare('SELECT COUNT(DISTINCT user_id) FROM training_attempts WHERE exam_id = ?');
     $stmt->execute([$examId]);
     return (int) $stmt->fetchColumn();
 }
@@ -103,9 +110,11 @@ function exam_parse_time($v)
 
 /**
  * Set up (or change) the exam on an item.
- * $in: window_open, window_close, minutes, pass_percent, shuffle, part_marks, leave_alert, question_ids.
+ * $in: window_open, window_close, minutes, pass_percent, shuffle, part_marks, leave_alert, question_ids,
+ * attempts_allowed (1-3; left out: as saved, else 1).
  * Once anyone has started, the questions, the time, the pass mark and the
- * marking rules are fixed; the window can still move and the alert change.
+ * marking rules are fixed; the window can still move, the alert change, and
+ * the attempts go up (never down: nobody loses a chance they were given).
  * $addAfterStart (the set-up page's import, after the tutor's confirm):
  * questions may also be added then, never removed. Started papers don't
  * change: each attempt keeps the questions it was given at the start
@@ -164,22 +173,36 @@ function exam_save(PDO $pdo, array $item, array $in, int $actor, bool $addAfterS
     $shuffle = !empty($in['shuffle']) ? 1 : 0;
     $part = !empty($in['part_marks']) ? 1 : 0;
     $old = exam_get($pdo, (int) $item['id']);
+    $retakes = exams_retakes_ready($pdo);
+    $attempts = (int) ($in['attempts_allowed'] ?? ($old['attempts_allowed'] ?? 1));
+    if ($attempts < 1 || $attempts > EXAM_ATTEMPTS_MAX) {
+        $errors[] = 'Attempts allowed: 1, 2 or 3.';
+    } elseif ($attempts > 1 && !$retakes) {
+        $errors[] = 'Retakes open after the next update. Keep 1 attempt for now.';
+    }
+    $started = $old !== null && exam_attempt_count($pdo, (int) $old['id']) > 0;
     $grows = $addAfterStart && $old !== null && array_diff($old['question_ids'], $ids) === [];
-    if ($old !== null && exam_attempt_count($pdo, (int) $old['id']) > 0
-        && (($old['question_ids'] !== $ids && !$grows) || $old['minutes'] !== $minutes || $old['pass_percent'] !== $pass
+    if ($started && (($old['question_ids'] !== $ids && !$grows) || $old['minutes'] !== $minutes || $old['pass_percent'] !== $pass
             || $old['shuffle'] !== $shuffle || $old['part_marks'] !== $part)) {
         $errors[] = 'People have started it, so only the times and the leave alert can change.';
+    }
+    if ($started && $attempts < $old['attempts_allowed']) {
+        $errors[] = 'People have started it, so attempts can go up, not down.';
     }
     if ($errors !== []) {
         return ['ok' => false, 'errors' => array_values(array_unique($errors))];
     }
     $now = exams_sql_dt(exams_now());
+    $cols = ['question_ids_json', 'window_open', 'window_close', 'minutes', 'pass_percent', 'shuffle', 'part_marks', 'leave_alert'];
     $values = [exams_json($ids), $open ? exams_sql_dt($open) : null, $close ? exams_sql_dt($close) : null, $minutes, $pass, $shuffle, $part, $alert];
+    if ($retakes) {
+        $cols[] = 'attempts_allowed';
+        $values[] = $attempts;
+    }
     if ($old === null) {
         try {
-            $pdo->prepare('INSERT INTO training_exams (question_ids_json, window_open, window_close, minutes, pass_percent, shuffle, part_marks, leave_alert,
-                                                       item_id, training_id, created_by, created_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            $all = array_merge($cols, ['item_id', 'training_id', 'created_by', 'created_at']);
+            $pdo->prepare('INSERT INTO training_exams (' . implode(', ', $all) . ') VALUES (' . implode(', ', array_fill(0, count($all), '?')) . ')')
                 ->execute(array_merge($values, [(int) $item['id'], (int) $item['training_id'], $actor, $now]));
         } catch (PDOException $e) {
             if (!exams_is_duplicate_key($e)) {
@@ -188,8 +211,8 @@ function exam_save(PDO $pdo, array $item, array $in, int $actor, bool $addAfterS
             return ['ok' => false, 'errors' => ['Someone else set this exam up just now. Reload to see it.']];
         }
     } else {
-        $pdo->prepare('UPDATE training_exams SET question_ids_json = ?, window_open = ?, window_close = ?, minutes = ?, pass_percent = ?, shuffle = ?,
-                              part_marks = ?, leave_alert = ?, updated_by = ?, updated_at = ? WHERE id = ?')
+        $set = implode(', ', array_map(static fn ($c) => $c . ' = ?', array_merge($cols, ['updated_by', 'updated_at'])));
+        $pdo->prepare('UPDATE training_exams SET ' . $set . ' WHERE id = ?')
             ->execute(array_merge($values, [$actor, $now, (int) $old['id']]));
     }
     return ['ok' => true, 'exam' => exam_get($pdo, (int) $item['id'])];
@@ -225,8 +248,9 @@ function exam_import_into_exam(PDO $pdo, array $item, array $ids, int $actor, ar
     $rules = $exam !== null
         ? ['window_open' => (string) ($exam['window_open'] ?? ''), 'window_close' => (string) ($exam['window_close'] ?? ''),
            'minutes' => $exam['minutes'], 'pass_percent' => $exam['pass_percent'], 'leave_alert' => $exam['leave_alert'],
-           'shuffle' => $exam['shuffle'], 'part_marks' => $exam['part_marks']]
-        : ['window_open' => '', 'window_close' => '', 'minutes' => 30, 'pass_percent' => 50, 'leave_alert' => 3, 'shuffle' => 1, 'part_marks' => 0];
+           'shuffle' => $exam['shuffle'], 'part_marks' => $exam['part_marks'], 'attempts_allowed' => $exam['attempts_allowed']]
+        : ['window_open' => '', 'window_close' => '', 'minutes' => 30, 'pass_percent' => 50, 'leave_alert' => 3, 'shuffle' => 1, 'part_marks' => 0,
+           'attempts_allowed' => 1];
     // Once started, only the times and the leave alert may change, so the rest comes from the saved exam.
     $editable = $started > 0 ? ['window_open', 'window_close', 'leave_alert'] : array_keys($rules);
     foreach ($editable as $k) {
@@ -314,15 +338,65 @@ function exam_attempt_decode(array $row): array
     foreach (['score', 'percent'] as $k) {
         $row[$k] = $row[$k] === null ? null : (float) $row[$k];
     }
+    $row['attempt_no'] = (int) ($row['attempt_no'] ?? 1);
     return $row;
 }
 
+/** The person's latest attempt (the one in progress, or the last one handed in), or null. */
 function exam_attempt_get(PDO $pdo, int $examId, int $userId): ?array
 {
-    $stmt = $pdo->prepare('SELECT * FROM training_attempts WHERE exam_id = ? AND user_id = ?');
+    $stmt = $pdo->prepare('SELECT * FROM training_attempts WHERE exam_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1');
     $stmt->execute([$examId, $userId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     return $row ? exam_attempt_decode($row) : null;
+}
+
+/** Every attempt of one person on one exam, first to last. */
+function exam_attempts_of(PDO $pdo, int $examId, int $userId): array
+{
+    $stmt = $pdo->prepare('SELECT * FROM training_attempts WHERE exam_id = ? AND user_id = ? ORDER BY id');
+    $stmt->execute([$examId, $userId]);
+    return array_map('exam_attempt_decode', $stmt->fetchAll(PDO::FETCH_ASSOC));
+}
+
+/** The attempt that counts: the best handed-in score (the earlier one on a tie), or null. */
+function exam_best_attempt(array $attempts): ?array
+{
+    $best = null;
+    foreach ($attempts as $a) {
+        if ($a['status'] !== 'submitted' || $a['percent'] === null) {
+            continue;
+        }
+        if ($best === null || $a['percent'] > $best['percent']) {
+            $best = $a;
+        }
+    }
+    return $best;
+}
+
+/**
+ * Where one person stands on an exam's attempts.
+ *   more       they could still sit it again (no attempt in progress, not
+ *              passed, attempts left, the exam not closed): until this is
+ *              false, right answers stay hidden from them;
+ *   can_retake they can start the next attempt now (the window is open).
+ *
+ * @return array{allowed:int, used:int, left:int, passed:bool, in_progress:bool, more:bool, can_retake:bool, best:?array}
+ */
+function exam_attempts_state(array $exam, array $attempts, DateTimeImmutable $now): array
+{
+    $allowed = (int) ($exam['attempts_allowed'] ?? 1);
+    $used = count($attempts);
+    $passed = false;
+    foreach ($attempts as $a) {
+        $passed = $passed || ($a['status'] === 'submitted' && !empty($a['passed']));
+    }
+    $inProgress = $used > 0 && $attempts[$used - 1]['status'] === 'started';
+    $left = max(0, $allowed - $used);
+    $window = exam_window($exam, $now);
+    $more = !$inProgress && !$passed && $left > 0 && $window !== 'closed';
+    return ['allowed' => $allowed, 'used' => $used, 'left' => $left, 'passed' => $passed, 'in_progress' => $inProgress,
+            'more' => $more, 'can_retake' => $more && $used > 0 && $window === 'open', 'best' => exam_best_attempt($attempts)];
 }
 
 function exam_attempt_by_id(PDO $pdo, int $id): ?array
@@ -351,20 +425,34 @@ function exam_event(PDO $pdo, int $attemptId, string $kind, ?string $detail = nu
 }
 
 /**
- * Start the one attempt (or resume it while its time runs).
+ * Start an attempt: the first, or the next one while the exam allows it (or
+ * resume the one in progress while its time runs). Each attempt is a fresh
+ * paper: a new shuffle, a new timer, the same window rules.
  * @return array{ok:bool, attempt?:array, code?:string, error?:string}
- *   code: NOT_OPEN | CLOSED | DONE | EMPTY
+ *   code: NOT_OPEN | CLOSED | DONE (no attempt left) | PASSED | EMPTY
  */
 function exam_start(PDO $pdo, array $exam, int $userId, ?int $enrolmentId = null, ?DateTimeImmutable $now = null): array
 {
     $now ??= exams_now();
     exam_finalize_due($pdo, $now, (int) $exam['id']);
-    $have = exam_attempt_get($pdo, (int) $exam['id'], $userId);
-    if ($have !== null) {
-        return $have['status'] === 'started'
-            ? ['ok' => true, 'attempt' => $have]
-            : ['ok' => false, 'code' => 'DONE', 'error' => 'You have taken this exam.'];
+    $all = exam_attempts_of($pdo, (int) $exam['id'], $userId);
+    $done = (int) ($exam['attempts_allowed'] ?? 1) > 1
+        ? ['ok' => false, 'code' => 'DONE', 'error' => 'You have used all your attempts.']
+        : ['ok' => false, 'code' => 'DONE', 'error' => 'You have taken this exam.'];
+    if ($all !== []) {
+        $last = $all[count($all) - 1];
+        if ($last['status'] === 'started') {
+            return ['ok' => true, 'attempt' => $last];
+        }
+        $st = exam_attempts_state($exam, $all, $now);
+        if ($st['left'] === 0) {
+            return $done;
+        }
+        if ($st['passed']) {
+            return ['ok' => false, 'code' => 'PASSED', 'error' => 'You have passed this exam.'];
+        }
     }
+    $attemptNo = $all === [] ? 1 : max(array_column($all, 'attempt_no')) + 1;
     $state = exam_window($exam, $now);
     if ($state !== 'open') {
         return ['ok' => false, 'code' => $state === 'closed' ? 'CLOSED' : 'NOT_OPEN',
@@ -401,9 +489,16 @@ function exam_start(PDO $pdo, array $exam, int $userId, ?int $enrolmentId = null
         if ($own) {
             $pdo->beginTransaction();
         }
-        $pdo->prepare("INSERT INTO training_attempts (exam_id, item_id, user_id, enrolment_id, status, started_at, deadline_at)
-                       VALUES (?, ?, ?, ?, 'started', ?, ?)")
-            ->execute([(int) $exam['id'], (int) $exam['item_id'], $userId, $enrolmentId, exams_sql_dt($now), exams_sql_dt($deadline)]);
+        // The insert claims the attempt number: UNIQUE (exam_id, user_id, attempt_no). Never check-then-insert.
+        if (exams_retakes_ready($pdo)) {
+            $pdo->prepare("INSERT INTO training_attempts (exam_id, item_id, user_id, attempt_no, enrolment_id, status, started_at, deadline_at)
+                           VALUES (?, ?, ?, ?, ?, 'started', ?, ?)")
+                ->execute([(int) $exam['id'], (int) $exam['item_id'], $userId, $attemptNo, $enrolmentId, exams_sql_dt($now), exams_sql_dt($deadline)]);
+        } else {
+            $pdo->prepare("INSERT INTO training_attempts (exam_id, item_id, user_id, enrolment_id, status, started_at, deadline_at)
+                           VALUES (?, ?, ?, ?, 'started', ?, ?)")
+                ->execute([(int) $exam['id'], (int) $exam['item_id'], $userId, $enrolmentId, exams_sql_dt($now), exams_sql_dt($deadline)]);
+        }
         $attemptId = (int) $pdo->lastInsertId();
         $ins = $pdo->prepare('INSERT INTO training_attempt_answers (attempt_id, question_id, position, option_order) VALUES (?, ?, ?, ?)');
         foreach ($order as $pos => $q) {
@@ -424,11 +519,10 @@ function exam_start(PDO $pdo, array $exam, int $userId, ?int $enrolmentId = null
             $pdo->rollBack();
         }
         if (exams_is_duplicate_key($e)) {
-            // Two tabs pressed Start at once: the other one won; use its attempt.
+            // Two tabs pressed Start at once: the other one won this attempt number; use its attempt.
             $have = exam_attempt_get($pdo, (int) $exam['id'], $userId);
             if ($have !== null) {
-                return $have['status'] === 'started' ? ['ok' => true, 'attempt' => $have]
-                    : ['ok' => false, 'code' => 'DONE', 'error' => 'You have taken this exam.'];
+                return $have['status'] === 'started' ? ['ok' => true, 'attempt' => $have] : $done;
             }
         }
         throw $e;
@@ -683,7 +777,8 @@ function exam_tell_tutors(PDO $pdo, array $exam, array $attempt, int $leaves): v
     $name = trim((string) ($u['first_name'] ?? '') . ' ' . (string) ($u['last_name'] ?? '')) ?: 'Someone';
     $ins = $pdo->prepare('INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, ?, ?, ?)');
     foreach (exam_tutor_ids($exam) as $uid) {
-        $ins->execute([$uid, 'Exam: left the tab', $name . ' has left the exam tab ' . $leaves . ' times.',
+        $ins->execute([$uid, 'Exam: left the tab', $name . ' has left the exam tab ' . $leaves . ' times'
+                       . ((int) ($attempt['attempt_no'] ?? 1) > 1 ? ' (attempt ' . (int) $attempt['attempt_no'] . ').' : '.'),
                        exam_url_setup((int) $exam['item_id']) . '#tab=results']);
     }
 }
@@ -693,15 +788,22 @@ function exam_tell_tutors(PDO $pdo, array $exam, array $attempt, int $leaves): v
 // ---------------------------------------------------------------------------
 
 /**
- * What a person sees after their exam: the score, and for the questions
- * they got wrong (once exam_review_state() opens the review) the right
- * answer and the stored explanation; until then, when that will be.
+ * What a person sees after an attempt: the score, and for the questions
+ * they got wrong the right answer and the stored explanation, only when both
+ *   - they can't sit it again (no attempt left, or they passed, or it has
+ *     closed): never while another attempt is still theirs to take; and
+ *   - exam_review_state() opens the review (#181's rule).
+ * Until then, when that will be (review_when 'attempts': after their attempts).
  */
 function exam_result_for_learner(PDO $pdo, array $exam, array $attempt, ?DateTimeImmutable $now = null): array
 {
     $now ??= exams_now();
     $review = exam_review_state($pdo, $exam, $now);
-    $open = $review['open'];
+    $st = exam_attempts_state($exam, exam_attempts_of($pdo, (int) $exam['id'], (int) $attempt['user_id']), $now);
+    $open = $review['open'] && !$st['more'];
+    if ($st['more']) {
+        $review = ['open' => false, 'when' => 'attempts', 'at' => null];
+    }
     $wrong = [];
     $count = 0;
     foreach (exam_attempt_rows($pdo, (int) $attempt['id']) as $r) {
@@ -720,6 +822,7 @@ function exam_result_for_learner(PDO $pdo, array $exam, array $attempt, ?DateTim
         ] : ['n' => (int) $r['position']];
     }
     return [
+        'attempt_no' => (int) $attempt['attempt_no'],
         'score' => $attempt['score'], 'max' => $attempt['max_score'], 'percent' => $attempt['percent'],
         'passed' => (bool) $attempt['passed'], 'pass_percent' => (int) $exam['pass_percent'],
         'questions' => $count, 'wrong_count' => count($wrong), 'review_open' => $open,
@@ -728,21 +831,36 @@ function exam_result_for_learner(PDO $pdo, array $exam, array $attempt, ?DateTim
 }
 
 /**
- * The tutor's table: every attempt, plus the people enrolled who have not
- * started (when PR 1's enrolments are there).
+ * The tutor's table: every attempt (attempt_no; `best` marks the one that
+ * counts, `attempts` is how many that person has), plus the people enrolled
+ * who have not started (when PR 1's enrolments are there). The summary
+ * counts people, not attempts; "passed" goes by each person's best.
  */
 function exam_results(PDO $pdo, array $exam, ?DateTimeImmutable $now = null): array
 {
     exam_finalize_due($pdo, $now, (int) $exam['id']);
     $stmt = $pdo->prepare('SELECT a.*, u.first_name, u.last_name FROM training_attempts a LEFT JOIN users u ON u.id = a.user_id
-                            WHERE a.exam_id = ? ORDER BY u.first_name, u.last_name, a.id');
+                            WHERE a.exam_id = ? ORDER BY u.first_name, u.last_name, a.user_id, a.id');
     $stmt->execute([(int) $exam['id']]);
     $rows = [];
     $seen = [];
+    $byUser = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $a = exam_attempt_decode($r);
         $seen[$a['user_id']] = true;
+        $byUser[$a['user_id']][] = $a;
         $rows[] = $a + ['name' => trim((string) $r['first_name'] . ' ' . (string) $r['last_name']) ?: ('#' . $a['user_id'])];
+    }
+    $bestIds = [];
+    foreach ($byUser as $uid => $list) {
+        $best = exam_best_attempt($list);
+        if ($best !== null) {
+            $bestIds[$best['id']] = true;
+        }
+    }
+    foreach ($rows as $i => $r) {
+        $rows[$i]['best'] = isset($bestIds[$r['id']]);
+        $rows[$i]['attempts'] = count($byUser[$r['user_id']]);
     }
     if (exams_table_exists($pdo, 'training_enrolments')) {
         $stmt = $pdo->prepare("SELECT e.user_id, u.first_name, u.last_name FROM training_enrolments e LEFT JOIN users u ON u.id = e.user_id
@@ -750,17 +868,24 @@ function exam_results(PDO $pdo, array $exam, ?DateTimeImmutable $now = null): ar
         $stmt->execute([(int) $exam['training_id']]);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
             if (!isset($seen[(int) $r['user_id']])) {
-                $rows[] = ['id' => null, 'user_id' => (int) $r['user_id'], 'status' => 'not_started', 'leaves' => 0, 'score' => null,
+                $rows[] = ['id' => null, 'user_id' => (int) $r['user_id'], 'attempt_no' => null, 'best' => false, 'attempts' => 0,
+                           'status' => 'not_started', 'leaves' => 0, 'score' => null,
                            'max_score' => null, 'percent' => null, 'passed' => null, 'started_at' => null, 'submitted_at' => null, 'ended_by' => null,
                            'name' => trim((string) $r['first_name'] . ' ' . (string) $r['last_name']) ?: ('#' . $r['user_id'])];
             }
         }
     }
-    $sum = ['enrolled' => count($rows), 'started' => 0, 'finished' => 0, 'passed' => 0];
+    $people = [];
     foreach ($rows as $r) {
-        $sum['started'] += $r['status'] !== 'not_started' ? 1 : 0;
-        $sum['finished'] += $r['status'] === 'submitted' ? 1 : 0;
-        $sum['passed'] += !empty($r['passed']) ? 1 : 0;
+        $p = $people[$r['user_id']] ?? ['started' => false, 'finished' => false];
+        $people[$r['user_id']] = ['started' => $p['started'] || $r['status'] !== 'not_started', 'finished' => $p['finished'] || $r['status'] === 'submitted'];
+    }
+    $sum = ['enrolled' => count($people), 'started' => 0, 'finished' => 0, 'passed' => 0, 'attempts' => array_sum(array_map('count', $byUser))];
+    foreach ($people as $uid => $p) {
+        $sum['started'] += $p['started'] ? 1 : 0;
+        $sum['finished'] += $p['finished'] ? 1 : 0;
+        $best = isset($byUser[$uid]) ? exam_best_attempt($byUser[$uid]) : null;
+        $sum['passed'] += $best !== null && !empty($best['passed']) ? 1 : 0;
     }
     return ['rows' => $rows, 'summary' => $sum];
 }
@@ -804,8 +929,10 @@ function exam_enrolment_id(PDO $pdo, int $trainingId, int $userId): ?int
 
 /**
  * Tell PR 1 that this person has sat the exam: training_progress (enrolment,
- * item) = 'completed' with data {score, max, percent, passed, attempt_id}
- * (PR 1 counts it towards completion only when passed), through PR 1's own
+ * item) = 'completed' with data {score, max, percent, passed, attempt_id,
+ * attempt_no, attempts} from their BEST attempt so far (retakes: the best
+ * score counts; a worse retake never lowers it). PR 1 counts it towards
+ * completion only when passed. Written through PR 1's own
  * trainings_progress_put(); then trainings_recheck_enrolment(), which may
  * complete the training. Never breaks marking: a failure is logged.
  */
@@ -815,8 +942,12 @@ function exam_progress_hook(PDO $pdo, array $exam, array $attempt): void
     if ($enrolment === null || !exams_table_exists($pdo, 'training_progress')) {
         return;
     }
-    $data = ['score' => $attempt['score'], 'max' => $attempt['max_score'], 'percent' => $attempt['percent'],
-             'passed' => (bool) $attempt['passed'], 'attempt_id' => (int) $attempt['id']];
+    $all = exam_attempts_of($pdo, (int) $exam['id'], (int) $attempt['user_id']);
+    $best = exam_best_attempt($all) ?? $attempt;
+    $data = ['score' => $best['score'], 'max' => $best['max_score'], 'percent' => $best['percent'],
+             'passed' => (bool) $best['passed'], 'attempt_id' => (int) $best['id'], 'attempt_no' => (int) ($best['attempt_no'] ?? 1),
+             'attempts' => count(array_filter($all, static fn ($a) => $a['status'] === 'submitted'))];
+    $attempt = $best;
     try {
         $core = dirname(__DIR__) . '/trainings/bootstrap.php';
         if (!function_exists('trainings_progress_put') && is_file($core)) {

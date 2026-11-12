@@ -339,6 +339,7 @@
         f.elements.leave_alert.value = e ? e.leave_alert : 3;
         f.elements.shuffle.checked = e ? !!e.shuffle : true;
         f.elements.part_marks.checked = e ? !!e.part_marks : false;
+        f.elements.attempts_allowed.value = String(e ? e.attempts_allowed || 1 : 1);
         fillPool(v, e ? e.question_ids : []);
     }
 
@@ -359,10 +360,13 @@
         if (into) into.textContent = locked ? 'They are saved as Ready and added for new starters.' : 'They are saved as Ready and added to this exam.';
         one('[data-ex-locked]').innerHTML = locked
             ? '<div class="ui-banner ui-banner--info mb-4" role="status">' + HOD.icon('info') + '<div class="ui-banner__body"><p class="ui-banner__text">' +
-              esc(plural(v.started, 'person has', 'people have') + ' started: only the times and the note can change.') + '</p></div></div>'
+              esc(plural(v.started, 'person has', 'people have') + ' started: only the times, the note and more attempts can change.') + '</p></div></div>'
             : '';
         all('[data-ex-pool] input, #ex-exam-form [name="minutes"], #ex-exam-form [name="pass_percent"], #ex-exam-form [name="shuffle"], #ex-exam-form [name="part_marks"]')
             .forEach(function (i) { i.disabled = locked; });
+        // Once started, attempts can go up, never down.
+        var saved = v.exam ? v.exam.attempts_allowed || 1 : 1;
+        all('#ex-exam-form [name="attempts_allowed"] option').forEach(function (o) { o.disabled = locked && Number(o.value) < saved; });
         total();
     }
 
@@ -451,6 +455,7 @@
             leave_alert: form.elements.leave_alert.value,
             shuffle: form.elements.shuffle.checked ? 1 : 0,
             part_marks: form.elements.part_marks.checked ? 1 : 0,
+            attempts_allowed: form.elements.attempts_allowed.value,
             question_ids: all('[data-ex-pool] input:checked').map(function (i) { return Number(i.value); })
         };
     }
@@ -473,18 +478,24 @@
         if (btn) HOD.busy(btn, true);
         call('results', { item: cfg.item }, { quiet: !btn }).then(function (res) {
             var s = res.summary;
+            var allowed = setup.view && setup.view.exam ? setup.view.exam.attempts_allowed || 1 : 1;
             one('[data-ex-summary]').textContent = s
-                ? s.enrolled + ' enrolled · ' + s.started + ' started · ' + s.finished + ' handed in · ' + s.passed + ' passed'
+                ? s.enrolled + ' enrolled · ' + s.started + ' started · ' + s.finished + ' handed in · ' + s.passed + ' passed' +
+                  (s.attempts > s.started ? ' · ' + plural(s.attempts, 'attempt', 'attempts') : '')
                 : 'Set the exam up first.';
             var alert = setup.view && setup.view.exam ? setup.view.exam.leave_alert : 3;
+            // Retakes: one row per attempt; with more than one, the attempt that counts (the best) is marked.
             one('[data-ex-results]').innerHTML = (res.rows || []).length
-                ? '<div class="ui-table-wrap"><table class="ui-table"><thead><tr><th scope="col">Person</th><th scope="col">Status</th>' +
+                ? '<div class="ui-table-wrap"><table class="ui-table"><thead><tr><th scope="col">Person</th>' +
+                  (allowed > 1 || s.attempts > s.started ? '<th scope="col">Attempt</th>' : '') + '<th scope="col">Status</th>' +
                   '<th scope="col" class="text-right">Score</th><th scope="col">Result</th><th scope="col" class="text-right">Left tab</th><th scope="col"><span class="sr-only">Open</span></th></tr></thead><tbody>' +
                   res.rows.map(function (r) {
                       var status = r.status === 'not_started' ? 'Not started' : (r.status === 'started' ? 'Writing' : (ENDED[r.ended_by] || 'Handed in'));
                       var score = r.score === null ? '—' : r.score + ' / ' + r.max_score + ' (' + Math.round(r.percent) + '%)';
-                      var result = r.passed === null ? '' : (r.passed ? badge('Passed', 'success') : badge('Not passed', 'danger'));
-                      return '<tr><td>' + esc(r.name) + '</td><td>' + esc(status) + '</td><td class="text-right tabular-nums">' + esc(score) + '</td><td>' + result + '</td>' +
+                      var result = (r.passed === null ? '' : (r.passed ? badge('Passed', 'success') : badge('Not passed', 'danger'))) +
+                          (r.best && r.attempts > 1 ? ' ' + badge('Best', 'info') : '');
+                      var attemptCell = allowed > 1 || s.attempts > s.started ? '<td class="tabular-nums">' + (r.attempt_no ? esc(r.attempt_no + ' of ' + allowed) : '—') + '</td>' : '';
+                      return '<tr><td>' + esc(r.name) + '</td>' + attemptCell + '<td>' + esc(status) + '</td><td class="text-right tabular-nums">' + esc(score) + '</td><td>' + result + '</td>' +
                           '<td class="text-right">' + (r.leaves >= alert ? badge(String(r.leaves), 'warning') : esc(String(r.leaves || 0))) + '</td>' +
                           '<td class="text-right">' + (r.id ? '<button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-action="ex.attempt" data-id="' + r.id + '"><span>View</span></button>' : '') + '</td></tr>';
                   }).join('') + '</tbody></table></div>'
@@ -497,7 +508,8 @@
     function showAttempt(res) {
         setup.attempt = res.attempt;
         var a = res.attempt;
-        one('#ex-attempt-title').textContent = a.status === 'started' ? 'Writing now' : 'Score ' + a.score + ' / ' + a.max_score;
+        one('#ex-attempt-title').textContent = (a.attempt_no > 1 ? 'Attempt ' + a.attempt_no + ' · ' : '') +
+            (a.status === 'started' ? 'Writing now' : 'Score ' + a.score + ' / ' + a.max_score);
         one('[data-ex-attempt]').innerHTML =
             '<ol class="ui-stack">' + res.questions.map(function (q) {
                 return '<li class="rounded-ui-lg border border-line p-3"><p class="ui-meta">Question ' + q.n + ' · ' + plural(q.marks, 'mark', 'marks') + '</p>' +

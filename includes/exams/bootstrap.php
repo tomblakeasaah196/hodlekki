@@ -67,6 +67,37 @@ function exams_table_exists(PDO $pdo, string $table): bool
     return $known[$table];
 }
 
+/** Does the table have this column (memoised per connection; any driver)? */
+function exams_column_exists(PDO $pdo, string $table, string $column): bool
+{
+    static $memo = null;
+    $memo ??= new WeakMap();
+    if (!preg_match('/^[a-z_][a-z0-9_]*$/', $table) || !preg_match('/^[a-z_][a-z0-9_]*$/', $column)) {
+        return false;
+    }
+    $known = $memo[$pdo] ?? [];
+    $key = $table . '.' . $column;
+    if (!array_key_exists($key, $known)) {
+        try {
+            $pdo->query("SELECT {$column} FROM {$table} LIMIT 0");
+            $known[$key] = true;
+        } catch (Throwable $e) {
+            $known[$key] = false;
+        }
+        $memo[$pdo] = $known;
+    }
+    return $known[$key];
+}
+
+/**
+ * Retakes are possible: migration 20261209090200 has run (attempts_allowed,
+ * attempt_no). Until then every exam is one attempt, as before.
+ */
+function exams_retakes_ready(PDO $pdo): bool
+{
+    return exams_column_exists($pdo, 'training_exams', 'attempts_allowed') && exams_column_exists($pdo, 'training_attempts', 'attempt_no');
+}
+
 /** The migration has run (every table of the module exists). */
 function exams_ready(PDO $pdo): bool
 {

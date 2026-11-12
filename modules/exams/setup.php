@@ -47,8 +47,13 @@ echo ui_json_script('exams-config', ['page' => 'setup', 'item' => (int) $item['i
                         <?= ui_field('number', ['name' => 'minutes', 'id' => 'ex-minutes', 'label' => 'Minutes', 'value' => '30', 'required' => true, 'attrs' => ['min' => 1, 'max' => 300]]) ?>
                         <?= ui_field('number', ['name' => 'pass_percent', 'id' => 'ex-pass', 'label' => 'Pass mark (%)', 'value' => '50', 'required' => true, 'attrs' => ['min' => 0, 'max' => 100]]) ?>
                     </div>
-                    <?= ui_field('number', ['name' => 'leave_alert', 'id' => 'ex-leaves', 'label' => 'Tell me after', 'value' => '3',
-                        'info' => 'How many times someone may leave the exam tab before you get a note.', 'attrs' => ['min' => 1, 'max' => 50]]) ?>
+                    <div class="grid grid-cols-2 gap-3">
+                        <?= ui_field('select', ['name' => 'attempts_allowed', 'id' => 'ex-attempts', 'label' => 'Attempts allowed', 'value' => '1',
+                            'options' => ['1' => '1', '2' => '2', '3' => '3'],
+                            'info' => 'People can retake it until they pass or run out. Each retake is a new paper and timer, the best score counts, and the right answers wait until no attempt is left. Once people have started you can add attempts, not take them away.']) ?>
+                        <?= ui_field('number', ['name' => 'leave_alert', 'id' => 'ex-leaves', 'label' => 'Tell me after', 'value' => '3',
+                            'info' => 'How many times someone may leave the exam tab before you get a note.', 'attrs' => ['min' => 1, 'max' => 50]]) ?>
+                    </div>
                     <label class="ui-check"><input type="checkbox" name="shuffle" value="1" checked><span>Shuffle per person</span></label>
                     <label class="ui-check"><input type="checkbox" name="part_marks" value="1"><span>Part marks<span class="ui-check__hint">Several answers: partly right earns part.</span></span></label>
                     <div><?= ui_button('Save', ['variant' => 'primary', 'type' => 'submit', 'icon' => 'check']) ?></div>

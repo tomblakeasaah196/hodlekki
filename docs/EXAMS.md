@@ -64,23 +64,30 @@ One exam per training item of type `exam` (`training_exams.item_id`, UNIQUE).
 | Rule | How |
 | ---- | --- |
 | Opens and closes | `window_open` / `window_close` (Lagos) bound when an attempt may **start**. |
-| One attempt | `training_attempts` UNIQUE (`exam_id`, `user_id`), claimed by insert; two tabs pressing Start share one. |
+| Attempts | Set per exam: **Attempts allowed** 1, 2 or 3 (`training_exams.attempts_allowed`, default 1; owner, 12 Nov 2026). One row per attempt, `training_attempts.attempt_no`, UNIQUE (`exam_id`, `user_id`, `attempt_no`) claimed by insert (never check-then-insert), so two tabs pressing Start share one. A learner retakes on their own (`start` begins the next attempt) until they pass or run out, while the window is open. Each retake is a fresh paper: a new shuffle, a new timer, the same window rules. Every attempt is kept. Once people have started, attempts can go up, not down. Migration `20261209090200` (existing rows become attempt 1); until it runs every exam is one attempt (`exams_retakes_ready()`). |
 | Countdown | The deadline is fixed on the server at Start: the earlier of start + minutes and `window_close`. The page shows the server's seconds left and re-syncs on every saved answer. |
 | Shuffled per person | Question order and option order per attempt (`random_int`, Fisher–Yates), stored in `training_attempt_answers`. True/false keeps True, False. |
 | Nothing right sent | The browser gets each question's text and its options in this person's order as shown positions; never `correct_json`, never the explanation. Answers come back as shown positions and are mapped on the server. |
 | Auto-submit at zero | The page hands in when its clock reaches zero. The server also ends every attempt past its deadline + 20 s whenever an exam is opened, answered or looked at (`exam_finalize_due()`): `ended_by` = `timer`, or `closed` when the window's close cut it short. An answer after that hands the paper in instead. |
-| Tab-leave notes | `visibilitychange` → `leave` / `return` events; after `leave_alert` leaves (default 3) the people who set the exam up get a bell (and push), once per attempt. The tutor sees the timeline. |
+| Tab-leave notes | `visibilitychange` → `leave` / `return` events; after `leave_alert` leaves (default 3) the people who set the exam up get a bell (and push), once per attempt (a retake counts afresh, and the bell names the attempt). The tutor sees the timeline. |
 | Marking | On the server, once, when the attempt ends. One answer and true/false: all or nothing. Several answers: all or nothing, or with **part marks** when the exam says so: (right picked − wrong picked) / right × marks, never below 0. |
-| Firm once started | The questions, minutes, pass mark, shuffle and part marks cannot change once anyone has started; the times and the leave alert can. One exception, the set-up page's import after the tutor's confirm: questions can be added (never removed) for new starters. Every paper is fixed at its start (its own `training_attempt_answers` rows), so started papers never change. |
+| Best score counts | `exam_best_attempt()`: the highest percentage handed in (the earlier on a tie). It decides pass/fail for training progress and completion: `exam_progress_hook()` writes the best attempt's score to `training_progress` (`data.attempt_id`, `attempt_no`, `attempts`) after every hand-in, so a worse retake never lowers it, then `trainings_recheck_enrolment()`. |
+| Firm once started | The questions, minutes, pass mark, shuffle and part marks cannot change once anyone has started; the times, the leave alert and more attempts can. One exception, the set-up page's import after the tutor's confirm: questions can be added (never removed) for new starters. Every paper is fixed at its start (its own `training_attempt_answers` rows), so started papers never change. |
 
 **Results.** A learner sees the score, the percentage and Passed / Not passed straight away. For the questions they
 got **wrong** they see their answer, the right answer and the stored explanation, only when nobody can still be
 helped by them (`exam_review_state()`): at the exam's closing time; with no closing time, the day after the
 training's end date; with neither (self-paced), when a tutor presses **Show answers** on the set-up page. A tutor may
 also show them earlier (and hide them again); the learner is told when they will show, before starting and on the
-result. Marking never calls
+result. With retakes there is a second condition, for that learner: they can't sit it again (no attempt left, or they
+passed, or it has closed). Never while another attempt is still theirs, whatever the review rule or the tutor's
+switch says (`exam_result_for_learner()`, `review_when` = `attempts` until then).
+
+The take view (`take`, `start`, `submit`) carries `attempts_allowed`, `attempts_used`, `attempts_left`, `attempt_no`,
+`can_retake` (an attempt is left, not passed, the window open), `best` {score, max, percent, passed, attempt_no} and
+`attempts` (each one, `best` marked). The take page shows "Try again (attempt N of M)" from these. Marking never calls
 the AI: explanations are written once per question (by the tutor, or by PR 4's AI with approval). Tutors see every
-attempt (and the enrolled people who have not started), each attempt in full with its timeline, and can hand in an
+attempt, numbered, with the best one marked (and the enrolled people who have not started; the summary counts people), each attempt in full with its timeline, and can hand in an
 attempt that is still running.
 
 ## 4. Access (`access.php`)
