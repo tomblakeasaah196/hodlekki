@@ -1,7 +1,7 @@
 # Mail: the church's mailboxes in the ERP
 
-Runbook and contracts for the Mail module. PR 2 of 4 (this document grows with each): 1 foundation and
-Mailboxes · **2 reading** · 3 writing and signatures · 4 teamwork, alerts and AI. Design and the decisions behind it:
+Runbook and contracts for the Mail module. PR 3 of 4 (this document grows with each): 1 foundation and
+Mailboxes · 2 reading · **3 writing and signatures** · 4 teamwork, alerts and AI. Design and the decisions behind it:
 the lead's design notes (11 Nov 2026). The engine is ported from bureau.lpc.cm's Courrier, which runs on this same
 cPanel server.
 
@@ -30,12 +30,15 @@ cPanel server.
 | `includes/mail/mail_config.php` | Settings (non-secret; `.env` overrides). |
 | `modules/mail/index.php`, `mailboxes.php` | The Mail page (three panes, section 7c), the Mailboxes screen. Strict mode. |
 | `includes/mail/Read/` | Reading (section 7c): the list, the reader, the sanitizer, the partials. |
+| `includes/mail/Compose/`, `includes/mail/mounts/composer.php` | Writing (section 7d): drafts, sending, the signature; the composer. |
+| `modules/mail/signature.php`, `outbox.php` | My signature; the Outbox (scheduled, not sent, drafts). |
 | `api/mail_api.php`, `api/mail_admin_api.php`, `api/mail_export.php` | JSON for the Mail page, the Mailboxes screen, the export download. |
 | `api/mail_view.php`, `api/mail_file.php` | A message's HTML in its own document (own CSP); attachments and pictures. |
-| `assets/ui/js/pages/mail.js`, `mail-mailboxes.js`, `assets/css/mail.css` | Page scripts; the Mail page's styles. |
+| `api/mail_compose_api.php` | JSON for the composer, the Outbox and My signature. |
+| `assets/ui/js/pages/mail.js`, `mail-compose.js`, `mail-signature.js`, `mail-outbox.js`, `mail-mailboxes.js`, `assets/css/mail.css` | Page scripts; the Mail pages' styles. |
 | `cron/mail_minute.php`, `cron/mail_daily.php` | The crons (section 6). |
 | `bin/mail_doctor.php`, `bin/mail_rekey.php` | Health from the shell; moving to a new vault key. |
-| `db/migrations/20261128090000_mail_core.sql`, `20261201090000_mail_read.sql` | Every Mail table, plus the one day-one matrix cell; picture trust (PR 2). |
+| `db/migrations/20261128090000_mail_core.sql`, `20261201090000_mail_read.sql`, `20261203090000_mail_compose.sql` | Every Mail table, plus the one day-one matrix cell; picture trust (PR 2); signatures and compose files (PR 3). |
 | `tests/mail/` | `run.php` (no database), `integration.php` (MySQL 8 / MariaDB 10.11). |
 
 ## 3. Access (contract)
@@ -75,6 +78,12 @@ Module keys in `includes/permissions/modules.php`: `mail`, `mail.personal`, `mai
   the runner to stdin input if it exists.
 - A job left running 10 minutes is retried once; handlers check cPanel's real state first (an existing mailbox is
   given its password again rather than made twice).
+- **Which `uapi`**: `MAIL_UAPI_BINARY` when set, else the first of `/usr/bin/uapi` and `/usr/local/cpanel/bin/uapi`
+  this account can run (`Uapi::binary()`). On this CloudLinux / CageFS host the second fails from the account's own
+  shells ("Failed to execute /usr/local/cpanel/cpanel"); the first works (12 Nov 2026).
+- **Failures are visible**: every call's outcome is kept (`mail_settings` `uapi.status`). The Mailboxes Health tab
+  and `bin/mail_doctor.php` show "cPanel commands: failing — <what uapi printed>" with the time it began, and the
+  Mailboxes tab a red banner, instead of "never read yet". A printed line never carries an argument's value.
 
 ## 5. Vault
 
@@ -92,9 +101,11 @@ key lost: `bin/mail_rekey.php --reset-all`.
 45 6 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/mail_daily.php >> /home/smartqaq/logs/hod-mail.log 2>&1
 ```
 
-- **Minute**: jobs; the mailbox count every 5 minutes or after a job; (PR 3) the outbox; sync within 45 s. A folder
+- **Minute**: jobs; the mailbox count every 5 minutes or after a job; the outbox (section 7d); sync within 45 s. A folder
   whose MESSAGES, UNSEEN, UIDNEXT and UIDVALIDITY have not moved skips the full pass (one at least hourly).
-  `--verbose`, `--account=<id>`, `--jobs-only`.
+  `--verbose`, `--account=<id>`, `--jobs-only`. A run where a step fails (jobs, the count, the outbox, a mailbox's
+  sync) writes one dated line to `~/logs/hod-mail.log` (`MAIL_LOG_FILE` moves it; `HOD\Mail\Admin\CronLog`),
+  since the cron line sends output to /dev/null. A clean run writes nothing.
 - **Daily**: disk and the 80 % warnings; mailboxes gone from the server; the access diff (someone lost access to a
   shared mailbox -> a new password; a personal holder lost `mail.personal` or their account -> the leaving path);
   removals that are due; export downloads past 7 days; pruning.
@@ -159,6 +170,49 @@ Rules:
   follows `mail:sent`, `mail:thread-changed`, `mail:refresh` (CustomEvents on `document`).
 - Shortcuts: `j` / `k`, `u` or `Esc`, `/`, `e`, `#`, `!`, `s`, `Shift+U`, `?` (and `c`, `r`, `a`, `f` once the
   composer exists). They stay quiet while a field or a dialog has focus.
+## 7d. Writing and signatures (PR 3)
+
+The composer is a mount (`includes/mail/mounts/composer.php`): once it exists **and** its tables do
+(`mail_compose_ready()`), the reader shows Reply, Reply all, Forward, Edit draft and New message, and the shortcuts
+`c`, `r`, `a`, `f` work. It is a dialog on a computer and full screen on a phone (`assets/ui/js/pages/mail-compose.js`).
+
+| Piece | What |
+|---|---|
+| `includes/mail/Compose/` | `Outbox` (a draft's life), `OutboxSender` (sending what is due), `MessageBuilder` (text, signature, quote, files, threading headers), `HtmlCleaner` (the editor's HTML, own allow-list), `Recipients` (parsing, suggestions), `Signatures` (the church design), `Files` (attachments in the database), `ComposeConfig` + `compose_config.php`. |
+| `api/mail_compose_api.php` | GET `suggest`; POST `upload` (multipart, one file); JSON `open`, `save`, `send`, `schedule`, `deliver`, `undo`, `open_again`, `close`, `discard`, `remove_attachment`, and My signature's `sig_preview`, `sig_numbers`, `sig_church`, `sig_church_reset`. CSRF on every POST. |
+| `modules/mail/signature.php` | My signature: a person's own numbers; mail admins also edit the church part (name, tagline, address, phone, site, logo). |
+| `modules/mail/outbox.php` | Outbox: a person's scheduled messages, those that did not go, and their drafts. Open goes back to Mail (`?compose=<id>`). |
+| `db/migrations/20261203090000_mail_compose.sql` | `mail_signatures` (a person's numbers), `mail_compose_files` (attachments in 512 KB chunks; never under `uploads/`). `mail_outbox` is PR 1's. |
+| `assets/images/mail/hod-signature-logo.png` | The church logo at 228 px (shown at 76 px), 26 KB, on the site's own https address. |
+
+A draft's life (`mail_outbox.status`): `draft` (saved as the person types, with a copy in the server's Drafts at most
+once a minute) → `queued` (Send: 10 seconds for Undo; or a scheduled time) → `sending` (one atomic update, so never
+twice) → `sent`, or back to `queued` after a temporary failure (1, 2, 5, 15, 30, 60 minutes), or `failed` (a bell
+notification; the Outbox page opens it again). A row left in `sending` for 15 minutes is marked failed, never sent
+again by itself. The composer itself asks to deliver at the end of the 10 seconds; `cron/mail_minute.php` sends the
+rest within a minute.
+
+Rules:
+
+- **A row is its writer's.** Every action goes through `Outbox::own()`: someone else's row answers 404, and the writer
+  must still hold Read and send on the mailbox (`MailAccess`). A reader cannot answer.
+- **One budget.** Each message takes one slot per recipient in the domain's shared hourly budget
+  (`MailTransport` → `email_budget_take('mailbox')`, section 7b). A send that finds the hour used waits and tries
+  again; the host's own refusal stops every sender for the hour.
+- **Limits**: 50 recipients (more is a Campaign), 18 MB of files together (what arrives everywhere after base64),
+  uploads PHP refuses as too large are told so. Files are typed by their first bytes (no fileinfo on the host).
+- **Nothing from the editor is trusted**: the browser cleans pasted HTML, then `HtmlCleaner` keeps a short list of
+  tags with no attribute but a link's https / mailto / tel address.
+- **From is the mailbox.** The person shows in the signature: their name; on a department's mailbox, the department
+  and their seat in it; their own numbers (else the phone on their profile); the church part. Full on new mail and
+  forwards, short on replies, or none. Tables, inline styles and a sized PNG, so it holds in Gmail, Outlook and phones.
+- **Strict CSP**: the signature preview and the quoted original carry inline styles; the page moves each one to the
+  element's CSSOM style (allowed) instead of a `style` attribute (refused).
+- **Sent and credited**: after sending, the original is marked answered, the server draft and the files go, Sent and
+  Drafts are read again, and sync credits the writer (`sent_by`) through the Message-ID chosen when the draft began.
+  On shared mailboxes the conversation's timeline gets a `sent` entry (PR 4 shows it).
+- The composer raises `mail:compose-opened`, `mail:compose-closed`, `mail:sent`, `mail:composing` (PR 4's "someone
+  is replying") and offers `window.HODMailComposer` (current, replaceBody, insertHtml, open) for PR 4's writing help.
 ## 8. Export of a departed holder's mail
 
 Requested on the Mailboxes screen (reason required). Two approvals by two different people, one per side. Then a job
@@ -185,11 +239,16 @@ up". After the deploy (lead + owner):
   the quota rule, `uapi` refusals, automatic replies, no server-missing extension, no shell, no role name, LF only,
   every class exists, the migrations' shape), Courrier's protocol tests (parsing, and the IMAP and SMTP clients
   against scripted servers over real sockets), and reading (`read_unit.php`: an XSS corpus through the sanitizer,
-  the two JBS fixes, the frame's policy, text, dates, search words, the partials, the endpoints, short copy).
+  the two JBS fixes, the frame's policy, text, dates, search words, the partials, the endpoints, short copy), and
+  writing (`compose_unit.php`: the editor's HTML cleaned, addresses, the quote, the signature escaped and checked,
+  file types, the endpoint's CSRF and limits, the strict-CSP preview).
 - `php tests/mail/integration.php` (integration job, on the database `tests/special_events/db_setup.php` built,
   MySQL 8 and MariaDB 10.11; the migration carries the `_mail_` marker so it must apply on both): access through the
   real `can()`, grants by seat key and role, personal privacy, the quota and the race for the last slot, every job,
   the vault (no password anywhere else; a half-done rotation), sync and automatic replies, the leaving path, the
   export with two people, removal with a forwarder, the nightly access diff; reading: lists, filters, search,
-  opening marks read, folder actions refused to a reader and Undo, picture trust per person.
+  opening marks read, folder actions refused to a reader and Undo, picture trust per person; writing: a reader
+  cannot answer, someone else's draft is 404, cleaning and bad addresses, files and their limit, the server draft,
+  Undo, sent once within the budget with threading headers and the file, credited and marked answered, retries,
+  failures with a bell, schedules, pruning, a stuck send never re-sent, suggestions, the signature.
 - Fakes: `tests/mail/support/FakeMailServer.php` (behaves like Dovecot; ported from Courrier), `FakeUapi.php`.

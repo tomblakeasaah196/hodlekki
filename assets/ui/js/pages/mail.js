@@ -372,11 +372,12 @@
     }
 
     // ---- writing (PR 3's composer listens) ----------------------------------------------------------------------
-    function compose(mode, messageId, to) {
+    function compose(mode, messageId, to, outboxId) {
         if (!DATA.canSend) return;
         var detail = { mode: mode, accountId: DATA.accountId };
         if (messageId) detail.messageId = Number(messageId);
         if (to) detail.to = to;
+        if (outboxId) detail.outboxId = outboxId;
         emit('mail:compose', detail);
     }
     function composeTo(href) {
@@ -738,6 +739,7 @@
     });
 
     wireFrames(document);
+    if (DATA.compose) compose('draft', null, null, DATA.compose);
     if (state.thread) {
         history.replaceState({ mail: true }, '', url());
         emit('mail:thread-opened', { accountId: DATA.accountId, threadId: state.thread.id, shared: !!DATA.shared, folderRole: state.folder.role });

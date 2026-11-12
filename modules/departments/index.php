@@ -294,9 +294,9 @@ if (!$dept_schema_ok) {
                 <div>
                     <label class="block text-xs font-bold text-gray-600 uppercase mb-2">Role in Unit</label>
                     <select name="role_in_dept" class="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-hodBlue bg-white font-medium">
-                        <option value="Worker">Worker</option>
-                        <option value="Member">Member</option>
-                        <option value="Sub_Unit_Head">Sub-Unit Head</option>
+<?php foreach (dept_member_seats() as $seatValue => $seatLabel): ?>
+                        <option value="<?= htmlspecialchars($seatValue) ?>"<?= $seatValue === dept_seat_value('worker') ? ' selected' : '' ?>><?= htmlspecialchars($seatLabel) ?></option>
+<?php endforeach; ?>
                     </select>
                 </div>
             </div>
@@ -496,6 +496,10 @@ if (!$dept_schema_ok) {
 <script src="../../assets/js/department_export.js"></script>
 <script>
     const API_URL = '../../api/department_api.php';
+    // Seat names come from the seat types (Roles & permissions → Seats).
+    const SEAT_LABELS = <?= json_encode(dept_role_labels(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const SUB_UNIT_HEAD = <?= json_encode(dept_seat_value('sub_unit_head'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const MEMBER_SEAT = <?= json_encode(dept_seat_value('member'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const EXPORT_URL = '../../api/department_export_excel.php';
 
     let state = {
@@ -592,8 +596,7 @@ if (!$dept_schema_ok) {
     function fullName(p) { return esc((p.first_name || '') + ' ' + (p.last_name || '')); }
 
     function roleLabel(r) {
-        return ({ Assoc_Pastor: 'Pastor in Charge', Director: 'Director in Charge', HOD: 'Head of Department',
-                  Sub_Unit_Head: 'Sub-Unit Head', Worker: 'Worker', Member: 'Member' })[r] || String(r).replace(/_/g, ' ');
+        return SEAT_LABELS[r] || String(r).replace(/_/g, ' ');
     }
 
     function fmtDate(d) {
@@ -807,6 +810,11 @@ if (!$dept_schema_ok) {
 
         $('#btnNewDept').toggleClass('hidden', !p.can_manage_all || archived);
         $('#btnRollover').toggleClass('hidden', !p.can_rollover);
+        // The year-end summary links to #rollover (Roles & permissions → Seats too).
+        if (p.can_rollover && window.location.hash === '#rollover' && !state.rolloverOpened) {
+            state.rolloverOpened = true;
+            openRolloverWizard();
+        }
         $('#btnManageYears').toggleClass('hidden', !p.can_edit_year);
         $('#archiveBanner').toggleClass('hidden', !archived);
         if (archived) {
@@ -922,7 +930,7 @@ if (!$dept_schema_ok) {
         return list.map(r => {
             const other = membership === 'primary' ? 'Secondary' : 'Primary';
             const otherTone = membership === 'primary' ? 'gray' : 'red';
-            const head = r.role_in_dept === 'Sub_Unit_Head';
+            const head = r.role_in_dept === SUB_UNIT_HEAD;
             return `
             <tr class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                 <td class="px-6 py-4">
@@ -1245,7 +1253,7 @@ if (!$dept_schema_ok) {
                     (people[userId] || []).forEach(row => {
                         if (String(row.department_id) !== String(d.id)) return;
                         if (['Assoc_Pastor', 'Director', 'HOD'].includes(row.role_in_dept)) return;
-                        entry.members.push({ user_id: String(userId), membership: row.membership_type });
+                        entry.members.push({ user_id: String(userId), membership: row.membership_type, role: row.role_in_dept });
                     });
                 });
                 entry.members.sort((a, b) => nameOf(byId[a.user_id]).localeCompare(nameOf(byId[b.user_id])));
@@ -1440,7 +1448,7 @@ if (!$dept_schema_ok) {
                 }
             });
             entry.members.forEach(m => {
-                assignments.push({ user_id: m.user_id, department_id: deptId, role_in_dept: 'Member', membership_type: m.membership });
+                assignments.push({ user_id: m.user_id, department_id: deptId, role_in_dept: m.role || MEMBER_SEAT, membership_type: m.membership });
             });
         });
 

@@ -33,6 +33,8 @@ function monitor_cron_jobs(): array
             'line' => '0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/reach_lost_souls.php >/dev/null 2>&1'],
         'assimilation_watchlists' => ['label' => 'Assimilation watchlists (07:15)', 'daily' => '07:15',
             'line' => '15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/assimilation_watchlists.php >/dev/null 2>&1'],
+        'permissions_daily'       => ['label' => 'Roles: end dates and reminders (00:10)', 'daily' => '00:10',
+            'line' => '10 0 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/permissions_daily.php >/dev/null 2>&1'],
         'monitor'                 => ['label' => 'This monitor', 'every' => 1,
             'line' => '* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/monitor.php >/dev/null 2>&1'],
     ];
@@ -1109,6 +1111,20 @@ function monitor_checks_run(PDO $pdo, PDO $db, bool $slow = false): array
     $safe('php', 'Server', 'PHP (web)', fn () => monitor_check_php($web, $now));
     $safe('speed', 'Server', 'Server speed settings', fn () => monitor_check_speed($web));
     $safe('logs', 'Server', 'Log files', fn () => monitor_check_logs(monitor_facts_logs()));
+    $safe('permissions_expiry', 'Background jobs', 'Seat end dates', function () use ($pdo) {
+        require_once dirname(__DIR__) . '/permissions/expiry.php';
+        $st = perm_expiry_status($pdo);
+        if ($st['enforced']) {
+            return monitor_check('permissions_expiry', 'Background jobs', 'Seat end dates', 'ok', 'End dates are on: seats end with their ministry year unless renewed.');
+        }
+        return $st['blockers'] > 0
+            ? monitor_check('permissions_expiry', 'Background jobs', 'Seat end dates', 'warn',
+                $st['blockers'] . ' seats or roles are past their end date. Renew or end them, then switch end dates on.',
+                'Roles & permissions → Seats lists them, with Renew and End; then press Enforce end dates.')
+            : monitor_check('permissions_expiry', 'Background jobs', 'Seat end dates', 'warn',
+                'End dates are off: seats never end and nobody is reminded.',
+                'Roles & permissions → Enforce end dates (nothing is past its end, so nobody loses access).');
+    });
     $safe('monitor_key', 'Server', 'Monitor key', function () use ($dir) {
         $own = strlen(hod_monitor_env('MONITOR_SECRET')) >= 16;
         $kept = $dir !== null && is_file($dir . '/secret.key');

@@ -149,8 +149,7 @@ try {
                         $updateStmt->execute([$picture_path, $child_id]);
                         
                         // NOTIFICATION TRIGGER: Alert Junior Church Leadership
-                        $jcStmt = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 11 AND role_in_dept IN ('HOD', 'Director') AND is_active = 1");
-                        $jc_leaders = $jcStmt->fetchAll(PDO::FETCH_COLUMN);
+                        $jc_leaders = perm_module_leaders($pdo, 'junior_church', 'hod');
 
                         if (!empty($jc_leaders)) {
                             // Get child name for context

@@ -222,6 +222,18 @@ function ui_shell_open(PDO $pdo, array $page): void
         <?= ui_icon('wifi-off') ?><span data-ui-offline-text>You're offline. Anything you change will wait until you're connected.</span>
     </div>
     <main id="main" class="ui-main" tabindex="-1">
+<?php if (function_exists('perm_view_as') && ($viewAs = perm_view_as()) !== null): ?>
+        <div class="ui-page">
+            <?= ui_banner('warning', [
+                'title' => 'Viewing as ' . $viewAs['label'],
+                'text' => 'Read-only: nothing can be changed.',
+                'info' => 'You see what they may open, never more than you hold yourself. Pages about "me" still show your own things.',
+                'actions' => '<form method="post" action="/api/roles_api.php">' . ui_csrf_field()
+                    . '<input type="hidden" name="action" value="view_as_stop">'
+                    . ui_button('Stop viewing', ['variant' => 'primary', 'type' => 'submit', 'size' => 'sm', 'icon' => 'x']) . '</form>',
+            ]) ?>
+        </div>
+<?php endif; ?>
 <?php if ($page['mode'] === 'legacy'): ?>
         <!-- Legacy pages run inline scripts that need jQuery while they parse.
              Loaded here, not in <head>, so the shell paints before it. -->

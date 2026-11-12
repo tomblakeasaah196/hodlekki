@@ -63,8 +63,7 @@ try {
             $stmt->execute([$phone, $address, $latitude, $longitude, $dob, $marital_status, $wedding_anniversary, $user_id]);
 
             // NOTIFICATION TRIGGER: Alert IDI (Department 1) of the autonomous data update
-            $idiStmt = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 1 AND is_active = 1");
-            $idi_users = $idiStmt->fetchAll(PDO::FETCH_COLUMN);
+            $idi_users = perm_module_team($pdo, 'idi');
 
             if (!empty($idi_users)) {
                 $uStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
@@ -164,12 +163,7 @@ try {
                 $stmt->execute([$db_path, $user_id]);
 
                 // NOTIFICATION TRIGGER: Alert Charis Leadership of the new media
-                $charisStmt = $pdo->query("
-                    SELECT ud.user_id FROM user_departments ud 
-                    JOIN departments d ON ud.department_id = d.id 
-                    WHERE d.name LIKE '%Charis%' AND ud.role_in_dept IN ('HOD', 'Director') AND ud.is_active = 1
-                ");
-                $charis_leaders = $charisStmt->fetchAll(PDO::FETCH_COLUMN);
+                $charis_leaders = perm_module_leaders($pdo, 'charis', 'hod');
 
                 if (!empty($charis_leaders)) {
                     $uStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
@@ -211,12 +205,7 @@ try {
             $stmt->execute([$user_id, $content]);
 
             // NOTIFICATION TRIGGER: Alert Admins to action the name change
-            $adminStmt = $pdo->query("
-                SELECT user_id FROM user_roles 
-                JOIN roles ON user_roles.role_id = roles.id 
-                WHERE roles.role_name IN ('Super_Admin', 'Resident_Pastor')
-            ");
-            $admins = $adminStmt->fetchAll(PDO::FETCH_COLUMN);
+            $admins = perm_office_holders($pdo, 'congregation', 'edit');
 
             if (!empty($admins)) {
                 $uStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");

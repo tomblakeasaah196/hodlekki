@@ -38,11 +38,16 @@ final class Partial
 
     /**
      * Later pieces of the page (the composer in PR 3, the team bar in PR 4) plug in as includes/mail/mounts/<name>.php.
-     * Until a piece exists, nothing that leads to it is drawn: no Reply button without a composer.
+     * Until a piece exists, nothing that leads to it is drawn: no Reply button without a composer. The composer also
+     * waits for its tables (mail_compose_ready), since the code reaches the server before the migration runs.
      */
     public static function mounted(string $name): bool
     {
-        return preg_match('/^[a-z_]+$/', $name) === 1 && is_file(dirname(__DIR__) . '/mounts/' . $name . '.php');
+        if (preg_match('/^[a-z_]+$/', $name) !== 1 || !is_file(dirname(__DIR__) . '/mounts/' . $name . '.php')) {
+            return false;
+        }
+
+        return $name !== 'composer' || !function_exists('mail_compose_ready') || mail_compose_ready();
     }
 
     /** A mount's markup, or '' while it does not exist */

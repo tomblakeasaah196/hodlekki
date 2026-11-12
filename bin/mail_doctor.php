@@ -39,7 +39,9 @@ try {
 } catch (Throwable $e) {
     $line(false, 'uapi answers', $e->getMessage());
 }
-$binary = (string) Config::get('uapi.binary');
+$binary = Uapi::binary();
+$line(is_file($binary) && is_executable($binary), 'uapi command', $binary . (trim((string) Config::get('uapi.binary', '')) !== ''
+    ? ' (MAIL_UAPI_BINARY)' : ' (the first of ' . implode(', ', (array) Config::get('uapi.candidates', Uapi::BINARIES)) . ' that runs)'));
 if (is_executable($binary)) {
     $help = (string) shell_exec(escapeshellarg($binary) . ' --help 2>&1');
     $line(true, 'uapi --help mentions stdin input', preg_match('/stdin|--input/i', $help) ? 'yes: switch the runner to it' : 'no: parameters stay arguments');

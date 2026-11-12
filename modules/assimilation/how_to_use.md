@@ -26,6 +26,19 @@ people assigned to them, plus the unclaimed pool when it is switched on.
 
 We never say "reclaimed". People are not property. They come **home**.
 
+## The new look (November 2026)
+
+- **Tabs** across the top: Find people (managers), Follow-up, Team, Analytics
+  (managers) and this Guide. The link remembers your tab.
+- **The (i) icons** explain a section or a field. Hover, focus or tap them.
+- **Find people** opens with **Build a list**; the rule and every filter sit
+  under **Filters**. Tick people and press **Assign** in the bar that appears.
+- **A follow-up** opens as a side sheet (a full-height sheet on a phone) with
+  Call and WhatsApp at the top, then the actions, the log form and the timeline.
+  **Back to pool** returns someone to the unclaimed pool; **Reopen** reopens a
+  closed follow-up.
+- **Settings** is the gear button next to **Volunteer page** (managers only).
+
 ## 2. How we count attendance
 
 A person counts as present on a day if they appear in either the **check-in**
@@ -70,8 +83,8 @@ sparkline, their departments, and whether anyone is already on them.
 People whose profile is marked **Relocated** are left out — they told us
 they were going.
 
-**Send someone after them:** tick the people you want, then in the bar that
-appears choose a volunteer and click **Send someone after them**. Choose
+**Assign:** tick the people you want, then in the bar that appears choose
+a volunteer and click **Assign**. Choose
 *Leave unclaimed* to put them in the pool instead, for a volunteer to pick up
 themselves. Anyone who already has an open follow-up is skipped, and the
 message tells you how many.
@@ -107,7 +120,7 @@ in 2 months*. The easiest way to build one is the **Build a List** button on
 Find people: a friendly step-by-step wizard that asks how long people have
 been away, who to watch, any fine-tuning (department, region, gender, age),
 and who should go after them — then shows a live count of who matches and
-lets you name and launch it. Power users can still open **Advanced filters**,
+lets you name and launch it. Power users can still open **Filters**,
 build the rule by hand, and click **Save as watchlist**.
 
 ### Download a watchlist
@@ -180,9 +193,9 @@ Tap any card to open the drawer:
   attended, who is on it, next touch, and a badge if the same person is also
   an open Reach lead or Embrace first timer (read-only, so nobody gets two
   calls in one day).
-- **Attendance over the last year** — a monthly bar chart and the last ten
-  days they were in the house.
-- **Log a follow-up** — channel, outcome, notes, **Clean up with AI**, prayer
+- **The last year** — a monthly bar chart and the last ten days they were
+  in the house.
+- **Log a follow-up** — channel, outcome, notes, **Tidy with AI**, prayer
   points and the next touch date.
 - **What has happened** — the full timeline. Where AI tidied the notes, the
   volunteer's own words are kept underneath.
@@ -204,8 +217,9 @@ nightly job — so a Sunday check-in is noticed on Sunday. Somebody we had
 already closed as unreachable is still caught if they come back within three
 months.
 
-You can also mark it by hand with **They came back to church** in the drawer,
-for the times someone walks in and nobody scanned them.
+You can also mark it by hand in the drawer: pick the date they were back and
+press **They came back**, for the times someone walks in and nobody scanned
+them.
 
 ## 6b. Texting an Assimilation list from SMS Studio
 

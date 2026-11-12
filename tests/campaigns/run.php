@@ -1297,11 +1297,12 @@ $asm = (string) file_get_contents($root . 'modules/assimilation/index.php');
 $chr = (string) file_get_contents($root . 'modules/charis/index.php');
 ct_ok('the tab shows only with the manage right: Embrace, Assimilation, Charis',
     str_contains($emb, "\$embraceAutomation = can('embrace', 'manage');") && str_contains($emb, "'frame-src' => [\"'self'\"]")
-    && str_contains($asm, "['automation', 'Automation']") && str_contains($asm, '<?php if ($assim_manager): ?>')
-    && str_contains($chr, "<?php if (!empty(\$charisPageAccess['can_configure_awol'])): ?>
-<!-- AUTOMATION")
-    && str_contains($chr, "<?php if (!empty(\$charisPageAccess['can_configure_awol'])): ?>
-        <button onclick=\"switchTab('automation')\""));
+    && str_contains($asm, "\$assim_manager = can('assimilation', 'manage');") && str_contains($asm, "'automation' => ['label' => 'Automation'")
+    && str_contains($asm, "<?php if (\$assim_manager): ?>
+    <section id=\"panel-automation\"") && str_contains($asm, "'frame-src' => [\"'self'\"]")
+    && str_contains($chr, "(\$charisCanConfigure ? ['automation' => ['label' => 'Automation'")
+    && str_contains($chr, "<?php if (\$charisCanConfigure): ?>
+    <section id=\"panel-automation\"") && str_contains($chr, "'frame-src' => [\"'self'\"]"));
 
 // ===========================================================================
 ct_section('17. Every function the module calls exists');

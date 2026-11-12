@@ -6,10 +6,11 @@
  *
  *   1. admin jobs (cPanel through `uapi`: create, bring in, reset, suspend, remove, …), then the mailbox count
  *      when it is 5 minutes old or a job was queued;
- *   2. (PR 3) the outbox: messages due to leave;
+ *   2. the outbox: messages due to leave (each takes the domain's hourly budget; HOD\Mail\Compose\OutboxSender);
  *   3. sync: every active mailbox, least recently synced first, within a 45 s budget.
  *
- * One run at a time (a database lock): an overlapping run exits at once. Flags:
+ * One run at a time (a database lock): an overlapping run exits at once. A run where a step fails writes one line
+ * to ~/logs/hod-mail.log (HOD\Mail\Admin\CronLog; the cron line sends output to /dev/null). Flags:
  *     --verbose        print what each step did
  *     --account=<id>   sync only this mailbox (and every folder)
  *     --jobs-only      only the admin jobs
@@ -24,8 +25,10 @@ $_SERVER['DOCUMENT_ROOT'] = $_SERVER['DOCUMENT_ROOT'] ?? '' ?: dirname(__DIR__);
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/mail/bootstrap.php';
 
+use HOD\Mail\Admin\CronLog;
 use HOD\Mail\Admin\Jobs;
 use HOD\Mail\Admin\Quota;
+use HOD\Mail\Compose\OutboxSender;
 use HOD\Mail\Config;
 use HOD\Mail\Db;
 use HOD\Mail\Sync\MailSync;
@@ -54,15 +57,33 @@ if (!Db::lock('hod-mail-minute')) {
 }
 
 $started = microtime(true);
+$problems = [];
 try {
     try {
-        $say('jobs', Jobs::run());
+        $jobs = Jobs::run();
+        $say('jobs', $jobs);
+        if (!empty($jobs['failed'])) {
+            $problems[] = "jobs: {$jobs['failed']} failed (Mailboxes, Activity)";
+        }
+    } catch (Throwable $e) {
+        $problems[] = 'jobs: ' . $e->getMessage();
+    }
+    try {
         if (Quota::due()) {
             Quota::refresh();
             $say('quota', 'refreshed');
         }
     } catch (Throwable $e) {
-        error_log('Mail cron: jobs: ' . $e->getMessage());
+        // also kept as the uapi status the Health tab shows
+        $problems[] = 'quota: ' . $e->getMessage();
+    }
+
+    if (!in_array('--jobs-only', $args, true) && $only === null && mail_compose_ready()) {
+        try {
+            $say('outbox', OutboxSender::make()->due());
+        } catch (Throwable $e) {
+            $problems[] = 'outbox: ' . $e->getMessage();
+        }
     }
 
     if (!in_array('--jobs-only', $args, true)) {
@@ -73,9 +94,21 @@ try {
             if ($left < 3) {
                 break;
             }
-            $say('sync ' . $account['id'], MailSync::make()->account((int) $account['id'], $left, $only !== null));
+            try {
+                $result = MailSync::make()->account((int) $account['id'], $left, $only !== null);
+                $say('sync ' . $account['id'], $result);
+                if (($result['status'] ?? '') === 'error') {
+                    $problems[] = 'sync ' . $account['id'] . ': ' . ($result['error'] ?? 'failed');
+                }
+            } catch (Throwable $e) {
+                $problems[] = 'sync ' . $account['id'] . ': ' . $e->getMessage();
+            }
         }
     }
 } finally {
     Db::release('hod-mail-minute');
+    $logged = CronLog::problems('mail_minute', $problems);
+    if ($logged !== null) {
+        $say('logged', rtrim($logged));
+    }
 }
