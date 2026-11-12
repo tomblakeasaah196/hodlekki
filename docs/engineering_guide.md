@@ -284,7 +284,7 @@ Two layers: **module-level** (who can enter the Studio, create events, manage al
 | `crew_only` | Anyone holding a non-revoked crew role on a non-archived event | Row in `se_crew` with `revoked_at IS NULL` on an event whose `status <> 'archived'`. |
 | `none` | Everyone else | Module link hidden; API returns `FORBIDDEN`. |
 
-The department is matched by **ID 3** (as in `includes/header.php`). `se_settings.envision_department_id` overrides it if the ID ever changes.
+Since permissions PR 2 the levels come from Roles & permissions (module `special_events`); the department whose seats count is set there under Module owners. The old `se_settings.envision_department_id` was removed in `20261204090000_se_drop_envision_setting.sql`.
 
 **Event-level capability matrix.** ✔ = allowed. A `manager` has every capability on every event. A `studio_member` can create events and read every event's Overview (aggregates only); they get capabilities on a specific event only through crew roles (the creator is auto-added as `producer`).
 
@@ -2808,7 +2808,6 @@ New `.env` keys (§20.1). `SE_HASH_PEPPER` (64 hex) is **required**; without it 
 
 | Key | Default | Meaning |
 |---|---|---|
-| `envision_department_id` | `3` | Department granting studio membership |
 | `default_brand_primary` / `default_brand_secondary` | `#1D356A` / `#D11920` | HOD blue/red for new events (until cloned) |
 | `default_theme_preset` | `marquee` | |
 | `default_privacy_notice_md` | (text) | Privacy notice template with `{event}` placeholders |
