@@ -77,12 +77,23 @@ foreach ($registry as $item) {
         $badIcon[] = $item['key'] . ':' . $item['icon'];
     }
     // Clean addresses: /modules/x/ is modules/x/index.php, /auth/login is auth/login.php.
-    $path = (string) parse_url($item['href'], PHP_URL_PATH);
-    $file = str_ends_with($path, '/') ? $path . 'index.php' : (pathinfo($path, PATHINFO_EXTENSION) === '' ? $path . '.php' : $path);
+    $file = ui_nav_href_file($item['href']);
     if (empty($item['when_exists']) && !is_file($root . $file)) {
         $badHref[] = $item['href'];
     }
+    if (!empty($item['when_exists']) && is_dir($root . (string) parse_url($item['href'], PHP_URL_PATH)) && !is_file($root . $file)) {
+        $badHref[] = $item['href'] . ' (folder without index.php)';
+    }
 }
+// 12 Nov 2026: clean URLs turned System Health's link into /modules/monitor/, and the
+// "when_exists" check ran is_file() on that folder, so the entry vanished from the menu.
+$whenExists = array_filter($registry, static fn ($i) => !empty($i['when_exists']));
+$hidden = array_values(array_map(static fn ($i) => $i['key'], array_filter($whenExists,
+    static fn ($i) => is_dir($root . dirname(ui_nav_href_file($i['href']))) && !is_file($root . ui_nav_href_file($i['href'])))));
+ok('a "when_exists" entry whose page is there is listed (System Health)',
+    ui_nav_href_file('/modules/monitor/') === '/modules/monitor/index.php' && is_file($root . '/modules/monitor/index.php')
+    && ui_nav_href_file('/auth/login') === '/auth/login.php' && ui_nav_href_file('/x/y.php?a=1') === '/x/y.php' && $hidden === [],
+    implode(', ', $hidden));
 ok('every entry is in a known section', $badSection === [], implode(', ', $badSection));
 ok('every entry\'s icon is in the sprite', $badIcon === [], implode(', ', $badIcon));
 ok('every entry links to a file that exists', $badHref === [], implode(', ', $badHref));
