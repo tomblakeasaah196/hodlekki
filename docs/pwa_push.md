@@ -246,10 +246,12 @@ as high urgency, and those ignore a member's quiet window.
 
 ## 4b. The Alerts Centre
 
-`modules/alerts/index.php`, in the sidebar under Security & Stewardship. Super
-Admins and the Resident Pastor only, gated by `security_is_admin()` against the
-live roles table — never `$_SESSION['active_role']`, which the member can
-switch themselves from their profile.
+`modules/alerts/index.php` (script `assets/ui/js/pages/alerts.js`), in the
+sidebar under Security & Stewardship. Gated by the `alerts` row of Roles &
+permissions, read live from the database — never `$_SESSION['active_role']`,
+which the member can switch themselves from their profile. View opens the
+health panel; Manage sends broadcasts and flips the switches. Writes to
+`api/push_admin_api.php` need the CSRF token.
 
 It shows device counts, members reached, delivered and waiting, where the
 signing keys live, how far behind the fan-out is, a breakdown by platform, and
@@ -264,9 +266,9 @@ member's quiet hours and opt-out are honoured without this endpoint knowing
 they exist. Audiences are everyone, everyone with alerts on, a department, a
 role, or a region.
 
-It always asks twice. The button first reads **Check who this reaches** and
+It always asks twice. The button first reads **Check reach** and
 answers with the real number of people and how many of them have a phone
-registered; only then does it become **Send it**. Any edit afterwards — a word,
+registered; only then does it become **Send now**. Any edit afterwards — a word,
 the audience, the link — resets it, so nothing can be sent to an audience that
 was not shown first. Member-facing guide: `modules/alerts/how_to_use.md`.
 
