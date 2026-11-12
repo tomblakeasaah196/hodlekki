@@ -311,7 +311,29 @@ same('church-wide and break-glass', [['leadership', []], ['leadership', []]],
 same('director seat, HOD seat, own only, nobody', [['director', [2]], ['hod', [2]], ['member', []], ['member', []]],
     [dash_tier_for($tierCtx($dept2, [$seat(2, 50)]), 50), dash_tier_for($tierCtx($dept2, [$seat(2, 40)]), 50),
      dash_tier_for($tierCtx($own), 50), dash_tier_for(null, 50)]);
-same('leadership cards', ['workforce', 'pipeline', 'followups', 'pending_qa', 'sunday'], DASH_TIER_CARDS['leadership']);
+same('leadership cards: pipeline and follow-ups are one card', ['workforce', 'first_timers', 'pending_qa', 'sunday'], DASH_TIER_CARDS['leadership']);
+
+// The SMS wallet card (dash_sms_state): amber under ₦5,000, red when the queue
+// is stuck or the wallet cannot pay one text, "Check" when the balance is unknown.
+$now = 1_800_000_000;
+$bal = static fn (?float $b, float $price = 6.5): array => ['balance' => $b, 'unit_price' => $price, 'at' => $now];
+$st = dash_sms_state(['queued' => 0, 'sent_24h' => 0, 'failed_24h' => 0, 'balance' => $bal(1045.05)], $now);
+same('₦1,045: Low, amber, ≈160 texts, sending OK', ['warning', 'Low', '₦1,045', '≈160 texts · Sending OK'],
+    [$st['tone'], $st['badge'], $st['display'], $st['note']]);
+$st = dash_sms_state(['queued' => 0, 'balance' => $bal(12000.0)], $now);
+same('₦12,000: OK, green', ['success', 'OK'], [$st['tone'], $st['badge']]);
+$st = dash_sms_state(['queued' => 0, 'balance' => $bal(5000.0)], $now);
+same('exactly ₦5,000 is not low', 'success', $st['tone']);
+$st = dash_sms_state(['queued' => 3, 'oldest_queued' => $now - 20 * 60, 'balance' => $bal(12000.0)], $now);
+same('a queue waiting 20 minutes: red, Check', ['danger', 'Check', '≈1,846 texts · Queue not moving'], [$st['tone'], $st['badge'], $st['note']]);
+$st = dash_sms_state(['queued' => 3, 'oldest_queued' => $now - 60, 'balance' => $bal(12000.0)], $now);
+same('a queue that is moving stays green', ['success', '≈1,846 texts · 3 waiting'], [$st['tone'], $st['note']]);
+$st = dash_sms_state(['queued' => 0, 'balance' => $bal(3.0)], $now);
+same('cannot pay one text: red, Empty', ['danger', 'Empty'], [$st['tone'], $st['badge']]);
+$st = dash_sms_state(['queued' => 0, 'sent_24h' => 2, 'failed_24h' => 12, 'balance' => $bal(12000.0)], $now);
+same('more failed than sent: amber, Check', ['warning', 'Check', '≈1,846 texts · Many failed today'], [$st['tone'], $st['badge'], $st['note']]);
+$st = dash_sms_state(['queued' => 0, 'balance' => ['error' => 'BulkSMS is not configured', 'at' => $now]], $now);
+same('balance unknown: amber, Check, a dash', ['warning', 'Check', '—'], [$st['tone'], $st['badge'], $st['display']]);
 
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed > 0 ? 1 : 0);

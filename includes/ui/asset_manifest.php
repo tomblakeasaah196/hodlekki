@@ -23,7 +23,7 @@ return [
     '/assets/ui/js/pages/charis.js' => '513487868fa8',
     '/assets/ui/js/pages/congregation.js' => 'e1b0609f25b0',
     '/assets/ui/js/pages/connect.js' => '5f6201b24e6c',
-    '/assets/ui/js/pages/dashboard.js' => '96707f19c2af',
+    '/assets/ui/js/pages/dashboard.js' => 'ebcdd1ad48d9',
     '/assets/ui/js/pages/departments.js' => '355430a60a4c',
     '/assets/ui/js/pages/embrace.js' => '8320d766e6e4',
     '/assets/ui/js/pages/finance.js' => '6bbb26309031',
