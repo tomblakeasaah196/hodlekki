@@ -252,7 +252,7 @@ if ($canEdit && $t['status'] !== 'published') {
         <?= ui_field('select', ['name' => 'type', 'id' => 'trb-type', 'label' => 'Kind', 'required' => true,
             'options' => array_intersect_key(TRAININGS_ITEM_TYPES, array_flip(trainings_builder_types())), 'attrs' => ['data-action-change' => 'trb.itemType']]) ?>
         <?= ui_field('text', ['name' => 'title', 'id' => 'trb-title', 'label' => 'Name', 'required' => true, 'attrs' => ['maxlength' => 160]]) ?>
-        <?= ui_field('select', ['name' => 'section_id', 'id' => 'trb-section', 'label' => 'Card', 'required' => true,
+        <?= ui_field('select', ['name' => 'section_id', 'id' => 'trb-item-section', 'label' => 'Card', 'required' => true,
             'options' => array_column(array_filter($sections, static fn ($s) => (int) $s['id'] > 0), 'title', 'id'), 'attrs' => ['data-action-change' => 'trb.itemType']]) ?>
         <?= ui_field('date', ['name' => 'date', 'id' => 'trb-date', 'label' => 'Day', 'class' => 'trb-when-week', 'optional' => true]) ?>
         <?= ui_field('time', ['name' => 'time', 'id' => 'trb-time', 'label' => 'Time', 'class' => 'trb-when', 'optional' => true]) ?>
