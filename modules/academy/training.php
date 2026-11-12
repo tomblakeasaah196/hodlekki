@@ -31,6 +31,7 @@ if ($t === null) {
 $canEdit = can('trainings', 'edit', 'church');
 $canAssign = can('trainings', 'create', 'church');
 $canDelete = can('trainings', 'delete', 'church');
+$canApprove = can('trainings', 'approve', 'church');   // confirm graduates; issue, reissue and revoke certificates
 trainings_sync_newcomers($pdo, $tid);
 $sections = trainings_outline($pdo, $tid);
 $learners = trainings_learners($pdo, $t);
@@ -179,9 +180,23 @@ if ($canEdit && $t['status'] !== 'published') {
                                     : ($l['due_on'] !== null && $l['due_on'] < trainings_today() ? ui_badge('Overdue', 'warning', ['dot' => true]) : ui_badge('Active', 'info', ['dot' => true])) ?>
                                 <?= $l['to_mark'] > 0 ? ui_badge('To mark', 'primary') : '' ?>
                                 <?= !$l['signin'] ? ui_badge($l['invited_at'] ? 'Invited' : 'No sign-in', 'neutral') : '' ?>
+                                <?= $l['certificate'] !== '' ? ui_badge($l['certificate'], 'success', ['class' => 'font-mono']) : '' ?>
                             </td>
                             <td class="is-actions">
                                 <?= ui_button('Open progress', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'eye', 'icon_only' => true, 'attrs' => ['data-action' => 'trb.progress', 'data-enrolment' => $l['id']]]) ?>
+<?php if ($l['certificate'] !== ''): ?>
+                                <?= ui_button('Download certificate', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'file-down', 'icon_only' => true,
+                                    'href' => '/api/trainings_certificate.php?e=' . (int) $l['id']]) ?>
+<?php endif; ?>
+<?php if ($canApprove && $t['gives_certificate'] && $l['status'] === 'completed'): ?>
+                                <?= ui_button($l['certificate'] !== '' ? 'Reissue certificate' : 'Issue certificate', ['variant' => 'ghost', 'size' => 'sm',
+                                    'icon' => $l['certificate'] !== '' ? 'refresh-cw' : 'star', 'icon_only' => true,
+                                    'attrs' => ['data-action' => 'trb.certIssue', 'data-enrolment' => $l['id'], 'data-name' => $l['name'], 'data-has' => $l['certificate'] !== '' ? '1' : '0']]) ?>
+<?php if ($l['certificate'] !== ''): ?>
+                                <?= ui_button('Revoke certificate', ['variant' => 'danger-ghost', 'size' => 'sm', 'icon' => 'circle-x', 'icon_only' => true,
+                                    'attrs' => ['data-action' => 'trb.certRevoke', 'data-enrolment' => $l['id'], 'data-name' => $l['name']]]) ?>
+<?php endif; ?>
+<?php endif; ?>
 <?php if ($canAssign && !$l['signin']): ?>
                                 <?= ui_button('Send invite', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'mail', 'icon_only' => true,
                                     'attrs' => ['data-action' => 'trb.invite', 'data-user' => $l['user_id'], 'data-name' => $l['name']]]) ?>

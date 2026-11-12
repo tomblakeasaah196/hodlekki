@@ -143,6 +143,8 @@ function trainings_check_completion(PDO $pdo, array $t, array $enrolment): bool
     if ($upd->rowCount() === 1) {
         trainings_notify($pdo, [$enrolment['user_id']], 'Training complete', (string) $t['title'],
             '/modules/trainings/?t=' . (int) $t['id']);
+        // Its certificate, if it gives one (an official class waits for the Academy's confirm).
+        trainings_certificate_auto($pdo, (int) $enrolment['id']);
         return true;
     }
     return false;
@@ -350,6 +352,7 @@ function trainings_confirm(PDO $pdo, array $enrolment, int $by): array
     } else {
         trainings_notify($pdo, [$uid], 'Ready to serve', 'Maturity Class confirmed.', '/modules/trainings/?t=' . (int) $t['id']);
     }
+    trainings_certificate_auto($pdo, (int) $enrolment['id']);
     return ['ok' => true, 'moved' => $moved];
 }
 
@@ -449,7 +452,8 @@ function trainings_learner_view(PDO $pdo, array $t, ?array $enrolment): array
         $sum = trainings_enrolment_summary($pdo, $t, $enrolment);
         $out['enrolment'] = ['id' => $enrolment['id'], 'status' => $enrolment['status'], 'due_on' => $enrolment['due_on'],
             'source' => $enrolment['source'], 'completed_at' => $enrolment['completed_at'], 'confirmed_at' => $enrolment['confirmed_at'],
-            'done' => $sum['done'], 'required' => $sum['required'], 'percent' => $sum['percent']];
+            'done' => $sum['done'], 'required' => $sum['required'], 'percent' => $sum['percent'],
+            'certificate' => (string) ($enrolment['certificate_no'] ?? '')];
     }
     return $out;
 }

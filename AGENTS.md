@@ -1327,6 +1327,35 @@ pages `modules/trainings/` (learners), `modules/academy/` + `training.php`
 - **Degrade before the migration:** `trainings_ready()` is false until the
   core tables exist; pages show "Almost ready", the API answers
   `FEATURE_NOT_READY`, IDI shows an empty Academy pipeline.
+- **Certificates** (`includes/trainings/certificates.php`, owner's answer
+  14): only for a training with `gives_certificate`; issued when an enrolment
+  completes, or for an official class when the Academy confirms
+  (`trainings_certificate_auto()`). Code `CERT-XXXX-XXXX` (no 0/O/1/I),
+  SHA-256 over the code and what was printed; the current one is on the
+  enrolment (`certificate_no` / `certificate_hash`), every one ever issued
+  in `training_certificates`, so `/verify` (the existing page and
+  `api/public_verify_api.php`, check 3) answers valid, revoked (with why) or
+  replaced (a reissue). The QR goes to `/verify?code=…`, which fills the box
+  and checks it. The QR is `includes/qr.php` (no Composer package: a
+  byte-mode level-M encoder ported from the vendored qrcode-generator,
+  pinned in the tests, plus a PNG writer without GD); the PDF is dompdf with
+  data-URI images (`isRemoteEnabled` off, as the Reach report). Who signs
+  (name, title, signature image) is `training_settings`, set on HOD Academy →
+  Settings (Manage); never write a name in code. Approve issues, reissues
+  and revokes; `api/trainings_certificate.php` serves only a current
+  certificate, to its learner or the Academy.
+- **Reminders** (`includes/trainings/reminders.php`, owner's answer 15):
+  email (a confirmed personal email; `alert` lane for the hour-before ones,
+  `automation` otherwise, purpose `account`) and push (`trainings_notify()`),
+  never SMS. The day before and an hour before a live class and an exam
+  opening (PR 2's `training_exams.window_open`), the day before a training
+  is due, the morning a scheduled required item is due. Active enrolments in
+  published trainings only; an item done or an exam sat is skipped. Nothing
+  from 21:00 to 06:30 except the hour-before ones. Each one is claimed in
+  `training_reminders` (UNIQUE kind + enrolment + item + the time it is
+  about) before it goes, so overlapping runs never send twice and a moved
+  class is reminded again. Runs from `cron/automation_tick.php` (*/5, behind
+  a `function_exists()` guard: no new cron line) and `cron/trainings_daily.php`.
 - The old Academy's tables were **renamed** `*_retired_20261112` (never
   dropped; the lead drops them later with the owner). SMS Studio's
   "Academy applicant" source reads `academy_applications` only when that
