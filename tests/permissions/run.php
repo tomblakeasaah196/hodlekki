@@ -246,6 +246,24 @@ $tDir = perm_test_person($pdo, 'TribesDirector');
 perm_test_seat($pdo, $tDir, 13, 'Director');
 ok('a Director seat holder may open Tribes (their own tribe)', perm_ctx_can($r($tDir), 'tribes', 'view'));
 ok('but has no church-wide Tribes view (the branch that used to error)', !perm_ctx_can($r($tDir), 'tribes', 'view', 'church'));
+ok('tribes_api needs the CSRF token; a new tribe needs Create church-wide',
+    str_contains($tribes, 'csrf_require();') && str_contains($tribes, "\$can_create_tribe = can('tribes', 'create', 'church');")
+    && str_contains($tribes, "if (!\$can_create_tribe)"));
+ok('day, kind and roster assignee come from fixed lists or the tribe',
+    str_contains($tribes, 'in_array($meeting_day, $tribe_days, true)') && str_contains($tribes, 'in_array($category, $tribe_categories, true)')
+    && str_contains($tribes, 'JOIN events e ON e.tribe_id = ut.tribe_id WHERE e.id = ? AND ut.user_id = ?'));
+
+section('Asset Management checks each write');
+$assetsApi = '';   // the code, comments stripped
+foreach (token_get_all((string) file_get_contents($root . '/api/assets_api.php')) as $tok) {
+    if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+        $assetsApi .= is_array($tok) ? $tok[1] : $tok;
+    }
+}
+ok('assets_api needs the CSRF token on writes', str_contains($assetsApi, 'csrf_require();'));
+ok('a new asset needs Create, every other write Edit', str_contains($assetsApi, "can('assets', \$is_new_asset ? 'create' : 'edit')"));
+ok('condition and movement come from fixed lists',
+    str_contains($assetsApi, 'in_array($condition, $asset_conditions, true)') && str_contains($assetsApi, '!isset($asset_actions[$log_action])'));
 
 // ---------------------------------------------------------------------------
 section('Appointing: only seats ranked below your own (decision 6)');
