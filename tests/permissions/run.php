@@ -246,6 +246,24 @@ $tDir = perm_test_person($pdo, 'TribesDirector');
 perm_test_seat($pdo, $tDir, 13, 'Director');
 ok('a Director seat holder may open Tribes (their own tribe)', perm_ctx_can($r($tDir), 'tribes', 'view'));
 ok('but has no church-wide Tribes view (the branch that used to error)', !perm_ctx_can($r($tDir), 'tribes', 'view', 'church'));
+ok('tribes_api needs the CSRF token; a new tribe needs Create church-wide',
+    str_contains($tribes, 'csrf_require();') && str_contains($tribes, "\$can_create_tribe = can('tribes', 'create', 'church');")
+    && str_contains($tribes, "if (!\$can_create_tribe)"));
+ok('day, kind and roster assignee come from fixed lists or the tribe',
+    str_contains($tribes, 'in_array($meeting_day, $tribe_days, true)') && str_contains($tribes, 'in_array($category, $tribe_categories, true)')
+    && str_contains($tribes, 'JOIN events e ON e.tribe_id = ut.tribe_id WHERE e.id = ? AND ut.user_id = ?'));
+
+section('Asset Management checks each write');
+$assetsApi = '';   // the code, comments stripped
+foreach (token_get_all((string) file_get_contents($root . '/api/assets_api.php')) as $tok) {
+    if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+        $assetsApi .= is_array($tok) ? $tok[1] : $tok;
+    }
+}
+ok('assets_api needs the CSRF token on writes', str_contains($assetsApi, 'csrf_require();'));
+ok('a new asset needs Create, every other write Edit', str_contains($assetsApi, "can('assets', \$is_new_asset ? 'create' : 'edit')"));
+ok('condition and movement come from fixed lists',
+    str_contains($assetsApi, 'in_array($condition, $asset_conditions, true)') && str_contains($assetsApi, '!isset($asset_actions[$log_action])'));
 
 // ---------------------------------------------------------------------------
 section('Appointing: only seats ranked below your own (decision 6)');
@@ -321,6 +339,25 @@ ok('history row written', perm_history_add($pdo, ['via' => 'test', 'change_type'
     'before' => ['level' => 3], 'after' => ['level' => 4], 'actor_user_id' => $sa, 'actor_label' => 'Test']));
 
 // ---------------------------------------------------------------------------
+section('Zoe checks each write');
+$zoeApi = '';   // the code, comments stripped
+foreach (token_get_all((string) file_get_contents($root . '/api/zoe_api.php')) as $tok) {
+    if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+        $zoeApi .= is_array($tok) ? $tok[1] : $tok;
+    }
+}
+ok('zoe_api needs the CSRF token and asks the matrix', str_contains($zoeApi, 'csrf_require();') && str_contains($zoeApi, "api_require_can('zoe');"));
+ok('a prayer request needs Create; running Zoe needs Manage',
+    str_contains($zoeApi, "api_require_can('zoe', 'create');") && str_contains($zoeApi, "\$is_zoe_admin = can('zoe', 'manage');")
+    && str_contains($zoeApi, 'in_array($action, $admin_actions, true) && !$is_zoe_admin'));
+ok('the bulletin is a PDF through the upload guard, and its link is never taken from the request',
+    str_contains($zoeApi, "hod_upload_store(\$_FILES['bulletin_pdf']") && str_contains($zoeApi, "['pdf']")
+    && !str_contains($zoeApi, 'existing_pdf_url') && !str_contains($zoeApi, 'move_uploaded_file'));
+ok('post type, statuses, marks and roster type come from fixed lists',
+    str_contains($zoeApi, 'in_array($type, $post_types, true)') && str_contains($zoeApi, 'in_array($status, $request_statuses, true)')
+    && str_contains($zoeApi, 'in_array($status, $marks, true)') && str_contains($zoeApi, 'in_array($type, $roster_types, true)'));
+
+// ---------------------------------------------------------------------------
 section('Day-one parity of a synthetic church');
 $pdo = perm_test_db();
 $people = [];
@@ -377,6 +414,35 @@ ok('report fits one screen', substr_count($report, "\n") <= 24, (string) substr_
 
 // PR 3: changing the permission data, view-as, end dates.
 require __DIR__ . '/admin_tests.php';
+
+// ---------------------------------------------------------------------------
+section('River of Life checks each write');
+$rolApi = '';   // the code, comments stripped
+foreach (token_get_all((string) file_get_contents($root . '/api/rol_api.php')) as $tok) {
+    if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+        $rolApi .= is_array($tok) ? $tok[1] : $tok;
+    }
+}
+ok('rol_api needs the CSRF token on writes', str_contains($rolApi, 'csrf_require();'));
+ok('each write asks its own level (it was View for all)',
+    str_contains($rolApi, "api_require_can('river_of_life', \$levels[\$action]);") && str_contains($rolApi, "'assign_member' => 'create'")
+    && str_contains($rolApi, "'mark_attendance' => 'edit'") && str_contains($rolApi, "'remove_member' => 'delete'"));
+ok('role, mark and assignee come from fixed lists or the team',
+    str_contains($rolApi, 'in_array($role_category, $rol_categories, true)') && str_contains($rolApi, 'in_array($status, $rol_marks, true)')
+    && str_contains($rolApi, "perm_module_team(\$pdo, 'river_of_life')), true)"));
+ok('the unreachable audio upload is gone', !str_contains($rolApi, 'upload_audio_key') && !str_contains($rolApi, 'move_uploaded_file'));
+
+// ---------------------------------------------------------------------------
+section('AI in Mail for every role (owner, 12 Nov 2026)');
+$aiSql = perm_test_migration('20261206090000_perm_ai_for_every_role.sql');
+ok('mail.ai migration is portable (no ON DUPLICATE / INSERT IGNORE)', !preg_match('/ON DUPLICATE|INSERT IGNORE/i', $aiSql));
+$pdo->exec($aiSql);
+$roles = (int) $pdo->query('SELECT COUNT(*) FROM roles')->fetchColumn();
+eq('every role holds mail.ai at view, church-wide', $roles,
+    (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE seat_key = '' AND module_key = 'mail.ai' AND level = 1 AND scope = 'church'")->fetchColumn());
+$pdo->exec($aiSql);
+eq('mail.ai migration re-runs as a no-op', $roles,
+    (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE module_key = 'mail.ai'")->fetchColumn());
 
 echo "\n{$GLOBALS['perm_test_passed']} passed, {$GLOBALS['perm_test_failed']} failed\n";
 exit($GLOBALS['perm_test_failed'] === 0 ? 0 : 1);

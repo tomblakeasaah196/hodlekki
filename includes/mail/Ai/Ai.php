@@ -17,8 +17,8 @@ use HOD\Mail\Store;
  *   1. the owner confirmed the Gemini project is on a paid plan: a mail admin records it on the Mailboxes screen
  *      (mail_settings `ai.paid_plan_confirmed`, who and when); until then AI is unavailable everywhere;
  *   2. GEMINI_API_KEY is set;
- *   3. a mail admin switched it on for that mailbox (mail_accounts.ai_enabled, off by default); never offered, and
- *      refused, on personal mailboxes and on mailboxes marked pastoral;
+ *   3. a mail admin switched it on for that mailbox (mail_accounts.ai_enabled, off by default). Any mailbox may
+ *      have it: shared, department, personal and pastoral (owner, 12 Nov 2026: "every mailbox should use it");
  *   4. the person may read the mailbox and holds `mail.ai` in the permissions matrix (mail_can('ai')).
  *
  * This sends mail content to Google, which the house rule forbids for other modules; it is a written exception,
@@ -66,20 +66,11 @@ final class Ai
         $confirmed ? MailSettings::set(self::PLAN_KEY, ['by' => $byUserId, 'at' => Clock::sql()], $byUserId) : MailSettings::forget(self::PLAN_KEY);
     }
 
-    /** Could AI ever be switched on for this mailbox? (not personal, not pastoral) */
-    public static function allowedFor(array $account): bool
-    {
-        return ($account['kind'] ?? '') !== 'personal' && empty($account['is_pastoral']);
-    }
-
-    /** A mail admin switches AI on or off for a mailbox */
+    /** A mail admin switches AI on or off for a mailbox (any kind, owner 12 Nov 2026) */
     public static function setMailbox(int $byUserId, array $account, bool $on): void
     {
         if (!MailAccess::allows($byUserId, 'admin')) {
             throw MailError::denied('Only mail admins switch AI on.');
-        }
-        if ($on && !self::allowedFor($account)) {
-            throw MailError::invalid('AI is never used on personal or pastoral mailboxes.');
         }
         if ($on && !self::plan()) {
             throw MailError::invalid('Record the paid Gemini plan first.');
@@ -90,7 +81,7 @@ final class Ai
     /** AI is on for this mailbox (gates 1 to 3) */
     public static function on(array $account): bool
     {
-        return self::plan() !== null && self::key() !== '' && !empty($account['ai_enabled']) && self::allowedFor($account);
+        return self::plan() !== null && self::key() !== '' && !empty($account['ai_enabled']);
     }
 
     /** This person may use AI on this mailbox (all four gates) */

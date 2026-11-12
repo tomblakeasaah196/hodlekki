@@ -96,6 +96,19 @@ $lastSlow = (int) monitor_state_get($pdo, 'slow_checks_at', '0');
 $forceChecks = in_array('--checks', $args, true);
 if ($forceChecks || $minute % 5 === 0 || $lastChecks < $now - 300) {
     $slow = $forceChecks || $lastSlow < $now - 3600;
+    // The dashboard's SMS wallet card reads the balance the monitor keeps: between
+    // the hourly runs, refresh just that one when it is over 10 minutes old, so a
+    // top-up shows soon.
+    if (!$slow) {
+        $bal = json_decode((string) monitor_state_get($pdo, 'sms_balance'), true);
+        if (!is_array($bal) || (int) ($bal['at'] ?? 0) < $now - 600) {
+            try {
+                monitor_refresh_sms_balance($pdo, $pdo);
+            } catch (Throwable $e) {
+                hod_monitor_report($e, ['step' => 'sms balance']);
+            }
+        }
+    }
     try {
         $checks = monitor_checks_run($pdo, $pdo, $slow);
         monitor_state_set($pdo, 'checks_at', (string) $now);

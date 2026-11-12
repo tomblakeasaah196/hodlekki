@@ -113,7 +113,10 @@
             // dropped (leaving a page cancels it), an inline data:/blob: image,
             // or anything that fails while the page is being left.
             var rel = String(t.rel || '').toLowerCase();
-            if (leaving || /^(data|blob):/i.test(url)
+            // An element with an empty src (<img src="">) "fails" to load the
+            // page's own address: nothing a person sees, and not the page.
+            var given = t.getAttribute && (t.getAttribute('src') !== null ? t.getAttribute('src') : t.getAttribute('href'));
+            if (leaving || /^(data|blob):/i.test(url) || (given !== null && given !== undefined && String(given).trim() === '')
                 || (t.tagName === 'LINK' && /prefetch|prerender|preconnect|preload|modulepreload/.test(rel))) {
                 return;
             }

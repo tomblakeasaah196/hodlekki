@@ -2,6 +2,7 @@
 // /api/testimony_public_api.php
 
 require_once '../includes/db.php';
+require_once '../includes/html_allowlist.php';
 
 header('Content-Type: application/json');
 header('X-Content-Type-Options: nosniff');
@@ -49,6 +50,10 @@ try {
                     }
                 }
                 
+                // The wall shows this as HTML: only allowlisted formatting gets
+                // through, including rows saved before the allowlist existed.
+                $t['content_text'] = hod_html_allowlist($t['content_text'] ?? '');
+
                 // Clean up data to minimize payload and prevent data leakage
                 unset($t['first_name'], $t['last_name'], $t['guest_name']);
             }

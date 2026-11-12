@@ -454,5 +454,31 @@ ok('ui_field info sits beside the label (not inside it) and describes the contro
     && strpos($fieldHtml, '</label><span class="ui-info"') !== false
     && strpos($fieldHtml, 'aria-describedby="f-days-info f-days-error"') !== false);
 
+/* ---------------------------------------------------------------------- */
+suite('10. formatted text that reaches the public wall (includes/html_allowlist.php)');
+
+require_once $root . '/includes/html_allowlist.php';
+$clean = 'hod_html_allowlist';
+ok('formatting tags stay, with every attribute removed',
+    $clean('<p class="x" style="color:red" onclick="a()">A <strong>b</strong> <em>c</em> <u>d</u> <s>e</s></p><ul><li>f</li></ul><ol><li>g</li></ol>')
+    === '<p>A <strong>b</strong> <em>c</em> <u>d</u> <s>e</s></p><ul><li>f</li></ul><ol><li>g</li></ol>');
+ok('script, style, frames, media and forms go with what is inside them',
+    $clean('<script>x()</script><style>p{}</style><iframe src="//e"></iframe><img src=x onerror=y()><svg><script>z()</script></svg><form><input></form>ok') === 'ok');
+ok('links and other tags are unwrapped to their text', $clean('<a href="javascript:x()">link</a> <span style="color:red">red</span> <h1>big</h1>') === 'link red big');
+ok('a split tag cannot rebuild itself', strpos($clean('<scr<script>ipt>alert(1)</script>'), '<script') === false);
+ok('escaped text stays text, line breaks and all', $clean("&lt;b&gt;x&lt;/b&gt;\ny") === "&lt;b&gt;x&lt;/b&gt;\ny");
+ok('accents and emoji survive', $clean('<p>Ọlọrun ṣeun 🙏</p>') === '<p>Ọlọrun ṣeun 🙏</p>');
+ok('comments are removed', $clean('<!-- x --><p>y</p>') === '<p>y</p>');
+ok('blank formatting counts as empty', hod_html_is_blank('<p><br></p>&nbsp;') && !hod_html_is_blank('<p>a</p>'));
+$adminApi = (string) file_get_contents($root . '/api/testimony_admin_api.php');
+$publicApi = (string) file_get_contents($root . '/api/testimony_public_api.php');
+ok('the admin API cleans on save and on read, needs CSRF and asks each level',
+    str_contains($adminApi, "\$content = hod_html_allowlist(\$_POST['content_text'] ?? '');")
+    && str_contains($adminApi, '$clean = hod_html_allowlist($raw);') && str_contains($adminApi, 'csrf_require();')
+    && str_contains($adminApi, "'save_edited_testimony' => 'edit'") && str_contains($adminApi, "'delete_testimony' => 'delete'")
+    && str_contains($adminApi, 'in_array($status, $statuses, true)'));
+ok('the wall cleans what it sends, rows saved before the allowlist included',
+    str_contains($publicApi, "\$t['content_text'] = hod_html_allowlist(\$t['content_text'] ?? '');"));
+
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed === 0 ? 0 : 1);

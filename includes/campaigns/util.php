@@ -29,6 +29,8 @@ const EMAIL_SETTING_DEFAULTS = [
     'learned_cap'    => '',      // read from the host's own refusal, if it ever refuses
     'learned_cap_at' => '',      // when; a learnt cap lapses after 7 days
     'signin_prompt'  => '1',     // the required personal-email prompt after sign-in (0 = off)
+    'bounces_last_at' => '',     // the bounce reader's last run (cron/email_bounces.php)
+    'bounces_last'   => '',      // and what it did, in one line
 ];
 
 /** Now, in Lagos. Tests pin it with campaigns_set_clock(). */
