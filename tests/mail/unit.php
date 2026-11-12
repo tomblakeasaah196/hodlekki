@@ -141,9 +141,11 @@ foreach (array_keys($classes) as $class) {
 check('every HOD\\Mail class the module names exists', !$missing, implode(', ', $missing));
 
 $migrations = glob("$root/db/migrations/*_mail_*.sql");
-check('one migration, carrying the _mail_ marker', count($migrations) === 1);
-$sql = (string) preg_replace('/^--.*$/m', '', (string) file_get_contents($migrations[0] ?? ''));
-check('idempotent DDL only, no DELIMITER', !preg_match('/\bDELIMITER\b|CREATE TABLE (?!IF NOT EXISTS)|\bDROP |ALTER TABLE/', $sql));
+check('the Mail migrations carry the _mail_ marker (core, then reading)', array_map('basename', $migrations) === ['20261128090000_mail_core.sql', '20261201090000_mail_read.sql']);
+foreach ($migrations as $migration) {
+    $sql = (string) preg_replace('/^--.*$/m', '', (string) file_get_contents($migration));
+    check(basename($migration) . ': idempotent DDL only, no DELIMITER', !preg_match('/\bDELIMITER\b|CREATE TABLE (?!IF NOT EXISTS)|\bDROP |ALTER TABLE/', $sql));
+}
 check('the shared integration harness requires it on both engines', str_contains((string) file_get_contents("$root/tests/special_events/db_setup.php"), "'_mail_'"));
 
 mail_test_done();

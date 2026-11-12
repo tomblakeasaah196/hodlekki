@@ -33,3 +33,5 @@ spl_autoload_register(static function (string $class): void {
 require_once dirname(__DIR__) . '/site_url.php';
 require_once dirname(__DIR__) . '/permissions.php';
 require_once __DIR__ . '/functions.php';
+// The reader's partials print through the shared UI helpers (ui_e, ui_icon, ui_badge, ui_info), also from the API
+require_once dirname(__DIR__) . '/ui/bootstrap.php';

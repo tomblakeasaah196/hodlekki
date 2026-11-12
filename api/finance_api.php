@@ -111,12 +111,7 @@ try {
             }
 
             // NOTIFICATION TRIGGER: Alert other Finance Admins/Pastors of the transaction
-            $adminStmt = $pdo->query("
-                SELECT user_id FROM user_roles 
-                JOIN roles ON user_roles.role_id = roles.id 
-                WHERE roles.role_name IN ('Super_Admin', 'Resident_Pastor')
-            ");
-            $admins = $adminStmt->fetchAll(PDO::FETCH_COLUMN);
+            $admins = perm_office_holders($pdo, 'finance', 'edit');
             
             if (!empty($admins)) {
                 $formatted_amount = number_format($amount, 2);
@@ -165,12 +160,7 @@ try {
                 $pdo->prepare("DELETE FROM finance_transactions WHERE id = ?")->execute([$tx_id]);
 
                 // NOTIFICATION TRIGGER: Critical Security Alert for Reversed Transactions
-                $adminStmt = $pdo->query("
-                    SELECT user_id FROM user_roles 
-                    JOIN roles ON user_roles.role_id = roles.id 
-                    WHERE roles.role_name IN ('Super_Admin', 'Resident_Pastor')
-                ");
-                $admins = $adminStmt->fetchAll(PDO::FETCH_COLUMN);
+                $admins = perm_office_holders($pdo, 'finance', 'edit');
 
                 if (!empty($admins)) {
                     $formatted_amount = number_format($tx['amount'], 2);

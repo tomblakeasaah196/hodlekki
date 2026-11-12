@@ -109,9 +109,7 @@ try {
 
             // NOTIFICATION TRIGGER: Alert the HOD and Director of the managing department
             if ($department_id) {
-                $leaderStmt = $pdo->prepare("SELECT user_id FROM user_departments WHERE department_id = ? AND role_in_dept IN ('HOD', 'Director') AND is_active = 1");
-                $leaderStmt->execute([$department_id]);
-                $leaders = $leaderStmt->fetchAll(PDO::FETCH_COLUMN);
+                $leaders = perm_department_leaders($pdo, (int) $department_id);
 
                 if (!empty($leaders)) {
                     $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Asset Inventory Update', ?, '/modules/assets/index.php')");
@@ -172,9 +170,7 @@ try {
 
                 // NOTIFICATION TRIGGER 2: Alert Department Leaders if an asset goes missing or breaks down
                 if (in_array($log_action, ['Lost', 'Maintenance']) && $managing_dept) {
-                    $leaderStmt = $pdo->prepare("SELECT user_id FROM user_departments WHERE department_id = ? AND role_in_dept IN ('HOD', 'Director') AND is_active = 1");
-                    $leaderStmt->execute([$managing_dept]);
-                    $leaders = $leaderStmt->fetchAll(PDO::FETCH_COLUMN);
+                    $leaders = perm_department_leaders($pdo, (int) $managing_dept);
 
                     if (!empty($leaders)) {
                         $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Asset Status Alert', ?, '/modules/assets/index.php')");

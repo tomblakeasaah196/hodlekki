@@ -242,9 +242,7 @@ try {
 
             // Notification trigger for department leaders
             if ($department_id) {
-                $leaderStmt = $pdo->prepare("SELECT user_id FROM user_departments WHERE department_id = ? AND role_in_dept IN ('HOD', 'Director') AND is_active = 1");
-                $leaderStmt->execute([$department_id]);
-                $dept_leaders = $leaderStmt->fetchAll(PDO::FETCH_COLUMN);
+                $dept_leaders = perm_department_leaders($pdo, (int) $department_id);
                 if (!empty($dept_leaders)) {
                     $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Department Event', ?, '/modules/events/index.php')");
                     $nice_date = date('M jS, Y', strtotime($event_date));
@@ -915,18 +913,12 @@ try {
                 $safe_name = htmlspecialchars("{$first_name} {$last_name}", ENT_QUOTES, 'UTF-8');
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, ?, ?, ?)");
 
-                $embraceStmt = $pdo->query("
-                    SELECT ud.user_id
-                    FROM user_departments ud
-                    JOIN departments d ON ud.department_id = d.id
-                    WHERE d.name LIKE '%Embrace%' AND ud.role_in_dept IN ('Director', 'HOD') AND ud.is_active = 1
-                ");
-                foreach ($embraceStmt->fetchAll(PDO::FETCH_COLUMN) as $uid) {
+                $idi_users = perm_module_team($pdo, 'idi');
+                foreach (array_diff(perm_module_leaders($pdo, 'embrace', 'hod'), $idi_users) as $uid) {
                     $notifStmt->execute([$uid, 'New First Timer', "{$safe_name} was added as a first timer from the Events Attendance desk and is waiting in the queue to be assigned.", '/modules/embrace/index.php']);
                 }
 
-                $idiStmt = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 1 AND is_active = 1");
-                foreach ($idiStmt->fetchAll(PDO::FETCH_COLUMN) as $uid) {
+                foreach ($idi_users as $uid) {
                     $notifStmt->execute([$uid, 'New Connect Card Profile', "A new profile for {$safe_name} was generated from the Events Attendance desk. Please review the entry.", '/modules/congregation/index.php']);
                 }
             } catch (Throwable $e) {

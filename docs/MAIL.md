@@ -1,7 +1,7 @@
 # Mail: the church's mailboxes in the ERP
 
-Runbook and contracts for the Mail module. PR 1 of 4 (this document grows with each): **1 foundation and
-Mailboxes** · 2 reading · 3 writing and signatures · 4 teamwork, alerts and AI. Design and the decisions behind it:
+Runbook and contracts for the Mail module. PR 2 of 4 (this document grows with each): 1 foundation and
+Mailboxes · **2 reading** · 3 writing and signatures · 4 teamwork, alerts and AI. Design and the decisions behind it:
 the lead's design notes (11 Nov 2026). The engine is ported from bureau.lpc.cm's Courrier, which runs on this same
 cPanel server.
 
@@ -16,7 +16,7 @@ cPanel server.
 | Access | Matrix abilities through `can()`; who works from a shared mailbox is that mailbox's **grants** (matrix roles, department seat-type keys, departments, people) at Read / Read and send / Read, send and assign / Manage. **Mail admins do not read** a mailbox without a grant. A personal mailbox opens to its holder only. |
 | Disk | 2 GB department and church, 1 GB personal; a warning at 80 %. |
 | Holder leaves | Access ends, password reset, login suspended, auto-reply pointing to info@ for 30 days, then removed with a forwarder to info@. Nobody reads the past mail except through an **export approved by two different people** (admin side, pastoral side). |
-| Existing | info@ and embrace@ brought in; tom.blake@ brought in as the owner's personal mailbox; **system@ refused** (its password is `MAIL_PASSWORD`, used by `hod_send_mail()`); dmarc@ stays outside the Mail page. |
+| Existing | info@ and embrace@ to bring in, and tom.blake@ as the owner's personal mailbox, **only once reading (PR 2) and writing (PR 3) are both live**: bringing one in resets its password, so phones and Outlook lose it; **system@ refused** (its password is `MAIL_PASSWORD`, used by `hod_send_mail()`); dmarc@ stays outside the Mail page. |
 
 ## 2. Where things are
 
@@ -28,12 +28,14 @@ cPanel server.
 | `includes/mail/Admin/` | `Uapi` (the `uapi` runner), `Jobs` (the queue), `Quota`, `Lifecycle`, `Grants`, `Exports`, `Nightly`, `Addresses`, `Health`, `Audit`. |
 | `includes/mail/*.php` | `MailAccess` (THE decision), `Store`, `Vault`, `MailServer`, `MailActions`, `MailFetch`, `MailTransport`, `MailNotices`, `MailNav`, `People`, `Db`, `Clock`, `Config`, `Events`. |
 | `includes/mail/mail_config.php` | Settings (non-secret; `.env` overrides). |
-| `modules/mail/index.php`, `mailboxes.php` | The Mail page (PR 1: the latest conversations), the Mailboxes screen. Strict mode. |
+| `modules/mail/index.php`, `mailboxes.php` | The Mail page (three panes, section 7c), the Mailboxes screen. Strict mode. |
+| `includes/mail/Read/` | Reading (section 7c): the list, the reader, the sanitizer, the partials. |
 | `api/mail_api.php`, `api/mail_admin_api.php`, `api/mail_export.php` | JSON for the Mail page, the Mailboxes screen, the export download. |
-| `assets/ui/js/pages/mail.js`, `mail-mailboxes.js` | Page scripts. |
+| `api/mail_view.php`, `api/mail_file.php` | A message's HTML in its own document (own CSP); attachments and pictures. |
+| `assets/ui/js/pages/mail.js`, `mail-mailboxes.js`, `assets/css/mail.css` | Page scripts; the Mail page's styles. |
 | `cron/mail_minute.php`, `cron/mail_daily.php` | The crons (section 6). |
 | `bin/mail_doctor.php`, `bin/mail_rekey.php` | Health from the shell; moving to a new vault key. |
-| `db/migrations/20261128090000_mail_core.sql` | Every Mail table, plus the one day-one matrix cell. |
+| `db/migrations/20261128090000_mail_core.sql`, `20261201090000_mail_read.sql` | Every Mail table, plus the one day-one matrix cell; picture trust (PR 2). |
 | `tests/mail/` | `run.php` (no database), `integration.php` (MySQL 8 / MariaDB 10.11). |
 
 ## 3. Access (contract)
@@ -116,6 +118,47 @@ automations and campaigns together never pass the host's limit. A send refused f
 `MailSendException` ("…will go in the next hour"); PR 3's outbox retries it. Mail alerts to personal addresses
 (PR 4) go through `email_send_now()` with an alert lane, never `hod_send_mail()` directly.
 
+## 7c. Reading (PR 2)
+
+The Mail page has three panes: mailboxes and folders, the conversation list, the reader. On a phone it shows the
+list or the reader. The first screen is drawn in PHP; `assets/ui/js/pages/mail.js` then swaps the list and the
+reader with pieces from `api/mail_api.php`, drawn by the same partials (`includes/mail/Read/partials/`), so
+nothing is built twice.
+
+| Piece | What |
+|---|---|
+| `includes/mail/Read/` | `Inbox` (where the person is: mailboxes, folder, open conversation; `allows()` asks `MailAccess`), `ThreadList` (a folder or a search over the ERP's 12 months; filters All, Unread, and on shared mailboxes Mine, Open, Waiting, Done), `Screen` (list and reader pieces), `Reader` (messages, bodies, older mail), `Actions` (archive, spam, trash, inbox, move, read, unread, flag, delete for good, empty; Undo), `HtmlSanitizer`, `DarkPalette`, `TextFormatter`, `ImageTrust`, `Format`, `Partial`. |
+| `api/mail_api.php` | GET `list`, `counts` (polled each minute: folder counts and a change stamp), `older`, `server_search`; POST (JSON, CSRF) `thread`, `message`, `trust`, `live`, `live_trust`, `act`, `undo`, `empty`, `refresh`. |
+| `api/mail_view.php` | The inside of the reader's frame: one HTML message as its own document. |
+| `api/mail_file.php` | Attachments, `cid:` pictures and files of older mail, read from the server when asked for. |
+| `assets/css/mail.css` | The page's styles, on the `--ui-*` tokens only (light and dark). |
+| `db/migrations/20261201090000_mail_read.sql` | `mail_image_trust`: the senders whose pictures a person always shows. |
+
+Rules:
+
+- **A sender's HTML never runs.** `HtmlSanitizer` keeps an allow-list of tags, attributes and CSS (no scripts,
+  forms, frames, SVG, `javascript:` or `data:text/html`, no `@import`, no `expression()`), and it carries the two
+  JBS HQ fixes: a link that wraps a table keeps its table, and CSS meant only for a dark device is taken out
+  (`DarkPalette`), so light text never lands on the white page. The result loads in a frame from
+  `api/mail_view.php` (not `srcdoc`, which would inherit the page's strict CSP). That document has its own policy:
+  `default-src 'none'`, pictures from the ERP and `data:` only until the person allows them, no forms, no base,
+  `frame-ancestors 'self'`, plus `Referrer-Policy: no-referrer`. The frame's sandbox has no `allow-scripts`.
+- **Pictures from the internet wait.** They tell the sender the message was opened. "Show pictures" loads them
+  once; "Always show" saves that sender for that person only (`mail_image_trust`).
+- **Opening marks read for everyone** on a shared mailbox, on the server too, and the message says who opened it
+  ("Opened by"). That is why opening is a POST. `api/mail_view.php` never marks anything.
+- **Files are never trusted.** Only pictures (not SVG), PDF and plain text open in the browser, and only when their
+  first bytes match what they claim (the host's PHP has no fileinfo); the rest downloads as
+  `application/octet-stream` with `nosniff`. The ERP keeps no copy.
+- **Older than 12 months**: "Load older" and "Search server" read the server live, a page at a time; nothing is kept.
+- **Access**: every call goes through `Inbox` / `MailAccess` (Read to read; Read and send to organise). A mailbox
+  the person cannot open answers 404, like one that does not exist.
+- **No Reply yet.** Reply, Reply all, Forward and New message appear only once PR 3's composer exists
+  (`includes/mail/mounts/composer.php`, `Partial::mounted()`). PR 4's team bar mounts the same way.
+- Page events, for PR 3 and PR 4: the page raises `mail:compose`, `mail:thread-opened`, `mail:thread-changed`, and
+  follows `mail:sent`, `mail:thread-changed`, `mail:refresh` (CustomEvents on `document`).
+- Shortcuts: `j` / `k`, `u` or `Esc`, `/`, `e`, `#`, `!`, `s`, `Shift+U`, `?` (and `c`, `r`, `a`, `f` once the
+  composer exists). They stay quiet while a field or a dialog has focus.
 ## 8. Export of a departed holder's mail
 
 Requested on the Mailboxes screen (reason required). Two approvals by two different people, one per side. Then a job
@@ -131,7 +174,8 @@ up". After the deploy (lead + owner):
 1. `MAIL_VAULT_KEY` in the docroot `.env` (made on the server; never in chat).
 2. The two cron lines (section 6).
 3. `/usr/local/bin/ea-php83 bin/mail_doctor.php`: tables, key, `uapi`, the stdin question, the TLS names.
-4. Mailboxes screen: bring in info@ and embrace@ (church) and tom.blake@ (personal, the owner); then grants:
+4. Once reading (PR 2) **and** writing (PR 3) are live, not before (lead, 12 Nov 2026): Mailboxes screen, bring in
+   info@ and embrace@ (church) and tom.blake@ (personal, the owner); then grants:
    embrace@ = Embrace department seats `hod` and `deputy_hod` *Read, send and assign*, `worker` *Read and send*;
    info@ = matrix roles Super Admin and Resident Pastor *Read, send and assign*, Administrator *Read*.
 
@@ -139,11 +183,13 @@ up". After the deploy (lead + owner):
 
 - `php tests/mail/run.php` (lint job): the module's rules (`unit.php`: every permission key exists, vault, addresses,
   the quota rule, `uapi` refusals, automatic replies, no server-missing extension, no shell, no role name, LF only,
-  every class exists, the migration's shape), and Courrier's protocol tests (parsing, and the IMAP and SMTP clients
-  against scripted servers over real sockets).
+  every class exists, the migrations' shape), Courrier's protocol tests (parsing, and the IMAP and SMTP clients
+  against scripted servers over real sockets), and reading (`read_unit.php`: an XSS corpus through the sanitizer,
+  the two JBS fixes, the frame's policy, text, dates, search words, the partials, the endpoints, short copy).
 - `php tests/mail/integration.php` (integration job, on the database `tests/special_events/db_setup.php` built,
   MySQL 8 and MariaDB 10.11; the migration carries the `_mail_` marker so it must apply on both): access through the
   real `can()`, grants by seat key and role, personal privacy, the quota and the race for the last slot, every job,
   the vault (no password anywhere else; a half-done rotation), sync and automatic replies, the leaving path, the
-  export with two people, removal with a forwarder, the nightly access diff.
+  export with two people, removal with a forwarder, the nightly access diff; reading: lists, filters, search,
+  opening marks read, folder actions refused to a reader and Undo, picture trust per person.
 - Fakes: `tests/mail/support/FakeMailServer.php` (behaves like Dovecot; ported from Courrier), `FakeUapi.php`.

@@ -125,13 +125,7 @@ try {
             $stmt->execute([$sermon_id, $author_name, $comment_text, $is_question, $show_publicly, $is_approved]);
 
             // NOTIFICATION TRIGGER: Alert Envision Leadership of the new engagement
-            $envStmt = $pdo->query("
-                SELECT ud.user_id 
-                FROM user_departments ud 
-                JOIN departments d ON ud.department_id = d.id 
-                WHERE d.name LIKE '%Envision%' AND ud.role_in_dept IN ('HOD', 'Director') AND ud.is_active = 1
-            ");
-            $env_leaders = $envStmt->fetchAll(PDO::FETCH_COLUMN);
+            $env_leaders = perm_module_leaders($pdo, 'envision', 'hod');
 
             if (!empty($env_leaders)) {
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Sermon Engagement', ?, '/modules/envision/index.php')");

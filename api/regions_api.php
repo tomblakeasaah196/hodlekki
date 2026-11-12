@@ -597,15 +597,29 @@ try {
         // 8. Utility: Fetch Leaders for the Dropdown during Region Creation
         case 'admin_fetch_leaders':
             if (!$is_admin) { echo json_encode(['status'=>'error','message'=>'Access Denied.']); exit; }
-            $stmt = $pdo->query("
-                SELECT DISTINCT u.id, u.first_name, u.last_name, r.role_name
-                FROM users u
-                JOIN user_roles ur ON u.id = ur.user_id
-                JOIN roles r ON ur.role_id = r.id
-                WHERE r.role_name IN ('Resident_Pastor', 'Assoc_Pastor', 'Director', 'HOD')
-                ORDER BY r.role_name ASC, u.first_name ASC
-            ");
-            echo json_encode(['status' => 'success', 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+            // Pastors (roles that may appoint) and Director / HOD seat holders.
+            $leaders = [];
+            foreach ($pdo->query("SELECT ur.user_id, COALESCE(NULLIF(r.label, ''), REPLACE(r.role_name, '_', ' ')) AS title
+                                    FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+                                   WHERE r.appoint_rank IS NOT NULL AND COALESCE(r.is_archived, 0) = 0 AND COALESCE(ur.is_frozen, 0) = 0")
+                         ->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $leaders[(int) $row['user_id']] ??= $row['title'];
+            }
+            foreach (['director', 'hod'] as $seatKey) {
+                foreach (perm_seat_holders($pdo, $seatKey) as $uid) {
+                    $leaders[$uid] ??= (string) (perm_seat_types($pdo)[$seatKey]['label'] ?? $seatKey);
+                }
+            }
+            $rows = [];
+            if ($leaders) {
+                $stmt = $pdo->prepare('SELECT id, first_name, last_name FROM users WHERE id IN (' . implode(',', array_fill(0, count($leaders), '?')) . ')');
+                $stmt->execute(array_keys($leaders));
+                foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $u) {
+                    $rows[] = ['id' => (int) $u['id'], 'first_name' => $u['first_name'], 'last_name' => $u['last_name'], 'role_name' => $leaders[(int) $u['id']]];
+                }
+                usort($rows, static fn ($a, $b) => [$a['role_name'], $a['first_name']] <=> [$b['role_name'], $b['first_name']]);
+            }
+            echo json_encode(['status' => 'success', 'data' => $rows]);
             break;
 
         default:

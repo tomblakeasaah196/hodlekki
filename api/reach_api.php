@@ -796,16 +796,12 @@ try {
             }
             $pdo->commit();
 
-            $embrace_leaders = $pdo->query("
-                SELECT ud.user_id FROM user_departments ud
-                JOIN departments d ON ud.department_id = d.id
-                WHERE d.name LIKE '%Embrace%' AND ud.role_in_dept IN ('Director', 'HOD') AND ud.is_active = 1
-            ")->fetchAll(PDO::FETCH_COLUMN);
+            $idi_users = perm_module_team($pdo, 'idi');
+            $embrace_leaders = array_values(array_diff(perm_module_leaders($pdo, 'embrace', 'hod'), $idi_users));
             reach_notify($pdo, $embrace_leaders, 'New 1st Timer from Reach',
                 "{$lead_name} was met through Reach ({$lead['campaign_title']}) and is waiting in the Embrace queue.",
                 '/modules/embrace/index.php');
             if (!$existing_id) {
-                $idi_users = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 1 AND is_active = 1")->fetchAll(PDO::FETCH_COLUMN);
                 reach_notify($pdo, $idi_users, 'New Reach Profile',
                     "A profile for {$lead_name} was created from Reach. Please review the entry.",
                     '/modules/congregation/index.php');

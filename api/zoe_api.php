@@ -64,6 +64,8 @@ try {
             ")->fetchAll();
 
             // 5. Active Roster (Official Workers from user_departments + Volunteers from zoe_roster)
+            // The Zoe department = the departments that own the Zoe module (Roles & permissions → Seats).
+            $zoeDeptIn = implode(', ', array_map('intval', array_filter(perm_module_owners($pdo)['zoe'] ?? [], static fn ($d) => $d > 0))) ?: 'NULL';
             $roster = $pdo->query("
                 SELECT MAX(roster_id) as id, user_id, MAX(roster_type) as roster_type, first_name, last_name, spiritual_status
                 FROM (
@@ -77,7 +79,7 @@ try {
                     SELECT NULL as roster_id, ud.user_id, ud.role_in_dept as roster_type, u.first_name, u.last_name, u.spiritual_status
                     FROM user_departments ud
                     JOIN users u ON ud.user_id = u.id
-                    WHERE ud.department_id = 7 AND ud.is_active = 1
+                    WHERE ud.department_id IN (" . $zoeDeptIn . ") AND ud.is_active = 1
                 ) as combined_roster
                 GROUP BY user_id, first_name, last_name, spiritual_status
                 ORDER BY roster_type ASC, first_name ASC

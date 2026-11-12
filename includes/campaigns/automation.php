@@ -23,6 +23,10 @@
 // wallet check and delivery reports all apply; sms_log is never written here);
 // otherwise skip. Someone who unsubscribed is skipped, not texted instead.
 
+// Team and pastor audiences come from the permission engine. db.php loads it on
+// the web and in cron; CLI harnesses that skip db.php still need it here.
+require_once __DIR__ . '/../permissions.php';
+
 const AUTOMATION_KINDS = ['embrace' => 'journey', 'assimilation' => 'absence', 'charis' => 'absence'];
 const AUTOMATION_TARGETS = ['member', 'team', 'pastor'];
 const AUTOMATION_LOCK = 'hod_automation_tick';
@@ -933,10 +937,10 @@ function automation_alert(PDO $pdo, array $rule, array $step, array $cand, array
 }
 
 /**
- * Who hears a team alert. Swap point for perm_holders() once can() exists.
+ * Who hears a team alert (permission engine, includes/permissions.php):
  *   assimilation: the module's managers (assim_manager_ids())
- *   charis:       Director / HOD seats in the Charis departments
- *   otherwise, or when nobody holds those: the pastors
+ *   charis:       HOD-and-above seats of the departments that own Charis
+ *   otherwise, or when nobody holds those: the pastors (perm_office_holders)
  *
  * @return list<int>
  */
@@ -947,17 +951,13 @@ function automation_team_ids(PDO $pdo, string $module): array
         if ($module === 'assimilation' && function_exists('assim_manager_ids')) {
             $ids = assim_manager_ids($pdo);
         } elseif ($module === 'charis') {
-            $ids = $pdo->query("SELECT DISTINCT ud.user_id FROM user_departments ud
-                                  JOIN departments d ON d.id = ud.department_id
-                                 WHERE ud.is_active = 1 AND ud.role_in_dept IN ('Director', 'HOD')
-                                   AND (ud.department_id IN (1, 10) OR d.name LIKE '%Charis%' OR d.name LIKE '%Welfare%' OR d.name = 'IDI')")
-                ->fetchAll(PDO::FETCH_COLUMN);
+            $ids = perm_module_leaders($pdo, 'charis', 'hod');
         }
     } catch (Throwable $e) {
         error_log('[automation] team lookup for ' . $module . ' failed: ' . $e->getMessage());
     }
     $ids = array_values(array_unique(array_map('intval', $ids)));
-    return $ids !== [] ? $ids : automation_role_holders($pdo, ['Resident_Pastor', 'Assoc_Pastor']);
+    return $ids !== [] ? $ids : perm_office_holders($pdo, 'pastoral', 'edit', false);
 }
 
 /** The person's region pastor, else the Resident Pastor(s). */
@@ -973,22 +973,7 @@ function automation_pastor_ids(PDO $pdo, int $userId): array
     } catch (Throwable $e) {
         // no regions table, or no region column: fall through to the Resident Pastor
     }
-    return automation_role_holders($pdo, ['Resident_Pastor']);
-}
-
-/** @return list<int> live (unfrozen) holders of these roles */
-function automation_role_holders(PDO $pdo, array $roleNames): array
-{
-    try {
-        $in = implode(',', array_fill(0, count($roleNames), '?'));
-        $stmt = $pdo->prepare("SELECT DISTINCT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id
-                                WHERE r.role_name IN ({$in}) AND COALESCE(ur.is_frozen, 0) = 0");
-        $stmt->execute($roleNames);
-        return array_values(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)));
-    } catch (Throwable $e) {
-        error_log('[automation] role lookup failed: ' . $e->getMessage());
-        return [];
-    }
+    return perm_senior_pastor_ids($pdo);
 }
 
 // ---------------------------------------------------------------------------

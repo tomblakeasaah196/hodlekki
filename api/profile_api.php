@@ -47,7 +47,6 @@ try {
             $address = trim($_POST['physical_address'] ?? '');
             $latitude = !empty($_POST['latitude']) ? $_POST['latitude'] : null;
             $longitude = !empty($_POST['longitude']) ? $_POST['longitude'] : null;
-            $real_email = trim($_POST['real_email'] ?? '');
             $dob = !empty($_POST['dob']) ? $_POST['dob'] : null;
             $marital_status = $_POST['marital_status'] ?? 'Single';
             $wedding_anniversary = !empty($_POST['wedding_anniversary']) ? $_POST['wedding_anniversary'] : null;
@@ -58,14 +57,13 @@ try {
 
             $stmt = $pdo->prepare("
                 UPDATE users 
-                SET phone = ?, physical_address = ?, latitude = ?, longitude = ?, real_email = ?, dob = ?, marital_status = ?, wedding_anniversary = ? 
+                SET phone = ?, physical_address = ?, latitude = ?, longitude = ?, dob = ?, marital_status = ?, wedding_anniversary = ? 
                 WHERE id = ?
             ");
-            $stmt->execute([$phone, $address, $latitude, $longitude, $real_email, $dob, $marital_status, $wedding_anniversary, $user_id]);
+            $stmt->execute([$phone, $address, $latitude, $longitude, $dob, $marital_status, $wedding_anniversary, $user_id]);
 
             // NOTIFICATION TRIGGER: Alert IDI (Department 1) of the autonomous data update
-            $idiStmt = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 1 AND is_active = 1");
-            $idi_users = $idiStmt->fetchAll(PDO::FETCH_COLUMN);
+            $idi_users = perm_module_team($pdo, 'idi');
 
             if (!empty($idi_users)) {
                 $uStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
@@ -165,12 +163,7 @@ try {
                 $stmt->execute([$db_path, $user_id]);
 
                 // NOTIFICATION TRIGGER: Alert Charis Leadership of the new media
-                $charisStmt = $pdo->query("
-                    SELECT ud.user_id FROM user_departments ud 
-                    JOIN departments d ON ud.department_id = d.id 
-                    WHERE d.name LIKE '%Charis%' AND ud.role_in_dept IN ('HOD', 'Director') AND ud.is_active = 1
-                ");
-                $charis_leaders = $charisStmt->fetchAll(PDO::FETCH_COLUMN);
+                $charis_leaders = perm_module_leaders($pdo, 'charis', 'hod');
 
                 if (!empty($charis_leaders)) {
                     $uStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
@@ -212,12 +205,7 @@ try {
             $stmt->execute([$user_id, $content]);
 
             // NOTIFICATION TRIGGER: Alert Admins to action the name change
-            $adminStmt = $pdo->query("
-                SELECT user_id FROM user_roles 
-                JOIN roles ON user_roles.role_id = roles.id 
-                WHERE roles.role_name IN ('Super_Admin', 'Resident_Pastor')
-            ");
-            $admins = $adminStmt->fetchAll(PDO::FETCH_COLUMN);
+            $admins = perm_office_holders($pdo, 'congregation', 'edit');
 
             if (!empty($admins)) {
                 $uStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
@@ -436,6 +424,21 @@ try {
                     ? "Signed out {$killed} other device(s). This one stays signed in."
                     : 'No other devices were signed in.',
             ]);
+            break;
+
+        // =====================================================================================
+        // YOUR EMAIL card: the personal address (confirmed by a link) and church news.
+        // The address is no longer a free field of update_profile (users.real_email is
+        // left as it was): it only counts once its link is confirmed. docs/EMAIL.md.
+        // =====================================================================================
+        case 'email_card':
+        case 'email_save':
+        case 'email_resend':
+        case 'email_cancel':
+        case 'email_news':
+            require_once '../includes/campaigns/profile_card.php';
+            echo json_encode(email_profile_action($pdo, (int) $user_id, $action, $_POST,
+                security_client_ip(), substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255)));
             break;
 
         default:

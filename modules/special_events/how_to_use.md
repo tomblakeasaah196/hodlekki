@@ -1768,7 +1768,9 @@ the rules themselves cannot be overridden — the server refuses to hand off
 anyone who did not consent, even if asked to. Only tick **Also send people
 who registered but did not come** deliberately. Press **Push** once the list
 is right. **Earlier runs** lists each push with its counts, and pushing again
-safely picks up late opt-ins without handing anyone off twice.
+safely picks up late opt-ins without handing anyone off twice. Each push tells
+the Reach and Embrace leaders (the HOD and above in the departments that own
+each module, set in Roles & permissions → Seats) how many are waiting.
 
 A manager may archive at least 24 hours after the end. Archived events are
 frozen except for exports, insights and hand-off. A manager, or a producer in

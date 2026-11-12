@@ -1030,6 +1030,130 @@ ct_at('2027-03-01 12:00');
 ct_eq('a suspended account gets no link', false, email_reset_request($p, 'bisi.new@gmail.com', '1.1.1.6')['sent']);
 
 // ===========================================================================
+ct_section('16e. The Profile email card');
+// ===========================================================================
+require_once __DIR__ . '/../../includes/campaigns/profile_card.php';
+$q = ct_db();
+ct_at('2027-04-01 10:00');
+ct_user($q, 200, 'Tolu', 'Member', ['email' => 'tolu@hodlc.com']);
+ct_user($q, 201, 'Yemi', 'First Timer');
+$v = email_profile_view($q, 200);
+ct_ok('a member with no address: nothing confirmed or waiting, nothing to suggest from a church sign-in name',
+    $v['ready'] && $v['confirmed'] === null && $v['pending'] === null && $v['suggest'] === null);
+ct_ok('…church news is on by membership', $v['member'] && $v['news']);
+$h = email_profile_card_html($v);
+ct_ok('…the card shows the open form and no news switch',
+    str_contains($h, 'data-profile-email-form') && !str_contains($h, 'data-profile-email-form novalidate hidden')
+    && str_contains($h, 'Send link') && !str_contains($h, 'profile.email-news'));
+email_prompt_skip($q, 200, 200);
+$bad = email_profile_action($q, 200, 'email_save', ['email' => 'tolu@hodlekki.org']);
+ct_ok('a church address is refused on the email field', $bad['status'] === 'error' && ($bad['field'] ?? '') === 'email');
+ct_eq('an empty field is refused', 'email', email_profile_action($q, 200, 'email_save', ['email' => ' '])['field'] ?? null);
+$r = email_profile_action($q, 200, 'email_save', ['email' => 'Tolu@Gmail.com'], '1.2.3.4', 'UA');
+ct_ok('the first address needs no password: saving sends a link and answers with the card', $r['status'] === 'success' && $r['message'] === 'Link sent.'
+    && str_contains($r['html'], 'tolu@gmail.com') && str_contains($r['html'], 'Waiting') && str_contains($r['html'], 'Resend'));
+ct_eq('…one confirmation email queued to it', 1, ct_count($q, 'email_outbox', "flow = 'confirm_email' AND to_email = 'tolu@gmail.com'"));
+ct_eq('…recorded as from Profile', 1, ct_count($q, 'email_addresses', "user_id = 200 AND source = 'profile' AND status = 'pending'"));
+ct_eq("…and \"I don't have an email\" is forgotten", 0, ct_count($q, 'email_prompt_skips', 'user_id = 200'));
+ct_ok('the news switch shows once there is an address', str_contains($r['html'], 'profile.email-news') && str_contains($r['html'], ' checked>'));
+$again = email_profile_action($q, 200, 'email_resend', []);
+ct_ok('resend straight away waits a minute', $again['status'] === 'error' && !isset($again['field']));
+ct_at('2027-04-01 10:02');
+ct_eq('resend after a minute sends again', 'success', email_profile_action($q, 200, 'email_resend', [])['status']);
+ct_eq('…to the same waiting address', 2, ct_count($q, 'email_outbox', "flow = 'confirm_email' AND to_email = 'tolu@gmail.com'"));
+$c = email_profile_action($q, 200, 'email_cancel', []);
+ct_ok('"Wrong email?" drops the waiting address and shows the form again',
+    $c['status'] === 'success' && email_profile_view($q, 200)['pending'] === null && str_contains($c['html'], 'Send link'));
+ct_eq('resend with nothing waiting says so', 'error', email_profile_action($q, 200, 'email_resend', [])['status']);
+
+ct_confirm($q, 200, 'tolu@gmail.com', false);
+$h = email_profile_card_html(email_profile_view($q, 200));
+ct_ok('confirmed: the address, "Confirmed", the form folded behind "Change email"',
+    str_contains($h, 'Confirmed') && str_contains($h, 'data-profile-email-form novalidate hidden') && str_contains($h, 'Change email'));
+ct_ok('…the switch is on (a member who has not said stop)', str_contains($h, ' checked>'));
+ct_eq('saving the same address again: already confirmed', 'Already confirmed.',
+    email_profile_action($q, 200, 'email_save', ['email' => 'tolu@gmail.com'])['message'] ?? null);
+
+$off = email_profile_action($q, 200, 'email_news', ['on' => '0'], '1.2.3.4', 'UA');
+ct_ok('switching church news off', $off['status'] === 'success' && $off['news'] === false);
+$row = email_consent_current($q, 200);
+ct_ok('…is a withdrawal in the consent log, from Profile, with the address',
+    $row['action'] === 'withdrawn' && $row['method'] === 'profile' && $row['email'] === 'tolu@gmail.com' && $row['ip'] === '1.2.3.4');
+ct_eq('…and stops church news', 'withdrawn', email_may_send_news($q, 200)['reason']);
+ct_ok('…the switch shows off', !str_contains(email_profile_card_html(email_profile_view($q, 200)), ' checked>'));
+email_profile_action($q, 200, 'email_news', ['on' => '1']);
+$row = email_consent_current($q, 200);
+$text = $q->prepare('SELECT body FROM email_consent_texts WHERE id = ?');
+$text->execute([(int) $row['text_id']]);
+ct_ok('switching it on again is a "yes" with the wording beside the switch',
+    $row['action'] === 'granted' && $row['method'] === 'profile' && $text->fetchColumn() === EMAIL_PROFILE_NEWS_TEXT);
+ct_eq('…and church news may go again', true, email_may_send_news($q, 200)['ok']);
+$n = ct_count($q, 'email_consents', 'user_id = 200');
+$same = email_profile_action($q, 200, 'email_news', ['on' => '1']);
+ct_ok('switching on when already on writes nothing', $same['status'] === 'success' && ct_count($q, 'email_consents', 'user_id = 200') === $n);
+
+ct_confirm($q, 201, 'yemi@yahoo.com', false);
+ct_eq('a visitor with no "yes" on record: the switch is off', false, email_profile_view($q, 201)['news']);
+ct_eq('…and no church news', 'no_consent', email_may_send_news($q, 201)['reason']);
+email_profile_action($q, 201, 'email_news', ['on' => '1']);
+ct_eq('…switching it on lets church news go', true, email_may_send_news($q, 201)['ok']);
+
+ct_at('2027-04-01 11:00');
+$q->prepare('UPDATE users SET password_hash = ? WHERE id = 200')->execute([password_hash('Right-Pass-2027', PASSWORD_DEFAULT)]);
+ct_ok('changing a CONFIRMED address asks for the password',
+    str_contains(email_profile_card_html(email_profile_view($q, 200)), 'name="password"'));
+$np = email_profile_action($q, 200, 'email_save', ['email' => 'tolu.new@gmail.com']);
+ct_ok('…without it: refused on the password field', $np['status'] === 'error' && ($np['field'] ?? '') === 'password');
+$wp = email_profile_action($q, 200, 'email_save', ['email' => 'tolu.new@gmail.com', 'password' => 'Wrong-Pass-2027']);
+ct_ok('…a wrong password: refused with one line', $wp['status'] === 'error' && ($wp['field'] ?? '') === 'password'
+    && $wp['message'] === 'That is not your password.');
+ct_eq('…and nothing is started or sent', [null, 0],
+    [email_profile_view($q, 200)['pending'], ct_count($q, 'email_outbox', "to_email = 'tolu.new@gmail.com'")]);
+$typo = email_profile_action($q, 200, 'email_save', ['email' => 'tolu@hodlekki.org', 'password' => 'Wrong-Pass-2027']);
+ct_eq('…a bad address is refused before the password is tried', 'email', $typo['field'] ?? null);
+$src = (string) file_get_contents(__DIR__ . '/../../includes/campaigns/profile_card.php');
+ct_ok("…a wrong password counts in the Password card's lockout (login_attempts, 'password_change')",
+    str_contains($src, "security_record_attempt(\$pdo, \$userId, (string) (\$me['email'] ?? ''), false, 'wrong_password_email_change', 'password_change')")
+    && str_contains($src, "security_recent_failure_count(\$pdo, \$userId, 'password_change', SECURITY_PASSWORD_CHANGE_WINDOW_MINUTES)"));
+$ch = email_profile_action($q, 200, 'email_save', ['email' => 'tolu.new@gmail.com', 'password' => 'Right-Pass-2027']);
+ct_ok('with the password: the new one waits beside the old',
+    $ch['status'] === 'success' && str_contains($ch['html'], 'New, waiting') && str_contains($ch['html'], 'Keep current'));
+ct_eq('…and mail still goes to the confirmed one until the link is tapped', 'tolu@gmail.com', member_confirmed_email($q, 200));
+email_profile_action($q, 200, 'email_cancel', []);
+ct_eq('"Keep current" drops the new one', null, email_profile_view($q, 200)['pending']);
+
+ct_eq('a first confirmation tells no old address', 0, ct_count($q, 'email_outbox', "flow = 'email_changed'"));
+ct_at('2027-04-01 12:00');
+email_profile_action($q, 200, 'email_save', ['email' => 'tolu.new@gmail.com', 'password' => 'Right-Pass-2027']);
+$html = (string) $q->query("SELECT html FROM email_outbox WHERE flow = 'confirm_email' AND to_email = 'tolu.new@gmail.com' ORDER BY id DESC LIMIT 1")->fetchColumn();
+preg_match('#confirm\.php\?t=([A-Za-z0-9_-]+)#', $html, $m);
+ct_eq('confirming the new address replaces the old', 'tolu.new@gmail.com',
+    (email_capture_confirm($q, $m[1] ?? '')['ok'] ?? false) ? member_confirmed_email($q, 200) : null);
+$note = $q->query("SELECT * FROM email_outbox WHERE flow = 'email_changed' ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+ct_ok('…and the OLD address is told, as account mail in the alert lane',
+    $note && $note['to_email'] === 'tolu@gmail.com' && $note['lane'] === 'alert' && $note['purpose'] === 'account' && (int) $note['user_id'] === 200);
+ct_ok('…naming the new address only masked, with the date',
+    str_contains((string) $note['html'], 't•••@gmail.com') && !str_contains((string) $note['html'], 'tolu.new@gmail.com')
+    && str_contains((string) $note['html'], '1 Apr 2027') && str_contains((string) $note['html'], 'Not you?'));
+$err = email_profile_card_html(email_profile_view($q, 200), ['error' => 'Check this.', 'typed' => 'x@y']);
+ct_ok('a failed save re-opens the form with the error and what was typed',
+    str_contains($err, 'Check this.') && str_contains($err, 'value="x@y"') && !str_contains($err, 'novalidate hidden'));
+email_suppress($q, 'tolu.new@gmail.com', 'hard_bounce', 'test');
+ct_ok('a bouncing address says so', email_profile_view($q, 200)['suppressed']
+    && str_contains(email_profile_card_html(email_profile_view($q, 200)), 'Emails are not arriving'));
+
+$bare = ct_db(false);
+ct_ok('before the migration: the card says it is being set up, actions refuse',
+    str_contains(email_profile_card_html(email_profile_view($bare, 200)), 'Email is being set up.')
+    && email_profile_action($bare, 200, 'email_save', ['email' => 'a@gmail.com'])['status'] === 'error');
+$api = (string) file_get_contents(__DIR__ . '/../../api/profile_api.php');
+$page = (string) file_get_contents(__DIR__ . '/../../modules/profile/index.php');
+ct_ok('Profile no longer saves the personal email as a free field',
+    !str_contains($api, 'real_email = ?') && !str_contains($page, "'name' => 'real_email'"));
+ct_ok("…the API runs the card's actions and the page prints the card",
+    str_contains($api, 'email_profile_action(') && str_contains($page, 'email_profile_card_html('));
+
+// ===========================================================================
 ct_section('17. Every function the module calls exists');
 // ===========================================================================
 $files = array_merge(glob(__DIR__ . '/../../includes/campaigns/*.php'), [
