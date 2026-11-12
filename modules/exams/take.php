@@ -28,12 +28,14 @@ if (exams_learner_enrolment($pdo, $item, (int) $_SESSION['user_id']) === null) {
     exit;
 }
 echo ui_json_script('exams-config', ['page' => 'take', 'item' => (int) $item['id']]);
+// Retakes: attempts are set per exam (docs/EXAMS.md §3).
+$tries = (int) (exam_get($pdo, (int) $item['id'])['attempts_allowed'] ?? 1);
 ?>
 <div class="ui-page ui-page--narrow xt" data-exam-take>
     <?= ui_page_header([
         'title' => 'Your exam',
         'description' => $item['title'] . ' · ' . $item['training_title'],
-        'info' => 'You have one attempt. Once you start, the clock runs even if you close the page, and at zero your answers are handed in by themselves. Each answer is saved as you choose it. Stay on this tab: leaving it is noted for your tutor.',
+        'info' => ($tries > 1 ? 'You have ' . $tries . ' attempts, until you pass; your best score counts.' : 'You have one attempt.') . ' Once you start, the clock runs even if you close the page, and at zero your answers are handed in by themselves. Each answer is saved as you choose it. Stay on this tab: leaving it is noted for your tutor.',
     ]) ?>
 
     <div data-xt-view aria-live="polite"><p class="ui-meta">Loading…</p></div>
