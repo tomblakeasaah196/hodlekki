@@ -396,9 +396,10 @@ et_eq('after 2 leaves the tutor is told, once', [2, true, 1, 3], [$second['leave
 
 // Time runs out: answers stop, the server hands it in.
 et_at('2027-01-12 09:35:10');
-et_eq('just after the deadline an answer still lands (network slack)', true, exam_answer($pdo, $ben, 1, [0])['ok']);
+$benOther = array_values(array_filter(exam_attempt_rows($pdo, $ben['id']), static fn ($r) => (int) $r['id'] !== (int) $multi['id']))[0];
+et_eq('just after the deadline an answer still lands (network slack)', true, exam_answer($pdo, $ben, (int) $benOther['position'], [0])['ok']);
 et_at('2027-01-12 09:35:30');
-et_eq('past the slack, an answer hands the paper in instead', 'ENDED', exam_answer($pdo, exam_attempt_get($pdo, $exam['id'], 3), 1, [0])['code'] ?? null);
+et_eq('past the slack, an answer hands the paper in instead', 'ENDED', exam_answer($pdo, exam_attempt_get($pdo, $exam['id'], 3), (int) $benOther['position'], [0])['code'] ?? null);
 et_eq('…ended by the timer', 'timer', exam_attempt_get($pdo, $exam['id'], 3)['ended_by']);
 $res = exam_results($pdo, $exam);
 et_eq('looking at the results ends every attempt whose time is up', ['submitted', 'submitted', 'submitted', 'submitted'],

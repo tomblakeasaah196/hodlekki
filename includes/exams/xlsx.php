@@ -77,6 +77,9 @@ function xlsx_write(array $sheets): string
         throw new RuntimeException('xlsx_write: cannot create the file');
     }
     $sheetEntries = $relEntries = $overrides = '';
+    // Text goes in a shared-strings table, as Excel itself writes it: the form
+    // every reader (Excel, Google Sheets, LibreOffice, Numbers) handles.
+    $sst = ['index' => [], 'list' => [], 'uses' => 0];
     foreach (array_values($sheets) as $i => $sheet) {
         $n = $i + 1;
         $name = mb_substr(str_replace(['\\', '/', '?', '*', '[', ']', ':'], ' ', (string) $sheet['name']), 0, 31);
@@ -84,7 +87,7 @@ function xlsx_write(array $sheets): string
             . (!empty($sheet['hidden']) ? ' state="hidden"' : '') . '/>';
         $relEntries .= '<Relationship Id="rId' . $n . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' . $n . '.xml"/>';
         $overrides .= '<Override PartName="/xl/worksheets/sheet' . $n . '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
-        $zip->addFromString('xl/worksheets/sheet' . $n . '.xml', xlsx_sheet_xml($sheet));
+        $zip->addFromString('xl/worksheets/sheet' . $n . '.xml', xlsx_sheet_xml($sheet, $sst));
     }
     $count = count($sheets);
     $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -93,6 +96,7 @@ function xlsx_write(array $sheets): string
         . '<Default Extension="xml" ContentType="application/xml"/>'
         . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
         . '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+        . '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>'
         . $overrides . '</Types>');
     $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
@@ -104,8 +108,15 @@ function xlsx_write(array $sheets): string
     $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' . $relEntries
         . '<Relationship Id="rId' . ($count + 1) . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        . '<Relationship Id="rId' . ($count + 2) . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>'
         . '</Relationships>');
     $zip->addFromString('xl/styles.xml', xlsx_styles_xml());
+    $items = '';
+    foreach ($sst['list'] as $text) {
+        $items .= '<si><t xml:space="preserve">' . xlsx_xml_text($text) . '</t></si>';
+    }
+    $zip->addFromString('xl/sharedStrings.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<sst xmlns="' . XLSX_NS_MAIN . '" count="' . $sst['uses'] . '" uniqueCount="' . count($sst['list']) . '">' . $items . '</sst>');
     $zip->close();
     $bytes = (string) file_get_contents($tmp);
     @unlink($tmp);
@@ -140,7 +151,7 @@ function xlsx_styles_xml(): string
         . '</styleSheet>';
 }
 
-function xlsx_sheet_xml(array $sheet): string
+function xlsx_sheet_xml(array $sheet, array &$sst): string
 {
     $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="' . XLSX_NS_MAIN . '" xmlns:r="' . XLSX_NS_REL . '">';
     $xml .= '<sheetViews><sheetView workbookViewId="0">'
@@ -164,7 +175,13 @@ function xlsx_sheet_xml(array $sheet): string
             if (is_int($value)) {
                 $xml .= '<c r="' . $ref . '"' . $s . '><v>' . $value . '</v></c>';
             } elseif ((string) $value !== '') {
-                $xml .= '<c r="' . $ref . '"' . $s . ' t="inlineStr"><is><t xml:space="preserve">' . xlsx_xml_text((string) $value) . '</t></is></c>';
+                $text = (string) $value;
+                if (!isset($sst['index'][$text])) {
+                    $sst['index'][$text] = count($sst['list']);
+                    $sst['list'][] = $text;
+                }
+                $sst['uses'] = ($sst['uses'] ?? 0) + 1;
+                $xml .= '<c r="' . $ref . '"' . $s . ' t="s"><v>' . $sst['index'][$text] . '</v></c>';
             } elseif ($style) {
                 $xml .= '<c r="' . $ref . '"' . $s . '/>';
             }
