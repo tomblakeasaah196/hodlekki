@@ -30,10 +30,18 @@ final class Health
         if (!mail_ready()) {
             return $out;
         }
+        $uapi = Uapi::status();
+        $failing = ($uapi['ok'] ?? null) === false;
+        $add(!$failing, 'cPanel commands', match (true) {
+            !$uapi => 'not run yet: the minute cron runs them',
+            $failing => 'failing — ' . ($uapi['error'] ?? '?') . ' (since ' . ($uapi['since'] ?? $uapi['error_at'] ?? '?') . '; ' . ($uapi['binary'] ?? Uapi::binary()) . ')',
+            default => 'working (' . ($uapi['binary'] ?? Uapi::binary()) . ', last ' . ($uapi['ok_at'] ?? '?') . ')',
+        });
         $snap = Quota::snapshot();
-        $add($snap['domain_used'] < $snap['domain_quota'], 'Mailboxes on ' . Addresses::domain(), "{$snap['domain_used']} of {$snap['domain_quota']}"
+        $add($snap['domain_used'] < $snap['domain_quota'] && ($snap['read_at'] !== null || !$failing), 'Mailboxes on ' . Addresses::domain(),
+            ($snap['read_at'] ? "{$snap['domain_used']} of {$snap['domain_quota']}" : "? of {$snap['domain_quota']}")
             . ($snap['account_max'] ? "; hosting account {$snap['account_used']} of {$snap['account_max']}" : '')
-            . ($snap['read_at'] ? ' (read ' . $snap['read_at'] . ')' : ' (never read yet: the minute cron reads it)'));
+            . ($snap['read_at'] ? ' (read ' . $snap['read_at'] . ')' : ($failing ? ' (never read: cPanel commands are failing)' : ' (never read yet: the minute cron reads it)')));
         $lastSync = Db::value('SELECT MAX(last_synced_at) FROM mail_accounts');
         $age = Clock::ageSeconds($lastSync);
         $hasActive = (bool) Db::value("SELECT 1 FROM mail_accounts WHERE status = 'active' LIMIT 1");

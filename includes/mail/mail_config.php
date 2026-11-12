@@ -69,10 +69,17 @@ return [
         'warn_percent' => 80,
     ],
 
-    // cPanel through the server's own command (no API token). CLI only.
+    // cPanel through the server's own command (no API token). CLI only. 'binary' empty: the first of 'candidates'
+    // this account can run (HOD\Mail\Admin\Uapi::binary; /usr/local/cpanel/bin/uapi fails under CageFS here).
     'uapi' => [
-        'binary'  => $env('MAIL_UAPI_BINARY', '/usr/local/cpanel/bin/uapi'),
+        'binary'  => $env('MAIL_UAPI_BINARY', ''),
+        'candidates' => ['/usr/bin/uapi', '/usr/local/cpanel/bin/uapi'],
         'timeout' => 30,
+    ],
+
+    // A line per cron run that had problems (HOD\Mail\Admin\CronLog); empty: ~/logs/hod-mail.log
+    'log' => [
+        'file' => $env('MAIL_LOG_FILE', ''),
     ],
 
     'jobs' => [

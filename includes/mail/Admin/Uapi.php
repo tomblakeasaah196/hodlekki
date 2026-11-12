@@ -2,7 +2,10 @@
 
 namespace HOD\Mail\Admin;
 
+use HOD\Mail\Clock;
 use HOD\Mail\Config;
+use HOD\Mail\MailSettings;
+use Throwable;
 /**
  * cPanel through the server's own `uapi` command (lead, 11 Nov 2026: no API token in .env). The cron runs as the
  * hosting account's user, and `uapi` acts on that account with no secret at all.
@@ -18,6 +21,12 @@ use HOD\Mail\Config;
  *     list to this hosting account's own processes (CageFS walls other accounts off). Those can already read .env
  *     and the database, so this adds no exposure. Never "fix" it into a shell string. Nothing here logs arguments.
  *
+ *   - Which command: MAIL_UAPI_BINARY when set, else the first of BINARIES this account can run. On this CloudLinux
+ *     host /usr/local/cpanel/bin/uapi fails from the account's own shells ("Failed to execute
+ *     /usr/local/cpanel/cpanel"); /usr/bin/uapi works, so it comes first.
+ *   - Every call's outcome is kept (MailSettings `uapi.status`): the Mailboxes Health tab and bin/mail_doctor.php
+ *     show a failing command with cPanel's own words instead of "never read yet".
+ *
  * Tests replace the runner with Uapi::use(new FakeUapi()).
  */
 class Uapi
@@ -31,6 +40,11 @@ class Uapi
         ],
         'StatsBar' => ['get_stats'],
     ];
+
+    /** Where uapi may live, best first (see above) */
+    public const BINARIES = ['/usr/bin/uapi', '/usr/local/cpanel/bin/uapi'];
+
+    public const STATUS_KEY = 'uapi.status';
 
     private static ?Uapi $instance = null;
 
@@ -51,14 +65,76 @@ class Uapi
     public function call(string $module, string $function, array $params = []): mixed
     {
         self::check($module, $function, $params);
+        try {
+            $data = $this->run($module, $function, $params);
+        } catch (UapiException $e) {
+            self::record($e->getMessage());
+            throw $e;
+        }
+        self::record(null);
 
-        return $this->run($module, $function, $params);
+        return $data;
     }
 
+    /** The command to run: MAIL_UAPI_BINARY when set, else the first of BINARIES this account can run */
+    public static function binary(): string
+    {
+        return self::pickBinary((string) Config::get('uapi.binary', ''), (array) Config::get('uapi.candidates', self::BINARIES),
+            static fn (string $path): bool => is_file($path) && is_executable($path));
+    }
+
+    /** @param list<string> $candidates @param callable(string): bool $runnable */
+    public static function pickBinary(string $configured, array $candidates, callable $runnable): string
+    {
+        if (trim($configured) !== '') {
+            return trim($configured);
+        }
+        foreach ($candidates as $path) {
+            if ($runnable((string) $path)) {
+                return (string) $path;
+            }
+        }
+
+        return (string) ($candidates[0] ?? self::BINARIES[0]);
+    }
+
+    /**
+     * The last outcome: ok (bool), ok_at, error, error_at, since (when the failing began), binary. [] before the first
+     * call. Written on every failure, and on success only when it changes or is 5 minutes old.
+     */
+    public static function status(): array
+    {
+        try {
+            return (array) MailSettings::get(self::STATUS_KEY, []);
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    public static function record(?string $error): void
+    {
+        try {
+            $prev = self::status();
+            $now = Clock::sql();
+            if ($error === null) {
+                if (($prev['ok'] ?? null) === true && (Clock::ageSeconds($prev['ok_at'] ?? null) ?? PHP_INT_MAX) < 300) {
+                    return;
+                }
+                MailSettings::set(self::STATUS_KEY, ['ok' => true, 'ok_at' => $now, 'binary' => self::binary(),
+                    'last_error' => $prev['error'] ?? $prev['last_error'] ?? null, 'last_error_at' => $prev['error_at'] ?? $prev['last_error_at'] ?? null]);
+
+                return;
+            }
+            MailSettings::set(self::STATUS_KEY, ['ok' => false, 'error' => mb_substr($error, 0, 300), 'error_at' => $now,
+                'since' => ($prev['ok'] ?? true) === false ? ($prev['since'] ?? $now) : $now, 'ok_at' => $prev['ok_at'] ?? null, 'binary' => self::binary()]);
+        } catch (Throwable $e) {
+            error_log('Mail: uapi status not saved: ' . $e->getMessage());
+        }
+    }
     /** The argument list for proc_open (public for the tests) @return list<string> */
     public static function argv(string $module, string $function, array $params): array
     {
-        $argv = [(string) Config::get('uapi.binary', '/usr/local/cpanel/bin/uapi'), '--output=json', $module, $function];
+        $argv = [self::binary(), '--output=json', $module, $function];
         foreach ($params as $key => $value) {
             $argv[] = $key . '=' . (is_bool($value) ? ($value ? '1' : '0') : (string) $value);
         }
@@ -100,7 +176,7 @@ class Uapi
         if (PHP_SAPI !== 'cli') {
             throw new UapiException('cPanel actions run only from the cron.');
         }
-        $binary = (string) Config::get('uapi.binary');
+        $binary = self::binary();
         if (!is_file($binary) || !is_executable($binary)) {
             throw new UapiException('The server\'s uapi command was not found at ' . $binary . '.');
         }
@@ -135,9 +211,34 @@ class Uapi
         fclose($pipes[2]);
         proc_close($proc);
 
+        if (!is_array(json_decode($out, true))) {
+            // Not uapi's JSON: say what the command printed ("Failed to execute …"), never the arguments
+            $detail = self::detail($err . "\n" . $out, $params);
+
+            throw new UapiException("cPanel gave no readable answer to {$function}" . ($detail !== '' ? ": {$detail}" : '.'));
+        }
+
         return self::parse($out, $function);
     }
 
+    /** The first line the command printed, without any argument's value (a password must never reach a log) */
+    public static function detail(string $printed, array $params): string
+    {
+        $line = '';
+        foreach (preg_split('/\R/', $printed) ?: [] as $l) {
+            if (trim($l) !== '') {
+                $line = trim($l);
+                break;
+            }
+        }
+        foreach ($params as $value) {
+            if (is_scalar($value) && strlen((string) $value) >= 4) {
+                $line = str_replace((string) $value, '…', $line);
+            }
+        }
+
+        return mb_substr((string) preg_replace('/[\x00-\x1f\x7f]/', '', $line), 0, 200);
+    }
     /** uapi's JSON answer → its data, or an exception with cPanel's own words (never the arguments) */
     public static function parse(string $json, string $function): mixed
     {
