@@ -33,6 +33,10 @@ try {
     if (($out['code'] ?? '') === 'FORBIDDEN') {
         http_response_code(403);
     }
+    // PR 3: a live class's Meet follows its item (moved, retitled, removed).
+    if (($out['status'] ?? '') === 'success' && function_exists('training_live_after_action')) {
+        training_live_after_action($pdo, (string) ($_POST['action'] ?? ''), $_POST);
+    }
     echo json_encode($out);
 } catch (Throwable $e) {
     error_log('[trainings] action failed: ' . $e->getMessage());

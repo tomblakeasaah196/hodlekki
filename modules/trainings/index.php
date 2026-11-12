@@ -12,7 +12,8 @@ require_once __DIR__ . '/../../includes/trainings/view.php';
 $ui = [
     'title' => 'Trainings',
     'mode' => 'strict',
-    'scripts' => ['/assets/ui/js/pages/trainings.js'],
+    // training-live.js (PR 3) logs each press of Join class for attendance, then the link opens as usual.
+    'scripts' => array_merge(['/assets/ui/js/pages/trainings.js'], function_exists('training_live_url') ? ['/assets/ui/js/pages/training-live.js'] : []),
     'csp' => ['frame-src' => TRAININGS_EMBED_HOSTS],
 ];
 require_once '../../includes/header.php';
@@ -98,7 +99,7 @@ $isStaff = can('trainings', 'view', 'church');
                             <p class="text-ink"><?= $d['mode'] === 'online' ? 'Online' : 'In person' ?><?= $d['venue'] !== '' ? ' · ' . ui_e($d['venue']) : '' ?></p>
 <?php if ($d['mode'] === 'online' && $d['link'] !== '' && $en !== null): ?>
                             <div><?= ui_button('Join class', ['variant' => 'primary', 'icon' => 'external-link', 'href' => $d['link'],
-                                'attrs' => ['target' => '_blank', 'rel' => 'noopener noreferrer']]) ?></div>
+                                'attrs' => ['target' => '_blank', 'rel' => 'noopener noreferrer', 'data-live-join' => (string) $item['id']]]) ?></div>
 <?php endif; ?>
                             <p class="ui-meta">Your tutor records who attended.</p>
 <?php elseif ($item['type'] === 'exam'): ?>

@@ -332,9 +332,11 @@ jobs:
         # against a scratch docroot: no script file may ever be served from uploads.
         run: php tests/upload_guard/run.php
 
-      - name: Integrations tests (Google OAuth and calls against a fake Google, vault, attendance matching)
-        # No network: Google::fake() answers. Needs pdo_sqlite (the settings table).
-        run: php tests/integrations/run.php
+      - name: Integrations and live-class tests (Google against a fake, vault, Meet links, Join log, attendance)
+        # No network: Google::fake() answers. Needs pdo_sqlite (the settings table; live classes on the real migrations).
+        run: |
+          php tests/integrations/run.php
+          php tests/training_live/run.php
 
       - name: Mail tests (protocol over real sockets, vault, quota, uapi rules, static rules)
         # No database, no network beyond 127.0.0.1: tests/mail/run.php runs unit.php,

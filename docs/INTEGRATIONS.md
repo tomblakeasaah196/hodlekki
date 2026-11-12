@@ -1,6 +1,6 @@
 # Integrations: Google for Trainings' live classes
 
-Trainings, PR 3 (`TRAININGS-PLAN.md`, owner's answers 5 and 6). The ERP connects to **one Google account**. First it is the JBS Praxis Gmail, for testing, and later HOD's own. The connection gives:
+Trainings, PR 3 (`TRAININGS-PLAN.md`, owner's answers 5 and 6). The ERP connects to **one Google account**: the church's Google account (Cloud project "HOD Lekki Academy"). The connection gives:
 
 - live classes a **Google Meet link**: a Calendar event with a Meet conference, in Africa/Lagos time;
 - **who attended**, after the class, from Meet's participant list.
@@ -20,8 +20,13 @@ Switching accounts needs no code change: **Integrations → Google → Disconnec
 | `includes/integrations/Google/Google.php` | The client: OAuth, the token cache, Calendar (`events.insert` / `patch` / `delete`) and Meet REST (`conferenceRecords`, `participants`, `participantSessions`). Fakeable: `Google::fake()`. |
 | `includes/integrations/{Settings,Vault}.php` | `integration_settings` (one row per setting), and secrets encrypted with `INTEGRATIONS_VAULT_KEY`. |
 | `includes/training_live/Matcher.php` | Matches Meet participants to enrolled learners (below). |
+| `includes/training_live/Live.php`, `functions.php` | Live classes: the Meet of a live item, Join class, attendance, the tutor's corrections; the hooks PR 1 calls. |
+| `modules/academy/live.php`, `assets/ui/js/pages/training-live.js` | The Academy's page of one live class (the builder's **Meet** / **Attendance** button), and the logging of the learner's **Join class**. |
+| `api/training_live_api.php` | `join` (the learner) and the Academy's actions (`can('trainings', 'edit', 'church')`). |
 | `db/migrations/20261210090000_integrations_google.sql` | `integration_settings`. |
+| `db/migrations/20261210100000_trainings_live.sql` | `training_meetings`, `training_join_log`, `training_attendance`, `training_meet_participants`, all keyed on `training_items.id`. |
 | `tests/integrations/run.php` | Vault, settings, the client against a fake Google, the matcher, static rules. |
+| `tests/training_live/run.php` | Live classes on SQLite from the real migrations, with Google faked, end to end. |
 
 ## Setup (once)
 
@@ -93,7 +98,41 @@ Everyone else lands in **Needs a look**, with up to three suggestions: learners 
 
 Minutes are the time in the call, with overlapping stretches counted once, so a phone and a laptop together count as one. **Present** means at least N minutes, set per class (default 30). The tutor can always correct the result.
 
-The tables (`training_meetings`, `training_join_log`, `training_attendance`) and the pages arrive once PR 1's `training_items` has merged.
+## Live classes (`HOD\TrainingLive\Live`)
+
+**The Meet link.** In the builder, a live item has a **Meet** button (or **Attendance** for an in-person class). It opens `/modules/academy/live?item=…`, where the Academy:
+
+- presses **Create Meet link**. This needs an online class with a date and time, and Google connected;
+- gets an event on the church's calendar with a Meet: titled "Training: class", at the class's time and length, in Lagos time;
+- adds no guests and has Google send nothing, so no learner record goes to Google;
+- sees the link stored in the item's `details.meet_url` / `meet_event_id`. PR 1 keeps those on every edit, and the learner's page prefers them to a pasted link.
+
+**The Meet follows the item.** `api/trainings_api.php` calls `training_live_after_action()` after a builder change (an item saved or removed, a card removed, the settings, the training deleted):
+
+- a moved or retitled class patches its event;
+- a removed class, or one made in person or left without a time, deletes the event.
+
+A Google problem never fails the builder. It is kept on the meeting, shown on the Meet page, and tried again on the next save or with **Update**.
+
+**Join class.** The learner's button opens the link as before, in a new tab, and `training-live.js` logs the press (`training_join_log`, once a minute at most). Only learners on the training can be logged.
+
+**Attendance.** It is read from Meet by **Get attendance** on the Meet page, or by the daily run (`cron/trainings_daily.php`, 06:30) for classes that ended 2 hours to 3 days ago:
+
+1. Meet's calls with the class's code, starting from an hour before the class to 3 hours after it.
+2. Their participants and stretches.
+3. The Matcher.
+4. `training_attendance`, and for those present the item **completed** in `training_progress` (`data.by = 'meet'`), then `trainings_recheck_enrolment()`.
+
+The rest go to **Needs a look** (`training_meet_participants`), one row per name.
+
+**The tutor decides.** On the Meet page the tutor can:
+
+- mark any learner present or absent;
+- give a participant to a learner (their minutes count, present at N);
+- **Ignore** a guest or their own device;
+- **Reopen** a decision.
+
+A tutor's choice (`source = manual`, progress `by = 'tutor'`) is never changed by a later read. A read removes only what an earlier read added.
 
 ## Known limit: who may enter the call
 

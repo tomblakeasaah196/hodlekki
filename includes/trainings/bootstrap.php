@@ -26,6 +26,11 @@ require_once dirname(__DIR__) . '/upload_guard.php';
 if (is_file(dirname(__DIR__) . '/exams/bootstrap.php')) {
     require_once dirname(__DIR__) . '/exams/bootstrap.php';
 }
+// Live classes on Google Meet are PR 3's (includes/training_live/, docs/INTEGRATIONS.md): the Meet page link,
+// Join class and attendance, through training_live_*() hooks guarded by function_exists().
+if (is_file(dirname(__DIR__) . '/training_live/bootstrap.php')) {
+    require_once dirname(__DIR__) . '/training_live/bootstrap.php';
+}
 require_once __DIR__ . '/build.php';
 require_once __DIR__ . '/people.php';
 require_once __DIR__ . '/progress.php';

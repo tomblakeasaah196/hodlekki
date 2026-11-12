@@ -72,6 +72,7 @@ return [
     '/assets/ui/js/pages/sms-studio.js' => '51d48711dc5a',
     '/assets/ui/js/pages/testimonies-admin.js' => '0f0f3511c753',
     '/assets/ui/js/pages/testimonies.js' => 'f1ce05bd44b2',
+    '/assets/ui/js/pages/training-live.js' => '8ef3eed04a59',
     '/assets/ui/js/pages/trainings.js' => '1e0e5fa664d0',
     '/assets/ui/js/pages/tribes.js' => '95e63385e0cc',
     '/assets/ui/js/pages/ui-guide.js' => '55bd00809be1',
