@@ -927,7 +927,6 @@ function monitor_refresh_smtp_test(PDO $db): void
     monitor_state_set($db, 'smtp_test', (string) json_encode(['ok' => $ok, 'error' => $error, 'at' => monitor_time()]));
 }
 
-/** The mailboxes the mail minute cron syncs (mail_accounts), or ready false before Mail is installed. */
 /** Google's connection from integration_settings and .env (never a value: only whether each is there). */
 function monitor_facts_google(PDO $pdo): array
 {
@@ -950,6 +949,7 @@ function monitor_facts_google(PDO $pdo): array
     ];
 }
 
+/** The mailboxes the mail minute cron syncs (mail_accounts), or ready false before Mail is installed. */
 function monitor_facts_mail(PDO $pdo): array
 {
     if (!monitor_table_exists($pdo, 'mail_accounts')) {
