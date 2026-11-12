@@ -164,6 +164,8 @@ function ui_nav_registry(): array
             'match' => ['monitor'], 'keywords' => ['errors', 'monitor', 'health', 'uptime', 'logs', 'status', 'alerts'], 'when_exists' => true],
         ['key' => 'ui_guide', 'label' => 'Design System', 'icon' => 'palette', 'href' => '/modules/ui_guide/', 'section' => 'system',
             'match' => ['ui_guide'], 'keywords' => ['ui', 'components', 'design', 'style guide', 'tokens']],
+        ['key' => 'integrations', 'label' => 'Integrations', 'icon' => 'link', 'href' => '/modules/integrations/', 'section' => 'system',
+            'match' => ['integrations'], 'keywords' => ['google', 'meet', 'calendar', 'connect', 'oauth']],
     ];
 }
 
