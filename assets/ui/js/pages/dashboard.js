@@ -2,17 +2,32 @@
 // The home dashboard (index.php). Cards come from /api/dashboard_api.php;
 // tapping one opens the detail drawer with its breakdown and a way into the
 // module. While today's Sunday service is live the numbers refresh every
-// minute, only while the tab is visible and no detail is open.
+// minute, only while the tab is visible and no detail is open; a refresh
+// updates the cards in place (no entrance, no count, focus kept).
+// Motion (app.css "Home dashboard"): on the first load only, and only when
+// the reader has not asked for reduced motion, the cards rise in one after
+// another (.dash-enter) and their numbers count up from 0.
 (function () {
     'use strict';
 
     var HOD = window.HOD;
     var API = '/api/dashboard_api.php';
     var LIVE_REFRESH_MS = 60000;
+    var COUNT_MS = 600;
+    var STAGGER_MS = 70;
+    var ENTRANCE_MS = 1100; // the longest delay plus the rise, then .dash-enter goes
     var ICONS = {
         workforce: 'users', first_timers: 'user-round-plus', pending_qa: 'circle-help', sms: 'wallet',
         sunday: 'chart-column', team: 'users-round', units: 'building-2', unit_workers: 'users', alerts: 'bell'
     };
+    // A calm hue per card so the eye can tell them apart (never a status:
+    // the SMS badge and the Sunday trend keep green, amber and red).
+    var HUES = {
+        workforce: 'dash-kpi--navy', first_timers: 'dash-kpi--rose', pending_qa: 'dash-kpi--violet',
+        sunday: 'dash-kpi--gold', sms: 'dash-kpi--teal', team: 'dash-kpi--navy', units: 'dash-kpi--teal',
+        unit_workers: 'dash-kpi--navy', alerts: 'dash-kpi--violet'
+    };
+    var reducedMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
     var TONES = { success: 'ui-badge--success', warning: 'ui-badge--warning', danger: 'ui-badge--danger' };
     var DELTA = { up: 'ui-delta ui-delta--up', down: 'ui-delta ui-delta--down', flat: 'ui-delta ui-delta--flat' };
     var DELTA_ICON = { up: 'trending-up', down: 'trending-down', flat: 'minus' };
@@ -28,39 +43,109 @@
         return typeof href === 'string' && href.charAt(0) === '/' && href.charAt(1) !== '/' && href.indexOf('\\') === -1;
     }
 
-    function cardHtml(card, live) {
+    function motionOk() {
+        return !(reducedMotion && reducedMotion.matches);
+    }
+
+    function cardClass(card) {
+        return 'ui-card dash-kpi ' + (HUES[card.key] || 'dash-kpi--navy') + (card.needs ? ' dash-kpi--needs' : '');
+    }
+
+    function cardValue(card) {
+        return typeof card.display === 'string' ? card.display : HOD.format.number(card.value);
+    }
+
+    function cardInner(card, live) {
         var trend = DELTA[card.trend] ? card.trend : 'flat';
-        var liveBadge = card.key === 'sunday' && live ? ' <span class="ui-badge ui-badge--danger ui-badge--dot">Live</span>' : '';
+        // One status at the top right: Live (today's service), the SMS
+        // wallet's OK / Low / Empty / Check, or "Needs you".
+        var status = '';
+        if (card.key === 'sunday' && live) status += '<span class="ui-badge ui-badge--danger ui-badge--dot">Live</span>';
+        if (card.badge && TONES[card.tone]) status += '<span class="ui-badge ui-badge--dot ' + TONES[card.tone] + '">' + esc(card.badge) + '</span>';
+        if (card.needs) status += '<span class="dash-needs">Needs you</span>';
         // A rising or falling number colours its note and carries an arrow;
         // anything else is a plain caption.
         var moving = card.trend === 'up' || card.trend === 'down';
         var note = !card.note ? '' : moving
-            ? '<span class="ui-stat__meta"><span class="' + DELTA[trend] + '">' + HOD.icon(DELTA_ICON[trend]) + '<span>' + esc(card.note) + '</span></span></span>'
-            : '<span class="ui-stat__meta">' + esc(card.note) + '</span>';
-        // A status badge from the server (the SMS wallet: OK / Low / Empty / Check).
-        var badge = card.badge && TONES[card.tone]
-            ? ' <span class="ui-badge ui-badge--dot ' + TONES[card.tone] + ' ml-auto">' + esc(card.badge) + '</span>' : '';
-        var value = typeof card.display === 'string' ? card.display : HOD.format.number(card.value);
-        var inner =
-            '<span class="ui-stat__label">' + HOD.icon(ICONS[card.key] || 'chart-column') + '<span>' + esc(card.title) + '</span>' + liveBadge + badge + '</span>' +
-            '<span class="ui-stat__value">' + esc(value) + '</span>' +
+            ? '<span class="dash-kpi__note"><span class="' + DELTA[trend] + '">' + HOD.icon(DELTA_ICON[trend]) + '<span>' + esc(card.note) + '</span></span></span>'
+            : '<span class="dash-kpi__note">' + esc(card.note) + '</span>';
+        // Read in this order: what it is, its status, the number, the note.
+        return '<span class="dash-kpi__chip">' + HOD.icon(ICONS[card.key] || 'chart-column') + '</span>' +
+            '<span class="dash-kpi__title">' + esc(card.title) + '</span>' +
+            (status ? '<span class="dash-kpi__status">' + status + '</span>' : '') +
+            '<span class="dash-kpi__value" data-dash-value>' + esc(cardValue(card)) + '</span>' +
             note;
+    }
+
+    function cardHtml(card, live) {
+        var inner = cardInner(card, live);
         // A card with its own page (the SMS wallet opens SMS Studio) is a link.
         if (safeHref(card.href)) {
-            return '<a class="ui-card ui-stat" href="' + esc(card.href) + '">' + inner + '</a>';
+            return '<a class="' + cardClass(card) + '" data-dash-key="' + esc(card.key) + '" href="' + esc(card.href) + '">' + inner + '</a>';
         }
-        return '<button type="button" class="ui-card ui-stat" data-action="dash.detail" data-card="' + esc(card.key) + '" data-title="' + esc(card.title) + '" aria-haspopup="dialog">' +
+        return '<button type="button" class="' + cardClass(card) + '" data-dash-key="' + esc(card.key) + '" data-action="dash.detail" data-card="' + esc(card.key) + '" data-title="' + esc(card.title) + '" aria-haspopup="dialog">' +
             inner +
         '</button>';
     }
 
-    function renderCards(res) {
+    // Counts a value such as "1,204" or the wallet's naira up from 0, then
+    // shows the server's own text. Anything else (a dash, a decimal) is left
+    // as it is.
+    function countUp(el, text, delay) {
+        var m = /^(\D*)(\d[\d,]*)(\D*)$/.exec(text);
+        var target = m ? Number(m[2].replace(/,/g, '')) : 0;
+        if (!m || !(target > 0)) return;
+        el.textContent = m[1] + '0' + m[3];
+        setTimeout(function () {
+            var start = null;
+            function step(now) {
+                if (start === null) start = now;
+                var p = Math.min(1, (now - start) / COUNT_MS);
+                var eased = 1 - Math.pow(1 - p, 3);
+                el.textContent = p < 1 ? m[1] + HOD.format.number(Math.round(target * eased)) + m[3] : text;
+                if (p < 1) window.requestAnimationFrame(step);
+            }
+            window.requestAnimationFrame(step);
+        }, delay);
+    }
+
+    // The cards on screen, when they are the same cards (key, order, link or
+    // button) as these.
+    function sameCards(cards) {
+        var shown = cardsEl.querySelectorAll('[data-dash-key]');
+        if (shown.length !== cards.length) return null;
+        for (var i = 0; i < cards.length; i++) {
+            var tag = safeHref(cards[i].href) ? 'A' : 'BUTTON';
+            if (shown[i].getAttribute('data-dash-key') !== cards[i].key || shown[i].tagName !== tag) return null;
+        }
+        return shown;
+    }
+
+    function renderCards(res, initial) {
         var cards = Array.isArray(res.cards) ? res.cards : [];
+        var live = !!res.live;
+        var shown = initial ? null : sameCards(cards);
+        if (shown) {
+            // A live refresh: new numbers in the same cards.
+            cards.forEach(function (c, i) {
+                shown[i].className = cardClass(c);
+                if (shown[i].tagName === 'A') shown[i].setAttribute('href', c.href);
+                else shown[i].setAttribute('data-title', c.title);
+                shown[i].innerHTML = cardInner(c, live);
+            });
+            return;
+        }
         // Five cards: 3 + 2 on a laptop, all five in a row from 1280 px.
         cardsEl.classList.toggle('lg:grid-cols-3', cards.length === 5);
         cardsEl.classList.toggle('xl:grid-cols-5', cards.length === 5);
-        cardsEl.innerHTML = cards.map(function (c) { return cardHtml(c, !!res.live); }).join('');
+        cardsEl.innerHTML = cards.map(function (c) { return cardHtml(c, live); }).join('');
         cardsEl.removeAttribute('aria-busy');
+        if (!initial || !motionOk()) return;
+        cardsEl.classList.add('dash-enter');
+        cardsEl.querySelectorAll('[data-dash-value]').forEach(function (el, i) {
+            countUp(el, cardValue(cards[i]), i * STAGGER_MS);
+        });
+        setTimeout(function () { cardsEl.classList.remove('dash-enter'); }, ENTRANCE_MS);
     }
 
     function renderNotices(res) {
@@ -112,7 +197,7 @@
     function load(initial) {
         HOD.api(API, { method: 'GET', quiet: true }).then(function (res) {
             errorEl.hidden = true;
-            renderCards(res);
+            renderCards(res, initial);
             renderNotices(res);
             scheduleRefresh(!!res.live);
         }).catch(function () {
