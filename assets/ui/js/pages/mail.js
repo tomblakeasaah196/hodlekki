@@ -284,6 +284,7 @@
     }
     function closeReader() {
         var had = state.thread ? state.thread.id : null;
+        if (had) emit('mail:thread-closed', { accountId: DATA.accountId, threadId: had });
         state.thread = null;
         state.liveUid = null;
         state.images = [];

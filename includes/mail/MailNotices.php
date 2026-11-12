@@ -16,8 +16,7 @@ final class MailNotices
 {
     public static function needsReset(array $account): void
     {
-        self::send(
-            MailAccess::mailAdmins(),
+        self::attention(
             'Mail: a mailbox needs a new password',
             "{$account['email']} stopped updating: the mail server refused its stored password. Open Mailboxes and choose Reset password.",
             self::mailboxesUrl((int) $account['id']),
@@ -26,8 +25,7 @@ final class MailNotices
 
     public static function storage(array $account, int $percent): void
     {
-        self::send(
-            MailAccess::mailAdmins(),
+        self::attention(
             'Mail: a mailbox is nearly full',
             "{$account['email']} is {$percent}% full. Ask its users to empty Trash and old attachments, or raise its limit on the Mailboxes screen.",
             self::mailboxesUrl((int) $account['id']),
@@ -79,6 +77,16 @@ final class MailNotices
     }
 
     /** @param list<int> $userIds */
+    /** A bell to every mail admin, and the key alert to those who ticked "a mailbox I manage needs attention" */
+    private static function attention(string $title, string $message, string $link): void
+    {
+        $admins = MailAccess::mailAdmins();
+        self::send($admins, $title, $message, $link);
+        foreach ($admins as $id) {
+            \HOD\Mail\Team\PersonalAlerts::send((int) $id, 'attention', $title, $message, $link);
+        }
+    }
+
     public static function send(array $userIds, string $title, string $message, ?string $link): void
     {
         foreach (array_values(array_unique(array_filter(array_map('intval', $userIds)))) as $id) {

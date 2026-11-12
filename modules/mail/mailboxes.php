@@ -210,6 +210,33 @@ $tab = $isAdmin ? 'boxes' : 'exports';
                 <span class="ui-list__meta"><?= ui_e($c['detail']) ?></span></div></li>
             <?php endforeach; ?>
         </ul></div>
+        <section class="ui-card" data-mb-ai>
+            <div class="ui-card__header ui-card__header--divided">
+                <h2 class="ui-h3">AI in Mail</h2>
+                <?= mail_info('Summaries and draft replies with Gemini, on press; AI never sends. It stays off until the owner confirms the Gemini project is on a paid plan. Then switch it on per mailbox. Never on personal or pastoral mailboxes. People also need "AI summaries and draft replies in Mail" in Roles & permissions.') ?>
+            </div>
+            <div class="ui-card__body ui-stack">
+                <?php $aiPlan = HOD\Mail\Ai\Ai::plan(); ?>
+                <div class="ui-toolbar">
+                    <span><?= $aiPlan ? ui_badge('Paid plan confirmed', 'success') . ' ' . ui_e(HOD\Mail\People::firstName($aiPlan['by']) . ', ' . HOD\Mail\Read\Format::when($aiPlan['at'], true)) : ui_badge('Not confirmed', 'neutral') ?></span>
+                    <?= HOD\Mail\Ai\Ai::key() === '' ? ui_badge('No GEMINI_API_KEY', 'warning') : '' ?>
+                    <div class="ui-toolbar__end">
+                        <?= $aiPlan
+                            ? ui_button('Withdraw', ['variant' => 'ghost', 'size' => 'sm', 'attrs' => ['data-action' => 'mb.aiplan', 'data-confirmed' => '0']])
+                            : ui_button('Record paid plan', ['variant' => 'secondary', 'size' => 'sm', 'attrs' => ['data-action' => 'mb.aiplan', 'data-confirmed' => '1']]) ?>
+                    </div>
+                </div>
+                <ul class="ui-list">
+                    <?php foreach ($accounts as $a): if (!HOD\Mail\Ai\Ai::allowedFor($a)) { continue; } ?>
+                    <li class="ui-list__item"><div class="ui-list__main"><span class="ui-list__title"><?= ui_e($a['email']) ?></span></div>
+                        <div class="ui-list__end">
+                            <?= $a['ai_enabled'] ? ui_badge('On', 'success') : ui_badge('Off', 'neutral') ?>
+                            <?= $aiPlan ? ui_button($a['ai_enabled'] ? 'Turn off' : 'Turn on', ['variant' => 'ghost', 'size' => 'sm', 'attrs' => ['data-action' => 'mb.aibox', 'data-id' => $a['id'], 'data-on' => $a['ai_enabled'] ? '0' : '1']]) : '' ?>
+                        </div></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        </section>
         <form class="ui-card ui-form" data-action="mb.reserved" novalidate>
             <div class="ui-card__body ui-form-grid">
                 <?= ui_field('number', ['name' => 'reserved_personal', 'label' => 'Slots kept for personal mailboxes', 'value' => $quota['reserved_personal'],
