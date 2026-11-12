@@ -354,9 +354,29 @@ function trainings_invite_prefill(PDO $pdo, int $userId): string
 }
 
 /**
+ * Does this person hold a live role or a department seat? Then a sign-in made
+ * for them carries staff access, so it must never come from an invite link:
+ * whoever reads the typed email would sign in with that access. Fails closed.
+ */
+function trainings_has_staff_access(PDO $pdo, int $userId): bool
+{
+    if (!function_exists('perm_ready') || !perm_ready($pdo)) {
+        return false;   // no matrix yet: nobody holds a role or a seat
+    }
+    try {
+        $today = perm_today();
+        return perm_person_roles($pdo, $userId, $today) !== [] || perm_live_seats($pdo, $userId, $today) !== [];
+    } catch (Throwable $e) {
+        error_log('[trainings] could not read roles/seats for an invite: ' . $e->getMessage());
+        return true;
+    }
+}
+
+/**
  * Send (or re-send) a visitor's invite: a link that works once, for 7 days.
  * A newer link replaces any earlier one. Refused when the person can already
- * sign in (they just sign in), or the email belongs to someone else.
+ * sign in (they just sign in), holds a role or a seat (staff access is never
+ * handed out by email link), or the email belongs to someone else.
  *
  * @return array{ok:bool, message?:string, field?:string, sent?:bool, token?:string}
  *   token is for tests only: callers never show or log it
@@ -374,6 +394,9 @@ function trainings_invite_send(PDO $pdo, array $t, array $enrolment, string $raw
     }
     if (strtolower((string) ($user['account_status'] ?? 'active')) !== 'active') {
         return ['ok' => false, 'message' => 'This account is not active.'];
+    }
+    if (trainings_has_staff_access($pdo, (int) $user['id'])) {
+        return ['ok' => false, 'message' => 'They hold a role. An admin sets up their sign-in.', 'code' => 'STAFF'];
     }
     $email = function_exists('email_normalize') ? email_normalize($rawEmail) : strtolower(trim($rawEmail));
     $problem = function_exists('email_address_problem') ? email_address_problem($email, $pdo, (int) $user['id'])
@@ -481,6 +504,10 @@ function trainings_invite_peek(PDO $pdo, string $token): array
     }
     if ((string) ($user['password_hash'] ?? '') !== '') {
         return ['state' => 'signin'] + $out;
+    }
+    // A role or seat given after the link went out: the link stops working (accept checks this too).
+    if (trainings_has_staff_access($pdo, (int) $inv['user_id'])) {
+        return ['state' => 'staff'] + $out;
     }
     return ['state' => 'valid'] + $out;
 }

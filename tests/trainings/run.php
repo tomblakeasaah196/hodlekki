@@ -627,6 +627,25 @@ eq('a link works for 7 days', ['expired', 'EXPIRED'], [trainings_invite_peek($pd
     trainings_invite_accept($pdo, $late, 'Strong-pass-2026!', 'Strong-pass-2026!')['code'] ?? null]);
 $GLOBALS['trainings_now'] = new DateTimeImmutable('2026-12-01 10:00:00', new DateTimeZone('Africa/Lagos'));
 eq('a made-up link is invalid', 'invalid', trainings_invite_peek($pdo, str_repeat('A', 43))['state']);
+// Staff access is never handed out by email link: whoever reads the typed address would sign in with it.
+$pdo->exec("INSERT INTO users (id, first_name, last_name, spiritual_status, attendance_status, account_status, created_at)
+            VALUES (910, 'Kemi', 'Test', 'Member', 'Active', 'active', '2026-12-01 09:00:00'), (911, 'Lanre', 'Test', 'Member', 'Active', 'active', '2026-12-01 09:00:00')");
+$pdo->exec("INSERT INTO user_roles (user_id, role_id) VALUES (910, 3)");
+perm_reset();
+eq('someone with a role and no password is not invited', 'STAFF', $inv(['user_id' => 910, 'email' => 'kemi.other@gmail.com'])['code'] ?? null);
+ok('…and no link is made for them', trn_count($pdo, 'training_invites', 'user_id = 910') === 0);
+$before = (string) trainings_invite_send($pdo, trainings_get($pdo, $weeks), trainings_enrolment_get($pdo, trainings_enrol($pdo, $weeks, 911, 'invite', 901)['id']),
+    'lanre@gmail.com', 901)['token'];
+$pdo->exec("INSERT INTO user_roles (user_id, role_id) VALUES (911, 3)");
+perm_reset();
+eq('a role given after the link went out stops it', ['staff', 'STAFF'], [trainings_invite_peek($pdo, $before)['state'],
+    trainings_invite_accept($pdo, $before, 'Strong-pass-2026!', 'Strong-pass-2026!')['code'] ?? null]);
+ok('…and no password is set', (string) $pdo->query('SELECT password_hash FROM users WHERE id = 911')->fetchColumn() === '');
+$pdo->exec("INSERT INTO users (id, first_name, last_name, spiritual_status, attendance_status, account_status, created_at)
+            VALUES (912, 'Musa', 'Test', 'Worker', 'Active', 'active', '2026-12-01 09:00:00')");
+$pdo->exec("INSERT INTO user_departments (user_id, department_id, is_active, role_in_dept) VALUES (912, 20, 1, 'HOD')");
+perm_reset();
+eq('a department seat counts too', 'STAFF', $inv(['user_id' => 912, 'email' => 'musa@gmail.com'])['code'] ?? null);
 $noMail = trn_db();
 $noMail->exec('DROP TABLE email_outbox');
 $noMailT = (int) act($noMail, 901, 'create', ['title' => 'X', 'length' => 'self_paced'])['id'];

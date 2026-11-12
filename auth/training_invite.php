@@ -88,6 +88,8 @@ if ($peek['state'] === 'valid'):
 <?php elseif ($peek['state'] === 'signin'): ?>
     <?= ui_banner('info', ['title' => 'You can sign in', 'text' => 'Your training is waiting in Trainings.']) ?>
     <?= $signIn ?>
+<?php elseif ($peek['state'] === 'staff'): ?>
+    <?= ui_banner('warning', ['title' => 'Ask the church office', 'text' => 'An admin sets up sign-in for this account.', 'info' => 'People who serve in a role get their sign-in from an admin, not from a link.']) ?>
 <?php elseif ($peek['state'] === 'expired'): ?>
     <?= ui_banner('warning', ['title' => 'Link expired', 'text' => 'Ask the HOD Academy for a new one.', 'info' => 'Invite links work for 7 days.']) ?>
 <?php else: ?>
