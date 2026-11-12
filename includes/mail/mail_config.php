@@ -25,12 +25,15 @@ return [
     // Mailboxes this domain may hold (owner, 11 Nov 2026: 15 of the account's 50).
     'domain_quota' => (int) $env('MAIL_DOMAIN_QUOTA', '15'),
 
-    // The one mail server. Never taken from a request.
+    // The one mail server. Never taken from a request. Its own name, not mail.hodlekki.org:
+    // ports 993 and 465 present the certificate for srv-web-ns9.newtoncorp.fr only, so a
+    // connection to mail.hodlekki.org fails the name check ("Could not reach … (erreur 0)",
+    // every minute in ~/logs/hod-mail.log until 12 Nov 2026: no mailbox ever synced).
     'server' => [
-        'imap_host'       => $env('MAIL_IMAP_HOST', 'mail.hodlekki.org'),
+        'imap_host'       => $env('MAIL_IMAP_HOST', 'srv-web-ns9.newtoncorp.fr'),
         'imap_port'       => (int) $env('MAIL_IMAP_PORT', '993'),
         'imap_encryption' => 'ssl',
-        'smtp_host'       => $env('MAIL_SMTP_HOST', 'mail.hodlekki.org'),
+        'smtp_host'       => $env('MAIL_SMTP_HOST', 'srv-web-ns9.newtoncorp.fr'),
         'smtp_port'       => (int) $env('MAIL_SMTP_PORT', '465'),
         'smtp_encryption' => 'ssl',
     ],
