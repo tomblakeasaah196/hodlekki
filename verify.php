@@ -4,7 +4,8 @@
 // holding a printed or digital HOD document types its code; the API
 // (api/public_verify_api.php, honeypot-protected) answers with what was
 // stamped, by whom and when. Rebuilt on the public layout (strict CSP);
-// script: assets/ui/js/pages/verify.js.
+// script: assets/ui/js/pages/verify.js. ?code=… (the QR on a Trainings
+// certificate) fills the box and checks it straight away.
 //
 // Baseline security headers (nosniff, referrer, framing, permissions): this
 // page does not load includes/db.php on every request, which is where every
@@ -15,6 +16,9 @@ session_start();
 
 require_once __DIR__ . '/includes/ui/public.php';
 require_once __DIR__ . '/includes/ui/components.php';
+
+// Only the characters a code can hold; anything else is dropped.
+$prefill = substr((string) preg_replace('/[^A-Z0-9-]/', '', strtoupper((string) ($_GET['code'] ?? ''))), 0, 20);
 
 ui_public_open([
     'title' => 'Document Verification',
@@ -35,7 +39,7 @@ ui_public_open([
     </div>
 
     <section id="verify-search" class="ui-card">
-        <form class="ui-card__body ui-form" id="verify-form" data-action="verify.check" data-ui-validate novalidate>
+        <form class="ui-card__body ui-form" id="verify-form" data-action="verify.check" data-ui-validate novalidate<?= $prefill !== '' ? ' data-autoverify' : '' ?>>
             <input type="hidden" name="action" value="verify_document">
             <div class="absolute -left-[9999px] h-px w-px overflow-hidden" aria-hidden="true">
                 <label for="verify-hp">Leave this empty</label>
@@ -45,7 +49,7 @@ ui_public_open([
                 <label class="ui-label" for="verify-code">Verification Code<span class="ui-label__req" aria-hidden="true">*</span></label>
                 <input class="ui-input font-mono uppercase tracking-[0.15em] placeholder:font-sans placeholder:normal-case placeholder:tracking-normal" type="text"
                     id="verify-code" name="verify_code" required placeholder="e.g. VRF-A1B2-C3D4" autocapitalize="characters" autocomplete="off"
-                    spellcheck="false" aria-describedby="verify-code-error" data-action-input="verify.upper">
+                    spellcheck="false" aria-describedby="verify-code-error" data-action-input="verify.upper" value="<?= htmlspecialchars($prefill, ENT_QUOTES, 'UTF-8') ?>">
                 <p class="ui-field-error" id="verify-code-error" aria-live="polite"></p>
             </div>
             <?= ui_button('Verify Document', ['variant' => 'primary', 'type' => 'submit', 'block' => true, 'size' => 'lg', 'icon_end' => 'arrow-right']) ?>
@@ -57,8 +61,8 @@ ui_public_open([
     </section>
 
     <section id="verify-result" class="ui-card overflow-hidden" aria-live="polite" hidden>
-        <div class="flex items-center justify-between gap-3 bg-success-soft px-5 py-3 text-success">
-            <span class="flex items-center gap-2 font-semibold"><?= ui_icon('circle-check') ?>Valid &amp; Binding</span>
+        <div class="flex items-center justify-between gap-3 bg-success-soft px-5 py-3 text-success" id="res-banner">
+            <span class="flex items-center gap-2 font-semibold"><?= ui_icon('circle-check') ?><span id="res-status">Valid &amp; Binding</span></span>
             <?= ui_icon('shield-check', 'ui-icon--lg') ?>
         </div>
         <div class="ui-card__body space-y-5">
@@ -68,10 +72,10 @@ ui_public_open([
                 <p class="font-mono text-sm text-ink-muted" id="res-ref"></p>
             </div>
             <dl class="grid gap-4 sm:grid-cols-2">
-                <div><dt class="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Department</dt><dd class="font-medium text-ink" id="res-dept"></dd></div>
-                <div><dt class="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Total Amount</dt><dd class="font-medium text-ink" id="res-amount"></dd></div>
-                <div><dt class="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Digitally Validated By</dt><dd class="font-medium text-ink" id="res-by"></dd><dd class="text-sm text-ink-muted" id="res-role"></dd></div>
-                <div><dt class="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Timestamp</dt><dd class="font-medium text-ink" id="res-time"></dd><dd class="text-sm text-ink-muted" id="res-level"></dd></div>
+                <div><dt class="text-xs font-semibold uppercase tracking-wide text-ink-subtle" data-label="department">Department</dt><dd class="font-medium text-ink" id="res-dept"></dd></div>
+                <div><dt class="text-xs font-semibold uppercase tracking-wide text-ink-subtle" data-label="amount">Total Amount</dt><dd class="font-medium text-ink" id="res-amount"></dd></div>
+                <div><dt class="text-xs font-semibold uppercase tracking-wide text-ink-subtle" data-label="validated_by">Digitally Validated By</dt><dd class="font-medium text-ink" id="res-by"></dd><dd class="text-sm text-ink-muted" id="res-role"></dd></div>
+                <div><dt class="text-xs font-semibold uppercase tracking-wide text-ink-subtle" data-label="timestamp">Timestamp</dt><dd class="font-medium text-ink" id="res-time"></dd><dd class="text-sm text-ink-muted" id="res-level"></dd></div>
             </dl>
             <div class="rounded-ui bg-surface-sunken p-4">
                 <p class="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-subtle"><?= ui_icon('shield-check', 'ui-icon--sm') ?>SHA-256 Cryptographic Hash</p>

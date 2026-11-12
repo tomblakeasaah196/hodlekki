@@ -158,4 +158,15 @@
                 .finally(function () { HOD.busy(button, false); });
         });
     });
+    /* ----------------------------------------------------------- settings: who signs certificates */
+
+    HOD.actions.on('acd.settings', function (form) {
+        var button = form.querySelector('button[type="submit"]');
+        var body = new FormData(form);
+        HOD.busy(button, true);
+        HOD.api(API, { action: 'settings_save', data: body })
+            .then(function () { flash('Settings saved.', '/modules/academy/#tab=settings'); window.setTimeout(function () { window.location.reload(); }, 50); })
+            .catch(function (err) { fieldError(form, err); })
+            .finally(function () { HOD.busy(button, false); });
+    });
 })();

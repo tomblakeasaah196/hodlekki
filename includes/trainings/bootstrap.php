@@ -34,6 +34,8 @@ if (is_file(dirname(__DIR__) . '/training_live/bootstrap.php')) {
 require_once __DIR__ . '/build.php';
 require_once __DIR__ . '/people.php';
 require_once __DIR__ . '/progress.php';
+require_once __DIR__ . '/certificates.php';
+require_once __DIR__ . '/reminders.php';
 require_once __DIR__ . '/actions.php';
 
 const TRAININGS_TZ = 'Africa/Lagos';

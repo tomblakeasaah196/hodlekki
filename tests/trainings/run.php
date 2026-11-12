@@ -111,8 +111,10 @@ function trn_db(bool $withTrainings = true): PDO
         $pdo->exec($stmt);
     }
     if ($withTrainings) {
-        foreach (trn_schema_sql('20261208090000_trainings_core.sql') as $stmt) {
-            $pdo->exec($stmt);
+        foreach (['20261208090000_trainings_core.sql', '20261211090000_trainings_certificates.sql'] as $file) {
+            foreach (trn_schema_sql($file) as $stmt) {
+                $pdo->exec($stmt);
+            }
         }
     }
     $pdo->exec("INSERT INTO roles (id, role_name) VALUES (1, 'Super_Admin'), (2, 'Resident_Pastor'), (3, 'Assoc_Pastor')");
@@ -666,6 +668,159 @@ eq('deleting with the learners confirmed removes everything under it', 'success'
 eq('…nothing left behind', [0, 0, 0, 0, 0], [trn_count($pdo, 'training_sections', 'training_id = ?', [$weeks]),
     trn_count($pdo, 'training_items', 'training_id = ?', [$weeks]), trn_count($pdo, 'training_enrolments', 'training_id = ?', [$weeks]),
     trn_count($pdo, 'training_progress', 'item_id = ?', [$video]), trn_count($pdo, 'training_invites', 'user_id = 909')]);
+
+// ---------------------------------------------------------------------------
+section('Certificates (owner answer 14): issued, checked at /verify, reissued, revoked');
+$bits = static function (array $m): string {
+    $b = '';
+    foreach ($m as $row) {
+        foreach ($row as $d) {
+            $b .= $d ? '1' : '0';
+        }
+    }
+    return $b;
+};
+// Pinned from the browser library (assets/ui/vendor/qrcode-generator-1.5.0), module for module: versions 4 and 10.
+eq('the QR encoder matches the browser library', ['3154b7fc17ab8d98b5f999d71a518fd9da777f8e81a809d01461d140321f3adc',
+    'ca104e9e24ec3f623810f191f33a0956766af5edb1efd169eec5b143c52bb514'],
+    [hash('sha256', $bits(hod_qr_matrix('https://hodlekki.org/verify?code=CERT-7K2M-9QXA'))), hash('sha256', $bits(hod_qr_matrix(str_repeat('Ab', 100))))]);
+$png = hod_qr_png(hod_qr_matrix('https://hodlekki.org/verify?code=CERT-7K2M-9QXA'), 8, 4);
+ok('…drawn as a PNG with no GD (33 modules + quiet zone, 8 px each)', str_starts_with($png, "\x89PNG\r\n\x1a\n") && unpack('N', substr($png, 16, 4))[1] === 328);
+try {
+    hod_qr_matrix(str_repeat('x', 214));
+    $tooLong = false;
+} catch (LengthException $e) {
+    $tooLong = true;
+}
+ok('…and refuses what it cannot hold', $tooLong);
+eq('the QR points at /verify', 'https://hodlekki.org/verify?code=CERT-AAAA-BBBB', trainings_certificate_verify_url('CERT-AAAA-BBBB'));
+
+eq('who signs is a setting: no name in the code, the title "Resident Pastor"', ['signatory_name' => '', 'signatory_title' => 'Resident Pastor', 'signature_image' => ''],
+    trainings_settings($pdo));
+eq('a member cannot change it', 'FORBIDDEN', act($pdo, 904, 'settings_save', ['signatory_name' => 'X', 'signatory_title' => 'Y'])['code'] ?? null);
+eq('a title is needed', 'signatory_title', act($pdo, 901, 'settings_save', ['signatory_name' => 'X', 'signatory_title' => ''])['field'] ?? null);
+act($pdo, 901, 'settings_save', ['signatory_name' => 'The Signatory', 'signatory_title' => 'Resident Pastor']);
+eq('the Academy (Manage) sets it', 'The Signatory', trainings_settings($pdo)['signatory_name']);
+
+$ct = (int) act($pdo, 901, 'create', ['title' => 'Certified course', 'length' => 'self_paced'])['id'];
+$ctItem = (int) act($pdo, 901, 'item_save', ['training_id' => $ct, 'type' => 'reading', 'title' => 'Read', 'section_id' => (int) trainings_outline($pdo, $ct)[0]['id'],
+    'text' => 'Read.'])['id'];
+act($pdo, 901, 'settings', ['training_id' => $ct, 'title' => 'Certified course', 'gives_certificate' => 1, 'live_percent' => 100]);
+act($pdo, 901, 'publish', ['training_id' => $ct]);
+act($pdo, 901, 'assign', ['training_id' => $ct, 'users' => [904, 902]]);
+$ce = trainings_enrolment_for($pdo, $ct, 904);
+act($pdo, 904, 'item_done', ['item_id' => $ctItem, 'done' => 1]);
+$cur = trainings_certificate_current($pdo, $ce['id']);
+ok('completing it issues the certificate (CERT-XXXX-XXXX)', $cur !== null && preg_match(TRAININGS_CERT_PATTERN, $cur['code']) === 1);
+$ceNow = trainings_enrolment_get($pdo, $ce['id']);
+eq('…held on the enrolment with its hash', [$cur['code'], $cur['hash']], [$ceNow['certificate_no'], $ceNow['certificate_hash']]);
+eq('…the hash covers the code and what was printed', hash('sha256', $cur['code'] . '|' . $ce['id'] . '|' . trainings_json($cur['snapshot'])), $cur['hash']);
+eq('…what was printed', ['learner' => 'Dayo Test', 'training' => 'Certified course', 'completed_on' => '2026-12-01',
+    'signatory_name' => 'The Signatory', 'signatory_title' => 'Resident Pastor'], $cur['snapshot']);
+eq('…the learner is told and can download it', [1, $cur['code']], [trn_count($pdo, 'system_notifications', "user_id = 904 AND title = 'Certificate ready'"),
+    act($pdo, 904, 'view', ['training_id' => $ct])['enrolment']['certificate']]);
+eq('…the Academy sees it', $cur['code'], array_values(array_filter(act($pdo, 901, 'learners', ['training_id' => $ct])['learners'],
+    static fn ($l) => $l['user_id'] === 904))[0]['certificate']);
+eq('a training that gives none issues none', null, trainings_certificate_current($pdo, trainings_enrolment_for($pdo, $ex, 904)['id']));
+eq('…and cannot be issued by hand', 'error', act($pdo, 901, 'certificate_issue', ['enrolment_id' => trainings_enrolment_for($pdo, $ex, 904)['id']])['status']);
+
+$m2 = (int) act($pdo, 901, 'create', ['template' => 'membership', 'starts_on' => '2026-12-06'])['id'];
+act($pdo, 901, 'settings', ['training_id' => $m2, 'title' => 'Membership Class', 'gives_certificate' => 1, 'live_percent' => 75]);
+$fill($m2);
+act($pdo, 901, 'publish', ['training_id' => $m2]);
+act($pdo, 901, 'assign', ['training_id' => $m2, 'users' => [905]]);
+$finish($m2, 905);
+$me2 = trainings_enrolment_for($pdo, $m2, 905);
+eq('an official class waits for the Academy\'s confirm', ['completed', null], [$me2['status'], trainings_certificate_current($pdo, $me2['id'])]);
+act($pdo, 900, 'confirm', ['enrolment_ids' => [$me2['id']]]);
+ok('…and confirming issues it', trainings_certificate_current($pdo, $me2['id']) !== null);
+
+$look = trainings_certificate_lookup($pdo, strtolower($cur['code']));
+eq('/verify finds it, in any case', ['valid', 'Dayo Test', 'Certified course', '2026-12-01'], [$look['state'], $look['learner'], $look['training'], $look['completed_on']]);
+$reply = trainings_certificate_verify_reply($look);
+eq('…as a certificate, with its own labels', ['Training Certificate', $cur['code'], 'Training', 'Awarded to', 'The Signatory, Resident Pastor', false],
+    [$reply['document_type'], $reply['reference'], $reply['labels']['department'], $reply['labels']['amount'], $reply['validated_by'], $reply['revoked']]);
+eq('an unknown or malformed code is not found', [null, null, null], [trainings_certificate_lookup($pdo, 'CERT-AAAA-AAAA'),
+    trainings_certificate_lookup($pdo, 'VRF-A1B2-C3D4'), trainings_certificate_lookup($pdo, "CERT-'; DROP")]);
+eq('a member cannot reissue or revoke', ['FORBIDDEN', 'FORBIDDEN'], [act($pdo, 904, 'certificate_issue', ['enrolment_id' => $ce['id']])['code'] ?? null,
+    act($pdo, 904, 'certificate_revoke', ['enrolment_id' => $ce['id'], 'reason' => 'x'])['code'] ?? null]);
+$r = act($pdo, 901, 'certificate_issue', ['enrolment_id' => $ce['id']]);
+$new = trainings_certificate_current($pdo, $ce['id']);
+ok('reissuing gives a new code', ($r['status'] ?? '') === 'success' && $new['code'] !== $cur['code'] && ($r['reissued'] ?? false) === true);
+eq('…the old one verifies as replaced, not valid', ['replaced', true], [trainings_certificate_lookup($pdo, $cur['code'])['state'],
+    trainings_certificate_verify_reply(trainings_certificate_lookup($pdo, $cur['code']))['revoked']]);
+eq('revoking needs a reason', 'reason', act($pdo, 901, 'certificate_revoke', ['enrolment_id' => $ce['id'], 'reason' => ''])['field'] ?? null);
+act($pdo, 901, 'certificate_revoke', ['enrolment_id' => $ce['id'], 'reason' => 'Issued in error']);
+eq('a revoked certificate verifies as revoked, with why', ['revoked', 'Issued in error'],
+    [trainings_certificate_lookup($pdo, $new['code'])['state'], trainings_certificate_lookup($pdo, $new['code'])['reason']]);
+eq('…and nothing is left to download', [null, null, null], [trainings_enrolment_get($pdo, $ce['id'])['certificate_no'],
+    trainings_enrolment_get($pdo, $ce['id'])['certificate_hash'], trainings_certificate_current($pdo, $ce['id'])]);
+$pdo->exec("UPDATE users SET first_name = '<b>Bola</b>' WHERE id = 902");
+act($pdo, 902, 'item_done', ['item_id' => $ctItem, 'done' => 1]);
+$c2 = trainings_certificate_current($pdo, trainings_enrolment_for($pdo, $ct, 902)['id']);
+$html = trainings_certificate_html($c2, trainings_settings($pdo));
+ok('the certificate page escapes names', str_contains($html, '&lt;b&gt;Bola&lt;/b&gt;') && !str_contains($html, '<b>Bola'));
+ok('…and shows the training, the code, who signs and the QR', str_contains($html, 'Certified course') && str_contains($html, $c2['code'])
+    && str_contains($html, 'The Signatory') && str_contains($html, 'Resident Pastor') && str_contains($html, 'data:image/png;base64,'));
+$pdf = trainings_certificate_pdf($c2, trainings_settings($pdo));
+ok('the PDF comes from dompdf where Composer installed it (CI has none)', $pdf === null || str_starts_with($pdf, '%PDF'));
+$verifyApi = (string) file_get_contents($root . '/api/public_verify_api.php');
+ok('the existing /verify API checks CERT- codes', str_contains($verifyApi, 'trainings_certificate_lookup($pdo, $code)'));
+$verifyPage = (string) file_get_contents($root . '/verify.php');
+ok('/verify?code=… fills the box and checks it', str_contains($verifyPage, "preg_replace('/[^A-Z0-9-]/', ''") && str_contains($verifyPage, 'data-autoverify')
+    && str_contains((string) file_get_contents($root . '/assets/ui/js/pages/verify.js'), 'requestSubmit'));
+$dl = (string) file_get_contents($root . '/api/trainings_certificate.php');
+ok('the download is the learner\'s own or the Academy\'s, and only a current certificate', str_contains($dl, "can('trainings', 'view', perm_person(\$me))")
+    && str_contains($dl, "can('trainings', 'view', 'church')") && str_contains($dl, 'trainings_certificate_current('));
+
+// ---------------------------------------------------------------------------
+section('Reminders (owner answer 15): email and push, never SMS, never twice');
+$pdo->exec('CREATE TABLE training_exams (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER, training_id INTEGER, window_open TEXT)');
+$rt = (int) act($pdo, 901, 'create', ['title' => 'Reminder course', 'length' => 'days', 'starts_on' => '2026-12-01', 'count' => 3])['id'];
+$rDays = array_values(array_filter(trainings_outline($pdo, $rt), static fn ($s) => (int) $s['id'] > 0));
+$rsave = static fn (array $in): int => (int) act($pdo, 901, 'item_save', $in + ['training_id' => $rt])['id'];
+$rRead = $rsave(['type' => 'reading', 'title' => 'Before class', 'section_id' => (int) $rDays[0]['id'], 'time' => '08:00', 'text' => 'Read.']);
+$rLive = $rsave(['type' => 'live', 'title' => 'Class', 'section_id' => (int) $rDays[1]['id'], 'time' => '10:00']);
+$rExam = $rsave(['type' => 'exam', 'title' => 'Test', 'section_id' => (int) $rDays[1]['id']]);
+$pdo->prepare('INSERT INTO training_exams (item_id, training_id, window_open) VALUES (?, ?, ?)')->execute([$rExam, $rt, '2026-12-02 14:00:00']);
+act($pdo, 901, 'publish', ['training_id' => $rt]);
+act($pdo, 901, 'assign', ['training_id' => $rt, 'users' => [904, 902, 906], 'due_on' => '2026-12-02']);
+trainings_withdraw($pdo, trainings_enrolment_for($pdo, $rt, 906));
+ct_confirm($pdo, 904, 'dayo.learner@gmail.com', false);
+$tz = new DateTimeZone('Africa/Lagos');
+$run = static fn (string $at): array => trainings_reminders_run($pdo, ['now' => new DateTimeImmutable($at, $tz)]);
+$kinds = static fn (array $r): array => array_filter($r['by_kind']);
+$outbox0 = trn_count($pdo, 'email_outbox', "flow = 'training_reminder'");
+$r = $run('2026-12-01 06:40:00');
+eq('the morning run: a class and an exam tomorrow, the training due tomorrow, today\'s reading (not the one taken off)',
+    ['class_day' => 2, 'exam_day' => 2, 'due' => 2, 'item_due' => 2], $kinds($r));
+eq('…email only to a confirmed personal address', [4, 4], [trn_count($pdo, 'email_outbox', "flow = 'training_reminder'") - $outbox0,
+    trn_count($pdo, 'email_outbox', "flow = 'training_reminder' AND to_email = 'dayo.learner@gmail.com'")]);
+eq('…push to both (system_notifications fans out to phones)', [4, 4], [trn_count($pdo, 'system_notifications', "user_id = 904 AND title IN
+    ('Class tomorrow', 'Exam opens tomorrow', 'Training due tomorrow', 'Due today')"), trn_count($pdo, 'system_notifications', "user_id = 902 AND title IN
+    ('Class tomorrow', 'Exam opens tomorrow', 'Training due tomorrow', 'Due today')")]);
+eq('…the channels are recorded', ['push,email', 'push'], [(string) $pdo->query("SELECT channels FROM training_reminders r JOIN training_enrolments e ON e.id = r.enrolment_id
+    WHERE e.user_id = 904 AND r.kind = 'class_day'")->fetchColumn(), (string) $pdo->query("SELECT channels FROM training_reminders r JOIN training_enrolments e
+    ON e.id = r.enrolment_id WHERE e.user_id = 902 AND r.kind = 'class_day'")->fetchColumn()]);
+eq('never twice', [0, 8], [$run('2026-12-01 12:00:00')['sent'], $run('2026-12-01 12:00:00')['skipped']]);
+$rLate = $rsave(['type' => 'live', 'title' => 'Evening class', 'section_id' => (int) $rDays[1]['id'], 'time' => '18:00']);
+eq('quiet hours: nothing from 21:00 to 06:30', [0, 0], [$run('2026-12-01 21:30:00')['sent'], $run('2026-12-02 05:00:00')['sent']]);
+eq('…before 21:00 it goes', ['class_day' => 2], $kinds($run('2026-12-01 20:55:00')));
+eq('an hour before the class', ['class_hour' => 2], $kinds($run('2026-12-02 09:05:00')));
+eq('…by the alert lane, straight away', 'alert', (string) $pdo->query("SELECT lane FROM email_outbox WHERE flow = 'training_reminder' ORDER BY id DESC LIMIT 1")->fetchColumn());
+$pr2(trainings_enrolment_for($pdo, $rt, 904)['id'], $rExam, ['score' => 8, 'max' => 10, 'percent' => 80, 'passed' => true, 'attempt_id' => 9]);
+eq('an hour before the exam opens, only to who has not sat it', ['exam_hour' => 1], $kinds($run('2026-12-02 13:05:00')));
+act($pdo, 901, 'item_save', ['training_id' => $rt, 'id' => $rLive, 'title' => 'Class', 'section_id' => (int) $rDays[1]['id'], 'time' => '11:00']);
+eq('a class moved to another time is reminded again', ['class_hour' => 2], $kinds($run('2026-12-02 10:05:00')));
+$rDawn = $rsave(['type' => 'live', 'title' => 'Dawn prayer', 'section_id' => (int) $rDays[2]['id'], 'time' => '06:00']);
+eq('the hour-before one goes even in quiet hours', ['class_hour' => 2], $kinds($run('2026-12-03 05:05:00')));
+act($pdo, 901, 'unpublish', ['training_id' => $rt]);
+$rDraft = $rsave(['type' => 'live', 'title' => 'Draft class', 'section_id' => (int) $rDays[2]['id'], 'time' => '12:00']);
+eq('a training that is not published reminds nobody', 0, $run('2026-12-02 12:00:00')['sent']);
+eq('no SMS, ever', 0, trn_count($pdo, 'sms_queue'));
+$tick = (string) file_get_contents($root . '/cron/automation_tick.php');
+ok('the */5 cron runs them through a function_exists() guard (no new cron line)', str_contains($tick, "function_exists('trainings_reminders_run')"));
+ok('the 06:30 job runs them too', str_contains((string) file_get_contents($root . '/cron/trainings_daily.php'), 'trainings_reminders_run($pdo)'));
 
 // ---------------------------------------------------------------------------
 section('The endpoint, pages and copy');

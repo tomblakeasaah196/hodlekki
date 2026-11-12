@@ -64,6 +64,9 @@ $isStaff = can('trainings', 'view', 'church');
                 <?= $en['status'] === 'completed' ? ui_badge($en['confirmed_at'] ? 'Confirmed' : 'Completed', 'success', ['dot' => true]) : '' ?>
             </div>
             <progress class="ui-progress" max="100" value="<?= (int) $en['percent'] ?>" aria-label="Progress"><?= (int) $en['percent'] ?>%</progress>
+<?php if ($en['certificate'] !== ''): ?>
+            <div><?= ui_button('Download certificate', ['variant' => 'primary', 'icon' => 'file-down', 'href' => '/api/trainings_certificate.php?e=' . (int) $en['id']]) ?></div>
+<?php endif; ?>
         </div>
     </div>
 <?php endif; ?>

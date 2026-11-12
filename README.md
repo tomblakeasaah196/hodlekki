@@ -323,7 +323,8 @@ assets/         Static CSS / JS / images shipped to the browser.
 auth/           Login, logout, first-time password setup.
 cron/           CLI jobs (sms_queue_worker.php, reach_lost_souls.php 07:00,
                 assimilation_watchlists.php 07:15, permissions_daily.php 00:10,
-                trainings_daily.php 06:30,
+                trainings_daily.php 06:30 (and Trainings reminders, also sent
+                from automation_tick.php every 5 minutes),
                 special_events.php and automation_tick.php every 5 min,
                 email_bounces.php */10, push_worker.php, email_worker.php
                 and monitor.php every minute).

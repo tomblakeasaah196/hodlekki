@@ -76,6 +76,23 @@ if (($raw = $opt('at')) !== null) {
 }
 $dry = in_array('--dry-run', $args, true);
 
+// Trainings reminders (includes/trainings/reminders.php) ride on this 5-minute beat: an hour before a
+// live class or an exam opening, plus the day-before and due ones outside 21:00-06:30. Its own try, so
+// a problem there never stops the automation below. No new cron line (TRAININGS-PLAN.md, PR 4a).
+if (is_file(__DIR__ . '/../includes/trainings/bootstrap.php')) {
+    require_once __DIR__ . '/../includes/trainings/bootstrap.php';
+}
+if (function_exists('trainings_reminders_run')) {
+    try {
+        $tr = trainings_reminders_run($pdo, array_filter(['now' => $at, 'dry_run' => $dry]));
+        if ($tr['sent'] > 0) {
+            $line('trainings reminders: ' . $tr['sent'] . ' sent');
+        }
+    } catch (Throwable $e) {
+        error_log('[trainings] reminders: ' . $e->getMessage());
+    }
+}
+
 try {
     $r = automation_tick($pdo, array_filter([
         'dry_run' => $dry,

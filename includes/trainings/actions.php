@@ -164,6 +164,31 @@ function trainings_action(PDO $pdo, string $action, array $in, array $files, int
             }
             return trainings_ok(['people' => trainings_to_confirm($pdo, $tid > 0 ? $tid : null)]);
 
+        case 'certificate_issue':
+        case 'certificate_revoke':
+            // Certificates (includes/trainings/certificates.php): issuing again replaces the current one.
+            if (!trainings_staff_can('approve')) {
+                return trainings_forbidden();
+            }
+            $e = trainings_enrolment_get($pdo, (int) ($in['enrolment_id'] ?? 0));
+            if ($e === null) {
+                return trainings_fail('They are no longer on this training. Reload the page.', 'NOT_FOUND');
+            }
+            return $reply($action === 'certificate_issue' ? trainings_certificate_issue($pdo, $e, $uid)
+                : trainings_certificate_revoke($pdo, $e, $uid, (string) ($in['reason'] ?? '')));
+
+        case 'settings_get':
+        case 'settings_save':
+            // The Academy's settings: who signs certificates (never hard-coded).
+            if (!trainings_staff_can('manage')) {
+                return trainings_forbidden();
+            }
+            if (!trainings_certs_ready($pdo)) {
+                return trainings_fail('Certificates are being set up. Try again later.', 'FEATURE_NOT_READY');
+            }
+            return $action === 'settings_get' ? trainings_ok(['settings' => trainings_settings($pdo)])
+                : $reply(trainings_settings_save($pdo, $in, $files, $uid));
+
         case 'confirm':
             if (!trainings_staff_can('approve')) {
                 return trainings_forbidden();
