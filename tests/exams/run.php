@@ -53,10 +53,34 @@ function et_at(string $when): DateTimeImmutable
     return $at;
 }
 
-/** PR 1's real tables (Trainings core) and this module's, from their migrations, translated to SQLite. */
-function et_db(): PDO
+/**
+ * The ALTERs of a re-runnable migration (the strings its PREPAREs run), translated to SQLite:
+ * ADD COLUMN, ADD UNIQUE KEY (a named unique index), DROP INDEX.
+ */
+function et_apply_alters(PDO $pdo, string $file): void
 {
-    $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+    $alters = (string) file_get_contents(__DIR__ . '/../../db/migrations/' . $file);
+    preg_match_all("/'ALTER TABLE (\\w+) (ADD COLUMN|ADD UNIQUE KEY|DROP INDEX) ([^']+)'/", $alters, $am, PREG_SET_ORDER);
+    foreach ($am as [, $table, $op, $rest]) {
+        if ($op === 'ADD COLUMN') {
+            $rest = (string) preg_replace('/\\b(TINYINT|INT)\\b/', 'INTEGER', $rest);
+            $pdo->exec("ALTER TABLE {$table} ADD COLUMN " . preg_replace('/\\bDATETIME\\b/', 'TEXT', $rest));
+        } elseif ($op === 'ADD UNIQUE KEY' && preg_match('/^(\\w+) \\((.+)\\)$/', $rest, $m)) {
+            $pdo->exec("CREATE UNIQUE INDEX {$m[1]} ON {$table} ({$m[2]})");
+        } elseif ($op === 'DROP INDEX') {
+            $pdo->exec('DROP INDEX ' . trim($rest));
+        }
+    }
+}
+
+/**
+ * PR 1's real tables (Trainings core) and this module's, from their migrations, translated to SQLite.
+ * $retakes false: stop before 20261209090200 (retakes), to test that migration on rows already there.
+ * $pdo: build into this connection (a file database, for the two-tab race) instead of a new in-memory one.
+ */
+function et_db(bool $retakes = true, ?PDO $pdo = null): PDO
+{
+    $pdo ??= new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
     $sql = '';
     foreach (['20261208090000_trainings_core.sql', '20261209090000_trainings_exams.sql', '20261211100000_trainings_ai.sql'] as $file) {
         $sql .= (string) file_get_contents(__DIR__ . '/../../db/migrations/' . $file) . PHP_EOL;
@@ -71,8 +95,9 @@ function et_db(): PDO
             if ($autoId && preg_match('/^PRIMARY KEY \((\w+)\)$/', $line)) {
                 continue;
             }
-            if (preg_match('/^UNIQUE KEY \w+ \((.+)\)$/', $line, $m)) {
-                $cols[] = 'UNIQUE (' . $m[1] . ')';
+            if (preg_match('/^UNIQUE KEY (\w+) \((.+)\)$/', $line, $m)) {
+                // A named unique index, as MySQL has it, so a later migration can drop it.
+                $indexes[] = "CREATE UNIQUE INDEX {$m[1]} ON {$name} ({$m[2]})";
                 continue;
             }
             if (preg_match('/^KEY (\w+) \((.+)\)$/', $line, $m)) {
@@ -94,10 +119,9 @@ function et_db(): PDO
             $pdo->exec($ix);
         }
     }
-    $alters = (string) file_get_contents(__DIR__ . '/../../db/migrations/20261209090100_trainings_exams_review.sql');
-    preg_match_all("/'ALTER TABLE (\\w+) ADD COLUMN ([^']+)'/", $alters, $am, PREG_SET_ORDER);
-    foreach ($am as [, $table, $col]) {
-        $pdo->exec("ALTER TABLE {$table} ADD COLUMN " . preg_replace('/\\b(DATETIME|INT)\\b/', 'TEXT', $col));
+    et_apply_alters($pdo, '20261209090100_trainings_exams_review.sql');
+    if ($retakes) {
+        et_apply_alters($pdo, '20261209090200_trainings_exams_retakes.sql');
     }
     foreach ([
         'CREATE TABLE users (id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, spiritual_status TEXT)',
@@ -411,7 +435,7 @@ et_eq('…ended by the timer', 'timer', exam_attempt_get($pdo, $exam['id'], 3)['
 $res = exam_results($pdo, $exam);
 et_eq('looking at the results ends every attempt whose time is up', ['submitted', 'submitted', 'submitted', 'submitted'],
     array_column($res['rows'], 'status'));
-et_eq('…the summary', ['enrolled' => 4, 'started' => 4, 'finished' => 4, 'passed' => 1], $res['summary']);
+et_eq('…the summary', ['enrolled' => 4, 'started' => 4, 'finished' => 4, 'passed' => 1, 'attempts' => 4], $res['summary']);
 
 // A late start is cut short by the window's close.
 $late = exam_save($pdo, exam_item($pdo, 200), $base + ['question_ids' => [$other['id']]] + [], 1);
@@ -913,6 +937,194 @@ foreach (['modules/academy/index.php' => "exam_url_bank()", 'modules/academy/tra
         str_contains($src, "ui_button('Question bank'") && str_contains($src, $call) && str_contains($src, "function_exists('exam_url_bank')")
         && !str_contains($src, "'/modules/exams/"));
 }
+
+// ===========================================================================
+et_section('13. Retakes: attempts set per exam, the best counts, answers wait');
+// ===========================================================================
+$t = et_db();
+$GLOBALS['et_grants'] = array_merge(['trainings:edit:"church"'], $learners);
+et_at('2027-05-01 09:00');
+$tq1 = (int) exam_question_save($t, null, 10, ['qtype' => 'true_false', 'body' => 'Is the sky green?', 'correct_text' => 'False', 'explanation' => 'It is blue.', 'status' => 'approved'], 1)['id'];
+$tq2 = (int) exam_question_save($t, null, 10, ['qtype' => 'true_false', 'body' => 'Is grass green?', 'correct_text' => 'True', 'explanation' => 'Chlorophyll.', 'status' => 'approved'], 1)['id'];
+$tbase = ['window_open' => '', 'window_close' => '', 'minutes' => 10, 'pass_percent' => 100, 'shuffle' => 1, 'part_marks' => 0, 'leave_alert' => 3, 'question_ids' => [$tq1, $tq2]];
+$titem = exam_item($t, 100);
+// Sit the person's latest attempt: the first $right questions right, the rest wrong; hand in through the API.
+$tsit = static function (int $uid, int $right) use ($t): array {
+    $a = exam_attempt_get($t, (int) exam_get($t, 100)['id'], $uid);
+    foreach (exam_attempt_rows($t, (int) $a['id']) as $i => $row) {
+        $want = $i < $right ? $row['correct'] : [1 - $row['correct'][0]];
+        exam_answer($t, $a, (int) $row['position'], array_map(static fn ($o) => (int) array_search($o, $row['order'], true), $want));
+    }
+    return exams_action($t, 'submit', ['item' => 100], $uid);
+};
+$tview = static fn (int $uid): array => exams_action($t, 'take', ['item' => 100], $uid);
+
+et_eq('(an exam saved without the setting)', true, exam_save($t, $titem, $tbase, 1)['ok']);
+et_eq('…allows one attempt: every quiz so far stays as it was', 1, exam_get($t, 100)['attempts_allowed']);
+exams_action($t, 'start', ['item' => 100], 2);
+$tsit(2, 1);
+$v = $tview(2);
+et_eq('…after it: done, nothing left, no retake', ['done', 1, 1, 0, false], [$v['state'], $v['attempts_allowed'], $v['attempts_used'], $v['attempts_left'], $v['can_retake']]);
+$again = exams_action($t, 'start', ['item' => 100], 2);
+et_eq('…and Start says so, as before', ['DONE', 'You have taken this exam.'], [$again['code'] ?? null, $again['message'] ?? null]);
+et_eq('attempts allowed: 1, 2 or 3', ['Attempts allowed: 1, 2 or 3.', 'Attempts allowed: 1, 2 or 3.'],
+    [exam_save($t, $titem, ['attempts_allowed' => 0] + $tbase, 1)['errors'][0] ?? null, exam_save($t, $titem, ['attempts_allowed' => 4] + $tbase, 1)['errors'][0] ?? null]);
+
+et_eq('once people have started, attempts can go up', true, exam_save($t, $titem, ['attempts_allowed' => 3] + $tbase, 1)['ok']);
+et_eq('…not down', ['People have started it, so attempts can go up, not down.'], exam_save($t, $titem, ['attempts_allowed' => 2] + $tbase, 1)['errors'] ?? null);
+exam_show_answers($t, exam_get($t, 100), true, 1);   // the tutor has pressed Show answers
+$v = $tview(2);
+et_eq('Ada now has a second chance: can retake, 2 left, her best so far', [true, 2, 1, 50.0, false],
+    [$v['can_retake'], $v['attempts_left'], $v['best']['attempt_no'] ?? null, (float) ($v['best']['percent'] ?? 0), $v['best']['passed'] ?? null]);
+et_eq('…and no right answers while an attempt is still hers, even with Show answers pressed', [false, 'attempts', [], 1],
+    [$v['result']['review_open'], $v['result']['review_when'], $v['result']['wrong'], $v['result']['wrong_count']]);
+et_ok('…nothing right in the whole view', !str_contains(json_encode($v), 'It is blue') && !str_contains(json_encode($v), 'Chlorophyll'));
+
+et_at('2027-05-01 10:00');
+$r2 = exams_action($t, 'start', ['item' => 100], 2);
+$a1 = exam_attempts_of($t, (int) exam_get($t, 100)['id'], 2);
+et_eq('a retake is a fresh attempt: number 2, its own paper, a new timer', ['started', 2, 2, 2, '2027-05-01 10:10:00'],
+    [$r2['state'] ?? null, count($a1), $a1[1]['attempt_no'], et_count($t, 'training_attempt_answers', 'attempt_id = ?', [$a1[1]['id']]), $a1[1]['deadline_at']]);
+et_eq('…the first attempt is kept as it was', ['submitted', 50.0], [$a1[0]['status'], (float) $a1[0]['percent']]);
+et_eq('…Start again while it runs resumes it', $a1[1]['id'], exam_start($t, exam_get($t, 100), 2)['attempt']['id'] ?? null);
+// The tab-leave note counts afresh on a retake, and the bell names the attempt.
+foreach ([1, 2, 3] as $leave) {
+    exam_note_focus($t, exam_get($t, 100), exam_attempt_by_id($t, $a1[1]['id']), 'leave');
+}
+et_eq('tab-leave notes are per attempt: three leaves on attempt 2 ring the bell, naming it', [3, 1, true],
+    [exam_attempt_by_id($t, $a1[1]['id'])['leaves'], et_count($t, 'system_notifications'),
+     str_contains((string) $t->query('SELECT message FROM system_notifications')->fetchColumn(), '(attempt 2)')]);
+$tsit(2, 1);
+$v = $tview(2);
+et_eq('attempt 2, 50% again: still one left, still no answers', [true, 1, false, 'attempts'], [$v['can_retake'], $v['attempts_left'], $v['result']['review_open'], $v['result']['review_when']]);
+exams_action($t, 'start', ['item' => 100], 2);
+$tsit(2, 0);
+$v = $tview(2);
+et_eq('attempt 3, 0%: none left, so the answers show (the tutor showed them): both wrong ones, with the right answer', [false, 0, true, 2, 'It is blue.'],
+    [$v['can_retake'], $v['attempts_left'], $v['result']['review_open'], count($v['result']['wrong']),
+     array_values(array_filter(array_column($v['result']['wrong'], 'explanation'), static fn ($e) => $e === 'It is blue.'))[0] ?? null]);
+et_eq('…the best counts (the earlier on a tie), and every attempt is in her history', [1, 50.0, [1, 2, 3], [true, false, false]],
+    [$v['best']['attempt_no'], (float) $v['best']['percent'], array_column($v['attempts'], 'attempt_no'), array_column($v['attempts'], 'best')]);
+$again = exams_action($t, 'start', ['item' => 100], 2);
+et_eq('…Start: all used', ['DONE', 'You have used all your attempts.'], [$again['code'] ?? null, $again['message'] ?? null]);
+$prog = json_decode((string) $t->query('SELECT data FROM training_progress WHERE enrolment_id = 1 AND item_id = 100')->fetchColumn(), true);
+et_eq('…training progress has her best, not her last', [50.0, false, 1, 3], [(float) ($prog['percent'] ?? -1), $prog['passed'] ?? null, $prog['attempt_no'] ?? null, $prog['attempts'] ?? null]);
+
+// Ben fails, then passes: the pass counts, completes the training, and ends his retakes.
+$t->exec("INSERT INTO training_progress (enrolment_id, item_id, status, completed_at, data) VALUES (2, 101, 'completed', '2027-05-01 08:00:00', '{\"by\":\"self\"}')");
+exams_action($t, 'start', ['item' => 100], 3);
+$tsit(3, 1);
+et_eq('Ben fails attempt 1: the training is not complete', 'active', (string) $t->query('SELECT status FROM training_enrolments WHERE id = 2')->fetchColumn());
+exams_action($t, 'start', ['item' => 100], 3);
+$tsit(3, 2);
+$prog = json_decode((string) $t->query('SELECT data FROM training_progress WHERE enrolment_id = 2 AND item_id = 100')->fetchColumn(), true);
+et_eq('…passes attempt 2: the best (the pass) is his progress, and the training completes', [true, 2, 'completed'],
+    [$prog['passed'] ?? null, $prog['attempt_no'] ?? null, (string) $t->query('SELECT status FROM training_enrolments WHERE id = 2')->fetchColumn()]);
+$v = $tview(3);
+et_eq('…passed: no retake though one is left, and the answers may show (nothing wrong to show)', [false, 1, true, 0],
+    [$v['can_retake'], $v['attempts_left'], $v['result']['review_open'], $v['result']['wrong_count']]);
+$again = exams_action($t, 'start', ['item' => 100], 3);
+et_eq('…Start: passed', ['PASSED', 'You have passed this exam.'], [$again['code'] ?? null, $again['message'] ?? null]);
+
+// Cy passes first time, then would do worse: never asked (passed). Dee: 50% then 0%: the 50 stays.
+exams_action($t, 'start', ['item' => 100], 5);
+$tsit(5, 1);
+exams_action($t, 'start', ['item' => 100], 5);
+$tsit(5, 0);
+$prog = json_decode((string) $t->query('SELECT data FROM training_progress WHERE enrolment_id = 4 AND item_id = 100')->fetchColumn(), true);
+et_eq('a worse retake never lowers the score that counts', [50.0, 1, 2], [(float) ($prog['percent'] ?? -1), $prog['attempt_no'] ?? null, $prog['attempts'] ?? null]);
+// The window closes with an attempt left: no retake, and nobody can be helped any more.
+exam_save($t, $titem, ['attempts_allowed' => 3, 'window_close' => '2027-05-01T10:30'] + $tbase, 1);
+exam_show_answers($t, exam_get($t, 100), false, 1);
+et_at('2027-05-01 11:00');
+$v = $tview(5);
+et_eq('the exam closes with an attempt left: no retake, and the answers show (the closing time)', [false, 1, true, 'close'],
+    [$v['can_retake'], $v['attempts_left'], $v['result']['review_open'], $v['result']['review_when']]);
+
+$res = exams_action($t, 'results', ['item' => 100], 1);
+$adaRows = array_values(array_filter($res['rows'], static fn ($r) => $r['user_id'] === 2));
+et_eq('the tutor\'s results: every attempt, numbered, the best marked', [[1, 2, 3], [true, false, false], [3, 3, 3]],
+    [array_column($adaRows, 'attempt_no'), array_column($adaRows, 'best'), array_column($adaRows, 'attempts')]);
+et_eq('…the summary counts people (passed by their best), and the attempts', ['enrolled' => 4, 'started' => 3, 'finished' => 3, 'passed' => 1, 'attempts' => 7],
+    $res['summary']);
+et_eq('…"people have started" counts people, not attempts', 3, exam_attempt_count($t, (int) exam_get($t, 100)['id']));
+
+// Two tabs press Start (or Try again) at once: the UNIQUE (exam_id, user_id, attempt_no) key decides, never a check first.
+final class EtRacePdo extends PDO
+{
+    public ?Closure $before = null;
+
+    public function prepare(string $query, array $options = []): PDOStatement|false
+    {
+        if ($this->before !== null && str_starts_with(ltrim($query), 'INSERT INTO training_attempts ')) {
+            $f = $this->before;
+            $this->before = null;
+            $f();
+        }
+        return parent::prepare($query, $options);
+    }
+}
+$raceFile = tempnam(sys_get_temp_dir(), 'etrace') . '.sqlite';
+$opts = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC];
+$tabA = et_db(true, new EtRacePdo('sqlite:' . $raceFile, null, null, $opts));
+$tabB = new PDO('sqlite:' . $raceFile, null, null, $opts);
+et_at('2027-05-02 09:00');
+$rq = (int) exam_question_save($tabA, null, 10, ['qtype' => 'true_false', 'body' => 'Race?', 'correct_text' => 'True', 'status' => 'approved'], 1)['id'];
+exam_save($tabA, exam_item($tabA, 100), ['window_open' => '', 'window_close' => '', 'minutes' => 10, 'pass_percent' => 100, 'shuffle' => 0,
+    'leave_alert' => 3, 'attempts_allowed' => 2, 'question_ids' => [$rq]], 1);
+$rexam = exam_get($tabA, 100);
+$first = exam_start($tabA, $rexam, 2)['attempt'];
+exam_submit($tabA, (int) $first['id'], 'learner');
+// Tab B claims attempt 2 after tab A has read the attempts and before tab A's insert.
+$tabA->before = static function () use ($tabB, $rexam): void {
+    $tabB->prepare("INSERT INTO training_attempts (exam_id, item_id, user_id, attempt_no, status, started_at, deadline_at)
+                    VALUES (?, 100, 2, 2, 'started', '2027-05-02 09:00:00', '2027-05-02 09:10:00')")->execute([(int) $rexam['id']]);
+};
+$won = exam_start($tabA, $rexam, 2);
+$bId = (int) $tabB->query('SELECT id FROM training_attempts WHERE user_id = 2 AND attempt_no = 2')->fetchColumn();
+et_eq('the race: tab A\'s insert loses on the key and takes tab B\'s attempt 2; one row, no error', [true, $bId, 1, 2],
+    [$won['ok'], (int) ($won['attempt']['id'] ?? 0), et_count($tabA, 'training_attempts', 'user_id = 2 AND attempt_no = 2'), et_count($tabA, 'training_attempts', 'user_id = 2')]);
+$dup = null;
+try {
+    $tabB->exec("INSERT INTO training_attempts (exam_id, item_id, user_id, attempt_no, status, started_at, deadline_at)
+                 VALUES ({$rexam['id']}, 100, 2, 2, 'started', '2027-05-02 09:00:00', '2027-05-02 09:10:00')");
+} catch (PDOException $e) {
+    $dup = $e;
+}
+et_ok('…a second row for the same attempt number is refused by the key itself', $dup !== null && exams_is_duplicate_key($dup));
+$tabA = $tabB = null;
+@unlink($raceFile);
+
+// The migration on rows already there, and the code before it runs.
+$m = et_db(false);
+$mbase = ['question_ids' => [(int) exam_question_save($m, null, 10, ['qtype' => 'true_false', 'body' => 'Old?', 'correct_text' => 'True', 'status' => 'approved'], 1)['id']]] + $tbase;
+et_eq('before the migration: retakes are off, an exam is one attempt, and the setting says why',
+    [false, 1, 'Retakes open after the next update. Keep 1 attempt for now.'],
+    [exams_retakes_ready($m), exam_save($m, exam_item($m, 100), $mbase + ['attempts_allowed' => 1], 1)['exam']['attempts_allowed'] ?? null,
+     exam_save($m, exam_item($m, 100), ['attempts_allowed' => 2] + $mbase, 1)['errors'][0] ?? null]);
+$mexam = exam_get($m, 100);
+$mOne = exam_start($m, $mexam, 2);
+exam_submit($m, (int) $mOne['attempt']['id'], 'learner');
+et_eq('…the old one-attempt path still works (attempt 1, then done)', [true, 1, 'DONE'],
+    [$mOne['ok'], $mOne['attempt']['attempt_no'], exam_start($m, $mexam, 2)['code'] ?? null]);
+$m->exec("INSERT INTO training_attempts (exam_id, item_id, user_id, status, started_at, deadline_at) VALUES ({$mexam['id']}, 100, 3, 'started', '2027-05-01 09:00:00', '2027-05-01 09:10:00')");
+et_apply_alters($m, '20261209090200_trainings_exams_retakes.sql');
+et_eq('the migration: rows already there become attempt 1, exams allow 1', [[1, 1], 1],
+    [array_map('intval', $m->query('SELECT attempt_no FROM training_attempts ORDER BY id')->fetchAll(PDO::FETCH_COLUMN)),
+     (int) $m->query('SELECT attempts_allowed FROM training_exams')->fetchColumn()]);
+$indexes = $m->query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'training_attempts' AND name LIKE 'uq_%' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+et_eq('…the key moves to (exam_id, user_id, attempt_no)', ['uq_training_attempts_no'], $indexes);
+$migSql = (string) file_get_contents($root . '/db/migrations/20261209090200_trainings_exams_retakes.sql');
+et_ok('…re-runnable: every change is guarded by information_schema, and the new key comes before the old one goes',
+    substr_count($migSql, 'information_schema') >= 6 && substr_count($migSql, 'EXECUTE exams_s;') === 4
+    && strpos($migSql, 'ADD UNIQUE KEY uq_training_attempts_no') < strpos($migSql, 'DROP INDEX uq_training_attempts_once'));
+
+$setupSrc = (string) file_get_contents($root . '/modules/exams/setup.php');
+$setupJs = (string) file_get_contents($root . '/assets/ui/js/pages/exams.js');
+et_ok('the set-up page: Attempts allowed, 1, 2 or 3, default 1, sent with Save and the import',
+    str_contains($setupSrc, "'name' => 'attempts_allowed'") && str_contains($setupSrc, "'options' => ['1' => '1', '2' => '2', '3' => '3']")
+    && str_contains($setupJs, 'attempts_allowed: form.elements.attempts_allowed.value'));
+et_ok('…once started, lower numbers can\'t be picked', str_contains($setupJs, 'o.disabled = locked && Number(o.value) < saved;'));
 
 exams_set_clock(false);
 echo PHP_EOL . $GLOBALS['et_passed'] . ' passed, ' . $GLOBALS['et_failed'] . ' failed' . PHP_EOL;

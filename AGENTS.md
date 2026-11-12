@@ -1056,11 +1056,14 @@ Guide and contracts: `docs/EXAMS.md`. Code: `includes/exams/` (entry
 - **One check for every question:** `exam_question_check()`, whoever writes
   it (form, Excel import, AI). The content hash (`import_hash`) is UNIQUE:
   never check-then-insert, never a second copy.
-- **One attempt** is the UNIQUE (`exam_id`, `user_id`) key. The deadline is set
-  on the server at Start; marking happens on the server, once, in
-  `exam_submit()`. Never send `correct_json` or an explanation to a learner
-  before they have handed in; after, only for the questions they got wrong,
-  once `exam_review_state()` opens (the closing time; else the day after the
+- **Attempts** (1-3 per exam, `attempts_allowed`): one row per attempt, the
+  UNIQUE (`exam_id`, `user_id`, `attempt_no`) key claims it on insert (never
+  check-then-insert). The best score counts (`exam_best_attempt()`). The
+  deadline is set on the server at Start; marking happens on the server,
+  once, in `exam_submit()`. Never send `correct_json` or an explanation to a
+  learner before they have handed in, nor while another attempt is still
+  theirs; after, only for the questions they got wrong, once
+  `exam_review_state()` opens (the closing time; else the day after the
   training ends; else a tutor's Show answers).
 - Marking never calls the AI (explanations are stored per question). AI help
   (`includes/exams/ai.php`) is a written exception: see the Mail section's
