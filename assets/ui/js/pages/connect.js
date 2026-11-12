@@ -12,6 +12,17 @@
     var HOD = window.HOD;
     var API = '/api/embrace_public_api.php';
     var cfg = HOD.data('connect-config') || {};
+
+    // Not the app (owner, 12 Nov 2026): the app belongs to hodlekki.org, so this
+    // page never offers to install it. A browser that still decides to offer
+    // is told no, and nothing is shown. On connect.hodlekki.org a service
+    // worker the old Connect page registered there is retired.
+    window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); });
+    if (cfg.retireWorker && navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        navigator.serviceWorker.getRegistrations().then(function (list) {
+            list.forEach(function (r) { r.unregister(); });
+        }).catch(function () { /* nothing registered, or not allowed */ });
+    }
     var SYSTEM_DOMAIN = cfg.systemDomain || '@hodlc.com';
     var NAME_PATTERN = /^\p{L}[\p{L}\p{M} .'’-]*$/u;
     var EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;

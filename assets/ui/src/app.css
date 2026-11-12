@@ -2452,14 +2452,6 @@
         overflow-x: clip;
     }
     .cx-wrap { width: min(100% - 32px, 1120px); margin-inline: auto; }
-    /* A first-time guest is visiting a web page, not launching the app: no
-       launch splash (pwa_head.php) and no whole-page fade-in (pwa.css). Both
-       held the welcome back, and a page that starts at opacity 0 gives the
-       browser no largest-contentful-paint at all. */
-    html.hod-booting:has(.cx),
-    html.hod-booting:has(.cx) body { overflow: visible !important; }
-    html.hod-booting body:has(.cx) #hodSplash { display: none !important; }
-    html.hod-app body:has(.cx) { animation: none !important; }
 
     /* Welcome: the photo fills the screen; the words sit on the warm wash at
        the bottom, below the faces. */

@@ -9,6 +9,12 @@
 // Styles: the "Connect" block in assets/ui/src/app.css (.cx-*).
 // The owner asked for the full story here (12 Nov 2026): the intro, vision and
 // mission are shown in full (tests/ui/copy_allowlist.txt says so).
+// Not the app (owner, 12 Nov 2026): the app belongs to hodlekki.org, so this
+// page never suggests installing it. No manifest, no install tags, no launch
+// splash, no service worker registration (ui_public_open 'app' => false); any
+// beforeinstallprompt is cancelled and, on connect.hodlekki.org, a worker the
+// old page registered there is retired (connect.js). Pinned by tests/ui/run.php.
+// Links use the clean addresses (no .php; the old ones redirect).
 //
 // Kept exactly as the campaigns work set it (#119, #127; includes/campaigns):
 // - the consent box: name="email_news" value="1", pre-ticked, with
@@ -64,8 +70,7 @@ ui_public_open([
     'mode' => 'strict',
     'indexable' => true,
     'bleed' => true,
-    // A first-time guest meets the church here: no app install banner or push sheet.
-    'quiet' => true,
+    'app' => false,
     'home' => $site('/'),
     'scripts' => $scripts,
     'csp' => $csp,
@@ -75,6 +80,7 @@ ui_public_open([
 echo ui_json_script('connect-config', [
     'geoapifyKey' => $_ENV['GEOAPIFY_API_KEY'] ?? '7a189b607e9e4c4cbedf6ada291b6bc1',
     'systemDomain' => '@hodlc.com',
+    'retireWorker' => is_connect_host(),
 ]);
 
 // I SEE & ACT: each core value beside its letter. Screen readers get the list
@@ -90,10 +96,10 @@ $values = [
     ['T', 'Teamwork', ''],
 ];
 $more = [
-    ['Parent Portal', 'baby', '/parent_portal.php'],
-    ['Library', 'book-open', '/modules/library/index.php'],
-    ['Testimonies', 'sparkles', '/testimonies.php'],
-    ['Sermons', 'music', '/sermons.php'],
+    ['Parent Portal', 'baby', '/parent_portal'],
+    ['Library', 'book-open', '/modules/library/'],
+    ['Testimonies', 'sparkles', '/testimonies'],
+    ['Sermons', 'music', '/sermons'],
 ];
 ?>
 <div class="cx">
@@ -113,7 +119,7 @@ $more = [
             <p class="cx-intro">Household of David is a global ministry led by <strong>Pastor Sola Osunmakinde</strong>. Our Resident Pastor is <strong>Pastor Ebele Uzo-Peters</strong>. Whether you’re just passing through or looking for a family, you belong here.</p>
             <div class="cx-actions">
                 <?= ui_button('I’m new here', ['variant' => 'brand', 'size' => 'lg', 'href' => '#connect', 'attrs' => ['data-action' => 'connect.start']]) ?>
-                <?= ui_button('Already family', ['variant' => 'secondary', 'size' => 'lg', 'icon' => 'user-round', 'href' => $site('/auth/login.php')]) ?>
+                <?= ui_button('Already family', ['variant' => 'secondary', 'size' => 'lg', 'icon' => 'user-round', 'href' => $site('/auth/login')]) ?>
             </div>
         </div>
     </section>
@@ -176,8 +182,8 @@ $more = [
                             <p class="ui-banner__title">Please check this</p>
                             <p class="ui-banner__text" id="connect-error-text"></p>
                             <div class="ui-banner__actions" id="connect-error-login" hidden>
-                                <?= ui_button('Sign in', ['variant' => 'primary', 'size' => 'sm', 'href' => $site('/auth/login.php')]) ?>
-                                <?= ui_button('Find my email', ['variant' => 'ghost', 'size' => 'sm', 'href' => $site('/auth/setup_password.php')]) ?>
+                                <?= ui_button('Sign in', ['variant' => 'primary', 'size' => 'sm', 'href' => $site('/auth/login')]) ?>
+                                <?= ui_button('Find my email', ['variant' => 'ghost', 'size' => 'sm', 'href' => $site('/auth/setup_password')]) ?>
                             </div>
                         </div>
                         <?= ui_button('Dismiss', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'x', 'icon_only' => true, 'attrs' => ['data-action' => 'connect.dismiss']]) ?>
@@ -253,8 +259,8 @@ $more = [
                     <h3 class="ui-h2" id="connect-success-title">We’ve received you!</h3>
                     <p class="text-ink-muted">Welcome to the family. Our Embrace Team will reach out soon.</p>
                     <div class="flex flex-col gap-2 sm:flex-row sm:justify-center">
-                        <?= ui_button('Read testimonies', ['variant' => 'primary', 'href' => $site('/testimonies.php')]) ?>
-                        <?= ui_button('Return home', ['variant' => 'secondary', 'href' => $site('/index.php')]) ?>
+                        <?= ui_button('Read testimonies', ['variant' => 'primary', 'href' => $site('/testimonies')]) ?>
+                        <?= ui_button('Return home', ['variant' => 'secondary', 'href' => $site('/')]) ?>
                     </div>
                 </div>
             </div>

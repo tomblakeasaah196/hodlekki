@@ -20,10 +20,12 @@
  * Graph tags the page escaped itself), actions (trusted HTML for the bar),
  * home (where the mark links; default '/'), indexable (default false),
  * bleed (default false: true lets the page run edge to edge, as Connect's
- * full-screen welcome does; the page then sets its own widths), quiet
- * (default false: true drops the PWA install banner and push sheet, as
- * includes/pwa_head.php $pwaQuiet describes; Connect, where a first-time guest
- * meets the church, is quiet).
+ * full-screen welcome does; the page then sets its own widths), app (default
+ * true: the page is part of the installable app, includes/pwa_head.php and
+ * pwa_boot.php. False leaves the app out entirely: no manifest, no install
+ * tags, no launch splash, no pwa.js and so no service worker registration or
+ * install banner; only the favicon, the theme colour and the error and speed
+ * monitor stay. Connect, on connect.hodlekki.org too, is not the app).
  */
 
 if (defined('HOD_UI_PUBLIC')) {
@@ -37,7 +39,7 @@ require_once dirname(__DIR__) . '/csrf.php';
 
 function ui_public_open(array $page): void
 {
-    $page += ['title' => 'HOD Lekki', 'scripts' => [], 'csp' => [], 'head' => '', 'actions' => '', 'home' => '/', 'indexable' => false, 'bleed' => false, 'quiet' => false];
+    $page += ['title' => 'HOD Lekki', 'scripts' => [], 'csp' => [], 'head' => '', 'actions' => '', 'home' => '/', 'indexable' => false, 'bleed' => false, 'app' => true];
     $nonce = ui_csp_nonce();
     security_send_csp('strict', $nonce, (array) $page['csp']);
     if (!headers_sent()) {
@@ -48,7 +50,6 @@ function ui_public_open(array $page): void
     register_shutdown_function('ui_public_close');
 
     $pwaNonce = $nonce;
-    $pwaQuiet = !empty($page['quiet']);
     ?>
 <!DOCTYPE html>
 <html lang="en" class="ui-html" data-ui-mode="strict">
@@ -56,7 +57,13 @@ function ui_public_open(array $page): void
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#FFFFFF">
+<?php if ($page['app']): ?>
 <?php require dirname(__DIR__) . '/pwa_head.php'; ?>
+<?php else: ?>
+<?php require_once dirname(__DIR__) . '/monitor/browser.php'; echo monitor_browser_tag($nonce); ?>
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/pwa/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/assets/pwa/icon-512.png">
+<?php endif; ?>
     <title><?= ui_e($page['title']) ?> · HOD Lekki</title>
 <?php if (!$page['indexable']): ?>
     <meta name="robots" content="noindex, nofollow">
@@ -71,7 +78,7 @@ function ui_public_open(array $page): void
 <?php endforeach; ?>
 </head>
 <body class="ui-public">
-<?php require dirname(__DIR__) . '/pwa_boot.php'; ?>
+<?php if ($page['app']) { require dirname(__DIR__) . '/pwa_boot.php'; } ?>
 <a class="ui-skip" href="#main">Skip to content</a>
 <header class="ui-public-bar">
     <div class="ui-public-bar__inner">
