@@ -18,6 +18,7 @@
 
 require_once '../includes/db.php';
 require_once '../includes/department_helpers.php';
+csrf_require();
 header('Content-Type: application/json');
 
 // ---------------------------------------------------------------------------

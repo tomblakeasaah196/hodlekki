@@ -9,7 +9,7 @@
 $ui = [
     'title' => 'Assimilation',
     'mode' => 'strict',
-    'scripts' => ['/assets/ui/js/pages/assimilation.js', '/assets/ui/js/pages/assimilation-find.js', '/assets/ui/js/pages/automation.js'],
+    'scripts' => ['/assets/ui/js/pages/assimilation.js', '/assets/ui/js/pages/assimilation-find.js', '/assets/ui/js/email-editor.js', '/assets/ui/js/pages/automation.js'],
     // The Automation tab's email preview: a sandboxed frame on api/email_preview.php.
     'csp' => ['frame-src' => ["'self'"]],
 ];

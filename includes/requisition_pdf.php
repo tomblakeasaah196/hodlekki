@@ -15,7 +15,7 @@ if (!isset($_SESSION['user_id'])) {
 
 // ─── CSRF Guard ───────────────────────────────────────────
 $csrf_get = trim($_GET['csrf'] ?? '');
-if (empty($csrf_get) || !hash_equals($_SESSION['csrf_token'] ?? '', $csrf_get)) {
+if (empty($csrf_get) || !function_exists('csrf_token') || !hash_equals(csrf_token(), $csrf_get)) {
     http_response_code(403);
     die('<h2 style="font-family:sans-serif;color:#c00">Security token invalid.</h2><p>Return to the Requisition module and try exporting again.</p>');
 }

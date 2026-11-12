@@ -382,8 +382,18 @@ the number of missed Sundays for each step, the SMS, the two alerts, and the
 sender name and reply address. **Preview** shows the email as it will look
 (phone or desktop) and **Send test** sends it to your own confirmed email.
 **Recent runs** lists each weekly check and, under **Who**, what happened to
-each person. The email wording itself is edited in the email editor (coming
-next); until then it is the church's default.
+each person.
+
+**Edit** opens the email editor. Type in a text block (the toolbar has Bold,
+Italic, Link, bulleted and numbered lists, and **Insert field** for things like
+the person's first name, filled in for each person). Add a heading, picture,
+button, Bible verse, quote, signature, divider or space with **Add block**;
+change the chosen block on the right. Move a block with its arrows, by
+dragging its handle, or with Alt+↑/↓. Pasted text arrives plain. **Preview**
+in the editor shows the real email; **Save email** checks it (a button needs an
+https:// link, a verse must be in the KJV) and saves it. Unsaved changes are
+kept on your device and offered back if the window closes. **Templates** saves
+an email for later and reuses it.
 
 **Switching on** first shows how many people are already past a step today.
 Choose **Start fresh** (only people who pass a step from now on hear anything:

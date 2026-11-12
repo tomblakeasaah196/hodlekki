@@ -112,6 +112,7 @@ function ui_standalone_runtime(): void
         'module' => 'standalone',
         'offline' => false,
         'public' => true,
+        'vendor' => ui_vendor_map(),
     ]) . "
 ";
 }
