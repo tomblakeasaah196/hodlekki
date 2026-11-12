@@ -226,6 +226,23 @@ The card also carries (`includes/campaigns/formguard.php`):
   CSP, add `https://challenges.cloudflare.com` to its `script-src` and
   `frame-src`.
 
+## 2c. The Automation tab (`includes/campaigns/automation_tab.php`)
+
+One panel, server-rendered on the foundation components, shown as a tab in
+**Embrace** (the first-timer journey), **Assimilation** and **Charis** (the
+absence ladders) to people with the module's `manage` right. Actions:
+`api/automation_api.php` (`api_require_can(<module>, 'manage')` + CSRF) through
+`automation_tab_action()`; script: `assets/ui/js/pages/automation.js`.
+
+| What | How |
+| ---- | ---- |
+| Switch on / off | Rules start OFF. "Switch on" first shows `automation_preview()` in words ("23 people are already past a step (14 by email, 7 by SMS, 2 unreachable)"); absence rules then choose **Start fresh** (baseline) or **Include them**. |
+| Settings | Who (journey: stop status and weeks; absence: statuses, weekly check day/time), sender name and reply-to, each step's day/time or missed Sundays, each SMS (character and text count), each team/pastor alert. `automation_tab_apply()` changes only those; `automation_rule_save()` validates and refuses a stale version. Email documents stay as they are until the block editor (next PR). |
+| Preview | `api/email_preview.php?module=&step=&week=`: the real render for the viewer (example streak/week), untracked, in a `sandbox=""` frame (never `srcdoc`), with its own CSP (`default-src 'none'; style-src 'unsafe-inline'; img-src data: <site>`). Embrace's strict CSP adds `frame-src 'self'` for it. |
+| Send test | The step's email to the tester's own confirmed address: lane `test`, account mail (always arrives, no unsubscribe link), subject "Test: …". |
+| Recent runs | The last runs with their counts; **Who** lists each person, the step and the result from `automation_sends`. |
+| Overlap | A warning when Assimilation and Charis cover the same status. |
+
 ## 3. For other modules
 
 ```php

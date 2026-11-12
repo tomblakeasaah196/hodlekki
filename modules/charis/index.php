@@ -13,7 +13,10 @@ $ui = [
         '/assets/js/celebrants_export.js',
         '/assets/ui/js/pages/charis.js',
         '/assets/ui/js/pages/charis-ops.js',
+        '/assets/ui/js/pages/automation.js',
     ],
+    // The Automation tab's email preview: a sandboxed frame on api/email_preview.php.
+    'csp' => ['frame-src' => ["'self'"]],
 ];
 require_once '../../includes/header.php';
 // Access: the 'charis' row of the permission matrix (Roles & permissions).
@@ -72,6 +75,7 @@ echo ui_json_script('charis-config', [
         'events' => ['label' => 'Events', 'icon' => 'calendar-check'],
         'finance' => ['label' => 'Finance', 'icon' => 'wallet'],
         'library' => ['label' => 'Library', 'icon' => 'book-open'],
+    ] + ($charisCanConfigure ? ['automation' => ['label' => 'Automation', 'icon' => 'bell-ring']] : []) + [
         'howto' => ['label' => 'Guide', 'icon' => 'circle-help'],
     ], 'welfare', 'Charis sections') ?>
 
@@ -294,9 +298,20 @@ echo ui_json_script('charis-config', [
         </section>
     </section>
 
-    <?php /* Mount point for the Automation tab (campaigns PR 4, api/automation_api.php):
-       add an 'automation' entry to the ui_tabs() list above for can('charis', 'manage')
-       and its <section id="panel-automation" data-tab-panel="automation"> here. */ ?>
+    <!-- Automation: the absence follow-up rule (can('charis', 'manage'), as the AWOL rules; includes/campaigns/automation_tab.php) -->
+<?php if ($charisCanConfigure): ?>
+    <section id="panel-automation" data-tab-panel="automation" class="ui-tab-panel" hidden>
+<?php
+    require_once __DIR__ . '/../../includes/campaigns/automation_tab.php';
+    try {
+        echo automation_tab_html($pdo, 'charis');
+    } catch (Throwable $e) {
+        error_log('[automation] Charis tab failed: ' . $e->getMessage());
+        echo ui_banner('danger', ['title' => 'Automation did not load', 'text' => 'Reload the page to try again.']);
+    }
+?>
+    </section>
+<?php endif; ?>
     <!-- Guide ------------------------------------------------------------ -->
     <section id="panel-howto" data-tab-panel="howto" class="ui-tab-panel" hidden>
         <div class="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
