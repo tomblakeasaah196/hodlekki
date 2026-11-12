@@ -1305,6 +1305,39 @@ ct_ok('the tab shows only with the manage right: Embrace, Assimilation, Charis',
     <section id=\"panel-automation\"") && str_contains($chr, "'frame-src' => [\"'self'\"]"));
 
 // ===========================================================================
+ct_section('16i. The Connect card: blank optional fields keep the column default');
+// ===========================================================================
+require_once __DIR__ . '/../../includes/embrace_helpers.php';
+$cx = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+// As in the live schema: the address is NOT NULL with a default; the rest allow NULL.
+$cx->exec("CREATE TABLE connect_users (id INTEGER PRIMARY KEY, first_name TEXT NOT NULL, last_name TEXT, email TEXT UNIQUE, phone TEXT,
+    gender TEXT, dob TEXT, marital_status TEXT, physical_address TEXT NOT NULL DEFAULT 'To be updated', latitude REAL, longitude REAL,
+    spiritual_status TEXT, invited_by TEXT, wants_to_join INTEGER, visitation_preference TEXT, prayer_requests TEXT, qr_code_hash TEXT)");
+$card = ['first_name' => 'Ada', 'last_name' => 'Obi', 'email' => '', 'phone' => '2348030000001', 'gender' => '', 'dob' => '',
+    'marital_status' => 'Single', 'physical_address' => '', 'latitude' => null, 'longitude' => null, 'spiritual_status' => '1st_Timer',
+    'invited_by' => '', 'wants_to_join' => 0, 'visitation_preference' => 'None', 'prayer_requests' => '', 'qr_code_hash' => 'h1'];
+[$sql, $params] = embrace_connect_insert($card, 'connect_users');
+ct_ok('a blank address, email, gender, date of birth and coordinates are left out of the INSERT',
+    !str_contains($sql, 'physical_address') && !str_contains($sql, 'email') && !str_contains($sql, 'gender')
+    && !str_contains($sql, 'dob') && !str_contains($sql, 'latitude') && !in_array('', array_slice($params, 0, 3), true));
+$cx->prepare($sql)->execute($params);
+$row = $cx->query("SELECT * FROM connect_users WHERE qr_code_hash = 'h1'")->fetch();
+ct_ok('…so the card saves, the address taking the column default and the email NULL',
+    $row['physical_address'] === 'To be updated' && $row['email'] === null && $row['gender'] === null && $row['spiritual_status'] === '1st_Timer');
+[$sql, $params] = embrace_connect_insert(['physical_address' => '12 Admiralty Way, Lekki', 'email' => 'ada@gmail.com', 'qr_code_hash' => 'h2', 'first_name' => 'Ada'] + $card, 'connect_users');
+$cx->prepare($sql)->execute($params);
+ct_eq('a filled-in address and email are saved as given', ['12 Admiralty Way, Lekki', 'ada@gmail.com'],
+    array_values($cx->query("SELECT physical_address, email FROM connect_users WHERE qr_code_hash = 'h2'")->fetch()));
+ct_ok('…while required fields are always sent, even empty (invited_by, prayer)',
+    str_contains($sql, 'invited_by') && str_contains($sql, 'prayer_requests'));
+$threw = false;
+try { embrace_connect_insert(['first_name; DROP TABLE users' => 'x']); } catch (InvalidArgumentException $e) { $threw = true; }
+ct_ok('a column name that is not a plain identifier is refused', $threw);
+$papi = (string) file_get_contents(__DIR__ . '/../../api/embrace_public_api.php');
+ct_ok('the Connect API builds its INSERT this way (no explicit NULL for the address)',
+    str_contains($papi, '[$sql, $params] = embrace_connect_insert([') && !str_contains($papi, "\$address !== '' ? \$address : null"));
+
+// ===========================================================================
 ct_section('17. Every function the module calls exists');
 // ===========================================================================
 $files = array_merge(glob(__DIR__ . '/../../includes/campaigns/*.php'), [
