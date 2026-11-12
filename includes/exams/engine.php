@@ -106,10 +106,14 @@ function exam_parse_time($v)
  * $in: window_open, window_close, minutes, pass_percent, shuffle, part_marks, leave_alert, question_ids.
  * Once anyone has started, the questions, the time, the pass mark and the
  * marking rules are fixed; the window can still move and the alert change.
+ * $addAfterStart (the set-up page's import, after the tutor's confirm):
+ * questions may also be added then, never removed. Started papers don't
+ * change: each attempt keeps the questions it was given at the start
+ * (training_attempt_answers, exam_start()); new starters get the new list.
  *
  * @return array{ok:bool, errors?:list<string>, exam?:array}
  */
-function exam_save(PDO $pdo, array $item, array $in, int $actor): array
+function exam_save(PDO $pdo, array $item, array $in, int $actor, bool $addAfterStart = false): array
 {
     $errors = [];
     $open = exam_parse_time($in['window_open'] ?? '');
@@ -160,8 +164,9 @@ function exam_save(PDO $pdo, array $item, array $in, int $actor): array
     $shuffle = !empty($in['shuffle']) ? 1 : 0;
     $part = !empty($in['part_marks']) ? 1 : 0;
     $old = exam_get($pdo, (int) $item['id']);
+    $grows = $addAfterStart && $old !== null && array_diff($old['question_ids'], $ids) === [];
     if ($old !== null && exam_attempt_count($pdo, (int) $old['id']) > 0
-        && ($old['question_ids'] !== $ids || $old['minutes'] !== $minutes || $old['pass_percent'] !== $pass
+        && (($old['question_ids'] !== $ids && !$grows) || $old['minutes'] !== $minutes || $old['pass_percent'] !== $pass
             || $old['shuffle'] !== $shuffle || $old['part_marks'] !== $part)) {
         $errors[] = 'People have started it, so only the times and the leave alert can change.';
     }
@@ -191,40 +196,57 @@ function exam_save(PDO $pdo, array $item, array $in, int $actor): array
 }
 
 /**
- * Put imported questions into an exam (the set-up page's Import questions).
- * They join the ones already chosen; a question already in it is not added
- * twice. A saved exam nobody has started is saved at once, its rules
- * unchanged. One not saved yet waits for the tutor's Save, because its
- * rules aren't set: the page ticks them. Once people have started, its
- * questions can't change, so they stay in the bank only.
+ * Put imported questions into an exam and save it at once (the set-up page's
+ * Import questions; owner, 12 Nov 2026: "add and save at once").
+ *
+ * $form is the set-up form as the tutor sees it (the rules and the ticked
+ * questions), so after the save the page and the exam agree. Without it the
+ * saved rules are kept (or the form's defaults, for an exam not saved yet).
+ * The file's questions join the ticked ones; one already in is not added
+ * twice. Once people have started, the import needs $startedOk (the tutor's
+ * confirm): the questions already in stay, the new ones are added for new
+ * starters, and started papers don't change (see exam_save()).
  *
  * @param list<int> $ids Ready questions of this training's bank (exam_import_confirm()'s question_ids)
- * @return array{state:string, added:int, errors?:list<string>} state: saved | unchanged | unsaved | started | failed
+ * @return array{state:string, added:int, started:int, errors?:list<string>}
+ *         state: saved | unchanged | confirm (started, not confirmed) | failed
  */
-function exam_import_into_exam(PDO $pdo, array $item, array $ids, int $actor): array
+function exam_import_into_exam(PDO $pdo, array $item, array $ids, int $actor, array $form = [], bool $startedOk = false): array
 {
-    $ids = array_values(array_unique(array_map('intval', $ids)));
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn ($i) => $i > 0)));
     $exam = exam_get($pdo, (int) $item['id']);
+    $started = $exam !== null ? exam_attempt_count($pdo, (int) $exam['id']) : 0;
     if ($ids === []) {
-        return ['state' => 'unchanged', 'added' => 0];
+        return ['state' => 'unchanged', 'added' => 0, 'started' => $started];
     }
-    if ($exam === null) {
-        return ['state' => 'unsaved', 'added' => count($ids)];
+    if ($started > 0 && !$startedOk) {
+        return ['state' => 'confirm', 'added' => 0, 'started' => $started];
     }
-    if (exam_attempt_count($pdo, (int) $exam['id']) > 0) {
-        return ['state' => 'started', 'added' => 0];
+    $rules = $exam !== null
+        ? ['window_open' => (string) ($exam['window_open'] ?? ''), 'window_close' => (string) ($exam['window_close'] ?? ''),
+           'minutes' => $exam['minutes'], 'pass_percent' => $exam['pass_percent'], 'leave_alert' => $exam['leave_alert'],
+           'shuffle' => $exam['shuffle'], 'part_marks' => $exam['part_marks']]
+        : ['window_open' => '', 'window_close' => '', 'minutes' => 30, 'pass_percent' => 50, 'leave_alert' => 3, 'shuffle' => 1, 'part_marks' => 0];
+    // Once started, only the times and the leave alert may change, so the rest comes from the saved exam.
+    $editable = $started > 0 ? ['window_open', 'window_close', 'leave_alert'] : array_keys($rules);
+    foreach ($editable as $k) {
+        if (array_key_exists($k, $form)) {
+            $rules[$k] = $form[$k];
+        }
     }
-    $new = array_values(array_diff($ids, $exam['question_ids']));
-    if ($new === []) {
-        return ['state' => 'unchanged', 'added' => 0];
+    // The questions already chosen: what the page has ticked, or what is saved.
+    // A started exam keeps every question it has (they can't be unticked there).
+    $base = $exam['question_ids'] ?? [];
+    if ($started === 0 && array_key_exists('question_ids', $form)) {
+        $base = array_values(array_unique(array_filter(array_map('intval', (array) $form['question_ids']), static fn ($i) => $i > 0)));
     }
-    $r = exam_save($pdo, $item, [
-        'window_open' => (string) ($exam['window_open'] ?? ''), 'window_close' => (string) ($exam['window_close'] ?? ''),
-        'minutes' => $exam['minutes'], 'pass_percent' => $exam['pass_percent'], 'leave_alert' => $exam['leave_alert'],
-        'shuffle' => $exam['shuffle'], 'part_marks' => $exam['part_marks'],
-        'question_ids' => array_merge($exam['question_ids'], $new),
-    ], $actor);
-    return $r['ok'] ? ['state' => 'saved', 'added' => count($new)] : ['state' => 'failed', 'added' => 0, 'errors' => $r['errors']];
+    $new = array_values(array_diff($ids, $base));
+    if ($new === [] && $exam !== null) {
+        return ['state' => 'unchanged', 'added' => 0, 'started' => $started];
+    }
+    $r = exam_save($pdo, $item, $rules + ['question_ids' => array_merge($base, $new)], $actor, $started > 0);
+    return $r['ok'] ? ['state' => 'saved', 'added' => count($new), 'started' => $started]
+                    : ['state' => 'failed', 'added' => 0, 'started' => $started, 'errors' => $r['errors']];
 }
 
 /** not_open | open | closed */

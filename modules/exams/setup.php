@@ -106,11 +106,21 @@ echo ui_json_script('exams-config', ['page' => 'setup', 'item' => (int) $item['i
             <p class="font-medium" data-ex-import-summary aria-live="polite"></p>
             <div class="mt-3 max-h-[50vh] overflow-auto" data-ex-import-rows></div>
             <p class="ui-meta mt-3" data-ex-import-into>They are saved as Ready and added to this exam.</p>
+            <label class="ui-check mt-3" data-ex-import-explain-row hidden><input type="checkbox" data-ex-import-explain><span>Suggest missing explanations<span class="ui-check__hint" data-ex-import-explain-hint></span></span></label>
         </div>
     <?= ui_dialog_end(
         ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
         . ui_button('Check file', ['variant' => 'secondary', 'type' => 'submit', 'attrs' => ['form' => 'ex-import-form', 'data-ex-import-check' => true]])
         . ui_button('Import', ['variant' => 'primary', 'attrs' => ['data-action' => 'ex.import-confirm', 'data-ex-import-go' => true, 'hidden' => true]])
+    ) ?>
+
+    <?php // AI suggestions for the imported questions with no explanation (PR 4b's flow): stored only on Save. ?>
+    <?= ui_dialog_start('ex-approve', ['title' => 'Check explanations', 'size' => 'lg']) ?>
+        <div data-ex-approve-note></div>
+        <ol class="ui-stack" data-ex-approve-list></ol>
+    <?= ui_dialog_end(
+        ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
+        . ui_button('Save', ['variant' => 'primary', 'attrs' => ['data-action' => 'ex.approve-confirm']])
     ) ?>
 </div>
 <?php require_once '../../includes/footer.php'; ?>

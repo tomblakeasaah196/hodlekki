@@ -793,43 +793,60 @@ $GLOBALS['et_grants'] = [];
 et_eq('without the Academy\'s Edit the import is refused', 'FORBIDDEN', exams_action($x, 'import_confirm', ['token' => $xCheck($xFile), 'item' => 100], 1)['code'] ?? null);
 $GLOBALS['et_grants'] = array_merge(['trainings:edit:"church"'], $learners);
 
-$n1 = exams_action($x, 'import_confirm', ['token' => $xCheck($xFile), 'item' => 100], 1);
-et_eq('an exam not saved yet: the questions go in the bank as Ready, ticked, waiting for Save', ['success', 'unsaved', 3, 3, 3, 0],
-    [$n1['status'], $n1['into'] ?? null, $n1['imported'] ?? null, count($n1['question_ids'] ?? []),
-     et_count($x, 'training_questions', "training_id = 10 AND status = 'approved' AND source = 'import'"), et_count($x, 'training_exams')]);
-et_ok('…the page gets the new list with them in it, and is told to press Save',
-    array_diff($n1['question_ids'], array_column($n1['pool'] ?? [], 'id')) === [] && str_contains($n1['message'], 'press Save'), $n1['message']);
-et_ok('…Ready even when the bank\'s "Mark them Ready" box would be off', exams_action($x, 'import_confirm', ['token' => $xCheck(et_sheet([ET_HEAD,
-    ['One answer', 'Who was the first king of Israel?', 'Saul', 'David', '', '', '', 'A', '1', '', '']])), 'item' => 100, 'ready' => 0], 1)['into'] === 'unsaved'
-    && et_count($x, 'training_questions', "status = 'draft'") === 0);
+// The form as the page sends it with the confirm (examValues() in exams.js).
+$form = static fn (array $ids, array $over = []): array => $over + ['window_open' => '', 'window_close' => '', 'minutes' => '25', 'pass_percent' => '70',
+    'leave_alert' => '4', 'shuffle' => 0, 'part_marks' => 0, 'question_ids' => $ids];
+$n1 = exams_action($x, 'import_confirm', ['token' => $xCheck($xFile), 'item' => 100, 'exam' => $form([])], 1);
+$e1 = exam_get($x, 100);
+et_eq('an exam not saved yet: Ready in the bank, added and saved at once, with the rules the form shows', ['success', 'saved', 3, 3, 3, 25, 70, 4],
+    [$n1['status'], $n1['into'] ?? null, $n1['imported'] ?? null, count($e1['question_ids'] ?? []),
+     et_count($x, 'training_questions', "training_id = 10 AND status = 'approved' AND source = 'import'"), $e1['minutes'] ?? null, $e1['pass_percent'] ?? null, $e1['leave_alert'] ?? null]);
+et_ok('…the page gets the saved exam back, and the toast says what was added',
+    ($n1['exam']['question_ids'] ?? null) === $e1['question_ids'] && $n1['message'] === '3 new questions in the bank. 3 questions added to this exam and saved.', $n1['message']);
+et_eq('…every row had an explanation, so none to suggest', [], $n1['unexplained'] ?? null);
+$saul = exams_action($x, 'import_confirm', ['token' => $xCheck(et_sheet([ET_HEAD,
+    ['One answer', 'Who was the first king of Israel?', 'Saul', 'David', '', '', '', 'A', '1', '', '']])), 'item' => 100, 'ready' => 0, 'exam' => $form($e1['question_ids'])], 1);
+et_ok('…Ready even when the bank\'s "Mark them Ready" box would be off', ($saul['into'] ?? null) === 'saved' && et_count($x, 'training_questions', "status = 'draft'") === 0);
+et_eq('…a row with no explanation is offered for AI suggestions, and the import itself asks nothing of the AI',
+    [[(int) $x->query("SELECT id FROM training_questions WHERE body LIKE 'Who was the first king%'")->fetchColumn()], 0],
+    [$saul['unexplained'] ?? null, et_count($x, 'training_ai_requests')]);
 
 $q0 = exam_question_save($x, null, 10, ['qtype' => 'true_false', 'body' => 'Is the Bible one book?', 'correct_text' => 'False', 'explanation' => '66 books.', 'status' => 'approved'], 1);
 $rules = ['window_open' => '2027-04-02T09:00', 'window_close' => '', 'minutes' => 20, 'pass_percent' => 60, 'shuffle' => 0, 'part_marks' => 1, 'leave_alert' => 5];
 exam_save($x, exam_item($x, 100), $rules + ['question_ids' => [$q0['id']]], 1);
 $xFile2 = et_sheet(array_merge($xRows, [['One answer', 'Who built the ark?', 'Noah', 'Abraham', '', '', '', 'A', '1', 'Genesis 6.', '']]));
-$n2 = exams_action($x, 'import_confirm', ['token' => $xCheck($xFile2), 'item' => 100], 1);
+$n2 = exams_action($x, 'import_confirm', ['token' => $xCheck($xFile2), 'item' => 100, 'exam' => ['minutes' => 35] + $rules + ['question_ids' => [$q0['id']]]], 1);
 $after = exam_get($x, 100);
-et_eq('a saved exam nobody has started: saved at once with the new one and the file\'s Ready ones from the bank', ['saved', 1, 4, 5],
+et_eq('a saved exam: the new one and the file\'s Ready ones from the bank join the ticked ones, saved at once', ['saved', 1, 4, 5],
     [$n2['into'] ?? null, $n2['imported'] ?? null, $n2['added'] ?? null, count($after['question_ids'])]);
-et_eq('…its chosen questions first, then the file\'s', $q0['id'], $after['question_ids'][0]);
-et_eq('…its rules unchanged', ['2027-04-02 09:00:00', null, 20, 60, 0, 1, 5],
+et_eq('…the ticked ones first, then the file\'s', $q0['id'], $after['question_ids'][0]);
+et_eq('…saved as the form shows it (a Minutes the tutor typed included), so the page and the exam agree', ['2027-04-02 09:00:00', null, 35, 60, 0, 1, 5],
     [$after['window_open'], $after['window_close'], $after['minutes'], $after['pass_percent'], $after['shuffle'], $after['part_marks'], $after['leave_alert']]);
-et_ok('…and the page says it was saved', str_contains($n2['message'], 'added to this exam and saved'), $n2['message']);
+et_ok('…and the toast says so', str_contains($n2['message'], '4 questions added to this exam and saved.'), $n2['message']);
 
 $bankBefore = et_count($x, 'training_questions');
-$n3 = exams_action($x, 'import_confirm', ['token' => $xCheck($xFile2), 'item' => 100], 1);
-et_eq('the same file again adds nothing twice: not to the bank, not to the exam', ['unchanged', 0, $bankBefore, $after['question_ids']],
-    [$n3['into'] ?? null, $n3['imported'] ?? null, et_count($x, 'training_questions'), $xIds()]);
+$stamp = (string) $x->query('SELECT updated_at FROM training_exams WHERE item_id = 100')->fetchColumn();
+et_at('2027-04-01 10:00');
+$n3 = exams_action($x, 'import_confirm', ['token' => $xCheck($xFile2), 'item' => 100, 'exam' => $form($after['question_ids'], $rules)], 1);
+et_eq('the same file again adds nothing twice, and saves nothing', ['unchanged', 0, $bankBefore, $after['question_ids'], $stamp],
+    [$n3['into'] ?? null, $n3['imported'] ?? null, et_count($x, 'training_questions'), $xIds(),
+     (string) $x->query('SELECT updated_at FROM training_exams WHERE item_id = 100')->fetchColumn()]);
 et_ok('…and says so', str_contains($n3['message'], 'No new questions') && str_contains($n3['message'], 'all in this exam already'), $n3['message']);
 et_eq('…the claimed check cannot be confirmed twice', 'This file has already been imported.',
     exams_action($x, 'import_confirm', ['token' => (string) $x->query('SELECT token FROM training_question_imports ORDER BY id DESC LIMIT 1')->fetchColumn(), 'item' => 100], 1)['message'] ?? null);
 
 $draftFile = et_sheet([ET_HEAD, ['One answer', 'Who was swallowed by a fish?', 'Jonah', 'Peter', '', '', '', 'A', '1', '', '']]);
 exam_import_confirm($x, $xCheck($draftFile), 1, false);   // the bank's import with "Mark them Ready" off: a draft
-$n4 = exams_action($x, 'import_confirm', ['token' => $xCheck($draftFile), 'item' => 100], 1);
+$n4 = exams_action($x, 'import_confirm', ['token' => $xCheck($draftFile), 'item' => 100, 'exam' => $form($after['question_ids'], $rules)], 1);
 et_eq('a question already in the bank as a draft is not put in the exam, and is counted', ['unchanged', 0, $after['question_ids']],
     [$n4['into'] ?? null, count($n4['question_ids'] ?? [1]), $xIds()]);
 et_ok('…the page says it was left out', str_contains($n4['message'], '1 is in the bank but not Ready'), $n4['message']);
+
+$bad = exams_action($x, 'import_confirm', ['token' => $xCheck(et_sheet([ET_HEAD, ['One answer', 'Who was the second king?', 'David', 'Saul', '', '', '', 'A', '1', '', '']])),
+    'item' => 100, 'exam' => $form($after['question_ids'], ['window_open' => '2027-04-05T09:00', 'window_close' => '2027-04-04T09:00'] + $rules)], 1);
+et_eq('a rule on the form that doesn\'t pass saves nothing: the question is in the bank, ticked, and the page says what to fix',
+    ['failed', 1, $after['question_ids'], 'Not saved: It must close after it opens. They are ticked: fix it and press Save.'],
+    [$bad['into'] ?? null, $bad['imported'] ?? null, $xIds(), str_replace('1 new question in the bank. ', '', $bad['message'] ?? '')]);
 
 $GLOBALS['et_grants'] = array_merge(['trainings:edit:"church"'], $learners);
 $noBank = exams_action($x, 'import_confirm', ['token' => $t20 = $xCheck(et_sheet([ET_HEAD, ['One answer', 'Who wrote Acts?', 'Luke', 'Paul', '', '', '', 'A', '1', '', '']]), 20), 'item' => 100], 1);
@@ -840,13 +857,39 @@ et_eq('the bank\'s own import is as before: the tutor\'s Ready choice, no exam t
     [$bankOnly['status'], $bankOnly['imported'] ?? null, $bankOnly['question_ids'] ?? null,
      (string) $x->query('SELECT status FROM training_questions WHERE training_id = 20')->fetchColumn()]);
 
+// People have started: ask first; papers are fixed at their start, new starters get the new list.
 et_at('2027-04-03 09:00');
 et_eq('(a learner starts the exam)', 'success', exams_action($x, 'start', ['item' => 100], 2)['status']);
-$n5 = exams_action($x, 'import_confirm', ['token' => $xCheck(et_sheet([ET_HEAD, ['One answer', 'Who baptised Jesus?', 'John', 'Peter', '', '', '', 'A', '1', '', '']])), 'item' => 100], 1);
-et_eq('once people have started: the bank only, the exam\'s questions unchanged', ['started', 1, $after['question_ids'], 1],
-    [$n5['into'] ?? null, $n5['imported'] ?? null, $xIds(), $n5['started'] ?? null]);
-et_ok('…and the page says why', str_contains($n5['message'], 'can\'t change'), $n5['message']);
-et_eq('exam_import_into_exam() with nothing to add changes nothing', ['state' => 'unchanged', 'added' => 0], exam_import_into_exam($x, exam_item($x, 200), [], 1));
+$a2 = (int) $x->query('SELECT id FROM training_attempts WHERE user_id = 2')->fetchColumn();
+$paper = static fn (int $attemptId): array => array_map('intval', $x->query('SELECT question_id FROM training_attempt_answers WHERE attempt_id = ' . $attemptId . ' ORDER BY position')->fetchAll(PDO::FETCH_COLUMN));
+$paper2 = $paper($a2);
+$bankBefore = et_count($x, 'training_questions');
+$baptism = $xCheck(et_sheet([ET_HEAD, ['One answer', 'Who baptised Jesus?', 'John', 'Peter', '', '', '', 'A', '1', 'Matthew 3.', '']]));
+$ask = exams_action($x, 'import_confirm', ['token' => $baptism, 'item' => 100, 'exam' => $form($after['question_ids'], $rules)], 1);
+et_eq('once people have started, the page must confirm first, and nothing is imported before it does',
+    ['CONFIRM_STARTED', 1, $bankBefore, 1], [$ask['code'] ?? null, $ask['started'] ?? null, et_count($x, 'training_questions'),
+     et_count($x, 'training_question_imports', 'token = ? AND imported_at IS NULL', [$baptism])]);
+et_eq('…the confirm says papers are fixed at the start', '1 person has started. Each paper is fixed when it starts, so theirs won\'t change; new starters get the new questions.',
+    $ask['message'] ?? null);
+$n5 = exams_action($x, 'import_confirm', ['token' => $baptism, 'item' => 100, 'started_ok' => 1,
+    'exam' => $form([], ['window_close' => '2027-04-30T17:00'] + $rules)], 1);   // the page's locked ticks can't drop questions
+$grown = exam_get($x, 100);
+et_eq('…confirmed: the question is added for new starters and saved; none taken away; the locked rules kept, the times taken',
+    ['saved', 1, array_merge($after['question_ids'], [$n5['question_ids'][0] ?? 0]), '2027-04-30 17:00:00', 35],
+    [$n5['into'] ?? null, $n5['added'] ?? null, $grown['question_ids'], $grown['window_close'], $grown['minutes']]);
+et_ok('…the toast says started papers stay as they were', str_contains($n5['message'], 'Papers already started stay as they were.'), $n5['message']);
+et_eq('…the started paper is unchanged', $paper2, $paper($a2));
+et_eq('(a second learner starts)', 'success', exams_action($x, 'start', ['item' => 100], 3)['status']);
+et_eq('…and gets the new question', count($paper2) + 1, count($paper((int) $x->query('SELECT id FROM training_attempts WHERE user_id = 3')->fetchColumn())));
+exams_action($x, 'submit', ['item' => 100], 2);
+et_eq('…the first is marked on their own paper only', (int) $x->query('SELECT SUM(q.marks) FROM training_attempt_answers a JOIN training_questions q ON q.id = a.question_id WHERE a.attempt_id = ' . $a2)->fetchColumn(),
+    (int) $x->query('SELECT max_score FROM training_attempts WHERE id = ' . $a2)->fetchColumn());
+$item100 = exam_item($x, 100);
+et_eq('adding after the start never removes, and the Save button still can\'t add', [false, false],
+    [exam_save($x, $item100, $rules + ['window_close' => '2027-04-30T17:00', 'question_ids' => array_slice($grown['question_ids'], 1)], 1, true)['ok'],
+     exam_save($x, $item100, $rules + ['window_close' => '2027-04-30T17:00', 'question_ids' => array_merge($grown['question_ids'], [$q0['id'] + 1000])], 1)['ok']]);
+et_eq('…nor change the minutes', false, exam_save($x, $item100, ['minutes' => 50] + $rules + ['window_close' => '2027-04-30T17:00', 'question_ids' => $grown['question_ids']], 1, true)['ok']);
+et_eq('exam_import_into_exam() with nothing to add changes nothing', ['state' => 'unchanged', 'added' => 0, 'started' => 0], exam_import_into_exam($x, exam_item($x, 200), [], 1));
 
 $setupSrc = (string) file_get_contents($root . '/modules/exams/setup.php');
 et_ok('the set-up page has Import questions, Download template and its own import dialog',
@@ -855,10 +898,14 @@ et_ok('the set-up page has Import questions, Download template and its own impor
     && str_contains($setupSrc, "ui_dialog_start('ex-import'"));
 et_ok('…with no bank to choose and no Ready box (always this training\'s bank, always Ready)',
     !str_contains($setupSrc, 'data-ex-import-ready') && !str_contains($setupSrc, "'name' => 'bank'"));
+et_ok('…and the offer of AI explanations, checked in a dialog before anything is stored',
+    str_contains($setupSrc, 'data-ex-import-explain') && str_contains($setupSrc, "ui_dialog_start('ex-approve'") && str_contains($setupSrc, "'data-action' => 'ex.approve-confirm'"));
 $setupJs = (string) file_get_contents($root . '/assets/ui/js/pages/exams.js');
-et_ok('…the script sends the exam with the confirm, and handles the import on the set-up page',
-    str_contains($setupJs, '{ token: bank.token, item: cfg.item }')
-    && preg_match("/cfg\\.page === 'setup'\\) \\{[^}]*ex\\.import-open[^}]*ex\\.import-check[^}]*ex\\.import-confirm/s", $setupJs) === 1);
+et_ok('…the script sends the form with the confirm, asks first when people have started, and handles it all on the set-up page',
+    str_contains($setupJs, 'exam: examValues(one(\'#ex-exam-form\'))') && str_contains($setupJs, "err.code === 'CONFIRM_STARTED'")
+    && str_contains($setupJs, "if (yes) importSend(btn, true);")
+    && preg_match("/cfg\\.page === 'setup'\\) \\{[^}]*ex\\.import-open[^}]*ex\\.import-check[^}]*ex\\.import-confirm[^}]*ex\\.approve-confirm/s", $setupJs) === 1);
+et_ok('…AI explanations only when the tutor ticked the offer', str_contains($setupJs, 'if (explain && res.unexplained && res.unexplained.length) approveStart(res.unexplained);'));
 et_eq('the bank\'s address helper', ['/modules/exams/', '/modules/exams/?training=10'], [exam_url_bank(), exam_url_bank(10)]);
 foreach (['modules/academy/index.php' => "exam_url_bank()", 'modules/academy/training.php' => 'exam_url_bank($tid)'] as $f => $call) {
     $src = (string) file_get_contents($root . '/' . $f);
