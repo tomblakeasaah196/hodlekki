@@ -68,24 +68,9 @@ try {
                 $detail['link'] = ['href' => '/modules/departments/index.php', 'label' => 'Open Departments'];
                 break;
 
-            case 'pipeline':
+            // New Pipeline and Follow-ups Due, one card (owner, 12 Nov 2026).
+            case 'first_timers':
                 $p = dash_pipeline($pdo);
-                $detail['title'] = 'New Pipeline';
-                $detail['summary'] = dash_plural($p['total'], 'person is', 'people are') . ' on Embrace\'s active list.';
-                $detail['sections'][] = [
-                    'heading' => 'By status',
-                    'rows'    => [
-                        ['label' => '1st Timers', 'value' => $p['by_status']['1st_Timer']],
-                        ['label' => '2nd Timers', 'value' => $p['by_status']['2nd_Timer']],
-                        ['label' => '3rd Timers', 'value' => $p['by_status']['3rd_Timer']],
-                        ['label' => 'Now Visitors, still owed a call', 'value' => $p['by_status']['Visitor'],
-                         'hint'  => 'Came a 4th Sunday before their follow-up was finished.'],
-                    ],
-                ];
-                $detail['link'] = ['href' => '/modules/embrace/index.php', 'label' => 'Open Embrace'];
-                break;
-
-            case 'followups':
                 $f = dash_followups($pdo);
                 $rows = [
                     ['label' => 'Assigned, waiting for a call', 'value' => $f['pending']],
@@ -94,16 +79,27 @@ try {
                 if ($f['other_open'] > 0) {
                     $rows[] = ['label' => 'Other open follow-ups', 'value' => $f['other_open']];
                 }
-                $detail['title'] = 'Follow-ups Due';
+                $detail['title'] = 'First timers';
                 $detail['summary'] = dash_plural($f['open'], 'follow-up is', 'follow-ups are') . ' waiting for a report'
-                    . ($f['oldest_open'] ? ', the oldest assigned on ' . dash_short_date((string) $f['oldest_open']) : '') . '.';
-                $detail['sections'][] = ['heading' => 'Open', 'rows' => $rows];
+                    . ($f['oldest_open'] ? ', the oldest assigned on ' . dash_short_date((string) $f['oldest_open']) : '')
+                    . '. ' . dash_plural($p['total'], 'person is', 'people are') . ' on Embrace\'s active list.';
+                $detail['sections'][] = ['heading' => 'Follow-ups due', 'rows' => $rows];
                 $detail['sections'][] = [
                     'heading' => 'Also on the active list',
                     'rows'    => [
                         ['label' => 'Not yet assigned a worker', 'value' => $f['unassigned']],
                         ['label' => 'Reported, still a timer', 'value' => $f['reported'],
                          'hint'  => 'Their call is done; they stay on the list until they move up the ladder.'],
+                    ],
+                ];
+                $detail['sections'][] = [
+                    'heading' => 'Pipeline by status',
+                    'rows'    => [
+                        ['label' => '1st Timers', 'value' => $p['by_status']['1st_Timer']],
+                        ['label' => '2nd Timers', 'value' => $p['by_status']['2nd_Timer']],
+                        ['label' => '3rd Timers', 'value' => $p['by_status']['3rd_Timer']],
+                        ['label' => 'Now Visitors, still owed a call', 'value' => $p['by_status']['Visitor'],
+                         'hint'  => 'Came a 4th Sunday before their follow-up was finished.'],
                     ],
                 ];
                 $detail['link'] = ['href' => '/modules/embrace/index.php', 'label' => 'Open Embrace'];
@@ -268,15 +264,20 @@ try {
         $response['cards'] = [
             ['key' => 'workforce', 'title' => 'Workforce', 'value' => $workforce,
              'note' => 'Serving in a department'],
-            ['key' => 'pipeline', 'title' => 'New Pipeline', 'value' => $pipeline['total'],
-             'note' => 'On Embrace\'s active list'],
-            ['key' => 'followups', 'title' => 'Follow-ups Due', 'value' => $followups['open'],
-             'note' => $followups['unassigned'] > 0 ? $followups['unassigned'] . ' more not yet assigned' : 'Waiting for a report'],
+            // New Pipeline + Follow-ups Due in one card: what needs a call is the number.
+            ['key' => 'first_timers', 'title' => 'First timers', 'value' => $followups['open'],
+             'note' => number_format($pipeline['total']) . ' in pipeline'
+                 . ($followups['unassigned'] > 0 ? ' · ' . number_format($followups['unassigned']) . ' unassigned' : '')],
             ['key' => 'pending_qa', 'title' => 'Pending Q&A', 'value' => $qa['total'],
              'note' => $qa['oldest'] ? 'Oldest from ' . dash_short_date((string) $qa['oldest']) : 'All answered'],
             ['key' => 'sunday', 'title' => $sunday['is_today'] ? "Today's Service" : 'Last Sunday', 'value' => $sunday['total'],
              'note' => $sundayNote, 'trend' => $sundayTrend],
         ];
+        // The SMS wallet, for whoever may open SMS Studio; it links there.
+        $sms = dash_sms_card($pdo);
+        if ($sms !== null) {
+            $response['cards'][] = $sms;
+        }
         $response['live'] = $sunday['is_today'];
     }
 
