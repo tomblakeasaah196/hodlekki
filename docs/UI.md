@@ -136,6 +136,8 @@ under `:root[data-theme="dark"]`; no page changes.
 | `--ui-primary` (+ `-hover`, `-soft`) | `bg-primary`, `bg-primary-soft` | The one main action; navy `#1D356A`. |
 | `--ui-brand-red` | `bg-brand-red` | Brand accent (`#D11920`): the active-nav marker, public CTAs. Sparingly. |
 | `--ui-danger` / `-success` / `-warning` / `-info` (+ `-soft`) | `text-danger`, `bg-success-soft` … | Status only. |
+| `--ui-hue-navy` / `-rose` / `-violet` / `-gold` / `-teal` (+ `-soft`, `-line`) | — | Telling things apart at a glance (the dashboard's cards): never a status. Ink is AA on white and on its own soft tint. |
+| `--ui-warm` | — | The warm wash under Connect and the dashboard welcome (`#FFF8F1`). |
 | `--ui-focus` | — | The focus ring (2 px, offset 2 px). |
 
 Type: **Inter** (400–700, variable) for everything; **Montserrat 700** only

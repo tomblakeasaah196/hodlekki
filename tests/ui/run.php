@@ -757,7 +757,7 @@ foreach ($it as $f) {
 ok('no page link in the code ends in .php', $oldLinks === [], implode(', ', array_slice($oldLinks, 0, 15)));
 
 /* ---------------------------------------------------------------------- */
-suite('12. a service never registers anyone (owner, 12 Nov 2026)');
+suite('13. a service never registers anyone (owner, 12 Nov 2026)');
 
 $checkinApi = (string) file_get_contents($root . '/api/checkin_api.php');
 $checkinPage = (string) file_get_contents($root . '/checkin.php');
@@ -782,6 +782,51 @@ ok('the check-in page is not the app (no install prompt at the door)', str_conta
 ok('the check-in page hands Connect the name in session storage, not the URL',
     !str_contains((string) file_get_contents($root . '/assets/ui/js/pages/checkin.js'), 'connect.php?')
     && str_contains((string) file_get_contents($root . '/assets/ui/js/pages/connect.js'), "'hod.connect.prefill'"));
+
+/* ---------------------------------------------------------------------- */
+suite('14. the dashboard moves once, and never under reduced motion');
+// The cards rise in and count up on the first load only (.dash-enter, set by
+// dashboard.js); a live Sunday refresh updates them in place. Anyone who has
+// asked for reduced motion gets neither, from the script and from the CSS.
+
+$dashJs = (string) file_get_contents($root . '/assets/ui/js/pages/dashboard.js');
+$dashRender = (string) strstr((string) strstr($dashJs, 'function renderCards('), 'function renderNotices(', true);
+$dashGuard = strpos($dashRender, 'if (!initial || !motionOk()) return;');
+$dashInPlace = strpos($dashRender, 'if (shown) {');
+ok('dashboard.js asks the browser whether reduced motion is on',
+    str_contains($dashJs, "matchMedia('(prefers-reduced-motion: reduce)')")
+    && str_contains($dashJs, 'return !(reducedMotion && reducedMotion.matches);'));
+ok('the entrance class is added in one place, after the reduced-motion guard',
+    substr_count($dashJs, "classList.add('dash-enter')") === 1 && $dashGuard !== false
+    && $dashGuard < (int) strpos($dashRender, "classList.add('dash-enter')"));
+ok('numbers count up only after the same guard',
+    substr_count($dashJs, 'countUp(el, cardValue(') === 1 && $dashGuard !== false
+    && $dashGuard < (int) strpos($dashRender, 'countUp(el, cardValue('));
+ok('a live refresh updates the cards in place, before any entrance or count',
+    $dashInPlace !== false && $dashInPlace < (int) $dashGuard
+    && str_contains($dashJs, 'renderCards(res, initial);'));
+
+/** The rules inside every @media (prefers-reduced-motion: reduce) block, whitespace removed. */
+$reducedRules = static function (string $css): string {
+    $out = '';
+    $offset = 0;
+    while (preg_match('/@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)\s*\{/', $css, $m, PREG_OFFSET_CAPTURE, $offset)) {
+        $i = $m[0][1] + strlen($m[0][0]);
+        for ($depth = 1, $j = $i; $j < strlen($css) && $depth > 0; $j++) {
+            $depth += $css[$j] === '{' ? 1 : ($css[$j] === '}' ? -1 : 0);
+        }
+        $out .= substr($css, $i, $j - $i);
+        $offset = $j;
+    }
+    return (string) preg_replace('/\s+/', '', $out);
+};
+foreach (['assets/ui/src/app.css' => 'source', 'assets/ui/app.css' => 'build'] as $cssFile => $cssKind) {
+    $rm = $reducedRules((string) file_get_contents($root . '/' . $cssFile));
+    ok("reduced motion stops the cards' entrance ({$cssKind})", str_contains($rm, '.dash-enter>.dash-kpi{animation:none!important'));
+    ok("reduced motion stops the cards' lift ({$cssKind})", str_contains($rm, '.ui-card.dash-kpi{transform:none!important'));
+}
+$dashCss = (string) strstr((string) strstr((string) file_get_contents($root . '/assets/ui/src/app.css'), '/* ---------- Home dashboard'), '/* A dialog that fills the screen', true);
+ok('nothing on the dashboard loops', $dashCss !== '' && !str_contains($dashCss, 'infinite'));
 
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed === 0 ? 0 : 1);
