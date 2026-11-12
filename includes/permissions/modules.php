@@ -113,4 +113,7 @@ return [
     // asks can('monitor', 'view' | 'manage') through monitor_user_can().
     'monitor' => ['label' => 'System monitor', 'group' => 'system', 'max' => 'view', 'extras' => ['manage'], 'partitioned' => false],
     'ui_guide' => ['label' => 'Design System', 'group' => 'system', 'max' => 'view', 'extras' => [], 'partitioned' => false],
+    // Outside services the ERP connects to (docs/INTEGRATIONS.md): Google for Trainings' live classes. Manage only.
+    'integrations' => ['label' => 'Integrations: connect Google and other services', 'group' => 'system', 'max' => 'none',
+        'extras' => ['manage'], 'partitioned' => false, 'nav' => ['manage']],
 ];

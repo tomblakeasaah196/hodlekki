@@ -42,6 +42,7 @@ return [
     '/assets/ui/js/pages/finance.js' => '6bbb26309031',
     '/assets/ui/js/pages/idi-mobilization.js' => 'd5fd7e1c5bc4',
     '/assets/ui/js/pages/idi.js' => '6e14ed9ed252',
+    '/assets/ui/js/pages/integrations.js' => '27e975028856',
     '/assets/ui/js/pages/junior-church.js' => '623c947640a2',
     '/assets/ui/js/pages/library.js' => '6a455160432f',
     '/assets/ui/js/pages/live-radio.js' => 'c11e4265c6bc',

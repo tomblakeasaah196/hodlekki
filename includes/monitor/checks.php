@@ -50,7 +50,7 @@ function monitor_cron_jobs(): array
 function monitor_urgent_checks(): array
 {
     return ['cron_sms_queue_worker', 'cron_push_worker', 'cron_email_worker', 'cron_special_events', 'cron_reach_lost_souls',
-            'cron_assimilation_watchlists', 'sms', 'push', 'email', 'mail_sync', 'db', 'disk', 'backups', 'php', 'deploy',
+            'cron_assimilation_watchlists', 'sms', 'push', 'email', 'mail_sync', 'google', 'db', 'disk', 'backups', 'php', 'deploy',
             'outside_site', 'outside_connect', 'tls', 'dns', 'origin_lock'];
 }
 
@@ -335,6 +335,44 @@ function monitor_check_mail(array $f, int $now): array
 
     return monitor_check('mail_sync', 'Messages', $label, 'ok', count($active) . ' active mailbox(es) synced within 10 minutes'
         . ($synced ? '; the oldest ' . monitor_ago((int) min($synced), $now) : '') . '.');
+}
+
+/**
+ * Google (docs/INTEGRATIONS.md): Trainings' Meet links and attendance. Red when Google withdrew access (every new
+ * link fails until an admin connects again); amber when it is not set up or not connected, or the last call was
+ * refused for the client or a permission. $f: ready, client, key, connected, status, last_ok (Unix), last_error.
+ */
+function monitor_check_google(array $f, int $now): array
+{
+    $label = 'Google (Meet)';
+    $page = 'Integrations → Google';
+    if (empty($f['ready'])) {
+        return monitor_check('google', 'Server', $label, 'ok', 'Integrations are not set up on this server yet.');
+    }
+    if (($f['status'] ?? null) === 'revoked') {
+        return monitor_check('google', 'Server', $label, 'bad', 'Google withdrew access: new Meet links and attendance stop until someone connects again.',
+            $page . ': Connect again, signed in as the church\'s Google account.');
+    }
+    if (empty($f['client'])) {
+        return monitor_check('google', 'Server', $label, 'warn', 'Not set up: GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are needed in .env.',
+            'docs/INTEGRATIONS.md → Google setup.');
+    }
+    if (empty($f['key'])) {
+        return monitor_check('google', 'Server', $label, 'warn', 'Not set up: INTEGRATIONS_VAULT_KEY (64 hex characters) is needed in .env.',
+            'On the server: php -r "echo bin2hex(random_bytes(32));" and add it to .env.');
+    }
+    if (empty($f['connected'])) {
+        return monitor_check('google', 'Server', $label, 'warn', 'Not connected: live classes cannot get a Meet link.', $page . ': Connect.');
+    }
+    $error = (string) ($f['last_error'] ?? '');
+    $reason = strtok($error, ' ');
+    $ok = isset($f['last_ok']) ? 'Last call worked ' . monitor_ago((int) $f['last_ok'], $now) . '.' : 'No call yet.';
+    if (in_array($reason, ['client', 'scopes'], true)) {
+        return monitor_check('google', 'Server', $label, 'warn', 'Connected, but Google refused the last call (' . ($reason === 'client' ? 'the client ID or secret' : 'a permission not granted') . '). ' . $ok,
+            $reason === 'client' ? 'Check GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in .env.' : $page . ': Disconnect, then Connect and allow every box.');
+    }
+
+    return monitor_check('google', 'Server', $label, 'ok', 'Connected. ' . $ok . ($error !== '' ? ' The last call failed (' . $reason . '), usually passing.' : ''));
 }
 
 /** Database speed: connecting, a simple and a real query, and slow pages. */
@@ -890,6 +928,28 @@ function monitor_refresh_smtp_test(PDO $db): void
 }
 
 /** The mailboxes the mail minute cron syncs (mail_accounts), or ready false before Mail is installed. */
+/** Google's connection from integration_settings and .env (never a value: only whether each is there). */
+function monitor_facts_google(PDO $pdo): array
+{
+    if (!monitor_table_exists($pdo, 'integration_settings')) {
+        return ['ready' => false];
+    }
+    $rows = [];
+    foreach ($pdo->query("SELECT setting_key, setting_value FROM integration_settings WHERE setting_key IN ('google.status', 'google.refresh_token', 'google.last_ok_at', 'google.last_error')")->fetchAll(PDO::FETCH_NUM) as [$k, $v]) {
+        $rows[(string) $k] = $v === null ? null : (string) $v;
+    }
+
+    return [
+        'ready' => true,
+        'client' => hod_monitor_env('GOOGLE_OAUTH_CLIENT_ID') !== '' && hod_monitor_env('GOOGLE_OAUTH_CLIENT_SECRET') !== '',
+        'key' => (bool) preg_match('/^[0-9a-fA-F]{64}$/', hod_monitor_env('INTEGRATIONS_VAULT_KEY')),
+        'connected' => ($rows['google.refresh_token'] ?? '') !== '' && ($rows['google.status'] ?? null) === 'connected',
+        'status' => $rows['google.status'] ?? null,
+        'last_ok' => monitor_ts($rows['google.last_ok_at'] ?? null),
+        'last_error' => $rows['google.last_error'] ?? null,
+    ];
+}
+
 function monitor_facts_mail(PDO $pdo): array
 {
     if (!monitor_table_exists($pdo, 'mail_accounts')) {
@@ -1179,6 +1239,7 @@ function monitor_checks_run(PDO $pdo, PDO $db, bool $slow = false): array
     $safe('push', 'Messages', 'Push notifications', fn () => monitor_check_push(monitor_facts_push($pdo), $now));
     $safe('email', 'Messages', 'Email sending', fn () => monitor_check_email(monitor_facts_email($db), $now));
     $safe('mail_sync', 'Messages', 'Mail sync', fn () => monitor_check_mail(monitor_facts_mail($pdo), $now));
+    $safe('google', 'Server', 'Google (Meet)', fn () => monitor_check_google(monitor_facts_google($pdo), $now));
     $safe('db', 'Server', 'Database speed', fn () => monitor_check_db(monitor_facts_db($pdo, $db)));
     $safe('disk', 'Server', 'Disk space', fn () => monitor_check_disk(json_decode((string) monitor_state_get($db, 'disk'), true) ?: []));
     $safe('backups', 'Server', 'Backups', fn () => monitor_check_backups(monitor_facts_backups(), $now));
