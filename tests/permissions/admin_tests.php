@@ -339,3 +339,41 @@ perm_reset();
 eq('renaming a seat type renames it in Departments', 'Unit Head', dept_role_labels()['HOD']);
 [$order, $values] = dept_seat_order('ud.role_in_dept');
 eq('roster order follows seat rank', ['Assoc_Pastor', 'Director', 'HOD', 'Deputy_HOD', 'Sub_Unit_Head', 'Worker', 'Member'], $values);
+
+// ---------------------------------------------------------------------------
+section('PR 3: functions other code relies on stay callable');
+// Notification audiences and holders used outside the engine (Special Events,
+// campaigns, mail, every module API). Renaming or removing one breaks a caller
+// that may only run after an event or in a cron job, so each is pinned here.
+foreach (['can', 'require_can', 'api_require_can', 'perm_current', 'perm_real_current', 'perm_view_as', 'perm_scope',
+    'perm_where', 'perm_holders', 'perm_module_team', 'perm_module_leaders', 'perm_department_leaders',
+    'perm_office_holders', 'perm_senior_pastor_ids', 'perm_seat_holders', 'perm_person_seats', 'perm_seat_key_for',
+    'perm_ctx_can_appoint', 'perm_history_add', 'perm_active_accounts'] as $fn) {
+    ok("{$fn}() is callable", function_exists($fn));
+}
+$leaders = new ReflectionFunction('perm_module_leaders');
+ok('perm_module_leaders($pdo, $module) still works with two arguments', $leaders->getNumberOfRequiredParameters() === 2);
+
+$root = dirname(__DIR__, 2);
+// Code that CLI harnesses load without includes/db.php loads the engine itself.
+foreach (['includes/special_events/after_event.php', 'includes/campaigns/automation.php'] as $rel) {
+    ok("{$rel} loads the permission engine itself",
+        (bool) preg_match("#require_once __DIR__ \. '/\.\./permissions\.php'#", (string) file_get_contents($root . '/' . $rel)));
+}
+// Names this PR retired are not called anywhere.
+$retired = ['DEPT_LEADER_ROLES', 'DEPT_ROLE_LABELS', 'automation_role_holders'];
+$hits = [];
+$iter = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+foreach ($iter as $file) {
+    $path = str_replace(DIRECTORY_SEPARATOR, '/', substr($file->getPathname(), strlen($root) + 1));
+    if ($file->getExtension() !== 'php' || preg_match('#^(vendor|node_modules|\.git|\.claude|tests)/#', $path)) {
+        continue;
+    }
+    $src = (string) file_get_contents($file->getPathname());
+    foreach ($retired as $name) {
+        if (str_contains($src, $name)) {
+            $hits[] = "{$path}: {$name}";
+        }
+    }
+}
+eq('retired names are referenced nowhere', [], $hits);

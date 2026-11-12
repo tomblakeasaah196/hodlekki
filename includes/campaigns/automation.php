@@ -23,6 +23,10 @@
 // wallet check and delivery reports all apply; sms_log is never written here);
 // otherwise skip. Someone who unsubscribed is skipped, not texted instead.
 
+// Team and pastor audiences come from the permission engine. db.php loads it on
+// the web and in cron; CLI harnesses that skip db.php still need it here.
+require_once __DIR__ . '/../permissions.php';
+
 const AUTOMATION_KINDS = ['embrace' => 'journey', 'assimilation' => 'absence', 'charis' => 'absence'];
 const AUTOMATION_TARGETS = ['member', 'team', 'pastor'];
 const AUTOMATION_LOCK = 'hod_automation_tick';
