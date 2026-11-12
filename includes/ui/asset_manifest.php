@@ -40,7 +40,7 @@ return [
     '/assets/ui/js/pages/events-analytics.js' => 'e5bb75529357',
     '/assets/ui/js/pages/events-attendance.js' => 'c2358114be17',
     '/assets/ui/js/pages/events.js' => '097f7e57f656',
-    '/assets/ui/js/pages/exams.js' => 'b21489c1c86c',
+    '/assets/ui/js/pages/exams.js' => '3a452973a34f',
     '/assets/ui/js/pages/finance.js' => '6bbb26309031',
     '/assets/ui/js/pages/idi-mobilization.js' => 'd5fd7e1c5bc4',
     '/assets/ui/js/pages/idi.js' => '6e14ed9ed252',

@@ -28,7 +28,7 @@ echo ui_json_script('exams-config', ['page' => 'setup', 'item' => (int) $item['i
     <?= ui_page_header([
         'title' => 'Exam set-up',
         'description' => $item['title'] . ' · ' . $item['training_title'],
-        'info' => 'People can start the exam between the opening and closing times. Each person gets one attempt, with the questions and options in their own order, and a countdown; at zero it is handed in by itself. Answers are checked on the server. If someone keeps leaving the exam tab you get a note. The right answers and explanations are shown to people only for the questions they got wrong, after the exam closes.',
+        'info' => 'People can start the exam between the opening and closing times. Each person gets one attempt, with the questions and options in their own order, and a countdown; at zero it is handed in by itself. Answers are checked on the server. If someone keeps leaving the exam tab you get a note. People see the right answers and explanations only for the questions they got wrong, and only once the answers are shown (see Answers).',
         'back' => ['href' => '/modules/exams/?training=' . (int) $item['training_id'], 'label' => 'Question bank'],
     ]) ?>
 
@@ -52,6 +52,11 @@ echo ui_json_script('exams-config', ['page' => 'setup', 'item' => (int) $item['i
                     <label class="ui-check"><input type="checkbox" name="shuffle" value="1" checked><span>Shuffle per person</span></label>
                     <label class="ui-check"><input type="checkbox" name="part_marks" value="1"><span>Part marks<span class="ui-check__hint">Several answers: partly right earns part.</span></span></label>
                     <div><?= ui_button('Save', ['variant' => 'primary', 'type' => 'submit', 'icon' => 'check']) ?></div>
+                    <div class="ui-stack ui-stack--sm border-t border-line pt-3">
+                        <div class="ui-label-row"><span class="ui-label">Answers</span><?= ui_info('People see the right answer and the explanation for the questions they got wrong only when nobody can still be helped by them: at the closing time; with no closing time, the day after the training ends; with neither, when you show them here. You can also show them earlier.') ?></div>
+                        <p class="ui-meta" data-ex-review aria-live="polite"></p>
+                        <div><?= ui_button('Show answers', ['variant' => 'secondary', 'size' => 'sm', 'attrs' => ['data-action' => 'ex.answers', 'data-ex-answers' => true, 'data-show' => '1']]) ?></div>
+                    </div>
                 </div>
             </section>
             <section class="ui-card" aria-labelledby="ex-pick-title">

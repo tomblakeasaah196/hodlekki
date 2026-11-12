@@ -54,8 +54,11 @@ One exam per training item of type `exam` (`training_exams.item_id`, UNIQUE).
 | Firm once started | The questions, minutes, pass mark, shuffle and part marks cannot change once anyone has started; the times and the leave alert can. |
 
 **Results.** A learner sees the score, the percentage and Passed / Not passed straight away. For the questions they
-got **wrong** they see their answer, the right answer and the stored explanation, **once the exam has closed**
-(right away when it has no closing time), so nobody can pass answers to people still sitting it. Marking never calls
+got **wrong** they see their answer, the right answer and the stored explanation, only when nobody can still be
+helped by them (`exam_review_state()`): at the exam's closing time; with no closing time, the day after the
+training's end date; with neither (self-paced), when a tutor presses **Show answers** on the set-up page. A tutor may
+also show them earlier (and hide them again); the learner is told when they will show, before starting and on the
+result. Marking never calls
 the AI: explanations are written once per question (by the tutor, or by PR 4's AI with approval). Tutors see every
 attempt (and the enrolled people who have not started), each attempt in full with its timeline, and can hand in an
 attempt that is still running.
