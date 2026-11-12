@@ -50,6 +50,12 @@ Four steps make it complete, in this order:
    origin-certificate checks). Run it once from GitHub → Actions → "Outside probe" → Run workflow.
    Then add the Actions variable `MONITOR_PROBE_ENABLED` = `1` to start the hourly schedule (until then
    the scheduled run is skipped and uses no Actions minutes).
+   GitHub skips many scheduled runs (on 12 Nov 2026 one of twelve fired), so also put a fine-grained GitHub
+   token in `.env` as `MONITOR_PROBE_KICK_TOKEN=…`: this repository only, permission *Actions: Read and
+   write*. When no report has come for 70 minutes, `cron/monitor.php` asks GitHub to run the probe now
+   (at most once in 55 minutes; `monitor_probe_kick()` in `includes/monitor/probe.php`). The probe still runs
+   on GitHub's machines, so it still sees the site from outside. A refused ask (an expired token) shows in
+   the cron's line as "HTTP 401".
 4. **Optional, recommended:** Cloudflare → Notifications → *Passive origin monitoring* (free). It emails within
    minutes when Cloudflare cannot reach the server — the one failure this server cannot report itself.
 5. **Optional:** the prepend (section 3) for full detail on the dozen public pages that never load `db.php`.

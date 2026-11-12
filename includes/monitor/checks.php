@@ -589,7 +589,7 @@ function monitor_check_outside(array $latest, array $uptime, int $now, int $ever
     $lastAt = $latest ? max(array_map(fn ($r) => (int) $r['at'], $latest)) : null;
     $stale = $lastAt === null || $now - $lastAt > max(3 * $everyMin, 90) * 60;
     $grp = 'From outside';
-    $fixProbe = 'GitHub → Actions → "Outside probe": is it running, and are MONITOR_PROBE_SECRET (secret) and the URL set? DEPLOY.md → "Outside probe".';
+    $fixProbe = 'GitHub → Actions → "Outside probe": is it running, and are MONITOR_PROBE_SECRET (secret) and the URL set? GitHub skips scheduled runs: MONITOR_PROBE_KICK_TOKEN in .env lets the server start it (docs/monitor.md, "Outside probe").';
     if ($lastAt === null) {
         $checks[] = monitor_check('probe', $grp, 'Outside probe', 'unknown', 'No report from the outside probe yet.', $fixProbe);
         foreach (['outside_site' => 'hodlekki.org', 'outside_connect' => 'connect.hodlekki.org', 'tls' => 'Certificates', 'dns' => 'DNS and mail records', 'origin_lock' => 'Origin lock'] as $k => $l) {
