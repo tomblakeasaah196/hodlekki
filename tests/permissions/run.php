@@ -339,6 +339,25 @@ ok('history row written', perm_history_add($pdo, ['via' => 'test', 'change_type'
     'before' => ['level' => 3], 'after' => ['level' => 4], 'actor_user_id' => $sa, 'actor_label' => 'Test']));
 
 // ---------------------------------------------------------------------------
+section('Zoe checks each write');
+$zoeApi = '';   // the code, comments stripped
+foreach (token_get_all((string) file_get_contents($root . '/api/zoe_api.php')) as $tok) {
+    if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+        $zoeApi .= is_array($tok) ? $tok[1] : $tok;
+    }
+}
+ok('zoe_api needs the CSRF token and asks the matrix', str_contains($zoeApi, 'csrf_require();') && str_contains($zoeApi, "api_require_can('zoe');"));
+ok('a prayer request needs Create; running Zoe needs Manage',
+    str_contains($zoeApi, "api_require_can('zoe', 'create');") && str_contains($zoeApi, "\$is_zoe_admin = can('zoe', 'manage');")
+    && str_contains($zoeApi, 'in_array($action, $admin_actions, true) && !$is_zoe_admin'));
+ok('the bulletin is a PDF through the upload guard, and its link is never taken from the request',
+    str_contains($zoeApi, "hod_upload_store(\$_FILES['bulletin_pdf']") && str_contains($zoeApi, "['pdf']")
+    && !str_contains($zoeApi, 'existing_pdf_url') && !str_contains($zoeApi, 'move_uploaded_file'));
+ok('post type, statuses, marks and roster type come from fixed lists',
+    str_contains($zoeApi, 'in_array($type, $post_types, true)') && str_contains($zoeApi, 'in_array($status, $request_statuses, true)')
+    && str_contains($zoeApi, 'in_array($status, $marks, true)') && str_contains($zoeApi, 'in_array($type, $roster_types, true)'));
+
+// ---------------------------------------------------------------------------
 section('Day-one parity of a synthetic church');
 $pdo = perm_test_db();
 $people = [];
