@@ -36,7 +36,7 @@ const MONITOR_BELLS_PER_HOUR  = 3;
 /** The monitor's screen, relative (bells) or absolute (emails); the home page until the screen exists. */
 function monitor_screen_link(string $fragment = '', bool $absolute = false): string
 {
-    $path = is_file(monitor_root() . '/modules/monitor/index.php') ? '/modules/monitor/index.php' . $fragment : '/index.php';
+    $path = is_file(monitor_root() . '/modules/monitor/index.php') ? '/modules/monitor/' . $fragment : '/';
 
     return $absolute ? site_url($path) : $path;
 }
@@ -236,7 +236,7 @@ function monitor_email_recipients(PDO $db, string $kind, string $subject, string
     $error = null;
     $button = monitor_screen_link('', true);
     foreach ($recipients as $r) {
-        $stop = site_url('/monitor_confirm.php?stop=' . rawurlencode(monitor_stop_token($r)));
+        $stop = site_url('/monitor_confirm?stop=' . rawurlencode(monitor_stop_token($r)));
         $res = monitor_mail($db, (string) $r['email'], $subject,
             monitor_email_html($heading, $intro, $sections, $button, 'Open the monitor', $stop),
             monitor_email_text($heading, $intro, $sections, $button, $stop), $kind);
@@ -552,7 +552,7 @@ function monitor_recipient_add(PDO $db, string $email, ?int $by): array
            ->execute([$email, hash('sha256', $secret), $expires, $by, $now]);
         $id = (int) $db->lastInsertId();
     }
-    $link = site_url('/monitor_confirm.php?t=' . $id . '.' . $secret);
+    $link = site_url('/monitor_confirm?t=' . $id . '.' . $secret);
     $heading = 'Confirm the system alerts';
     $intro = 'Someone with admin access to ' . site_host() . ' asked for this address to receive the site\'s system alerts: new errors, health problems, and a short summary each morning. '
         . 'Nothing is sent until you confirm. If you did not expect this, ignore this email.';

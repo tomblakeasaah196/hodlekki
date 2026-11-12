@@ -669,7 +669,7 @@ ct_eq('Mon 26 Oct: Musa at three (nothing new); Nkechi now two Sundays after her
 ct_eq('Mon 2 Nov, four missed: the team is told', ['50:team_alert:alerted'], $weekly($a, '2026-11-02'));
 $bell = $a->query("SELECT * FROM system_notifications WHERE user_id = 901")->fetch();
 ct_ok('…the Charis HOD gets a bell naming Musa and the streak', $bell && str_contains($bell['title'], '4 Sundays away: Musa Test')
-    && $bell['link_url'] === '/modules/charis/index.php');
+    && $bell['link_url'] === '/modules/charis/');
 foreach (['2026-11-09', '2026-11-16', '2026-11-23'] as $m) {
     $weekly($a, $m);
 }
@@ -1002,7 +1002,7 @@ ct_ok('the old sign-in name may ask; the link goes to the confirmed email', $req
 $resetMail = $p->query("SELECT * FROM email_outbox WHERE flow = 'password_reset' ORDER BY id DESC LIMIT 1")->fetch();
 ct_ok('…as account mail, first in line, to grace.real@gmail.com', $resetMail['to_email'] === 'grace.real@gmail.com'
     && $resetMail['lane'] === 'transactional' && $resetMail['purpose'] === 'account');
-ct_ok('…carrying the link', str_contains((string) $resetMail['html'], 'https://hodlekki.org/auth/reset_password.php?t=' . $req['token']));
+ct_ok('…carrying the link', str_contains((string) $resetMail['html'], 'https://hodlekki.org/auth/reset_password?t=' . $req['token']));
 ct_eq('the raw token is never stored', 0, ct_count($p, 'auth_reset_tokens', 'token_hash = ?', [$req['token']]));
 ct_eq('the link opens the form', 'valid', email_reset_peek($p, $req['token'])['state']);
 ct_eq('mismatch is refused', 'MISMATCH', email_reset_complete($p, $req['token'], 'Abcdefgh12!x', 'Abcdefgh12!y')['code'] ?? null);

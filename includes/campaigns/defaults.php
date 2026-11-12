@@ -51,7 +51,7 @@ function automation_default_doc(string $subject, string $preheader, string $head
 function automation_default_journey(): array
 {
     $home = site_url('/');
-    $sermons = site_url('/sermons.php');
+    $sermons = site_url('/sermons');
     $reply = 'If you have a question or something we can pray with you about, just reply to this email. A real person from our Embrace team reads every reply.';
 
     $weeks = [
@@ -200,7 +200,7 @@ function automation_default_journey(): array
 
 function automation_default_absence(string $module): array
 {
-    $sermons = site_url('/sermons.php');
+    $sermons = site_url('/sermons');
     $team = $module === 'charis' ? 'Charis' : 'Assimilation';
     $statuses = $module === 'charis' ? ['Member', 'Worker', 'Pastor'] : ['Visitor', 'Non_Member'];
 

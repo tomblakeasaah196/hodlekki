@@ -536,7 +536,9 @@ echo "\nWiring (static; the engine tests above are what prove behaviour)\n";
     };
     ok('a roster clock-in runs the ladder', $has('api/events_api.php', 'ladder_advance_user($pdo, (int) $target_user_id)'));
     ok('clocking out runs the rollback', $has('api/events_api.php', 'ladder_rollback_user($pdo, (int) $target_user_id)'));
-    ok('QR check-in runs the ladder (registered) and (walk-in)', substr_count((string) file_get_contents($root . '/api/checkin_api.php'), 'ladder_advance_user(') === 2);
+    // Three check-in paths can record a member's attendance: a registered person, a walk-in who registers there,
+    // and a service guest whose number turns out to be a member's (guest_present, #175).
+    ok('QR check-in runs the ladder (registered), (walk-in) and (service guest who is a member)', substr_count((string) file_get_contents($root . '/api/checkin_api.php'), 'ladder_advance_user(') === 3);
     ok('the Events profile editor records status changes', $has('api/events_api.php', "'events_profile'"));
     ok('the Congregation editor records status changes', $has('api/congregation_api.php', "'congregation_edit'"));
     ok('Embrace push records status changes', $has('api/embrace_api.php', "'embrace_push'"));

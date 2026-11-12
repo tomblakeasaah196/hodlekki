@@ -70,10 +70,17 @@ function auth_safe_next($raw): ?string
     if ($rest !== '' && (!preg_match('#^[?\#][A-Za-z0-9/_\-.~?=&%+,:\#]*$#D', $rest) || str_contains($rest, '//'))) {
         return null;
     }
-    if (!preg_match('#^/(?:modules/[A-Za-z0-9_\-]+/|e/[A-Za-z0-9_\-]|[A-Za-z0-9_\-]+\.php$)#D', $path)) {
+    // A module, a Special Events surface, or a page at the root: clean
+    // (/testimonies) or by its old .php name (links made before clean URLs).
+    if (!preg_match('#^/(?:modules/[A-Za-z0-9_\-]+/|e/[A-Za-z0-9_\-]|[A-Za-z0-9_\-]+(?:\.php)?$)#D', $path)) {
         return null;
     }
-    if ($path === '/index.php') {
+    // The dashboard, under either name.
+    if ($path === '/' || $path === '/index.php' || $path === '/index') {   // clean-urls: old name
+        return null;
+    }
+    // A sign-in or API address is never somewhere to return to.
+    if (preg_match('#^/(?:auth|api|webhook|email|includes|cron|db|bin|assets|uploads)$#', $path)) {
         return null;
     }
 
@@ -83,7 +90,7 @@ function auth_safe_next($raw): ?string
 function auth_login_url(?string $next = null): string
 {
     $safe = auth_safe_next($next);
-    return '/auth/login.php' . ($safe !== null ? '?next=' . rawurlencode($safe) : '');
+    return '/auth/login' . ($safe !== null ? '?next=' . rawurlencode($safe) : '');
 }
 
 /**
@@ -95,7 +102,7 @@ function auth_login_url_for_request(): string
 {
     $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     if ($method !== 'GET' && $method !== 'HEAD') {
-        return '/auth/login.php';
+        return '/auth/login';
     }
     return auth_login_url((string) ($_SERVER['REQUEST_URI'] ?? ''));
 }

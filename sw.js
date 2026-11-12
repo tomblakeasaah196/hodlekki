@@ -36,7 +36,7 @@
 // is a bug, not a feature.
 // ===========================================================================
 
-const VERSION = 'v2.0.0';
+const VERSION = 'v2.1.0';   // v2.1.0: clean addresses (no .php), so phones drop the old copies
 const STATIC_CACHE = `hod-static-${VERSION}`;
 const VENDOR_CACHE = `hod-vendor-${VERSION}`;
 // Content-hashed files: one entry per path (the newest), kept across versions.
@@ -296,7 +296,7 @@ async function navigate(event) {
     const request = event.request;
     const network = fetch(request).then((response) => {
         const mark = response.headers.get('X-HOD-Offline') || '';
-        // A redirect (an ended session is sent to /auth/login.php) arrives
+        // A redirect (an ended session is sent to /auth/login) arrives
         // here as an opaque redirect and is never kept; the browser then
         // navigates to /auth/, which wipes every copy (see the fetch handler).
         if (response.ok && response.type === 'basic' && !response.redirected && mark.startsWith('snapshot')) {
@@ -373,7 +373,7 @@ function parsePush(event) {
     const fallback = {
         title: 'HOD Lekki',
         body: 'You have a new notification.',
-        url: '/index.php',
+        url: '/',
         tag: 'hod-notif',
         badge: 0,
     };
@@ -445,7 +445,7 @@ self.addEventListener('notificationclick', (event) => {
 
     if (event.action === 'dismiss') return;
 
-    const target = (event.notification.data && event.notification.data.url) || '/index.php';
+    const target = (event.notification.data && event.notification.data.url) || '/';
 
     event.waitUntil(
         (async () => {

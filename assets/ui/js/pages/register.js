@@ -28,7 +28,7 @@
         $('reg-error-text').textContent = message;
         if (login) {
             var link = $('reg-error-link');
-            link.setAttribute('href', cfg.login || '/auth/login.php');
+            link.setAttribute('href', cfg.login || '/auth/login');
             var spans = link.querySelectorAll('span');
             if (spans.length) spans[spans.length - 1].textContent = 'Go to login';
             link.classList.remove('ui-btn--secondary');

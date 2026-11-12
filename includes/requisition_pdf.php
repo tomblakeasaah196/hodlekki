@@ -9,7 +9,7 @@ require_once __DIR__ . '/db.php';
 
 // ─── Auth Guard ───────────────────────────────────────────
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /auth/login.php');
+    header('Location: /auth/login');
     exit;
 }
 

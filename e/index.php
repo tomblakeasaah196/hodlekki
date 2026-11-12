@@ -144,11 +144,11 @@ if ($path === '') {
     // return path (§21.4), and honour a forced password change (§19.2).
     if (empty($_SESSION['user_id'])) {
         $next = se_event_url($slug, $path, false);
-        header('Location: /auth/login.php?next=' . rawurlencode($next));
+        header('Location: /auth/login?next=' . rawurlencode($next));
         exit;
     }
     if (!empty($_SESSION['must_change_password'])) {
-        header('Location: /auth/change_password.php');
+        header('Location: /auth/change_password');
         exit;
     }
 } else {

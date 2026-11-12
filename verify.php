@@ -21,7 +21,7 @@ ui_public_open([
     'mode' => 'strict',
     'indexable' => true,
     'scripts' => ['/assets/ui/js/pages/verify.js'],
-    'home' => '/index.php',
+    'home' => '/',
 ]);
 ?>
 <div class="mx-auto max-w-2xl px-4 py-10 sm:py-16">

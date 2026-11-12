@@ -99,7 +99,7 @@ try {
                 $approvers = perm_office_holders($pdo, 'announcements', 'approve');
 
                 if (!empty($approvers)) {
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Pending Announcement', ?, '/modules/announcements/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Pending Announcement', ?, '/modules/announcements/')");
                     $alertMessage = "A new announcement titled '{$title}' has been submitted and is awaiting your approval.";
                     foreach($approvers as $uid) {
                         // Prevent sending an alert to themselves if an admin/pastor submits it
@@ -146,7 +146,7 @@ try {
             if ($announcement && !empty($announcement['submitted_by'])) {
                 // Ensure we don't notify the approver if they are approving their own post
                 if ($announcement['submitted_by'] != $user_id) {
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Announcement Update', ?, '/modules/announcements/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Announcement Update', ?, '/modules/announcements/')");
                     $message = "Your announcement titled '{$announcement['title']}' has been marked as {$new_status}.";
                     $notifStmt->execute([$announcement['submitted_by'], $message]);
                 }

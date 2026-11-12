@@ -1,5 +1,5 @@
 <?php
-// /checkin.php
+// /checkin
 // Check-in at the door, on the public layout (strict CSP, self-hosted assets).
 // Opened from a QR code:
 //   /checkin?event=TOKEN    one event (its own check-in QR)
@@ -36,7 +36,7 @@ echo ui_json_script('checkin-config', [
     'csrf' => $_SESSION['checkin_csrf'],
     'token' => $token,
     'service' => $service,
-    'connect' => site_url('/connect.php'),
+    'connect' => site_url('/connect'),
 ]);
 $sources = [
     '' => 'Choose one',
@@ -80,7 +80,7 @@ $sources = [
                     <div class="ci-countdown__unit"><span class="ci-countdown__num ui-num" data-ci-unit="s">00</span><span class="ci-countdown__label">seconds</span></div>
                 </div>
                 <p class="text-sm text-ink-muted">Check-in opens on the day of the service.</p>
-                <?= ui_button('I’m new here', ['variant' => 'secondary', 'icon' => 'heart-handshake', 'href' => site_url('/connect.php')]) ?>
+                <?= ui_button('I’m new here', ['variant' => 'secondary', 'icon' => 'heart-handshake', 'href' => site_url('/connect')]) ?>
             </section>
 
             <!-- Nothing to check in to -->

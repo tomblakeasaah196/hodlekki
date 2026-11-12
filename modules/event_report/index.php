@@ -35,7 +35,7 @@ function er_tile(string $key, string $label, string $meta): string
         'title' => 'Event report',
         'description' => 'Promotion, registration, attendance and follow-up.',
         'info' => 'Pick an event to see its numbers. SMS sent from SMS Studio is counted on its own; BulkSMS campaigns sent elsewhere can be logged here so their cost is included. The PDF has every section.',
-        'back' => ['href' => '/modules/events/index.php', 'label' => 'Events'],
+        'back' => ['href' => '/modules/events/', 'label' => 'Events'],
     ]) ?>
 
     <div class="ui-toolbar mb-4">

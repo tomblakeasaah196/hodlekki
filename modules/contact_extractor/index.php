@@ -29,7 +29,7 @@ function ce_tile(string $key, string $label, string $meta): string
         'title' => 'Contact extractor',
         'description' => 'Every phone number, once.',
         'info' => 'Numbers come from members, event registrations, the IDI lists and guests checked in at a service. Each is written as 234… and appears once, even when it is in several places. Split them into batches to paste into BulkSMS.',
-        'back' => ['href' => '/modules/events/index.php', 'label' => 'Events'],
+        'back' => ['href' => '/modules/events/', 'label' => 'Events'],
     ]) ?>
 
 <?php if (!$ceCanLoad): ?>

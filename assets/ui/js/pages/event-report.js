@@ -41,7 +41,7 @@
         var h = '';
         (sys || []).forEach(function (s) {
             h += '<tr><td data-label="Campaign"><span class="ui-table__primary">' + esc(s.title) + '</span> <span class="ui-badge ui-badge--info">SMS Studio</span>' +
-                '<a class="ui-link mt-1 block text-xs" href="/modules/sms_studio/index.php?campaign=' + encodeURIComponent(s.campaign_ids || '') + '">' + num(s.delivered) + ' delivered · open</a></td>' +
+                '<a class="ui-link mt-1 block text-xs" href="/modules/sms_studio/?campaign=' + encodeURIComponent(s.campaign_ids || '') + '">' + num(s.delivered) + ' delivered · open</a></td>' +
                 '<td data-label="Sent" class="ui-num">' + esc(String(s.last_sent || '').slice(0, 10)) + '</td>' +
                 '<td data-label="Recipients" class="ui-num">' + num(s.uniq) + '</td>' +
                 '<td data-label="Pages" class="ui-num">1</td>' +

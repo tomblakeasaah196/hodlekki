@@ -19,7 +19,7 @@ require_once '../includes/bible/bootstrap.php';
 const BIBLE_EXPORT_LICENSED_VERSES = 400;
 
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /auth/login.php');
+    header('Location: /auth/login');
     exit;
 }
 $userId    = (int) $_SESSION['user_id'];
@@ -32,7 +32,7 @@ function bible_export_fail(string $message, int $http = 400): void
     header('Content-Type: text/html; charset=utf-8');
     echo '<!doctype html><meta charset="utf-8"><title>Export</title><body style="font-family:sans-serif;padding:2rem;color:#334155">'
         . '<h2>We could not make your PDF</h2><p>' . htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . '</p>'
-        . '<p><a href="/modules/bible/index.php">Back to The Bible</a></p></body>';
+        . '<p><a href="/modules/bible/">Back to The Bible</a></p></body>';
     exit;
 }
 

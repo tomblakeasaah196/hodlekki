@@ -283,11 +283,11 @@ function se_handoff_push(PDO $pdo, array $event, array $options, array $override
         $label = trim($event['title'] . ' ' . ($event['edition_label'] ?? ''));
 
         if ($reachCampaign) {
-            reach_notify($pdo, $reachIds, 'Special Event guests ready', ($counts['created'] ?? 0) . ' guests from ' . $label . ' are ready in Reach.', '/modules/reach/index.php');
+            reach_notify($pdo, $reachIds, 'Special Event guests ready', ($counts['created'] ?? 0) . ' guests from ' . $label . ' are ready in Reach.', '/modules/reach/');
         }
 
         if (($counts['created'] ?? 0) > 0) {
-            reach_notify($pdo, $embraceIds, 'Special Event first-timers', ($counts['created'] ?? 0) . ' hand-off records from ' . $label . ' are ready to review.', '/modules/embrace/index.php');
+            reach_notify($pdo, $embraceIds, 'Special Event first-timers', ($counts['created'] ?? 0) . ' hand-off records from ' . $label . ' are ready to review.', '/modules/embrace/');
         }
     }
 

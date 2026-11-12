@@ -808,7 +808,7 @@ function se_messages_studio(PDO $pdo, array $event): array
         'sms'      => [
             'available'     => se_sms_available($pdo),
             'worker_fresh'  => se_sms_worker_fresh($pdo),
-            'studio_url'    => '/modules/sms_studio/index.php',
+            'studio_url'    => '/modules/sms_studio/',
         ],
         'max_lateness_min' => se_int($settings['messages']['max_lateness_min'] ?? 90, 0, 1440, 90),
     ];
@@ -841,7 +841,7 @@ function se_message_runs(PDO $pdo, int $eventId, int $limit = 50): array
             'est_units'     => (int) $row['est_units'],
             'detail'        => $row['detail'] ?? null,
             'campaign_id'   => $campaignId,
-            'campaign_url'  => $campaignId !== null ? '/modules/sms_studio/index.php?campaign=' . $campaignId : null,
+            'campaign_url'  => $campaignId !== null ? '/modules/sms_studio/?campaign=' . $campaignId : null,
             'created_at'    => se_iso($row['created_at'] ?? null),
         ];
     }

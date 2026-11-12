@@ -128,7 +128,7 @@ try {
             $env_leaders = perm_module_leaders($pdo, 'envision', 'hod');
 
             if (!empty($env_leaders)) {
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Sermon Engagement', ?, '/modules/envision/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Sermon Engagement', ?, '/modules/envision/')");
                 
                 // Tailor the message based on what happened
                 if ($is_approved === 0) {

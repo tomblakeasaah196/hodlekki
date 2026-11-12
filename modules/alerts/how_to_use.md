@@ -58,7 +58,7 @@ a counter shows how many of the 120 and 400 characters you have used.
 - **Message** shows as roughly two lines. The whole thing is always readable in
   the bell.
 - **Opens when tapped** must be a path on this site, such as
-  `/modules/events/index.php`. Anything else quietly becomes the dashboard —
+  `/modules/events/`. Anything else quietly becomes the dashboard —
   that is on purpose, so a notification can never send somebody off to another
   website wearing our name.
 

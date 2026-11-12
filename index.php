@@ -52,7 +52,7 @@ $dashName = trim((string) ($_SESSION['first_name'] ?? ''));
                         <h2 class="ui-card__title" id="dash-notices">Ministry notices</h2>
                         <p class="ui-card__description">Announcements for the coming services.</p>
                     </div>
-                    <?= ui_button('Publish a notice', ['size' => 'sm', 'icon' => 'megaphone', 'href' => '/modules/announcements/index.php']) ?>
+                    <?= ui_button('Publish a notice', ['size' => 'sm', 'icon' => 'megaphone', 'href' => '/modules/announcements/']) ?>
                 </div>
                 <div data-dash-notices>
                     <div class="ui-card__body" aria-hidden="true">
@@ -68,10 +68,10 @@ $dashName = trim((string) ($_SESSION['first_name'] ?? ''));
                     <h2 class="ui-card__title" id="dash-tools">Quick actions</h2>
                 </div>
                 <ul class="ui-list">
-                    <li><a class="ui-list__item" href="/modules/events/index.php"><span class="ui-list__icon"><?= ui_icon('calendar-check') ?></span><span class="ui-list__main"><span class="ui-list__title">Attendance</span><span class="ui-list__meta">Services, check-ins and reports</span></span><span class="ui-list__end"><?= ui_icon('chevron-right') ?></span></a></li>
-                    <li><a class="ui-list__item" href="/modules/embrace/index.php"><span class="ui-list__icon"><?= ui_icon('user-round-plus') ?></span><span class="ui-list__main"><span class="ui-list__title">First timers</span><span class="ui-list__meta">Welcome and follow-up</span></span><span class="ui-list__end"><?= ui_icon('chevron-right') ?></span></a></li>
-                    <li><a class="ui-list__item" href="/modules/announcements/index.php"><span class="ui-list__icon"><?= ui_icon('megaphone') ?></span><span class="ui-list__main"><span class="ui-list__title">Notices</span><span class="ui-list__meta">Publish to the next services</span></span><span class="ui-list__end"><?= ui_icon('chevron-right') ?></span></a></li>
-                    <li><a class="ui-list__item" href="/modules/pastoral/index.php"><span class="ui-list__icon"><?= ui_icon('messages-square') ?></span><span class="ui-list__main"><span class="ui-list__title">Pastoral desk</span><span class="ui-list__meta">Questions and impressions</span></span><span class="ui-list__end"><?= ui_icon('chevron-right') ?></span></a></li>
+                    <li><a class="ui-list__item" href="/modules/events/"><span class="ui-list__icon"><?= ui_icon('calendar-check') ?></span><span class="ui-list__main"><span class="ui-list__title">Attendance</span><span class="ui-list__meta">Services, check-ins and reports</span></span><span class="ui-list__end"><?= ui_icon('chevron-right') ?></span></a></li>
+                    <li><a class="ui-list__item" href="/modules/embrace/"><span class="ui-list__icon"><?= ui_icon('user-round-plus') ?></span><span class="ui-list__main"><span class="ui-list__title">First timers</span><span class="ui-list__meta">Welcome and follow-up</span></span><span class="ui-list__end"><?= ui_icon('chevron-right') ?></span></a></li>
+                    <li><a class="ui-list__item" href="/modules/announcements/"><span class="ui-list__icon"><?= ui_icon('megaphone') ?></span><span class="ui-list__main"><span class="ui-list__title">Notices</span><span class="ui-list__meta">Publish to the next services</span></span><span class="ui-list__end"><?= ui_icon('chevron-right') ?></span></a></li>
+                    <li><a class="ui-list__item" href="/modules/pastoral/"><span class="ui-list__icon"><?= ui_icon('messages-square') ?></span><span class="ui-list__main"><span class="ui-list__title">Pastoral desk</span><span class="ui-list__meta">Questions and impressions</span></span><span class="ui-list__end"><?= ui_icon('chevron-right') ?></span></a></li>
                 </ul>
             </section>
         </div>

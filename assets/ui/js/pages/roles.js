@@ -438,7 +438,7 @@
 
     HOD.actions.on('roles.viewas', function (btn) {
         call('view_as_start', { kind: btn.getAttribute('data-kind'), id: btn.getAttribute('data-id') }).then(function () {
-            window.location.href = '/index.php';
+            window.location.href = '/';
         }).catch(failed);
     });
 
@@ -763,7 +763,7 @@
             if (s.can_roll) {
                 var acts = el('div', 'ui-banner__actions');
                 var a = el('a', 'ui-btn ui-btn--primary ui-btn--sm', 'Roll over year');
-                a.href = '/modules/departments/index.php#rollover';
+                a.href = '/modules/departments/#rollover';
                 acts.appendChild(a);
                 bb.appendChild(acts);
             }

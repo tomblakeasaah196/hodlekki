@@ -90,7 +90,7 @@ foreach ($tabs as $k => $t) {
         'actions' => $ready
             ? ui_button('Scan logs now', ['variant' => 'secondary', 'icon' => 'refresh-cw', 'attrs' => ['data-action' => 'monitor.scan']])
               . ui_button('Export open errors', ['variant' => 'secondary', 'icon' => 'file-down', 'href' => '/api/monitor_api.php?action=export'])
-              . ($wall ? ui_button('Open live wall', ['variant' => 'primary', 'icon' => 'external-link', 'href' => '/modules/monitor/wall.php#k=' . $wall, 'attrs' => ['target' => '_blank', 'rel' => 'noopener']]) : '')
+              . ($wall ? ui_button('Open live wall', ['variant' => 'primary', 'icon' => 'external-link', 'href' => '/modules/monitor/wall#k=' . $wall, 'attrs' => ['target' => '_blank', 'rel' => 'noopener']]) : '')
             : '',
     ]) ?>
 
@@ -369,7 +369,7 @@ foreach ($tabs as $k => $t) {
                         <p class="ui-meta">A full-screen view for a TV. <?= ui_info('Health, errors as they happen, uptime and speed. It needs no sign-in; the link itself is the key, so share it only with the team.', 'About the live wall') ?></p>
                         <div class="ui-input-group">
                             <label class="sr-only" for="monitor-wall-link">Live wall link</label>
-                            <input class="ui-input" id="monitor-wall-link" readonly value="<?= ui_e(site_url('/modules/monitor/wall.php#k=' . $wall)) ?>">
+                            <input class="ui-input" id="monitor-wall-link" readonly value="<?= ui_e(site_url('/modules/monitor/wall#k=' . $wall)) ?>">
                             <?= ui_button('Copy link', ['variant' => 'secondary', 'icon' => 'copy', 'attrs' => ['data-action' => 'monitor.copy-wall']]) ?>
                         </div>
                         <div><?= ui_button('New link', ['variant' => 'danger-ghost', 'size' => 'sm', 'icon' => 'refresh-cw', 'attrs' => ['data-action' => 'monitor.wall-rotate']]) ?></div>

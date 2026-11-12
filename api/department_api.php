@@ -75,7 +75,7 @@ function dept_leader_ids(PDO $pdo, int $dept_id, int $except = 0): array
     return array_keys($ids);
 }
 
-function dept_notify(PDO $pdo, $user_id, string $title, string $message, string $link = '/modules/departments/index.php'): void
+function dept_notify(PDO $pdo, $user_id, string $title, string $message, string $link = '/modules/departments/'): void
 {
     if (!$user_id) {
         return;
@@ -141,7 +141,7 @@ function dept_rollover_tell(PDO $pdo, array $carried, array $ctx): void
             $words[] = ($labels[$role] ?? str_replace('_', ' ', $role)) . ', ' . ($names[$deptId] ?? '');
         }
         dept_notify($pdo, (int) $uid, 'Serving in ' . $ctx['year_label'],
-            'You serve as ' . implode('; ', $words) . " in {$ctx['year_label']}. Thank you!", '/modules/profile/index.php');
+            'You serve as ' . implode('; ', $words) . " in {$ctx['year_label']}. Thank you!", '/modules/profile/');
     }
 }
 
@@ -256,7 +256,7 @@ function dept_set_leader(PDO $pdo, array $ctx, array $dept, string $role, ?int $
             $old,
             'Department Update',
             "You have been relieved of duty as {$label} of {$dept['name']}. Thank you for your service — you have been removed from the department roster and can be re-added at any time.",
-            '/modules/profile/index.php'
+            '/modules/profile/'
         );
     }
 
@@ -714,7 +714,7 @@ try {
                 'Department Assignment',
                 "You have been assigned to the {$dept['name']} department as a " . dept_role_label($role)
                     . " ({$membership} member) for {$ctx['year_label']}.",
-                '/modules/profile/index.php'
+                '/modules/profile/'
             );
 
             // Alert the department's leadership.
@@ -792,7 +792,7 @@ try {
                 (int) $record['user_id'],
                 'Department Update',
                 "You have been removed from the {$record['dept_name']} department roster. Thank you for your service — you can be added back at any time.",
-                '/modules/profile/index.php'
+                '/modules/profile/'
             );
 
             echo json_encode([

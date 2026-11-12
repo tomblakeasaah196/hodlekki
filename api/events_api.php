@@ -247,7 +247,7 @@ try {
             if ($department_id) {
                 $dept_leaders = perm_department_leaders($pdo, (int) $department_id);
                 if (!empty($dept_leaders)) {
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Department Event', ?, '/modules/events/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Department Event', ?, '/modules/events/')");
                     $nice_date = date('M jS, Y', strtotime($event_date));
                     foreach ($dept_leaders as $leader_id) {
                         if ($leader_id != $user_id) {
@@ -920,11 +920,11 @@ try {
 
                 $idi_users = perm_module_team($pdo, 'idi');
                 foreach (array_diff(perm_module_leaders($pdo, 'embrace', 'hod'), $idi_users) as $uid) {
-                    $notifStmt->execute([$uid, 'New First Timer', "{$safe_name} was added as a first timer from the Events Attendance desk and is waiting in the queue to be assigned.", '/modules/embrace/index.php']);
+                    $notifStmt->execute([$uid, 'New First Timer', "{$safe_name} was added as a first timer from the Events Attendance desk and is waiting in the queue to be assigned.", '/modules/embrace/']);
                 }
 
                 foreach ($idi_users as $uid) {
-                    $notifStmt->execute([$uid, 'New Connect Card Profile', "A new profile for {$safe_name} was generated from the Events Attendance desk. Please review the entry.", '/modules/congregation/index.php']);
+                    $notifStmt->execute([$uid, 'New Connect Card Profile', "A new profile for {$safe_name} was generated from the Events Attendance desk. Please review the entry.", '/modules/congregation/']);
                 }
             } catch (Throwable $e) {
                 error_log("Events API (create_first_timer notifications, user {$new_id}): " . $e->getMessage());
@@ -1122,7 +1122,7 @@ try {
                 $evtStmt->execute([$event_id]);
                 $evtTitle = $evtStmt->fetchColumn() ?: 'an event';
 
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Event Report Updated', ?, '/modules/events/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Event Report Updated', ?, '/modules/events/')");
                 $alertMsg = "The post-event report for '{$evtTitle}' has been submitted/updated and is ready for review.";
 
                 foreach ($pastors as $uid) {
@@ -1164,7 +1164,7 @@ try {
 
             if ($eventData && $eventData['created_by']) {
                 if ($eventData['created_by'] != $user_id) {
-                    $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Event Unlocked', ?, '/modules/events/index.php')")
+                    $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Event Unlocked', ?, '/modules/events/')")
                         ->execute([$eventData['created_by'], "Super Admin Override: Your event '{$eventData['title']}' has been unlocked. You may now modify attendance and report records."]);
                 }
             }

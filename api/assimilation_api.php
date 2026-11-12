@@ -372,7 +372,7 @@ try {
                         assim_notify($pdo, $aud['volunteers'], 'New open watchlist',
                             "\"{$name}\" — {$count} " . ($count === 1 ? 'person is' : 'people are')
                             . ' waiting on your volunteer page. Pick someone and call them with love.',
-                            '/assimilation.php');
+                            '/assimilation');
                     }
                 }
                 // Volunteers can only claim if self-pick is on; an open list
@@ -636,13 +636,13 @@ try {
                 ");
                 $rl->execute(['%' . $key . '%']);
                 if ($lead = $rl->fetch(PDO::FETCH_ASSOC)) {
-                    $links[] = ['module' => 'Reach', 'label' => 'Open Reach lead · ' . str_replace('_', ' ', $lead['status']), 'url' => '/modules/reach/index.php'];
+                    $links[] = ['module' => 'Reach', 'label' => 'Open Reach lead · ' . str_replace('_', ' ', $lead['status']), 'url' => '/modules/reach/'];
                 }
             }
             $eb = $pdo->prepare("SELECT id FROM embrace_followups WHERE visitor_id = ? AND status = 'Pending' ORDER BY id DESC LIMIT 1");
             $eb->execute([$person]);
             if ($eb->fetchColumn()) {
-                $links[] = ['module' => 'Embrace', 'label' => 'Open Embrace first-timer follow-up', 'url' => '/modules/embrace/index.php'];
+                $links[] = ['module' => 'Embrace', 'label' => 'Open Embrace first-timer follow-up', 'url' => '/modules/embrace/'];
             }
 
             $case['is_overdue'] = $case['closed_at'] === null && $case['assigned_to'] !== null
@@ -928,7 +928,7 @@ try {
                 $added++;
                 assim_notify($pdo, [$uid], 'Welcome to the Assimilation team',
                     assim_user_name($pdo, $user_id) . ' added you to the Assimilation team. Open the volunteer page to see who you are calling.',
-                    '/assimilation.php');
+                    '/assimilation');
             }
             echo json_encode(['status' => 'success', 'message' => $added === 1 ? 'Volunteer added.' : "{$added} volunteers added.", 'data' => assim_team($pdo)]);
             break;

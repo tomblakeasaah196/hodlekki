@@ -26,7 +26,7 @@ echo ui_json_script('event-qr-config', [
         'title' => 'Event QR poster',
         'description' => 'A 16:9 poster with the registration QR.',
         'info' => 'The QR opens the event’s registration page. Events with their Registration link off (services, for one) have nothing to register for; use the Check-in QR for them.',
-        'back' => ['href' => '/modules/events/index.php', 'label' => 'Events'],
+        'back' => ['href' => '/modules/events/', 'label' => 'Events'],
     ]) ?>
 
     <div class="grid gap-6 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
@@ -56,7 +56,7 @@ echo ui_json_script('event-qr-config', [
                 </div>
                 <div class="ui-banner ui-banner--warning mb-3" id="eq-nolink" role="status" hidden>
                     <?= ui_icon('triangle-alert') ?>
-                    <div class="ui-banner__body"><p class="ui-banner__text">No registration link, so no QR.</p><p class="ui-banner__text"><a class="ui-link" href="/modules/checkin_qr/index.php">Use the Check-in QR</a></p></div>
+                    <div class="ui-banner__body"><p class="ui-banner__text">No registration link, so no QR.</p><p class="ui-banner__text"><a class="ui-link" href="/modules/checkin_qr/">Use the Check-in QR</a></p></div>
                 </div>
                 <canvas class="block h-auto w-full rounded-ui shadow-md" id="eq-canvas" width="1600" height="900" role="img" aria-label="Event poster preview" hidden></canvas>
             </div>

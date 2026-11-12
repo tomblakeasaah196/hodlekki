@@ -276,7 +276,7 @@
                 sessionStorage.setItem(PREFILL_KEY, JSON.stringify(Object.assign({ at: Date.now() }, state.prefill)));
             } catch (e) { /* private mode: the card opens empty */ }
         }
-        window.location.href = cfg.connect || '/connect.php';
+        window.location.href = cfg.connect || '/connect';
     });
 
     function blessingText() {

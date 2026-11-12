@@ -118,14 +118,14 @@ function email_prompt_banner(PDO $pdo, int $userId): string
     if ($pending === null) {
         return '';
     }
-    $here = function_exists('auth_safe_next') ? (auth_safe_next((string) ($_SERVER['REQUEST_URI'] ?? '')) ?? '/index.php') : '/index.php';
-    $actions = '<form method="post" action="/auth/add_email.php" class="flex items-center gap-3">'
+    $here = function_exists('auth_safe_next') ? (auth_safe_next((string) ($_SERVER['REQUEST_URI'] ?? '')) ?? '/') : '/';
+    $actions = '<form method="post" action="/auth/add_email" class="flex items-center gap-3">'
         . ui_csrf_field()
         . '<input type="hidden" name="do" value="resend">'
         . '<input type="hidden" name="back" value="' . ui_e($here) . '">'
         . '<input type="hidden" name="next" value="' . ui_e($here) . '">'
         . ui_button('Resend', ['variant' => 'secondary', 'size' => 'sm', 'type' => 'submit'])
-        . '<a class="ui-link" href="/auth/add_email.php?next=' . ui_e(rawurlencode($here)) . '">Wrong email?</a>'
+        . '<a class="ui-link" href="/auth/add_email?next=' . ui_e(rawurlencode($here)) . '">Wrong email?</a>'
         . '</form>';
     return ui_banner('info', [
         'title'   => 'Confirm your email',
@@ -261,7 +261,7 @@ function email_reset_request(PDO $pdo, string $identifier, string $ip): array
         ->execute([(int) $user['id'], hash('sha256', $token), $to, $nowSql,
                    campaigns_sql_dt($now->modify('+' . EMAIL_RESET_TTL_MINUTES . ' minutes'))]);
 
-    $queued = email_send_doc($pdo, email_reset_doc(site_url('/auth/reset_password.php?t=' . rawurlencode($token))), $user + ['email' => $to], [
+    $queued = email_send_doc($pdo, email_reset_doc(site_url('/auth/reset_password?t=' . rawurlencode($token))), $user + ['email' => $to], [
         'lane' => 'transactional', 'purpose' => 'account', 'flow' => 'password_reset', 'to_email' => $to, 'now' => true,
     ]);
     if (function_exists('security_log')) {

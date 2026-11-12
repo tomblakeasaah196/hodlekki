@@ -668,7 +668,7 @@ if (!defined('PUSH_HELPERS_LOADED')) {
         // opened an arbitrary URL would turn any notification writer into an
         // open redirect with the app's branding on it.
         if ($url === '' || !str_starts_with($url, '/') || str_starts_with($url, '//') || str_contains($url, '\\')) {
-            $url = '/index.php';
+            $url = '/';
         }
 
         return [
@@ -768,7 +768,7 @@ if (!defined('PUSH_HELPERS_LOADED')) {
                 substr($source, 0, 40),
                 substr((string) ($message['title'] ?? 'HOD Lekki'), 0, 190),
                 substr((string) ($message['body'] ?? ''), 0, 500),
-                substr((string) ($message['url'] ?? '/index.php'), 0, 255),
+                substr((string) ($message['url'] ?? '/'), 0, 255),
                 substr((string) ($message['tag'] ?? ''), 0, 80),
                 $urgency,
             ]);
@@ -1018,7 +1018,7 @@ if (!defined('PUSH_HELPERS_LOADED')) {
         $job = [
             'title'           => substr((string) ($message['title'] ?? 'HOD Lekki'), 0, 190),
             'body'            => substr((string) ($message['body'] ?? ''), 0, 500),
-            'url'             => (string) ($message['url'] ?? '/index.php'),
+            'url'             => (string) ($message['url'] ?? '/'),
             'tag'             => (string) ($message['tag'] ?? 'hod-direct'),
             'urgency'         => ($message['urgency'] ?? 'normal') === 'high' ? 'high' : 'normal',
             'notification_id' => $message['notification_id'] ?? null,

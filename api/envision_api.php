@@ -126,7 +126,7 @@ try {
             $stmt->execute([$target_id, $category]);
 
             $cleanCategory = str_replace('_', ' ', $category);
-            $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Envision Media Team', ?, '/modules/profile/index.php')");
+            $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Envision Media Team', ?, '/modules/profile/')");
             $notifStmt->execute([$target_id, "You have been officially placed on the Envision Media Roster as a {$cleanCategory} specialist."]);
 
             echo json_encode(['status' => 'success', 'message' => 'Media member assigned.']);
@@ -275,7 +275,7 @@ try {
                 if ($sermon) {
                     $cleanRole = str_replace('_', ' ', $role);
                     $notifMsg = "You have been assigned to '{$cleanRole}' for the upcoming service: {$sermon['title']} ({$sermon['short_date']}).";
-                    $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Service Duty Assignment', ?, '/modules/profile/index.php')")
+                    $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Service Duty Assignment', ?, '/modules/profile/')")
                         ->execute([$crew_id, $notifMsg]);
                 }
 

@@ -311,7 +311,7 @@ ok('the summary goes to the Resident Pastor and the Super Admin', in_array('Mini
     && in_array('Ministry year ends soon', perm_admin_messages($pdo, $sa), true));
 ok('…and to nobody else', !in_array('Ministry year ends soon', perm_admin_messages($pdo, $hod), true));
 $link = (string) $pdo->query("SELECT link_url FROM system_notifications WHERE title = 'Seats ending soon'")->fetchColumn();
-ok('the pastor\'s message links to Renew with the seat', str_starts_with($link, '/modules/departments/renew.php?ids=') && str_contains($link, (string) $hodRecord));
+ok('the pastor\'s message links to Renew with the seat', str_starts_with($link, '/modules/departments/renew?ids=') && str_contains($link, (string) $hodRecord));
 $again = perm_daily_run($pdo, '2026-12-17');
 eq('run twice: nothing new', [0, 0, 0], [$again['seat_reminders'], $again['summaries'], $again['messages']]);
 $r = perm_daily_run($pdo, '2026-12-29');

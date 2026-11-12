@@ -136,7 +136,7 @@ try {
 
             // Tell the person
             $cleanRole = str_replace('_', ' ', $role_category);
-            $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'River of Life Roster', ?, '/modules/profile/index.php')");
+            $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'River of Life Roster', ?, '/modules/profile/')");
             $notifMsg = "You have been officially assigned to the River of Life team as a {$cleanRole} ({$section_name}).";
             $notifStmt->execute([$target_user_id, $notifMsg]);
 
@@ -192,7 +192,7 @@ try {
                 $rol_members = $pdo->query("SELECT user_id FROM river_of_life_roster")->fetchAll(PDO::FETCH_COLUMN);
                 if (!empty($rol_members)) {
                     $nice_date = $when->format('l, M jS @ g:i A');
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Rehearsal Scheduled', ?, '/modules/river_of_life/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Rehearsal Scheduled', ?, '/modules/river_of_life/')");
                     $msg = "A new rehearsal has been scheduled for {$nice_date}. Focus: {$focus_topic}. Please be punctual.";
                     foreach ($rol_members as $uid) {
                         if ($uid != $user_id) {

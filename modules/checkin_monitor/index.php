@@ -34,7 +34,7 @@ function cm_tile(string $key, string $label, string $meta): string
         'title' => 'Check-in monitor',
         'description' => 'Who has checked in, live.',
         'info' => 'Counts come from the check-in page (the door QR). Members are matched by phone. At a service, a newcomer is a guest: counted, never registered. The list refreshes every 30 seconds while Live is on.',
-        'back' => ['href' => '/modules/events/index.php', 'label' => 'Events'],
+        'back' => ['href' => '/modules/events/', 'label' => 'Events'],
     ]) ?>
 
     <div class="ui-toolbar mb-4">

@@ -49,8 +49,8 @@ echo ui_json_script('pp-config', ['authenticated' => $isAuthenticated]);
                     <?= ui_button('Verify & Enter', ['variant' => 'primary', 'type' => 'submit', 'block' => true, 'size' => 'lg']) ?>
                 </form>
                 <div class="space-y-1 border-t border-line pt-4 text-center text-sm">
-                    <p class="text-ink-muted">Already have a church account? <a class="ui-link" href="/auth/login.php">Sign in</a></p>
-                    <p><a class="ui-link text-ink-muted" href="/connect.php">Back to Connect</a></p>
+                    <p class="text-ink-muted">Already have a church account? <a class="ui-link" href="/auth/login">Sign in</a></p>
+                    <p><a class="ui-link text-ink-muted" href="/connect">Back to Connect</a></p>
                 </div>
             </div>
         </div>
@@ -91,7 +91,7 @@ echo ui_json_script('pp-config', ['authenticated' => $isAuthenticated]);
             <?= ui_empty(['icon' => 'users-round', 'title' => 'No children found', 'text' => 'Ask the Junior Church team to link your children.']) ?>
         </section>
 
-        <p class="pt-4 text-center text-xs text-ink-subtle">Household of David · Junior Church Parent Portal · <a class="ui-link" href="/connect.php">Back to Connect</a></p>
+        <p class="pt-4 text-center text-xs text-ink-subtle">Household of David · Junior Church Parent Portal · <a class="ui-link" href="/connect">Back to Connect</a></p>
     </section>
 </div>
 

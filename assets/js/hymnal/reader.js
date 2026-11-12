@@ -258,7 +258,7 @@
             /* The Bible module is on this platform, so a reference is a link
              * to the passage rather than something to go and look up. */
             add('Scripture', song.scripture.map(function (ref) {
-                return '<a href="/modules/bible/index.php?ref=' + encodeURIComponent(ref) + '">' + esc(ref) + '</a>';
+                return '<a href="/modules/bible/?ref=' + encodeURIComponent(ref) + '">' + esc(ref) + '</a>';
             }).join(' · '));
         }
 

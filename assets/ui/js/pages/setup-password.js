@@ -63,7 +63,7 @@
         HOD.busy(btn, true);
         HOD.api(API, { data: new FormData(form), quiet: true }).then(function (res) {
             showAlert('success', null, res.message || 'Password set.');
-            setTimeout(function () { window.location.href = '/auth/login.php'; }, 2000);
+            setTimeout(function () { window.location.href = '/auth/login'; }, 2000);
         }).catch(function (err) {
             showAlert('danger', null, err.code === 'NETWORK' ? 'Network error. Please try again.' : err.message);
             HOD.busy(btn, false);

@@ -20,7 +20,7 @@ use HOD\Mail\Team\PersonalAlerts;
 use HOD\Mail\Team\Prefs;
 
 $uid = (int) ($_SESSION['user_id'] ?? 0);
-$back = ['href' => '/modules/mail/index.php', 'label' => 'Mail'];
+$back = ['href' => '/modules/mail/', 'label' => 'Mail'];
 if (!mail_ready() || !mail_team_ready()) {
     echo '<div class="ui-page">' . ui_page_header(['title' => 'My mail settings', 'back' => $back])
         . ui_empty(['icon' => 'mail', 'title' => 'Not ready yet', 'text' => 'Try again after the next update.']) . '</div>';
@@ -89,7 +89,7 @@ if (!mail_can('admin')) {
             <?= mail_info('Key alerts to the personal email you confirmed for the church: the sender and subject only, never the message. At most one per conversation an hour, and 20 a day.') ?></div>
         <div class="ui-card__body ui-stack">
             <?php if ($address === null): ?>
-                <p class="ui-hint">No confirmed personal email yet. <a href="/modules/profile/index.php">Add it on your profile</a>.</p>
+                <p class="ui-hint">No confirmed personal email yet. <a href="/modules/profile/">Add it on your profile</a>.</p>
             <?php else: ?>
                 <p class="ui-hint">Goes to <?= ui_e($address) ?></p>
             <?php endif; ?>

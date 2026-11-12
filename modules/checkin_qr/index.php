@@ -1,7 +1,7 @@
 <?php
-// /modules/checkin_qr/index.php
+// /modules/checkin_qr/
 // Check-in QR: the printable 4:5 poster people scan at the door. Either the
-// standing service QR (/checkin.php?service=today: it always opens the service
+// standing service QR (/checkin?service=today: it always opens the service
 // on that day, so one print serves every Sunday and Thursday) or one event's
 // own QR. Drawn on a canvas (assets/ui/js/poster.js), downloaded as PNG or
 // JPEG at 2160 x 2700. Data: /api/checkin_qr_api.php (its CSRF token is
@@ -19,7 +19,7 @@ if (empty($_SESSION['checkin_csrf'])) $_SESSION['checkin_csrf'] = bin2hex(random
 
 echo ui_json_script('checkin-qr-config', [
     'csrf' => $_SESSION['checkin_csrf'],
-    'checkinUrl' => site_url('/checkin.php'),
+    'checkinUrl' => site_url('/checkin'),
 ]);
 ?>
 <div class="ui-page ui-page--wide">
@@ -27,7 +27,7 @@ echo ui_json_script('checkin-qr-config', [
         'title' => 'Check-in QR',
         'description' => 'A poster for the door: people scan it to check in.',
         'info' => 'The service QR is printed once: on a Sunday or Thursday it opens that day’s service, and on other days it counts down to the next one. An event’s own QR opens just that event.',
-        'back' => ['href' => '/modules/events/index.php', 'label' => 'Events'],
+        'back' => ['href' => '/modules/events/', 'label' => 'Events'],
     ]) ?>
 
     <div class="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">

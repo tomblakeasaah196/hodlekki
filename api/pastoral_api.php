@@ -113,7 +113,7 @@ try {
             // Tell pastoral leadership there is something new.
             $pastors = perm_office_holders($pdo, 'pastoral', 'edit');
             if (!empty($pastors)) {
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Pastoral Desk Entry', ?, '/modules/pastoral/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Pastoral Desk Entry', ?, '/modules/pastoral/')");
                 $alertMessage = "A new {$type_label} has been submitted to the Pastoral Desk and requires your attention.";
                 foreach ($pastors as $p_id) {
                     if ($p_id != $user_id) {
@@ -169,7 +169,7 @@ try {
 
                 // Tell the person who wrote it.
                 if ($submitter_id && $submitter_id != $user_id) {
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Pastoral Desk Update', ?, '/modules/member_portal/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Pastoral Desk Update', ?, '/modules/member_portal/')");
                     $alertMsg = "Your submitted {$tabs[$tab]['label']} has been reviewed and marked as '{$new_status}'.";
                     $notifStmt->execute([$submitter_id, $alertMsg]);
                 }

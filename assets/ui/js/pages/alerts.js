@@ -155,7 +155,7 @@
         return {
             title: (v.title || '').trim(),
             message: (v.message || '').trim(),
-            link: (v.link || '').trim() || '/index.php',
+            link: (v.link || '').trim() || '/',
             audience: v.audience || '',
             audience_id: q('[data-alerts-target]', form).hidden ? 0 : (v.audience_id || 0)
         };

@@ -18,7 +18,7 @@ use HOD\Mail\Compose\Signatures;
 use HOD\Mail\MailAccess;
 
 $uid = (int) ($_SESSION['user_id'] ?? 0);
-$back = ['href' => '/modules/mail/index.php', 'label' => 'Mail'];
+$back = ['href' => '/modules/mail/', 'label' => 'Mail'];
 if (!mail_ready() || !mail_compose_ready()) {
     echo '<div class="ui-page">' . ui_page_header(['title' => 'My signature', 'back' => $back])
         . ui_empty(['icon' => 'mail', 'title' => 'Not ready yet', 'text' => 'Try again after the next update.']) . '</div>';

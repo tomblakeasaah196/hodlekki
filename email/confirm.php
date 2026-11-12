@@ -28,8 +28,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $token !== '') {
     }
 }
 $peek = $token !== '' ? email_capture_peek($pdo, $token) : null;
-$continue = $signedIn ? ui_button('Continue', ['variant' => 'primary', 'href' => '/index.php', 'block' => true])
-                      : ui_button('Sign in', ['variant' => 'primary', 'href' => '/auth/login.php', 'block' => true]);
+$continue = $signedIn ? ui_button('Continue', ['variant' => 'primary', 'href' => '/', 'block' => true])
+                      : ui_button('Sign in', ['variant' => 'primary', 'href' => '/auth/login', 'block' => true]);
 
 ui_standalone_open('Confirm your email');
 
@@ -54,7 +54,7 @@ if ($result !== null && !empty($result['ok'])): ?>
     <?= $continue ?>
 <?php elseif ($peek !== null && $peek['state'] === 'expired'): ?>
     <?= ui_banner('warning', ['title' => 'Link expired', 'text' => 'Sign in to get a new one.', 'info' => 'Links work for 7 days.']) ?>
-    <?= $signedIn ? ui_button('Send new link', ['variant' => 'primary', 'href' => '/auth/add_email.php', 'block' => true]) : $continue ?>
+    <?= $signedIn ? ui_button('Send new link', ['variant' => 'primary', 'href' => '/auth/add_email', 'block' => true]) : $continue ?>
 <?php else: ?>
     <?= ui_banner('warning', ['title' => 'Link no longer works', 'text' => 'Use the newest link in your inbox.', 'info' => 'A newer link replaced it, or it was already used.']) ?>
     <?= $continue ?>

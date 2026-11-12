@@ -193,7 +193,7 @@ try {
         echo json_encode([
             'status'   => 'success',
             'message'  => 'Password change required. Redirecting...',
-            'redirect' => '/auth/change_password.php',
+            'redirect' => '/auth/change_password',
         ]);
         exit;
     }
@@ -206,7 +206,7 @@ try {
         || perm_scope_beyond_own(perm_ctx_scope($landing, 'dashboard', 'view'));
 
     // Set the final destination based on their access
-    $target_redirect = $has_dashboard_access ? '/index.php' : '/modules/member_portal/index.php';
+    $target_redirect = $has_dashboard_access ? '/' : '/modules/member_portal/';
 
     // A "return to" path stored by auth/login.php?next=… wins: the page a
     // tapped notification or a crew console link was opening (guide §21.4).
