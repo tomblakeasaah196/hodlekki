@@ -180,6 +180,25 @@ ct_ok('with the lockout over, the right password starts the change', $ok['status
 $pdo->exec('DELETE FROM login_attempts WHERE user_id = 9003');
 $pdo->exec('DELETE FROM security_audit_log WHERE target_user_id = 9003');
 
+ct_section('The Connect card on MySQL strict mode: a blank address');
+require_once __DIR__ . '/../../includes/embrace_helpers.php';
+$pdo->exec('DROP TEMPORARY TABLE IF EXISTS connect_users_it');
+$pdo->exec("CREATE TEMPORARY TABLE connect_users_it (id INT AUTO_INCREMENT PRIMARY KEY, first_name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NULL UNIQUE, gender ENUM('Male','Female') NULL, dob DATE NULL,
+    physical_address VARCHAR(255) NOT NULL DEFAULT 'To be updated', qr_code_hash VARCHAR(64) NULL)");
+$old = false;
+try {
+    $pdo->prepare('INSERT INTO connect_users_it (first_name, physical_address) VALUES (?, ?)')->execute(['Ada', null]);
+} catch (PDOException $e) {
+    $old = str_contains($e->getMessage(), '1048');
+}
+ct_ok('an explicit NULL for the address fails (1048), as the live card did', $old);
+[$sql, $params] = embrace_connect_insert(['first_name' => 'Ada', 'email' => '', 'gender' => '', 'dob' => '', 'physical_address' => '', 'qr_code_hash' => 'it1'], 'connect_users_it');
+$pdo->prepare($sql)->execute($params);
+ct_eq('the builder leaves it out: the card saves with the default', 'To be updated',
+    $pdo->query("SELECT physical_address FROM connect_users_it WHERE qr_code_hash = 'it1'")->fetchColumn());
+$pdo->exec('DROP TEMPORARY TABLE IF EXISTS connect_users_it');
+
 foreach (array_reverse(CAMPAIGNS_TABLES) as $table) {
     $pdo->exec("DELETE FROM {$table}");
 }

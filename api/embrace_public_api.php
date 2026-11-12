@@ -6,6 +6,7 @@
 
 require_once '../includes/db.php';
 require_once '../includes/campaigns/formguard.php'; // honeypot, single-use signed time, Turnstile
+require_once '../includes/embrace_helpers.php';      // embrace_connect_insert(): blank optional fields keep the column default
 header('Content-Type: application/json');
 
 // Church-issued login addresses. Visitors give a personal email instead.
@@ -229,33 +230,33 @@ try {
             // Generate unique QR hash for swift check-ins at physical services
             $qr_hash = hash('sha256', random_bytes(16) . $phone);
 
-            // Insert as a 1st_Timer. Optional fields go in as NULL, not '', so
-            // ENUM, DATE and UNIQUE columns never see an empty string.
-            $sql = "INSERT INTO users (
-                        first_name, last_name, email, phone, gender, dob, marital_status,
-                        physical_address, latitude, longitude, spiritual_status, invited_by, wants_to_join,
-                        visitation_preference, prayer_requests, qr_code_hash
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '1st_Timer', ?, ?, ?, ?, ?)";
+            // Insert as a 1st_Timer. A blank optional field (email, gender,
+            // date of birth, address, coordinates) is left out of the INSERT,
+            // so its column keeps its default: never '' (ENUM, DATE and UNIQUE
+            // columns refuse it) and never an explicit NULL (physical_address
+            // is NOT NULL DEFAULT 'To be updated': NULL lost the card, 1048).
+            [$sql, $params] = embrace_connect_insert([
+                'first_name'            => $fname,
+                'last_name'             => $lname,
+                'email'                 => $email,
+                'phone'                 => $phone,
+                'gender'                => $gender,
+                'dob'                   => $dob,
+                'marital_status'        => $marital,
+                'physical_address'      => $address,
+                'latitude'              => $has_coords ? $lat : null,
+                'longitude'             => $has_coords ? $lng : null,
+                'spiritual_status'      => '1st_Timer',
+                'invited_by'            => $invited_by,
+                'wants_to_join'         => $wants_to_join,
+                'visitation_preference' => $visitation_preference,
+                'prayer_requests'       => $prayer,
+                'qr_code_hash'          => $qr_hash,
+            ]);
 
             try {
                 $stmt = $pdo->prepare($sql);
-                $stmt->execute([
-                    $fname,
-                    $lname,
-                    $email !== '' ? $email : null,
-                    $phone,
-                    $gender !== '' ? $gender : null,
-                    $dob !== '' ? $dob : null,
-                    $marital,
-                    $address !== '' ? $address : null,
-                    $has_coords ? $lat : null,
-                    $has_coords ? $lng : null,
-                    $invited_by,
-                    $wants_to_join,
-                    $visitation_preference,
-                    $prayer,
-                    $qr_hash
-                ]);
+                $stmt->execute($params);
             } catch (PDOException $e) {
                 connect_server_fail($e);
             }
