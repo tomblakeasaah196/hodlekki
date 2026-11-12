@@ -219,6 +219,19 @@ foreach (preg_split('/\R/', $allowSrc) as $line) {
 }
 
 // ---------------------------------------------------------------------------
+section('Finance and the Alerts Centre check each write');
+$finance = (string) file_get_contents($root . '/api/finance_api.php');
+ok('finance_api needs the CSRF token on writes', str_contains($finance, 'csrf_require();'));
+ok('finance_api asks the level each action needs',
+    str_contains($finance, "api_require_can('finance', \$levels[\$action]);")
+    && str_contains($finance, "'save_transaction' => 'create'") && str_contains($finance, "'delete_transaction' => 'delete'")
+    && str_contains($finance, "'save_account' => 'edit'") && str_contains($finance, "'delete_category' => 'delete'"));
+ok('a receipt is stored through the upload guard, images and PDF only',
+    str_contains($finance, "hod_upload_store(\$_FILES['receipt_file']") && str_contains($finance, "['jpg', 'jpeg', 'png', 'pdf']")
+    && !str_contains($finance, 'move_uploaded_file'));
+ok('push_admin_api needs the CSRF token on writes', str_contains((string) file_get_contents($root . '/api/push_admin_api.php'), 'csrf_require();'));
+
+// ---------------------------------------------------------------------------
 section('Tribes no longer errors for Directors and HODs');
 $tribes = '';   // the code, comments stripped
 foreach (token_get_all((string) file_get_contents($root . '/api/tribes_api.php')) as $tok) {
