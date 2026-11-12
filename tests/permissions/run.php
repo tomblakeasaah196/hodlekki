@@ -273,6 +273,32 @@ eq('same access after renaming a role and two departments', $before,
     [$r($rp)['abilities'], $r($reachHod)['abilities'], $r($charisDir)['abilities']]);
 
 // ---------------------------------------------------------------------------
+section('Announcements and the Pastoral Desk check each write');
+$code = static function (string $file) use ($root): string {
+    $out = '';   // the code, comments stripped
+    foreach (token_get_all((string) file_get_contents($root . $file)) as $tok) {
+        if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+            $out .= is_array($tok) ? $tok[1] : $tok;
+        }
+    }
+    return $out;
+};
+$ann = $code('/api/announcements_api.php');
+ok('announcements_api needs the CSRF token on writes', str_contains($ann, 'csrf_require();'));
+ok('a new notice needs Create, deleting needs Delete',
+    str_contains($ann, "api_require_can('announcements', 'create');") && str_contains($ann, "api_require_can('announcements', 'delete');"));
+ok('a status is Approved or Archived, nothing else', str_contains($ann, "in_array(\$new_status, ['Approved', 'Archived'], true)"));
+$pas = $code('/api/pastoral_api.php');
+ok('pastoral_api needs the CSRF token and the matrix', str_contains($pas, 'csrf_require();') && str_contains($pas, "api_require_can('pastoral');"));
+ok('submitting needs Create, triage needs Edit church-wide',
+    str_contains($pas, "api_require_can('pastoral', 'create');") && str_contains($pas, "\$can_triage = can('pastoral', 'edit', 'church');"));
+ok('the box, status and priority come only from fixed lists',
+    str_contains($pas, 'if (!isset($tabs[$tab]))') && str_contains($pas, "in_array(\$new_status, \$tabs[\$tab]['statuses'], true)")
+    && str_contains($pas, 'in_array($priority, $priorities, true)'));
+ok('an anonymous entry never sends its author to anyone else',
+    str_contains($pas, "if (!empty(\$row['is_anonymous']) && !\$mine)") && str_contains($pas, "\$row['phone'] = null;"));
+
+// ---------------------------------------------------------------------------
 section('Holders and history');
 eq('seat holders by stable key', [$reachHod], perm_seat_holders($pdo, 'hod', 8));
 $holders = perm_holders($pdo, 'reach', 'manage');
