@@ -18,7 +18,12 @@
  * Keys: title, mode (always strict; the key is here so the UI tests treat the
  * page as strict), scripts, csp, head (trusted HTML for <head>, e.g. Open
  * Graph tags the page escaped itself), actions (trusted HTML for the bar),
- * home (where the mark links; default '/'), indexable (default false).
+ * home (where the mark links; default '/'), indexable (default false),
+ * bleed (default false: true lets the page run edge to edge, as Connect's
+ * full-screen welcome does; the page then sets its own widths), quiet
+ * (default false: true drops the PWA install banner and push sheet, as
+ * includes/pwa_head.php $pwaQuiet describes; Connect, where a first-time guest
+ * meets the church, is quiet).
  */
 
 if (defined('HOD_UI_PUBLIC')) {
@@ -32,7 +37,7 @@ require_once dirname(__DIR__) . '/csrf.php';
 
 function ui_public_open(array $page): void
 {
-    $page += ['title' => 'HOD Lekki', 'scripts' => [], 'csp' => [], 'head' => '', 'actions' => '', 'home' => '/', 'indexable' => false];
+    $page += ['title' => 'HOD Lekki', 'scripts' => [], 'csp' => [], 'head' => '', 'actions' => '', 'home' => '/', 'indexable' => false, 'bleed' => false, 'quiet' => false];
     $nonce = ui_csp_nonce();
     security_send_csp('strict', $nonce, (array) $page['csp']);
     if (!headers_sent()) {
@@ -43,6 +48,7 @@ function ui_public_open(array $page): void
     register_shutdown_function('ui_public_close');
 
     $pwaNonce = $nonce;
+    $pwaQuiet = !empty($page['quiet']);
     ?>
 <!DOCTYPE html>
 <html lang="en" class="ui-html" data-ui-mode="strict">
@@ -79,7 +85,7 @@ function ui_public_open(array $page): void
         <div class="ui-public-bar__actions"><?= $page['actions'] ?></div>
     </div>
 </header>
-<main id="main" class="ui-public-main" tabindex="-1">
+<main id="main" class="ui-public-main<?= $page['bleed'] ? ' ui-public-main--bleed' : '' ?>" tabindex="-1">
 <?php
 }
 
