@@ -61,6 +61,56 @@ eq('email not set up: bad', 'bad', monitor_check_email(['configured' => false], 
 eq('SMTP refused the sign-in: bad', 'bad', monitor_check_email(['configured' => true, 'smtp' => ['ok' => false, 'error' => 'auth failed', 'at' => $now]], $now)['state']);
 eq('two failed sends: worth a look', 'warn', monitor_check_email(['configured' => true, 'smtp' => ['ok' => true, 'at' => $now], 'failures_24h' => 2], $now)['state']);
 
+// ---- Mail sync (the 12 Nov 2026 outage: no mailbox had ever synced, and nothing said so)
+$box = static fn (string $name, ?int $synced, ?int $since = null, ?string $error = null): array => compact('name', 'synced', 'since', 'error');
+eq('Mail not installed: nothing to watch', 'ok', monitor_check_mail(['ready' => false], $now)['state']);
+eq('no mailbox brought in yet: fine', 'ok', monitor_check_mail(['ready' => true, 'active' => [], 'stuck' => []], $now)['state']);
+$fine = monitor_check_mail(['ready' => true, 'active' => [$box('Embrace', $now - 60), $box('Info', $now - 180)], 'stuck' => []], $now);
+eq('every active mailbox synced in the last minutes: fine', 'ok', $fine['state']);
+has('…and says how fresh', $fine['detail'], '2 active mailbox(es) synced within 10 minutes; the oldest 3 minutes ago');
+$never = monitor_check_mail(['ready' => true, 'active' => [$box('Embrace', null, $now - 86400, 'Could not reach mail.hodlekki.org:993 (erreur 0) for ada@example.org')], 'stuck' => []], $now);
+eq('active but never synced in a day: red', 'bad', $never['state']);
+has('…says never synced', $never['detail'], 'Never synced.');
+has('…shows the last error', $never['detail'], 'Could not reach mail.hodlekki.org:993');
+lacks('…without a personal address', $never['detail'], 'ada@example.org');
+has('…and the fix names the log and the cron', (string) $never['fix'], 'hod-mail.log');
+eq('brought in 3 minutes ago, first sync still to come: fine', 'ok', monitor_check_mail(['ready' => true, 'active' => [$box('New box', null, $now - 180)], 'stuck' => []], $now)['state']);
+$one = monitor_check_mail(['ready' => true, 'active' => [$box('Embrace', $now - 60), $box('Info', $now - 660)], 'stuck' => []], $now);
+eq('one mailbox 11 minutes behind: red', 'bad', $one['state']);
+has('…names it', $one['detail'], '1 of 2 active mailbox(es) not synced for 10 minutes: Info');
+eq('exactly 10 minutes: still fine', 'ok', monitor_check_mail(['ready' => true, 'active' => [$box('Info', $now - 600)], 'stuck' => []], $now)['state']);
+$reset = monitor_check_mail(['ready' => true, 'active' => [$box('Embrace', $now - 60)], 'stuck' => [['name' => 'Info', 'status' => 'needs_reset', 'error' => 'refused the address or the password']]], $now);
+eq('a mailbox needing a new password: amber', 'warn', $reset['state']);
+has('…names it', $reset['detail'], '1 need(s) a new password: Info');
+eq('a mailbox not on the server: amber', 'warn', monitor_check_mail(['ready' => true, 'active' => [], 'stuck' => [['name' => 'Youth', 'status' => 'failed', 'error' => null]]], $now)['state']);
+$both = monitor_check_mail(['ready' => true, 'active' => [$box('Embrace', $now - 3600)], 'stuck' => [['name' => 'Info', 'status' => 'needs_reset', 'error' => null]]], $now);
+eq('stale and a reset waiting: red wins', 'bad', $both['state']);
+has('…and still mentions the reset', $both['detail'], 'Also: 1 need(s) a new password: Info');
+ok('Mail sync alerts at once when red', in_array('mail_sync', monitor_urgent_checks(), true));
+
+// The facts on either engine: a fixture table that both accept, with explicit ids, dropped afterwards so the
+// MySQL/MariaDB run (MONITOR_TEST_MYSQL_DSN) starts clean next time. A database with a real mail_accounts is left alone.
+$mailDb = monitor_test_db();
+if (monitor_table_exists($mailDb, 'mail_accounts')) {
+    ok('facts: skipped, this database has its own mail_accounts', true);
+} else {
+    eq('facts: no mail_accounts table, not installed', ['ready' => false], monitor_facts_mail($mailDb));
+    $mailDb->exec('CREATE TABLE mail_accounts (id INT NOT NULL PRIMARY KEY, display_name VARCHAR(120) NOT NULL, status VARCHAR(20) NOT NULL,'
+        . ' last_synced_at DATETIME NULL, last_error VARCHAR(500) NULL, created_at DATETIME NULL)');
+    try {
+        $ins = $mailDb->prepare('INSERT INTO mail_accounts (id, display_name, status, last_synced_at, last_error, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+        $ins->execute([1, 'Embrace', 'active', monitor_fmt($now - 120), null, monitor_fmt($now - 86400)]);
+        $ins->execute([2, 'Info', 'needs_reset', null, 'refused the address or the password', monitor_fmt($now - 86400)]);
+        $ins->execute([3, 'Old', 'suspended', null, null, monitor_fmt($now - 86400)]);
+        $mf = monitor_facts_mail($mailDb);
+        eq('facts: active mailboxes with Lagos times read back', [['name' => 'Embrace', 'error' => null, 'synced' => $now - 120, 'since' => $now - 86400]], $mf['active']);
+        eq('facts: needs_reset kept, suspended ignored', ['Info'], array_column($mf['stuck'], 'name'));
+        eq('facts to verdict: amber for the reset', 'warn', monitor_check_mail($mf, $now)['state']);
+    } finally {
+        $mailDb->exec('DROP TABLE mail_accounts');
+    }
+}
+
 // ---- Server
 eq('database answering slowly: worth a look', 'warn', monitor_check_db(['query_ms' => 400, 'connect_ms' => 20])['state']);
 eq('database unreachable: bad', 'bad', monitor_check_db(['error' => 'gone away'])['state']);
