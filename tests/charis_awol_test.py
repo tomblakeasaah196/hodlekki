@@ -15,7 +15,13 @@ def require(condition: bool, message: str) -> None:
 
 
 api = (ROOT / "api/charis_api.php").read_text(encoding="utf-8")
-page = (ROOT / "modules/charis/index.php").read_text(encoding="utf-8")
+# The page is the PHP plus its two scripts (the UI migration moved the
+# rendering into assets/ui/js/pages/charis*.js).
+page = "\n".join((ROOT / p).read_text(encoding="utf-8") for p in (
+    "modules/charis/index.php",
+    "assets/ui/js/pages/charis.js",
+    "assets/ui/js/pages/charis-ops.js",
+))
 modals = (ROOT / "includes/charis_modals.php").read_text(encoding="utf-8")
 report = (ROOT / "includes/charis_awol_pdf.php").read_text(encoding="utf-8")
 helpers = (ROOT / "includes/charis_helpers.php").read_text(encoding="utf-8")
@@ -102,17 +108,17 @@ require("attendance_strip" in helpers and "attendance_strip" in page,
 # 5. UI / UX REBRANDING & MARKUP
 require("AWOL Monitoring" in page,
         "Charis module navigation must display AWOL Monitoring")
-require("desktopAwolPillsContainer" in page,
-        "Charis module desktop UI must include active rule summary pills container")
-require("Change AWOL List" in page,
+require('id="charis-awol-rule"' in page and "data-charis-rule-pills" in page,
+        "the AWOL card must show the active rule summary")
+require("Change AWOL list" in page,
         "Charis module must include 'Change AWOL List' button for authorized editors")
-require("awolConfigModal" in modals,
-        "Charis modals must include awolConfigModal")
-require("welfareOverviewModal" in modals,
-        "Charis modals must retain welfareOverviewModal with updated branding")
-require("awolConfigSentencePreview" in modals,
+require("ui_dialog_start('charis-awol-config'" in modals,
+        "Charis dialogs must include the AWOL rule editor")
+require('id="charis-awol"' in page,
+        "the AWOL Monitoring card must be on the page at every screen size")
+require('id="charis-awol-preview"' in modals,
         "awolConfigModal must render live English sentence preview")
-require("awolConfigHistoryList" in modals,
+require('id="charis-awol-history"' in modals,
         "awolConfigModal must render rule change history")
 
 # 6. MODAL TAB NAVIGATION & LIST RENDERING

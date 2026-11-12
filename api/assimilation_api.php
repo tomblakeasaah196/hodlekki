@@ -16,6 +16,10 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+// Writes (every POST, the Excel download included) must carry the session's
+// CSRF token (includes/csrf.php); the rebuilt page sends it on every call.
+csrf_require();
+
 $user_id     = (int) $_SESSION['user_id'];
 $action      = $_POST['action'] ?? $_GET['action'] ?? '';
 
