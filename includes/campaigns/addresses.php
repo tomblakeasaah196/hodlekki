@@ -392,6 +392,8 @@ function email_capture_confirm(PDO $pdo, string $token, ?string $ip = null): arr
     }
 
     $nowSql = campaigns_sql_dt($now);
+    // The address this one replaces (if any): told about the change afterwards.
+    $old = member_confirmed_email($pdo, $userId);
     $own = !$pdo->inTransaction();
     if ($own) {
         $pdo->beginTransaction();
@@ -439,8 +441,56 @@ function email_capture_confirm(PDO $pdo, string $token, ?string $ip = null): arr
     }
 
     email_sync_users_email($pdo, $userId, $email);
+    if ($old !== null && $old !== $email) {
+        email_address_changed_notice($pdo, $userId, $old, $email, $now);
+    }
 
     return ['ok' => true, 'user_id' => $userId, 'email' => $email];
+}
+
+/**
+ * A confirmed address was replaced: tell the OLD address (account mail, the
+ * alert lane; never church-news consent) and write the security log. If
+ * someone else changed it, this is how the owner finds out. Best effort.
+ */
+function email_address_changed_notice(PDO $pdo, int $userId, string $old, string $new, DateTimeImmutable $at): void
+{
+    try {
+        $person = email_person($pdo, $userId);
+        if ($person !== null) {
+            $queued = email_send_doc($pdo, email_changed_doc(email_mask($new), $at), $person + ['email' => $old], [
+                'lane' => 'alert', 'purpose' => 'account', 'flow' => 'email_changed', 'to_email' => $old, 'now' => true,
+            ]);
+            if (empty($queued['ok'])) {
+                error_log('[email] could not queue the email-changed notice for user ' . $userId . ': ' . ($queued['message'] ?? $queued['code'] ?? 'unknown'));
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('[email] email-changed notice failed for user ' . $userId . ': ' . $e->getMessage());
+    }
+    if (function_exists('security_log')) {
+        security_log($pdo, 'email_changed', $userId,
+            'Personal email changed from ' . email_mask($old) . ' to ' . email_mask($new) . ' (confirmed by link).');
+    }
+}
+
+/** The notice to the old address (account mail: no consent needed, no unsubscribe). */
+function email_changed_doc(string $maskedNew, DateTimeImmutable $at): array
+{
+    return [
+        'v' => 1,
+        'subject' => 'Your email was changed',
+        'preheader' => 'Not you? Contact the church office.',
+        'blocks' => [
+            ['type' => 'heading', 'level' => 1, 'align' => 'left', 'text' => 'Your email was changed'],
+            email_doc_paragraphs(
+                'Hi {{first_name}},',
+                'Your HOD Lekki email was changed to ' . $maskedNew . ' on ' . $at->format('j M Y \a\t g:i a') . '. Password reset links now go there.',
+                'Not you? Contact the church office straight away.'
+            ),
+            ['type' => 'footer'],
+        ],
+    ];
 }
 
 /**

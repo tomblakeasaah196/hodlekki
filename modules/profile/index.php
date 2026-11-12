@@ -17,6 +17,16 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $profileName = trim(($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_name'] ?? ''));
+
+// "Your email": the personal address, confirmed by a link, and church news
+// (includes/campaigns/profile_card.php; its actions are in api/profile_api.php).
+$emailCard = '';
+try {
+    require_once __DIR__ . '/../../includes/campaigns/profile_card.php';
+    $emailCard = email_profile_card_html(email_profile_view($pdo, (int) $_SESSION['user_id']));
+} catch (Throwable $e) {
+    error_log('[email] Profile email card failed: ' . $e->getMessage());
+}
 $profilePhoto = !empty($_SESSION['picture_path']) ? (string) $_SESSION['picture_path'] : null;
 
 /** A password input with a show/hide button. */
@@ -87,7 +97,6 @@ function profile_password_field(string $id, string $name, string $label, string 
             <hr class="ui-divider my-0">
 
             <div class="ui-form-grid">
-                <?= ui_field('email', ['name' => 'real_email', 'id' => 'profile-real-email', 'label' => 'Personal email', 'optional' => true, 'autocomplete' => 'email', 'info' => 'Gmail, Yahoo or similar — for messages that should reach you outside the app.', 'attrs' => ['data-profile' => 'real_email']]) ?>
                 <?= ui_field('tel', ['name' => 'phone', 'id' => 'profile-phone', 'label' => 'Phone number', 'autocomplete' => 'tel', 'inputmode' => 'tel', 'attrs' => ['data-profile' => 'phone']]) ?>
                 <?= ui_field('date', ['name' => 'dob', 'id' => 'profile-dob', 'label' => 'Date of birth', 'attrs' => ['data-profile' => 'dob']]) ?>
                 <?= ui_field('select', ['name' => 'marital_status', 'id' => 'profile-marital', 'label' => 'Marital status', 'options' => ['Single' => 'Single', 'Married' => 'Married', 'Separated' => 'Separated', 'Divorced' => 'Divorced'], 'attrs' => ['data-profile' => 'marital_status', 'data-action-change' => 'profile.marital']]) ?>
@@ -124,6 +133,8 @@ function profile_password_field(string $id, string $name, string $label, string 
             </div>
         </div>
     </form>
+
+    <?= $emailCard ?>
 
     <section class="ui-card" id="security" aria-labelledby="profile-security">
         <div class="ui-card__header ui-card__header--divided">

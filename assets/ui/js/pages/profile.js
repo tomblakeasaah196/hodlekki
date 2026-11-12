@@ -1,8 +1,8 @@
 // /assets/ui/js/pages/profile.js
 // My Profile (modules/profile/index.php): the member's own details, photo
 // and wedding photo (cropped square in the browser), a name-correction
-// request, and password + signed-in devices. Everything goes through
-// /api/profile_api.php; the shapes of its requests are unchanged.
+// request, the "Your email" card, and password + signed-in devices.
+// Everything goes through /api/profile_api.php.
 (function () {
     'use strict';
 
@@ -57,7 +57,7 @@
             $('[data-profile-badges]').innerHTML =
                 (u.spiritual_status ? '<span class="ui-badge ui-badge--primary">' + HOD.esc(label(u.spiritual_status)) + '</span>' : '') +
                 (u.attendance_status ? '<span class="ui-badge">' + HOD.esc(label(u.attendance_status)) + '</span>' : '');
-            ['first_name', 'last_name', 'email', 'real_email', 'phone', 'dob', 'physical_address', 'wedding_anniversary'].forEach(function (k) { setField(k, u[k]); });
+            ['first_name', 'last_name', 'email', 'phone', 'dob', 'physical_address', 'wedding_anniversary'].forEach(function (k) { setField(k, u[k]); });
             setField('marital_status', u.marital_status || 'Single');
             showMarried((u.marital_status || 'Single') === 'Married');
             if (u.picture_path) setPhoto('profile', u.picture_path);
@@ -255,6 +255,59 @@
         });
     }
 
+    /* ---------- your email (the card is server-rendered; each action returns it again) ---------- */
+
+    function emailCard(res) {
+        var card = $('#profile-email-card');
+        if (card && res && res.html) card.outerHTML = res.html;
+    }
+
+    function emailForm(open) {
+        var form = $('[data-profile-email-form]');
+        var change = $('[data-profile-email-change]');
+        if (!form) return;
+        form.hidden = !open;
+        if (change) change.hidden = open;
+        if (open) $('#profile-email-input').focus();
+        else form.reset();
+    }
+
+    function emailSave(form) {
+        var button = form.querySelector('[type="submit"]');
+        HOD.busy(button, true);
+        HOD.api(API, { action: 'email_save', data: HOD.form.values(form), quiet: true }).then(function (res) {
+            emailCard(res);
+            HOD.toast(res.message || 'Link sent.', 'success');
+        }).catch(function (err) {
+            if (err.field) {
+                var errs = {}; errs[err.field] = err.message; HOD.form.setErrors(form, errs);
+            } else {
+                HOD.toast(err.message, 'danger');
+            }
+            HOD.busy(button, false);
+        });
+    }
+
+    function emailDo(button) {
+        HOD.busy(button, true);
+        HOD.api(API, { action: button.getAttribute('data-do') }).then(function (res) {
+            emailCard(res);
+            HOD.toast(res.message || 'Done.', 'success');
+        }).catch(function (err) {
+            if (err.response) emailCard(err.response);
+            HOD.busy(button, false);
+        });
+    }
+
+    function emailNews(box) {
+        box.disabled = true;
+        HOD.api(API, { action: 'email_news', data: { on: box.checked ? 1 : 0 } }).then(function (res) {
+            HOD.toast(res.message, 'success');
+        }).catch(function () {
+            box.checked = !box.checked;
+        }).finally(function () { box.disabled = false; });
+    }
+
     HOD.ready(function () {
         if (!$('[data-profile-name]')) return;
         cfg = HOD.data('profile-config') || {};
@@ -268,6 +321,11 @@
         HOD.actions.on('profile.pick-photo', pickPhoto);
         HOD.actions.on('profile.save-photo', savePhoto);
         HOD.actions.on('profile.sign-out-others', signOutOthers);
+        HOD.actions.on('profile.email-save', emailSave);
+        HOD.actions.on('profile.email', emailDo);
+        HOD.actions.on('profile.email-news', emailNews);
+        HOD.actions.on('profile.email-open', function () { emailForm(true); });
+        HOD.actions.on('profile.email-close', function () { emailForm(false); });
         HOD.actions.on('profile.toggle-pw', function (btn) {
             var input = document.getElementById(btn.getAttribute('data-target'));
             var show = input.type === 'password';

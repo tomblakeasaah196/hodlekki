@@ -158,6 +158,28 @@ $claim = static function (PDO $c) use ($ruleId): bool {
 };
 ct_ok('an occasion is claimed once', $claim($pdo) && !$claim($other));
 
+ct_section('Changing a confirmed email: the password, and the lockout it shares with the Password card');
+require_once __DIR__ . '/../../includes/campaigns/profile_card.php';
+$pdo->exec('DELETE FROM login_attempts WHERE user_id = 9003');
+$pdo->exec('DELETE FROM security_audit_log WHERE target_user_id = 9003');
+$pdo->prepare('UPDATE users SET password_hash = ? WHERE id = 9003')->execute([password_hash('Right-Pass-2027', PASSWORD_DEFAULT)]);
+ct_at('2026-11-20 10:00');
+ct_confirm($pdo, 9003, 'chi.it@gmail.com', false);
+for ($i = 0; $i < SECURITY_MAX_PASSWORD_CHANGE_FAILURES; $i++) {
+    email_profile_action($pdo, 9003, 'email_save', ['email' => 'chi.new.it@gmail.com', 'password' => 'Wrong-Pass-' . $i]);
+}
+ct_eq('each wrong password is a failed password_change attempt', SECURITY_MAX_PASSWORD_CHANGE_FAILURES,
+    (int) $pdo->query("SELECT COUNT(*) FROM login_attempts WHERE user_id = 9003 AND context = 'password_change' AND was_successful = 0")->fetchColumn());
+ct_ok('…and in the audit log', (int) $pdo->query("SELECT COUNT(*) FROM security_audit_log WHERE target_user_id = 9003 AND action = 'email_change_failed'")->fetchColumn() > 0);
+$locked = email_profile_action($pdo, 9003, 'email_save', ['email' => 'chi.new.it@gmail.com', 'password' => 'Right-Pass-2027']);
+ct_ok('after five, even the right password waits', $locked['status'] === 'error' && str_starts_with((string) $locked['message'], 'Too many'));
+ct_eq('…nothing was started', null, email_profile_view($pdo, 9003)['pending']);
+$pdo->exec('DELETE FROM login_attempts WHERE user_id = 9003');
+$ok = email_profile_action($pdo, 9003, 'email_save', ['email' => 'chi.new.it@gmail.com', 'password' => 'Right-Pass-2027']);
+ct_ok('with the lockout over, the right password starts the change', $ok['status'] === 'success' && email_profile_view($pdo, 9003)['pending'] === 'chi.new.it@gmail.com');
+$pdo->exec('DELETE FROM login_attempts WHERE user_id = 9003');
+$pdo->exec('DELETE FROM security_audit_log WHERE target_user_id = 9003');
+
 foreach (array_reverse(CAMPAIGNS_TABLES) as $table) {
     $pdo->exec("DELETE FROM {$table}");
 }
