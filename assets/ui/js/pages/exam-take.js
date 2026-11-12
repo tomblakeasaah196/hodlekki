@@ -19,6 +19,10 @@
     var TYPES = { single: 'Choose one', multiple: 'Choose all that apply', true_false: 'True or false' };
     var WARN_AT = 300;   // seconds: the clock turns amber
     var DANGER_AT = 60;  // seconds: the clock turns red
+    // Retakes (attempts set per quiz, owner's choice): the take view brings
+    // attempts_allowed, attempts_used, can_retake and best. Without them
+    // there is no Try again. The action that starts the next attempt:
+    var RETAKE_ACTION = 'start';
     var cfg = {};
     var reducedMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 
@@ -105,7 +109,7 @@
             return;
         }
         forget();
-        view.innerHTML = resultHtml(v.result);
+        view.innerHTML = resultHtml(v.result, v);
         animateIn(view.firstElementChild, 'xt-rise');
         scoreIn(v.result);
     }
@@ -126,7 +130,24 @@
             '</section>';
     }
 
-    function resultHtml(r) {
+    /** Best so far, attempts left and Try again, from the take view; nothing when the fields are missing. */
+    function attemptsHtml(v) {
+        var allowed = Number(v.attempts_allowed) || 0;
+        var used = Number(v.attempts_used) || 0;
+        var best = v.best && v.best.percent != null && !isNaN(Number(v.best.percent)) ? Math.round(Number(v.best.percent)) : null;
+        var bits = [];
+        if (best !== null && used > 1) bits.push('Best so far: ' + best + '%');
+        if (allowed > 0 && used > 0) bits.push(used < allowed ? plural(allowed - used, 'attempt', 'attempts') + ' left' : 'No attempts left');
+        var html = bits.length ? '<p class="xt-attempts">' + esc(bits.join(' · ')) + '</p>' : '';
+        if (v.can_retake === true && (allowed === 0 || used < allowed)) {
+            html += '<div class="xt-retake"><button type="button" class="ui-btn ui-btn--primary ui-btn--lg" data-action="xt.retake"' +
+                (allowed ? ' aria-describedby="xt-retake-n"' : '') + '><span>Try again</span>' + HOD.icon('refresh-cw') + '</button>' +
+                (allowed ? '<p class="ui-meta" id="xt-retake-n">Attempt ' + (used + 1) + ' of ' + allowed + '</p>' : '') + '</div>';
+        }
+        return html;
+    }
+
+    function resultHtml(r, v) {
         var pct = Math.round(Number(r.percent) || 0);
         var passed = !!r.passed;
         var html = '<section class="xt-card xt-warm xt-result' + (passed ? ' xt-result--pass' : '') + '" aria-labelledby="xt-result-title">' +
@@ -136,7 +157,8 @@
             '<div class="xt-score"><p class="xt-score__pct"><span data-xt-pct>' + pct + '</span>%</p>' +
             '<div class="xt-score__bar" role="img" aria-label="' + esc(pct + '%, and ' + r.pass_percent + '% to pass') + '">' +
             '<span class="xt-score__fill" data-xt-score></span><span class="xt-score__pass" data-xt-passmark></span></div>' +
-            '<p class="ui-meta">' + esc(r.score + ' of ' + plural(r.max, 'mark', 'marks') + ' · ' + r.pass_percent + '% to pass') + '</p></div></section>';
+            '<p class="ui-meta">' + esc(r.score + ' of ' + plural(r.max, 'mark', 'marks') + ' · ' + r.pass_percent + '% to pass') + '</p></div>' +
+            attemptsHtml(v || {}) + '</section>';
         if (r.wrong_count === 0) {
             return html + '<p class="xt-after">Every answer right. Well done.</p>';
         }
@@ -179,6 +201,17 @@
         window.requestAnimationFrame(step);
     }
 
+    function retake(btn) {
+        var v = take.view || {};
+        var next = (Number(v.attempts_used) || 0) + 1;
+        HOD.confirm({ title: 'Start attempt ' + next + '?', message: (v.minutes ? v.minutes + ' minutes. ' : '') + 'The clock keeps running if you leave.', confirmLabel: 'Start' }).then(function (yes) {
+            if (!yes) return;
+            HOD.busy(btn, true);
+            forget();
+            call(RETAKE_ACTION, { item: cfg.item }).then(render).catch(function () { HOD.busy(btn, false); });
+        });
+    }
+
     function start(btn) {
         var v = take.view;
         HOD.confirm({ title: 'Start the exam?', message: 'One attempt, ' + v.minutes + ' minutes. The clock keeps running if you leave.', confirmLabel: 'Start' }).then(function (yes) {
@@ -203,6 +236,7 @@
         take.flags = kept.flags && typeof kept.flags === 'object' ? kept.flags : {};
         take.deadline = Date.now() + p.seconds_left * 1000;
         take.band = null;
+        take.saving = {};
         saved('');
         if (!take.timer) take.timer = window.setInterval(clock, 1000);
         clock();
@@ -518,6 +552,7 @@
         HOD.actions.on('xt.go', go);
         HOD.actions.on('xt.map', toggleMap);
         HOD.actions.on('xt.flag', flag);
+        HOD.actions.on('xt.retake', retake);
         document.addEventListener('keydown', onKey);
         document.addEventListener('visibilitychange', focusNote);
         call('take', { item: cfg.item }).then(render).catch(function () {});

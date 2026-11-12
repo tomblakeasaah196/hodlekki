@@ -882,6 +882,9 @@ ok('the wizard calls only the learner actions the API already has (take, start, 
     implode(',', $xtCalls));
 preg_match_all("/call\\('[a-z_]+',\\s*\\{[^}]*\\}/", $takeJs, $m);
 ok('flags stay in the browser: no request carries them', $m[0] !== [] && array_filter($m[0], static fn ($c) => stripos($c, 'flag') !== false) === []);
+ok('Try again shows only when the take view says another attempt is allowed (no fields, no button)',
+    str_contains($takeJs, 'if (v.can_retake === true && (allowed === 0 || used < allowed)) {')
+    && str_contains($takeJs, "HOD.actions.on('xt.retake', retake);"));
 ok('the wizard keeps the server\'s clock and auto hand-in at zero',
     str_contains($takeJs, 'if (left === 0) finish(true);') && str_contains($takeJs, 'take.deadline = Date.now() + res.seconds_left * 1000;'));
 

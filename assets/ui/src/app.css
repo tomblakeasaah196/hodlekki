@@ -3287,6 +3287,8 @@
         background: var(--ui-heading);
         box-shadow: 0 0 0 2px var(--ui-warm);
     }
+    .xt-attempts { margin: 14px 0 0; font-weight: 600; color: var(--ui-text); font-variant-numeric: tabular-nums; }
+    .xt-retake { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 18px; }
     .xt-learn-title { margin: 28px 0 12px; }
     .xt-learn { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
     .xt-learn__q { margin-top: 4px; font-weight: 600; color: var(--ui-heading); white-space: pre-line; overflow-wrap: anywhere; }
