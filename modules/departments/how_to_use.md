@@ -20,7 +20,7 @@ that can be edited.
 
 * **Move somebody between the lists** — press the **Secondary / Primary** chip on
   their row. One click, applied immediately.
-* **Add somebody** — **Add Member** → search for the name → choose
+* **Add somebody** — **Add member** → search for the name → choose
   *Primary* or *Secondary* → **Add to Department**.
   People already on this year's roster are hidden from the search, so the list
   never gets muddled.
@@ -34,7 +34,7 @@ that can be edited.
 * they disappear from the department screen, the counters, and every download;
 * the record itself is kept in the database (audit trail, end date stamped);
 * they are notified through the notification bell;
-* **adding them back later is just Add Member again** — the same record is
+* **adding them back later is just Add member again** — the same record is
   brought back to life, nothing is duplicated.
 
 Nobody who has been removed ever appears on the UI again. The same is true the
@@ -50,9 +50,9 @@ Open a department and press **Change** on the seat you want to move.
   off the department roster, they are notified, and — if they held a Director /
   HOD seat — their access to this module is removed on their next page load.
 * If you want the outgoing leader to stay in the department, simply add them
-  back as a Primary or Secondary member: **Add Member** does it in seconds.
+  back as a Primary or Secondary member: **Add member** does it in seconds.
 
-Saving *Edit Settings* does the same thing: selecting a different person for a
+Saving *Edit settings* does the same thing: selecting a different person for a
 seat replaces the sitting leader. A seat is never left half-changed, and the
 transition is reported in the confirmation message.
 
@@ -61,7 +61,7 @@ transition is reported in the confirmation message.
 A ministry year has a label and a period (e.g. `2026`, 1 Jan 2026 – 31 Dec
 2026). Rosters, downloads and reports are all tied to one.
 
-When a new year begins, use **Start Ministry Year** (Super Admin or Resident
+When a new year begins, use **Start new year** (Super Admin or Resident
 Pastor). It opens a **worksheet**, not a button:
 
 1. Set the **label** and the **period** for the new year.
@@ -69,11 +69,11 @@ Pastor). It opens a **worksheet**, not a button:
    fill the worksheet; then reshuffle by hand.
 3. For each department (and every sub-unit) you can
    * appoint the three leadership seats,
-   * add people with the searchable *+ Add a person* box,
+   * add people with the searchable person box and **Add**,
    * flip a member between Primary and Secondary with the chip,
    * take somebody out with the × on their chip,
    * or **Clear** the whole department.
-4. **Create year & go live.** See the running summary at the bottom for how many
+4. **Go live.** See the running summary at the bottom for how many
    members are placed and how many seats are filled.
 
 Going live:
