@@ -27,6 +27,12 @@ function monitor_cron_jobs(): array
             'line' => '* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1'],
         'push_worker'             => ['label' => 'Push notification worker', 'every' => 1,
             'line' => '* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/push_worker.php >/dev/null 2>&1'],
+        'email_worker'            => ['label' => 'Email queue worker', 'every' => 1,
+            'line' => '* * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/email_worker.php >> /home/smartqaq/logs/hod-email.log 2>&1'],
+        'automation_tick'         => ['label' => 'Email automation (every 5 min)', 'every' => 5,
+            'line' => '0,5,10,15,20,25,30,35,40,45,50,55 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/automation_tick.php >> /home/smartqaq/logs/hod-email.log 2>&1'],
+        'email_bounces'           => ['label' => 'Email bounces (every 10 min)', 'every' => 10,
+            'line' => '*/10 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/email_bounces.php >> /home/smartqaq/logs/hod-email.log 2>&1'],
         'special_events'          => ['label' => 'Special Events (reminders, clean-up)', 'every' => 5,
             'line' => '*/5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/special_events.php >/dev/null 2>&1'],
         'reach_lost_souls'        => ['label' => 'Reach: lost souls (07:00)', 'daily' => '07:00',
@@ -43,7 +49,7 @@ function monitor_cron_jobs(): array
 /** Checks that alert at once when they turn red (the rest wait for the morning summary). */
 function monitor_urgent_checks(): array
 {
-    return ['cron_sms_queue_worker', 'cron_push_worker', 'cron_special_events', 'cron_reach_lost_souls',
+    return ['cron_sms_queue_worker', 'cron_push_worker', 'cron_email_worker', 'cron_special_events', 'cron_reach_lost_souls',
             'cron_assimilation_watchlists', 'sms', 'push', 'email', 'db', 'disk', 'backups', 'php', 'deploy',
             'outside_site', 'outside_connect', 'tls', 'dns', 'origin_lock'];
 }

@@ -68,7 +68,7 @@ Four steps make it complete, in this order:
 | | DNS and mail records | no A, MX or SPF (amber: no DKIM or DMARC) | yes |
 | | Origin lock | a request around Cloudflare is answered (amber: no `EDGE_TOKEN`) | yes |
 | | Outside probe | (amber) no report for 3 runs | — |
-| Background jobs | SMS queue worker, push worker (every minute), Special Events (every 5 min), Reach lost souls (07:00), Assimilation watchlists (07:15) | stopped, or a daily run missed; amber when late, stuck or failed | yes |
+| Background jobs | SMS queue worker, push worker, email queue worker (every minute), email automation, Special Events (every 5 min), email bounces (every 10 min), Reach lost souls (07:00), Assimilation watchlists (07:15) | stopped, or a daily run missed; amber when late, stuck or failed | yes |
 | Messages | SMS sending | queue not moving for 15 min, stuck "sending", wallet under ~100 texts (amber under 500) | yes |
 | | Push notifications | cannot send, or jobs waiting over 15 min | yes |
 | | Email sending | not configured, SMTP refuses the sign-in (tested hourly without sending), 5+ failed sends a day | yes |
