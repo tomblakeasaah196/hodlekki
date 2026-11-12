@@ -36,6 +36,26 @@ exams and question import tests").
   row N) / Example → **Import** (`exam_import_confirm()`) adds the good rows, Ready unless the tutor unticks it. The
   file is never stored; the checked rows wait in `training_question_imports` for a day. A confirm runs once.
   Up to 500 questions per file, 5 MB.
+- **Straight into an exam** (owner, 12 Nov 2026: "add and save at once"): the exam set-up page
+  (`modules/exams/setup`) has **Import questions** and **Download template** too. There the bank is the training's (no
+  choice), the rows are saved as Ready, and the confirm (`import_confirm` with `item` and the form as the tutor sees
+  it) adds them to the exam and saves it in the same step (`exam_import_into_exam()`); the toast says what was added.
+  - The save uses the form's rules and ticks, so afterwards the page and the exam agree. A rule that doesn't pass
+    (say, closing before it opens) saves nothing: the questions are in the bank and ticked, and the page says what to fix.
+  - People have started: the server answers `CONFIRM_STARTED` before importing anything, and the page asks first
+    ("N people have started. Each paper is fixed when it starts, so theirs won't change; new starters get the new
+    questions."). On **Add**, the questions are added, never removed (`exam_save(..., $addAfterStart)`); the time, pass
+    mark and marking rules stay fixed. A paper is fixed at the start: `exam_start()` writes the attempt's own rows
+    (`training_attempt_answers`) and marking reads only those.
+  - The file's questions that were already in the bank (found by `import_hash`) and are Ready join the exam too, so a
+    re-import adds nothing twice to the bank or the exam (and saves nothing). Drafts and archived ones are left out,
+    and counted. The questions stay in the bank, so other exams can use them.
+  - Rows with no explanation: the check offers **Suggest missing explanations**. After the import it runs PR 4b's
+    flow (`approve_check`): AI suggestions to check and edit, stored only on **Save** (`approve`); **Cancel** stores
+    nothing. Off by default.
+- **Finding the bank:** **Question bank** in the HOD Academy header and on each training's builder (Trainings Edit,
+  through `exam_url_bank()`), and the global search ("question bank", "questions", "import questions"), from the
+  Academy's search-only `links` entry in `includes/ui/nav.php`.
 
 ## 3. Exams (`engine.php`), "fair and firm"
 
@@ -51,7 +71,7 @@ One exam per training item of type `exam` (`training_exams.item_id`, UNIQUE).
 | Auto-submit at zero | The page hands in when its clock reaches zero. The server also ends every attempt past its deadline + 20 s whenever an exam is opened, answered or looked at (`exam_finalize_due()`): `ended_by` = `timer`, or `closed` when the window's close cut it short. An answer after that hands the paper in instead. |
 | Tab-leave notes | `visibilitychange` → `leave` / `return` events; after `leave_alert` leaves (default 3) the people who set the exam up get a bell (and push), once per attempt. The tutor sees the timeline. |
 | Marking | On the server, once, when the attempt ends. One answer and true/false: all or nothing. Several answers: all or nothing, or with **part marks** when the exam says so: (right picked − wrong picked) / right × marks, never below 0. |
-| Firm once started | The questions, minutes, pass mark, shuffle and part marks cannot change once anyone has started; the times and the leave alert can. |
+| Firm once started | The questions, minutes, pass mark, shuffle and part marks cannot change once anyone has started; the times and the leave alert can. One exception, the set-up page's import after the tutor's confirm: questions can be added (never removed) for new starters. Every paper is fixed at its start (its own `training_attempt_answers` rows), so started papers never change. |
 
 **Results.** A learner sees the score, the percentage and Passed / Not passed straight away. For the questions they
 got **wrong** they see their answer, the right answer and the stored explanation, only when nobody can still be
@@ -82,7 +102,8 @@ attempt that is still running.
   it calls `trainings_recheck_enrolment()`, which may complete the training. A failure is logged and never breaks
   marking. PR 1's `includes/trainings/bootstrap.php` loads this module; the hook loads PR 1 on first use.
 - Links for PR 1's pages: `exam_url_setup($itemId)` → `/modules/exams/setup?item=N` (Academy builder: "Set up exam"),
-  `exam_url_take($itemId)` → `/modules/exams/take?item=N` (learner: "Start exam"). The bank: `/modules/exams/?training=N`.
+  `exam_url_take($itemId)` → `/modules/exams/take?item=N` (learner: "Start exam"). The bank: `exam_url_bank($trainingId)` →
+  `/modules/exams/?training=N` ("Question bank" in the Academy header and the builder).
 
 ## 6. For PR 4 (AI)
 

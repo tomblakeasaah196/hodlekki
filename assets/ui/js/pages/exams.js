@@ -121,6 +121,10 @@
         if (btn) HOD.busy(btn, true);
         return call('approve', { items: items }).then(function (res) {
             HOD.dialog.close('ex-approve');
+            if (cfg.page === 'setup') {   // explanations for questions just imported into the exam (already Ready)
+                HOD.toast('Explanations saved.', 'success');
+                return;
+            }
             HOD.toast(res.message, 'success');
             bank.picked = {};
             picks();
@@ -265,20 +269,55 @@
                         '<td class="' + (r.status === 'error' ? 'text-danger' : 'ui-meta') + '">' + esc(note) + '</td></tr>';
                 }).join('') + '</tbody></table></div>';
             one('[data-ex-import-result]').hidden = false;
-            one('[data-ex-import-go]').hidden = c.ok === 0;
+            // On an exam's set-up page, questions already in the bank can still join the exam.
+            one('[data-ex-import-go]').hidden = c.ok + (cfg.page === 'setup' ? c.duplicate : 0) === 0;
+            var explainRow = one('[data-ex-import-explain-row]');
+            if (explainRow) {
+                var missing = res.rows.filter(function (r) { return r.status === 'ok' && !r.explained; }).length;
+                explainRow.hidden = missing === 0;
+                one('[data-ex-import-explain]').checked = false;
+                one('[data-ex-import-explain-hint]').textContent = plural(missing, 'has', 'have') + ' none. AI drafts them; you check before saving.';
+            }
         }).catch(function (err) {
             HOD.form.setErrors(form, { sheet: err.message });
         }).finally(function () { HOD.busy(button, false); });
     }
 
     function importConfirm(btn) {
-        if (!bank.token) return;
+        if (bank.token) importSend(btn, false);
+    }
+
+    /**
+     * From an exam's set-up page the server saves them as Ready in this
+     * training's bank, adds them to the exam and saves it, with the rules as
+     * the form shows them (docs/EXAMS.md §2). If people have started, it
+     * answers CONFIRM_STARTED before importing anything; the tutor confirms
+     * and it goes again.
+     */
+    function importSend(btn, startedOk) {
+        var into = cfg.page === 'setup';
+        var explain = into && one('[data-ex-import-explain]').checked;
+        var data = into
+            ? { token: bank.token, item: cfg.item, started_ok: startedOk ? 1 : 0, exam: examValues(one('#ex-exam-form')) }
+            : { token: bank.token, ready: one('[data-ex-import-ready]').checked ? 1 : 0 };
         HOD.busy(btn, true);
-        call('import_confirm', { token: bank.token, ready: one('[data-ex-import-ready]').checked ? 1 : 0 }).then(function (res) {
+        call('import_confirm', data, { quiet: into }).then(function (res) {
             HOD.dialog.close('ex-import');
+            if (into) {
+                importedIntoExam(res, explain);
+                return;
+            }
             HOD.toast(res.message, 'success');
             loadQuestions();
-        }).catch(function () {}).finally(function () { HOD.busy(btn, false); });
+        }).catch(function (err) {
+            if (!into) return;
+            if (err.code === 'CONFIRM_STARTED') {
+                HOD.confirm({ title: 'Add to a started exam?', message: err.message, confirmLabel: 'Add' })
+                    .then(function (yes) { if (yes) importSend(btn, true); });
+                return;
+            }
+            HOD.toast(err.message, 'danger');
+        }).finally(function () { HOD.busy(btn, false); });
     }
 
     /* =====================================================================
@@ -300,7 +339,11 @@
         f.elements.leave_alert.value = e ? e.leave_alert : 3;
         f.elements.shuffle.checked = e ? !!e.shuffle : true;
         f.elements.part_marks.checked = e ? !!e.part_marks : false;
-        var chosen = e ? e.question_ids : [];
+        fillPool(v, e ? e.question_ids : []);
+    }
+
+    /** The question list (ticked: chosen), the locked note, the answers line and the totals. */
+    function fillPool(v, chosen) {
         var pool = v.pool.slice().sort(function (a, b) {
             var ia = chosen.indexOf(a.id), ib = chosen.indexOf(b.id);
             return (ia === -1 ? 1e9 : ia) - (ib === -1 ? 1e9 : ib);
@@ -309,9 +352,11 @@
             return '<label class="ui-check rounded-ui-lg border border-line px-3 py-2"><input type="checkbox" name="question_ids" value="' + q.id + '" data-marks="' + q.marks + '"' +
                 (chosen.indexOf(q.id) !== -1 ? ' checked' : '') + ' data-action-change="ex.total"><span><span class="whitespace-pre-line">' + esc(q.text) + '</span>' +
                 '<span class="ui-check__hint">' + esc([q.type_label, plural(q.marks, 'mark', 'marks'), q.topic, q.shared ? 'Shared bank' : ''].filter(Boolean).join(' · ')) + '</span></span></label>';
-        }).join('') : '<p class="ui-meta">No Ready questions yet. Add some in the question bank and mark them Ready.</p>';
+        }).join('') : '<p class="ui-meta">No Ready questions yet. Import some, or add them in the question bank.</p>';
         reviewSetup(v.review);
         var locked = v.started > 0;
+        var into = one('[data-ex-import-into]');
+        if (into) into.textContent = locked ? 'They are saved as Ready and added for new starters.' : 'They are saved as Ready and added to this exam.';
         one('[data-ex-locked]').innerHTML = locked
             ? '<div class="ui-banner ui-banner--info mb-4" role="status">' + HOD.icon('info') + '<div class="ui-banner__body"><p class="ui-banner__text">' +
               esc(plural(v.started, 'person has', 'people have') + ' started: only the times and the note can change.') + '</p></div></div>'
@@ -364,6 +409,31 @@
         one('[data-ex-total]').textContent = plural(picked.length, 'question', 'questions') + ' · ' + plural(marks, 'mark', 'marks');
     }
 
+    /**
+     * After Import on the set-up page: the new list, with what was ticked
+     * still ticked and the file's questions added. The rules on the form are
+     * left as typed. The server has already saved them into the exam when it
+     * could (res.into: saved | unchanged | unsaved | started | failed).
+     */
+    function importedIntoExam(res, explain) {
+        if (res.into === 'saved') {
+            fillSetup(res);   // saved with the form as it was, so the page shows what is saved
+        } else {
+            // Nothing saved (nothing new, or a rule to fix): the form stays as typed, the file's questions ticked.
+            var chosen = res.started > 0
+                ? (res.exam ? res.exam.question_ids : [])
+                : all('[data-ex-pool] input:checked').map(function (i) { return Number(i.value); });
+            if (!(res.started > 0)) {
+                (res.question_ids || []).forEach(function (id) { if (chosen.indexOf(id) === -1) chosen.push(id); });
+            }
+            setup.view = res;
+            fillPool(res, chosen);
+        }
+        HOD.toast(res.message, res.into === 'failed' ? 'warning' : 'success');
+        // The tutor asked for AI explanations: suggestions to check; stored only on Save (approveConfirm).
+        if (explain && res.unexplained && res.unexplained.length) approveStart(res.unexplained);
+    }
+
     function pickAll() { all('[data-ex-pool] input:not(:disabled)').forEach(function (i) { i.checked = true; }); total(); }
     function pickNone() { all('[data-ex-pool] input:not(:disabled)').forEach(function (i) { i.checked = false; }); total(); }
 
@@ -371,11 +441,9 @@
         return call('setup', { item: cfg.item }).then(fillSetup);
     }
 
-    function saveExam(form) {
-        var button = form.querySelector('[type="submit"]');
-        HOD.busy(button, true);
-        call('exam_save', {
-            item: cfg.item,
+    /** The set-up form as the tutor sees it: the rules and the ticked questions. */
+    function examValues(form) {
+        return {
             window_open: form.elements.window_open.value,
             window_close: form.elements.window_close.value,
             minutes: form.elements.minutes.value,
@@ -384,7 +452,13 @@
             shuffle: form.elements.shuffle.checked ? 1 : 0,
             part_marks: form.elements.part_marks.checked ? 1 : 0,
             question_ids: all('[data-ex-pool] input:checked').map(function (i) { return Number(i.value); })
-        }, { quiet: true }).then(function (res) {
+        };
+    }
+
+    function saveExam(form) {
+        var button = form.querySelector('[type="submit"]');
+        HOD.busy(button, true);
+        call('exam_save', Object.assign({ item: cfg.item }, examValues(form)), { quiet: true }).then(function (res) {
             fillSetup(res);
             results();
             HOD.toast(res.message, 'success');
@@ -635,6 +709,10 @@
             HOD.actions.on('ex.import-confirm', importConfirm);
             loadQuestions();
         } else if (cfg.page === 'setup') {
+            HOD.actions.on('ex.import-open', importOpen);
+            HOD.actions.on('ex.import-check', importCheck);
+            HOD.actions.on('ex.import-confirm', importConfirm);
+            HOD.actions.on('ex.approve-confirm', approveConfirm);
             HOD.actions.on('ex.exam-save', saveExam);
             HOD.actions.on('ex.total', total);
             HOD.actions.on('ex.pick-all', pickAll);

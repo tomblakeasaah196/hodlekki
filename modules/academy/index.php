@@ -56,6 +56,7 @@ if ($canManage) {
             . 'Assign it to groups or named people with a due date; visitors without a sign-in get an invite link. '
             . 'When someone finishes Membership Class or Maturity Class, confirm them here: Membership makes them a Member, Maturity marks them ready to serve.',
         'actions' => ($canCreate && $ready ? ui_button('New training', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-dialog-open' => 'acd-new']]) : '')
+            . ($canMark && $ready && function_exists('exam_url_bank') ? ui_button('Question bank', ['variant' => 'secondary', 'icon' => 'clipboard-list', 'href' => exam_url_bank()]) : '')   // docs/EXAMS.md
             . ui_button('My trainings', ['variant' => 'secondary', 'icon' => 'graduation-cap', 'href' => '/modules/trainings/']),
     ]) ?>
 <?php if (!$ready): ?>
