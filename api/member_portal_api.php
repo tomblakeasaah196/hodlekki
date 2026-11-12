@@ -148,12 +148,7 @@ try {
             $stmt->execute([$user_id, $amount, $type, $date, $receipt_path]);
 
             // NOTIFICATION TRIGGER: Alert Finance/Leadership of the new contribution for reconciliation
-            $adminStmt = $pdo->query("
-                SELECT user_id FROM user_roles 
-                JOIN roles ON user_roles.role_id = roles.id 
-                WHERE roles.role_name IN ('Super_Admin', 'Resident_Pastor', 'Director')
-            ");
-            $admins = $adminStmt->fetchAll(PDO::FETCH_COLUMN);
+            $admins = perm_office_holders($pdo, 'finance', 'edit');
 
             if (!empty($admins)) {
                 $formatted_amount = number_format($amount, 2);
@@ -191,12 +186,7 @@ try {
             $stmt->execute([$user_id, $request_text]);
 
             // NOTIFICATION TRIGGER: Alert Zoe Intercessory Leaders
-            $zoeStmt = $pdo->query("
-                SELECT ud.user_id FROM user_departments ud 
-                JOIN departments d ON ud.department_id = d.id 
-                WHERE d.name LIKE '%Zoe%' AND ud.role_in_dept IN ('HOD', 'Director') AND ud.is_active = 1
-            ");
-            $zoe_leaders = $zoeStmt->fetchAll(PDO::FETCH_COLUMN);
+            $zoe_leaders = perm_module_leaders($pdo, 'zoe', 'hod');
 
             if (!empty($zoe_leaders)) {
                 $uStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");

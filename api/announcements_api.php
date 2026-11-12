@@ -83,12 +83,7 @@ try {
                 $msg = "Announcement submitted for approval.";
 
                 // NOTIFICATION TRIGGER: Alert Pastors and Super Admins for review
-                $approversStmt = $pdo->query("
-                    SELECT user_id FROM user_roles 
-                    JOIN roles ON user_roles.role_id = roles.id 
-                    WHERE roles.role_name IN ('Super_Admin', 'Resident_Pastor', 'Assoc_Pastor')
-                ");
-                $approvers = $approversStmt->fetchAll(PDO::FETCH_COLUMN);
+                $approvers = perm_office_holders($pdo, 'announcements', 'approve');
 
                 if (!empty($approvers)) {
                     $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Pending Announcement', ?, '/modules/announcements/index.php')");

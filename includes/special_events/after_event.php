@@ -275,8 +275,8 @@ function se_handoff_push(PDO $pdo, array $event, array $options, array $override
     }
 
     if (function_exists('reach_notify')) {
-        $reachIds = $pdo->query("SELECT ud.user_id FROM user_departments ud JOIN departments d ON d.id=ud.department_id WHERE (d.name LIKE '%Reach%' OR d.name LIKE '%Evangelism%') AND ud.role_in_dept IN ('HOD','Director') AND ud.is_active=1")->fetchAll(PDO::FETCH_COLUMN);
-        $embraceIds = $pdo->query("SELECT ud.user_id FROM user_departments ud JOIN departments d ON d.id=ud.department_id WHERE d.name LIKE '%Embrace%' AND ud.role_in_dept IN ('HOD','Director') AND ud.is_active=1")->fetchAll(PDO::FETCH_COLUMN);
+        $reachIds = perm_module_leaders($pdo, 'reach', 'hod');
+        $embraceIds = array_values(array_diff(perm_module_leaders($pdo, 'embrace', 'hod'), perm_module_team($pdo, 'idi')));
         $label = trim($event['title'] . ' ' . ($event['edition_label'] ?? ''));
 
         if ($reachCampaign) {

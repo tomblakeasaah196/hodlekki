@@ -188,6 +188,7 @@ GitHub Secrets / Variables), and rollback instructions live in
 * * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/sms_queue_worker.php >> /home/smartqaq/sms_worker.log 2>&1
 0 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/reach_lost_souls.php >/dev/null 2>&1
 15 7 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/assimilation_watchlists.php >/dev/null 2>&1
+10 0 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/permissions_daily.php >/dev/null 2>&1
 */5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/special_events.php >/dev/null 2>&1
 * * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/push_worker.php >/dev/null 2>&1
 * * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/monitor.php >/dev/null 2>&1
@@ -233,6 +234,12 @@ ten minutes.
 sends managers one in-app digest per watchlist naming only the people who
 are newly drifted, and detects anyone who has come back to church. It is
 safe to run more than once a day — nobody is announced twice.
+
+`permissions_daily.php` (00:10) handles seat and role end dates: 14 days
+before, the holder and their pastor are told (pastors get a one-click Renew
+link); the Resident Pastor and Super Admins get a year-end summary at 14 and
+3 days; then what ended is closed. Access ends on the day even without it
+(`can()` checks the dates); `--dry-run` prints the counts.
 
 **Runtime files preserved across deploys (via `.deployignore`):**
 `.env`, `.htaccess`, `.user.ini`, `php.ini`, `uploads/`,
@@ -304,7 +311,8 @@ api/            JSON endpoints, one file per module (auth_api.php, ...).
 assets/         Static CSS / JS / images shipped to the browser.
 auth/           Login, logout, first-time password setup.
 cron/           CLI jobs (sms_queue_worker.php, reach_lost_souls.php 07:00,
-                assimilation_watchlists.php 07:15, special_events.php */5,
+                assimilation_watchlists.php 07:15, permissions_daily.php 00:10,
+                special_events.php */5,
                 push_worker.php and monitor.php every minute).
 includes/       Shared PHP: db.php, header.php, functions.php, PDF helpers,
                 sms_functions.php, sms_vault_key.php, push_*.php, pwa_*.php.

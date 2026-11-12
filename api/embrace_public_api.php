@@ -296,13 +296,9 @@ try {
                     : '';
 
                 // NOTIFICATION TRIGGER 1: Alert Embrace Leadership
-                $embraceStmt = $pdo->query("
-                    SELECT ud.user_id
-                    FROM user_departments ud
-                    JOIN departments d ON ud.department_id = d.id
-                    WHERE d.name LIKE '%Embrace%' AND ud.role_in_dept IN ('Director', 'HOD') AND ud.is_active = 1
-                ");
-                $embrace_leaders = $embraceStmt->fetchAll(PDO::FETCH_COLUMN);
+                // IDI hears below; nobody gets both messages.
+                $idi_users = perm_module_team($pdo, 'idi');
+                $embrace_leaders = array_diff(perm_module_leaders($pdo, 'embrace', 'hod'), $idi_users);
 
                 if (!empty($embrace_leaders)) {
                     $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Connect Card', ?, '/modules/embrace/index.php')");
@@ -313,8 +309,6 @@ try {
                 }
 
                 // NOTIFICATION TRIGGER 2: Alert IDI
-                $idiStmt = $pdo->query("SELECT user_id FROM user_departments WHERE department_id = 1 AND is_active = 1");
-                $idi_users = $idiStmt->fetchAll(PDO::FETCH_COLUMN);
 
                 if (!empty($idi_users)) {
                     $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Connect Card Profile', ?, '/modules/congregation/index.php')");

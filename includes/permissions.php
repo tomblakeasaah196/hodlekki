@@ -1185,29 +1185,110 @@ function perm_module_team(PDO $pdo, string $module): array
     return $ids;
 }
 
-/** The people in LEADERSHIP seats of the departments that own $module (who hear about its work). */
-function perm_module_leaders(PDO $pdo, string $module): array
+/**
+ * The people in LEADERSHIP seats of the departments that own $module (who
+ * hear about its work). $atLeast (a stable seat key, e.g. 'hod') keeps only
+ * seats ranked at or above that seat type: 'hod' = HOD, Director, Pastor in
+ * charge — the notification audience the old code picked by role name.
+ */
+function perm_module_leaders(PDO $pdo, string $module, ?string $atLeast = null): array
 {
     if (!perm_ready($pdo)) {
         return [];
     }
     $ids = [];
-    try {
-        foreach (perm_module_owners($pdo)[$module] ?? [] as $dept) {
-            if ($dept <= 0) {
-                continue;
+    foreach (perm_module_owners($pdo)[$module] ?? [] as $dept) {
+        if ($dept > 0) {
+            foreach (perm_department_leaders($pdo, $dept, $atLeast) as $id) {
+                $ids[$id] = true;
             }
-            foreach (perm_live_seats($pdo, null, perm_today(), $dept) as $seat) {
-                if (!empty($seat['is_leader'])) {
-                    $ids[$seat['user_id']] = true;
-                }
+        }
+    }
+    $ids = array_keys($ids);
+    sort($ids);
+    return $ids;
+}
+
+/** The people in leadership seats of one department ($atLeast: see perm_module_leaders()). */
+function perm_department_leaders(PDO $pdo, int $deptId, ?string $atLeast = 'hod'): array
+{
+    if (!perm_ready($pdo) || $deptId <= 0) {
+        return [];
+    }
+    $floor = $atLeast !== null ? (int) (perm_seat_types($pdo)[$atLeast]['seat_rank'] ?? PHP_INT_MAX) : 0;
+    $ids = [];
+    try {
+        foreach (perm_live_seats($pdo, null, perm_today(), $deptId) as $seat) {
+            if (!empty($seat['is_leader']) && $seat['seat_rank'] >= $floor) {
+                $ids[$seat['user_id']] = true;
             }
         }
     } catch (Throwable $e) {
-        error_log('permissions: module leaders: ' . $e->getMessage());
+        error_log('permissions: department leaders: ' . $e->getMessage());
         return [];
     }
-    $ids = array_keys($ids);
+    $ids = array_keys(perm_active_accounts($pdo, array_keys($ids)));
+    sort($ids);
+    return $ids;
+}
+
+/**
+ * The church office for $module: people whose ROLE (not a seat) reaches it
+ * church-wide at $level — the pastors, and the Super Admins when
+ * $withBreakGlass. Notifications about church-wide work go here; department
+ * leaders hear about their own department's work via perm_module_leaders().
+ * Live, unfrozen roles and active accounts only.
+ *
+ * @return int[] user ids
+ */
+function perm_office_holders(PDO $pdo, string $module, string $level = 'view', bool $withBreakGlass = true): array
+{
+    if (!perm_ready($pdo) || !perm_known($module, $level)) {
+        return [];
+    }
+    $today = perm_today();
+    $ids = [];
+    try {
+        $roles = $pdo->query('SELECT id, COALESCE(is_break_glass, 0) AS bg FROM roles WHERE COALESCE(is_archived, 0) = 0')->fetchAll(PDO::FETCH_ASSOC);
+        $holders = $pdo->prepare('SELECT DISTINCT user_id FROM user_roles WHERE role_id = ? AND COALESCE(is_frozen, 0) = 0
+                                     AND (starts_on IS NULL OR starts_on <= ?) AND (ends_on IS NULL OR ends_on >= ? OR ? = 1)');
+        foreach ($roles as $r) {
+            $bg = (int) $r['bg'] === 1;
+            $ctx = perm_resolve_role($pdo, (int) $r['id'], $today);
+            $reaches = perm_ctx_scope($ctx, $module, $level)['church'] || ($bg && $withBreakGlass);
+            if (!$reaches) {
+                continue;
+            }
+            $holders->execute([(int) $r['id'], $today, $today, $bg ? 1 : 0]);
+            foreach ($holders->fetchAll(PDO::FETCH_COLUMN) as $id) {
+                $ids[(int) $id] = true;
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('permissions: office holders: ' . $e->getMessage());
+        return [];
+    }
+    $ids = array_keys(perm_active_accounts($pdo, array_keys($ids)));
+    sort($ids);
+    return $ids;
+}
+
+/** The most senior pastor(s): live holders of the role with the highest appoint_rank (the Resident Pastor on day one). */
+function perm_senior_pastor_ids(PDO $pdo): array
+{
+    try {
+        $top = $pdo->query('SELECT MAX(appoint_rank) FROM roles WHERE COALESCE(is_archived, 0) = 0')->fetchColumn();
+        if ($top === null || $top === false) {
+            return [];
+        }
+        $stmt = $pdo->prepare('SELECT DISTINCT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+                                WHERE r.appoint_rank = ? AND COALESCE(r.is_archived, 0) = 0 AND COALESCE(ur.is_frozen, 0) = 0');
+        $stmt->execute([(int) $top]);
+        $ids = array_keys(perm_active_accounts($pdo, $stmt->fetchAll(PDO::FETCH_COLUMN)));
+    } catch (Throwable $e) {
+        error_log('permissions: senior pastor: ' . $e->getMessage());
+        return [];
+    }
     sort($ids);
     return $ids;
 }

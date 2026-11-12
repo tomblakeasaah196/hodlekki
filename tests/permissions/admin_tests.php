@@ -297,3 +297,45 @@ $pdo->exec("UPDATE perm_config SET cfg_value = '0' WHERE cfg_key = 'expiry_enfor
 perm_reset();
 ok('with end dates off the run does nothing', perm_daily_run($pdo, '2027-01-02')['skipped'] !== null);
 perm_set_today('2026-11-11');
+
+// ---------------------------------------------------------------------------
+section('PR 3: who is told (notification audiences) and Departments seats');
+$pdo = perm_admin_db();
+$sa = perm_admin_person($pdo, 'Admin');
+perm_test_role($pdo, $sa, 'Super_Admin');
+$rp = perm_admin_person($pdo, 'Pastor', 'Pastor');
+perm_test_role($pdo, $rp, 'Resident_Pastor');
+$ap = perm_admin_person($pdo, 'Assoc', 'Pastor');
+perm_test_role($pdo, $ap, 'Assoc_Pastor');
+$charisHod = perm_admin_person($pdo, 'Chika');
+perm_test_seat($pdo, $charisHod, 10, 'HOD');
+$charisWorker = perm_admin_person($pdo, 'Wole');
+perm_test_seat($pdo, $charisWorker, 10, 'Worker');
+$deputy = perm_admin_person($pdo, 'Deji');
+perm_test_seat($pdo, $deputy, 10, 'Deputy_HOD');
+$embraceDir = perm_admin_person($pdo, 'Efe');
+perm_test_seat($pdo, $embraceDir, 2, 'Director');
+eq('announcements approvers: the pastors\' roles and the Super Admin, not every Director/HOD seat',
+    [$sa, $rp, $ap], perm_office_holders($pdo, 'announcements', 'approve'));
+eq('finance: the Resident Pastor and the Super Admin (as before)', [$sa, $rp], perm_office_holders($pdo, 'finance', 'edit'));
+eq('…without break-glass: the Resident Pastor only', [$rp], perm_office_holders($pdo, 'finance', 'edit', false));
+eq('Charis leaders: HOD and above in the departments that own Charis', [$charisHod], perm_module_leaders($pdo, 'charis', 'hod'));
+eq('every leadership seat without a floor', [$charisHod, $deputy], perm_module_leaders($pdo, 'charis'));
+eq('a department\'s leaders', [$embraceDir], perm_department_leaders($pdo, 2));
+eq('the senior pastor: the highest appoint rank', [$rp], perm_senior_pastor_ids($pdo));
+$pdo->exec("UPDATE users SET account_status = 'suspended' WHERE id = {$charisHod}");
+eq('a suspended account is not told', [], perm_module_leaders($pdo, 'charis', 'hod'));
+$pdo->exec("INSERT INTO perm_module_owners (module_key, department_id) VALUES ('zoe', 7)");
+$pdo->exec(perm_test_migration('20261201090100_perm_zoe_owner.sql'));
+eq('the Zoe owner migration is idempotent', 1, (int) $pdo->query("SELECT COUNT(*) FROM perm_module_owners WHERE module_key = 'zoe' AND department_id = 7")->fetchColumn());
+
+require_once __DIR__ . '/../../includes/department_helpers.php';
+perm_reset();
+eq('Departments: the leadership seats by stable key', ['Assoc_Pastor', 'Director', 'HOD'], dept_leader_roles());
+ok('Departments: Add person offers Deputy HOD, never a leadership seat', isset(dept_member_seats()['Deputy_HOD'])
+    && !isset(dept_member_seats()['HOD']) && dept_member_seats()['Worker'] === 'Worker');
+$pdo->exec("UPDATE perm_seat_types SET label = 'Unit Head' WHERE seat_key = 'hod'");
+perm_reset();
+eq('renaming a seat type renames it in Departments', 'Unit Head', dept_role_labels()['HOD']);
+[$order, $values] = dept_seat_order('ud.role_in_dept');
+eq('roster order follows seat rank', ['Assoc_Pastor', 'Director', 'HOD', 'Deputy_HOD', 'Sub_Unit_Head', 'Worker', 'Member'], $values);

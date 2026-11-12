@@ -78,8 +78,8 @@ if ($format === 'csv') {
         fputcsv($out, [
             $n,
             $r['department'],
-            in_array($r['role_in_dept'], DEPT_LEADER_ROLES, true) ? 'Leader' : $r['membership_type'],
-            DEPT_ROLE_LABELS[$r['role_in_dept']] ?? str_replace('_', ' ', $r['role_in_dept']),
+            in_array($r['role_in_dept'], dept_leader_roles(), true) ? 'Leader' : $r['membership_type'],
+            dept_role_labels()[$r['role_in_dept']] ?? str_replace('_', ' ', $r['role_in_dept']),
             trim($r['first_name'] . ' ' . $r['last_name']),
             $r['gender'] ?: '-',
             $r['phone'] ?: '-',
@@ -203,9 +203,9 @@ foreach ($flat as $dept) {
         $n,
         $label,
         str_replace('_', ' ', (string) $dept['type']),
-        $leaders['Assoc_Pastor']['name'] ?? '—',
-        $leaders['Director']['name'] ?? '—',
-        $leaders['HOD']['name'] ?? '—',
+        $leaders[dept_seat_value('pastor_in_charge')]['name'] ?? '—',
+        $leaders[dept_seat_value('director')]['name'] ?? '—',
+        $leaders[dept_seat_value('hod')]['name'] ?? '—',
         $dept['primary_count'],
         $dept['secondary_count'],
         $dept['primary_count'] + $dept['secondary_count'],
@@ -271,13 +271,13 @@ foreach ($flat as $dept) {
     $n = 0;
 
     // 1. Leadership seats
-    foreach (DEPT_LEADER_ROLES as $role) {
+    foreach (dept_leader_roles() as $role) {
         $leader = $dept['leaders'][$role] ?? null;
         if (!$leader) {
             continue;
         }
         $n++;
-        $values = [$n, 'Leader', DEPT_ROLE_LABELS[$role], $leader['name'], $leader['gender'] ?: '-', $leader['phone'] ?: '-', '-', '-'];
+        $values = [$n, 'Leader', dept_role_labels()[$role], $leader['name'], $leader['gender'] ?: '-', $leader['phone'] ?: '-', '-', '-'];
         foreach ($values as $i => $val) {
             $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
             $sheet->setCellValue("{$col}{$row}", (string) $val);
@@ -293,7 +293,7 @@ foreach ($flat as $dept) {
             $values = [
                 $n,
                 $type,
-                $m['sub_unit_head'] ? 'Sub-Unit Head' : 'Member',
+                $m['sub_unit_head'] ? (dept_role_labels()[dept_seat_value('sub_unit_head')] ?? '') : (dept_role_labels()[dept_seat_value('member')] ?? ''),
                 $m['name'],
                 $m['gender'] ?: '-',
                 $m['phone'] ?: '-',
@@ -344,8 +344,8 @@ foreach ($rows as $r) {
     $values = [
         $n,
         $r['department'],
-        in_array($r['role_in_dept'], DEPT_LEADER_ROLES, true) ? 'Leader' : $r['membership_type'],
-        DEPT_ROLE_LABELS[$r['role_in_dept']] ?? str_replace('_', ' ', $r['role_in_dept']),
+        in_array($r['role_in_dept'], dept_leader_roles(), true) ? 'Leader' : $r['membership_type'],
+        dept_role_labels()[$r['role_in_dept']] ?? str_replace('_', ' ', $r['role_in_dept']),
         trim($r['first_name'] . ' ' . $r['last_name']),
         $r['gender'] ?: '-',
         $r['phone'] ?: '-',

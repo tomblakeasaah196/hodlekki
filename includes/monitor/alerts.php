@@ -47,10 +47,10 @@ function monitor_screen_link(string $fragment = '', bool $absolute = false): str
 function monitor_super_admin_ids(PDO $pdo): array
 {
     $base = "SELECT DISTINCT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id
-              WHERE r.role_name = 'Super_Admin' AND COALESCE(ur.is_frozen, 0) = 0";
+              WHERE COALESCE(r.is_break_glass, 0) = 1 AND COALESCE(ur.is_frozen, 0) = 0";
     try {
         $ids = $pdo->query("SELECT DISTINCT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id JOIN users u ON u.id = ur.user_id
-                             WHERE r.role_name = 'Super_Admin' AND COALESCE(ur.is_frozen, 0) = 0
+                             WHERE COALESCE(r.is_break_glass, 0) = 1 AND COALESCE(ur.is_frozen, 0) = 0
                                AND COALESCE(u.account_status, 'active') = 'active'")->fetchAll(PDO::FETCH_COLUMN);
     } catch (Throwable $e) {
         try {

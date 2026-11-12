@@ -165,7 +165,8 @@
             } else {
                 th.appendChild(el('span', 'ui-table__primary', h.label));
             }
-            th.appendChild(el('span', 'ui-table__secondary', h.breakglass ? 'Everything' : plural(h.people, 'person', 'people')));
+            th.appendChild(el('span', 'ui-table__secondary', h.breakglass ? 'Everything'
+                : (h.kind === 'seat' ? 'Seat · ' : (h.kind === 'role' ? 'Role · ' : '')) + plural(h.people, 'person', 'people')));
             hr.appendChild(th);
         });
         head.appendChild(hr);
@@ -347,8 +348,11 @@
             var row = el('div', 'ui-list__item');
             var main = el('div', 'ui-list__main');
             var title = el('p', 'ui-list__title', r.label);
-            if (r.breakglass) title.appendChild(document.createTextNode(' ')), title.appendChild(badge('Everything', 'brand'));
-            if (r.archived) title.appendChild(document.createTextNode(' ')), title.appendChild(badge('Archived'));
+            [[r.breakglass, 'Everything', 'brand'], [r.system && !r.breakglass, 'Built in', ''], [r.archived, 'Archived', '']].forEach(function (b) {
+                if (!b[0]) return;
+                title.appendChild(document.createTextNode(' '));
+                title.appendChild(badge(b[1], b[2]));
+            });
             main.appendChild(title);
             main.appendChild(el('p', 'ui-list__meta', (r.description ? r.description + ' · ' : '') + plural(r.holders, 'holder')));
             row.appendChild(main);

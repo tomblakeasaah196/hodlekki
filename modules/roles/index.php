@@ -93,12 +93,14 @@ $scopeOptions = ['own' => 'Own records', 'dept' => 'Their departments', 'church'
                 <label class="sr-only" for="roles-matrix-search">Find a module</label>
                 <input class="ui-input" type="search" id="roles-matrix-search" placeholder="Find a module" data-action-input="roles.matrix.filter">
             </div>
-            <label class="sr-only" for="roles-matrix-column">Column</label>
-            <select class="ui-select" id="roles-matrix-column" data-action-change="roles.matrix.filter">
-                <option value="">Every column</option>
-            </select>
-            <span class="ui-meta"><?= ui_info('V view · C create · E edit · D delete; a approve · x export · m manage. '
-                . 'The word under each cell is how far it reaches: Own, Dept or All.', 'How to read a cell') ?></span>
+            <div class="ui-toolbar__end">
+                <label class="sr-only" for="roles-matrix-column">Column</label>
+                <select class="ui-select" id="roles-matrix-column" data-action-change="roles.matrix.filter">
+                    <option value="">Every column</option>
+                </select>
+                <?= ui_info('V view · C create · E edit · D delete; a approve · x export · m manage. '
+                    . 'After the dot: how far it reaches (Own, Dept or All). Pick one column to read it on a phone.', 'How to read a cell') ?>
+            </div>
         </div>
         <div class="ui-card ui-card__body--flush">
             <div class="ui-table-wrap" data-roles-matrix>

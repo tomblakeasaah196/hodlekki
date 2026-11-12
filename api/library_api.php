@@ -157,12 +157,7 @@ try {
                 $updateStmt->execute([$book_id]);
 
                 // NOTIFICATION TRIGGER: Alert Charis Librarians to prep the book
-                $charisStmt = $pdo->query("
-                    SELECT ud.user_id FROM user_departments ud 
-                    JOIN departments d ON ud.department_id = d.id 
-                    WHERE d.name LIKE '%Charis%' AND ud.role_in_dept IN ('HOD', 'Director') AND ud.is_active = 1
-                ");
-                $charis_admins = $charisStmt->fetchAll(PDO::FETCH_COLUMN);
+                $charis_admins = perm_module_leaders($pdo, 'charis', 'hod');
 
                 if (!empty($charis_admins)) {
                     $uStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
@@ -270,12 +265,7 @@ try {
             if ($stmt->rowCount() > 0) {
 
                 // NOTIFICATION TRIGGER: Alert Charis Admins
-                $adminStmt = $pdo->query("
-                    SELECT ud.user_id FROM user_departments ud 
-                    JOIN departments d ON ud.department_id = d.id 
-                    WHERE d.name LIKE '%Charis%' AND ud.role_in_dept IN ('HOD', 'Director') AND ud.is_active = 1
-                ");
-                $admins = $adminStmt->fetchAll(PDO::FETCH_COLUMN);
+                $admins = perm_module_leaders($pdo, 'charis', 'hod');
                 
                 if (!empty($admins)) {
                     // Get the book title for context

@@ -98,12 +98,7 @@ try {
             }
 
             // NOTIFICATION TRIGGER: Alert Pastoral Leadership of the new submission
-            $pastorStmt = $pdo->query("
-                SELECT user_id FROM user_roles 
-                JOIN roles ON user_roles.role_id = roles.id 
-                WHERE roles.role_name IN ('Super_Admin', 'Resident_Pastor', 'Assoc_Pastor')
-            ");
-            $pastors = $pastorStmt->fetchAll(PDO::FETCH_COLUMN);
+            $pastors = perm_office_holders($pdo, 'pastoral', 'edit');
 
             if (!empty($pastors)) {
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Pastoral Desk Entry', ?, '/modules/pastoral/index.php')");

@@ -83,7 +83,9 @@ Going live:
   but read-only;
 * leadership seats are *not* carried over by the *Members only* preset: the new
   year starts with the seats empty so they are appointed deliberately;
-* carrying everyone over keeps the seats as they are.
+* carrying everyone over keeps the seats as they are — every Worker, Sub-Unit
+  Head and Deputy HOD keeps their seat, and each person gets one message
+  naming the seats they hold in the new year.
 
 Past years are never edited in place, so last year's sheet always downloads
 exactly as it stood.
@@ -142,3 +144,18 @@ you may only appoint, change or remove seats ranked **below** your own in that d
 longer appoints the Director. A Deputy HOD (up to two per department) appoints nobody.
 Appointing a leader no longer gives them a church-wide role: their access comes from the
 seat, and ends with it.
+
+## Seats end with the year (since December 2026)
+
+Every seat runs until its ministry year ends, unless an earlier end date is set.
+Fourteen days before, the holder and their pastor are told. The pastor's message
+opens **Renew seats**: tick the seats that continue and press **Renew seats** — each
+runs to the end of the next ministry year (or twelve months on if that year is not
+set up yet), and the holder is told. The Resident Pastor and Super Admins get one
+summary 14 and 3 days before the year ends, linking to the rollover. A seat that is
+not renewed or rolled over stops giving access the day after it ends.
+
+The seats you can give with *Add person* (Worker, Member, Sub-Unit Head, Deputy HOD …)
+and their names come from **Roles & permissions → Seats**. A department may use fewer
+seat types or allow fewer holders there; *Add person* refuses a seat that is full or
+not used ("This department already has its 2 Deputy HOD seats").
