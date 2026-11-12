@@ -327,7 +327,10 @@ ok('…leaving meet_url and meet_event_id to PR 3', !array_key_exists('meet_url'
 eq('a day outside the week is refused', 'date', $save(['type' => 'live', 'title' => 'X', 'section_id' => $w1, 'date' => '2026-12-15', 'time' => '09:00'])['field'] ?? null);
 eq('a bad time is refused', 'time', $save(['type' => 'live', 'title' => 'X', 'section_id' => $w1, 'time' => '25:00'])['field'] ?? null);
 eq('a link must be https', 'link', $save(['type' => 'live', 'title' => 'X', 'section_id' => $w1, 'live_mode' => 'online', 'link' => 'http://x.org'])['field'] ?? null);
-eq('an exam cannot be made here yet (PR 2)', 'type', $save(['type' => 'exam', 'title' => 'X', 'section_id' => $w1])['field'] ?? null);
+if (!function_exists('exam_url_setup')) {
+    // With PR 2 (includes/exams/) loaded, exams can be made: "Hooks for PR 2" below checks both cases.
+    eq('an exam cannot be made here yet (PR 2)', 'type', $save(['type' => 'exam', 'title' => 'X', 'section_id' => $w1])['field'] ?? null);
+}
 eq('a video needs a YouTube or Spotify link', 'url', $save(['type' => 'video', 'title' => 'X', 'section_id' => $w1, 'url' => 'https://vimeo.com/1'])['field'] ?? null);
 $video = (int) $save(['type' => 'video', 'title' => 'Teaching', 'section_id' => $w1, 'url' => 'https://youtu.be/dQw4w9WgXcQ'])['id'];
 $audio = (int) $save(['type' => 'audio', 'title' => 'Podcast', 'section_id' => $w1, 'url' => 'https://open.spotify.com/episode/4rOoJ6Egrf8K2IrywzwOMk'])['id'];
