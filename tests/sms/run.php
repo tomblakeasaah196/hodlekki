@@ -155,5 +155,31 @@ is_same('insufficient balance',  'Insufficient wallet balance — fund the accou
 is_same('unapproved sender ID',  'Sender ID not registered or not approved.',       sms_explain_code('BSNG-2011'));
 is_same('unknown code',          null, sms_explain_code('BSNG-9999'));
 
+echo "SMS Studio page (on the foundation)\n";
+$root = dirname(__DIR__, 2);
+$page = (string) file_get_contents($root . '/modules/sms_studio/index.php');
+$js = (string) file_get_contents($root . '/assets/ui/js/pages/sms-studio.js');
+$api = (string) file_get_contents($root . '/api/sms_api.php');
+is_same('the page is a strict page with its own script', true,
+    str_contains($page, "'mode' => 'strict'") && str_contains($page, "'/assets/ui/js/pages/sms-studio.js'"));
+is_same('no inline handler, script or style on the page', 0,
+    preg_match_all('/\son[a-z]+\s*=|<script(?![^>]*type="application\/json")|\sstyle\s*=/i', $page));
+$jsCode = (string) preg_replace(['#/\*.*?\*/#s', '#^\s*//.*$#m'], '', $js);
+is_same('the script builds no inline style either (widths go through the DOM)', 0, preg_match_all('/\sstyle\s*=/', $jsCode));
+is_same('the gate is the same as the API\'s', true, str_contains($page, 'if (!sms_user_can_send()) {'));
+preg_match_all("/call\\('([a-z_]+)'/", $js, $m);
+$calls = array_values(array_unique($m[1]));
+$missing = array_values(array_filter($calls, static fn ($a) => !preg_match("/case\\s+'" . preg_quote($a, '/') . "'\\s*:/", $api)));
+is_same('every API action the page calls exists in api/sms_api.php (' . count($calls) . ' actions)', [], $missing);
+// In markup (data-action="sms.x") and in PHP component attrs ('data-action' => 'sms.x').
+preg_match_all('/data-action(?:-change|-input)?(?:="|\'\s*=>\s*\')(sms\.[a-z-]+)/', $page . $js, $m);
+$used = $m[1];
+preg_match_all("/pager\\([^)]*'(sms\\.[a-z-]+)'\\)/", $js, $m);   // pager(page, pages, 'sms.x') builds data-action
+$used = array_values(array_unique(array_merge($used, $m[1])));
+preg_match_all("/A\\.on\\('(sms\\.[a-z-]+)'/", $js, $m);
+$handled = array_values(array_unique($m[1]));
+is_same('every action in the markup has a handler', [], array_values(array_diff($used, $handled)));
+is_same('every handler is used by the markup', [], array_values(array_diff($handled, $used)));
+is_same('the old ?tab=suppression link still opens the Blocked tab', true, str_contains($js, "var legacy = { suppression: 'blocked' };"));
 echo "\n{$count} checks, {$fails} failed\n";
 exit($fails ? 1 : 0);
