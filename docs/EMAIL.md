@@ -249,7 +249,7 @@ absence ladders) to people with the module's `manage` right. Actions:
 ## 2d. The block editor (`assets/ui/js/email-editor.js`, `includes/campaigns/editor.php`)
 
 `window.HODEmail.mount(root, {doc, onSave, storageKey, savedAt})`: framework-free, strict CSP (no inline script or
-style). Used by the Automation tab; Campaigns will use it too.
+style). Used by the Automation tab and Campaigns.
 
 - **Blocks** in a column; text blocks are edited in place (`contenteditable`) with Bold, Italic, Link (Ctrl+K),
   bulleted and numbered lists and merge-field chips, and turned back into the JSON tree on every change
@@ -264,7 +264,41 @@ style). Used by the Automation tab; Campaigns will use it too.
   `uploads/email/YYYY/MM/`, whose `.htaccess` serves pictures only and runs nothing.
 - **Templates** (`email_templates`): save, list, use (replaces after a confirm), remove (archived).
 - **Autosave** in the browser (`localStorage`, per email): a newer unsaved copy is offered back (Restore / Discard).
-- Access: anyone with Embrace, Assimilation or Charis `manage` (`email_editor_allowed()`), plus CSRF.
+- Access: anyone with Embrace, Assimilation or Charis `manage`, or `campaigns` Create (`email_editor_allowed()`),
+  plus CSRF.
+
+## 2e. Campaigns (`modules/campaigns/`, `includes/campaigns/campaigns.php`)
+
+One email to many people. Screen: `modules/campaigns/index.php` (the list, **Reach** = `email_coverage()`, and
+**Settings** for `campaigns` Manage) and `?id=N` (one campaign); script `assets/ui/js/pages/campaigns.js`; every
+action `api/campaigns_api.php` → `campaign_action()` (`includes/campaigns/campaign_actions.php`), where all access
+decisions live.
+
+| Step | What happens |
+| ---- | ---- |
+| Start | A name and **From**: the whole church or a department. A draft (`email_campaigns`). |
+| Who gets it | Everyone, by status, departments (with their sub-units, live roster only), regional hubs, or first timers (`embrace_pipeline_sql()`). People who left (Relocated, Attends Another Church) are never in it. The card counts it live: "212 people · 168 by email · 31 by text · 13 not reached", with the reasons and how long the email takes at the hour's budget. |
+| Email | The block editor (§2d); **Save email** validates it on the server. **Preview** is the real render (`api/email_draft_preview.php`). |
+| Text the rest | Optional: one SMS for people email cannot reach, handed to SMS Studio as one `sms_campaigns` row (`audience = 'email_campaign'`) and one `sms_queue` row each (never `sms_log`). |
+| Send test | To your own confirmed address: lane `test`, account mail, subject "Test: …". |
+| Send | Now (status `queued`) or at a time 5 minutes to 60 days ahead (`scheduled`). A scheduled campaign can still change; **Back to draft** unschedules it. |
+| Going out | `cron/email_worker.php` runs `campaigns_tick()` first each minute: it claims a due campaign (`queued`, or `scheduled` and due) with one conditional UPDATE and expands it in ONE transaction: one `email_campaign_people` row per person (UNIQUE campaign + person), one outbox row per email (lane `campaign`, church news: List-Unsubscribe, consent and suppression checked again just before it leaves, the send window), the texts. Five campaigns a minute at most. An expansion that throws rolls back and marks the campaign `failed` (nothing sent; **Back to draft**). When no email is waiting it becomes `sent`. |
+| Stop | Cancels the emails and texts that have not left (`cancelled`). What left stays sent. |
+| Report | Sent, waiting, opened (only when **Count opens** was ticked; approximate), clicked (people, per link), bounced, unsubscribed, texts by status, and every person's line. |
+
+**Who gets what** is `campaign_reach()`: the automations' order (`automation_choose_channel()`) for a whole
+audience in a few queries — unsubscribed from church news by email → nobody (never texted instead); email when
+`email_may_send_news()` allows it; else a text when the campaign has one and the number is usable and not
+blocked; else nobody, with the reason. The tests compare it person by person with the per-person functions.
+
+**Access** (`campaigns` in Roles & permissions; migration `20261207090100_perm_campaigns.sql`): a campaign's target
+is its department, else `'church'`. See: View on the target, or you wrote it. Change, send, stop: Edit on it, or
+you wrote it and may still Create for it. Delete (drafts that never went out): Delete, or yours. Church campaigns
+need Create church-wide; everyone else sends department campaigns, and those go to that department's people only.
+Day one: Super Admin (everything + Manage, as a plain grant), Resident Pastor (everything church-wide), Assoc.
+Pastor role (create, edit, send church-wide), Pastor in charge / Director / HOD seats (everything for their own
+department). Manage = the email settings: emails per hour, sending hours, the postal address in every footer,
+pause all email.
 
 ## 3. For other modules
 

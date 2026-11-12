@@ -29,6 +29,7 @@
 //   identity.php    the sign-in prompt, sign-in by personal email, reset links
 //   formguard.php   the Connect card's single-use token and Turnstile
 //   profile.php     the Profile email card: what it shows, the church-news switch
+//   campaigns.php   email campaigns: audience, who gets what, sending, the report
 //
 // The tree reaches production BEFORE db/migrate.php runs, so everything asks
 // campaigns_ready() first and degrades: lookups answer null, nothing is queued,
@@ -54,3 +55,4 @@ require_once __DIR__ . '/coverage.php';
 require_once __DIR__ . '/identity.php';
 require_once __DIR__ . '/formguard.php';
 require_once __DIR__ . '/profile.php';
+require_once __DIR__ . '/campaigns.php';
