@@ -6,7 +6,7 @@
 $ui = [
     'title' => 'Embrace Center',
     'mode' => 'strict',
-    'scripts' => ['/assets/ui/js/pages/embrace.js', '/assets/ui/js/pages/automation.js'],
+    'scripts' => ['/assets/ui/js/pages/embrace.js', '/assets/ui/js/email-editor.js', '/assets/ui/js/pages/automation.js'],
     // The address search (Geoapify) runs in the browser. frame-src 'self': the
     // Automation tab's email preview (a sandboxed frame on api/email_preview.php).
     'csp' => ['connect-src' => ['https://api.geoapify.com'], 'frame-src' => ["'self'"]],

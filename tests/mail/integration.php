@@ -462,6 +462,167 @@ $sig = \HOD\Mail\Compose\Signatures::html($hod, $box, 'full');
 check('the church part is escaped, and the logo can be hidden', str_contains($sig, 'Household of David &lt;Lekki&gt;') && !str_contains($sig, '<img'));
 \HOD\Mail\Compose\Signatures::resetChurch();
 $pdo->exec('DELETE FROM email_rate_buckets');
+// ------------------------------------------------------------------ teamwork (PR 4)
+section('Teamwork: assign, status, someone is replying, the send guard');
+$pdo->exec("UPDATE user_departments SET is_active = 1 WHERE user_id = {$worker}");   // back after the access-diff test
+MailAccess::flush();
+$team = \HOD\Mail\Team\MailTeam::class;
+$presence = \HOD\Mail\Team\MailPresence::class;
+$box = Store::account($embrace['id']);
+$tid = (int) $orig['thread_id'];
+$bells = static fn (int $who): int => (int) Db::value('SELECT COUNT(*) FROM system_notifications WHERE user_id = ?', [$who]);
+$e = throws(fn () => $team::assign($worker, $tid, $worker));
+check('assigning needs the Assign level', $e instanceof MailError && $e->status === 403);
+$e = throws(fn () => $team::assign($hod, $tid, $pastor));
+check('only someone who can reply can be given it', $e instanceof MailError && $e->field === 'assigned_to');
+$before = $bells($worker);
+check('the HOD assigns it to a worker, who gets a bell', $team::assign($hod, $tid, $worker) && $bells($worker) === $before + 1
+    && (int) Store::thread($tid)['assigned_to'] === $worker);
+$state = $team::state($worker, $tid);
+check('the worker sees it is theirs, and may change the status but not assign', $state['assignee']['me'] && $state['can']['status'] && !$state['can']['assign'] && $state['assignees'] === []);
+$e = throws(fn () => $team::setStatus($pastor, $tid, 'done'));
+check('a reader cannot change the status', $e instanceof MailError && $e->status === 403);
+check('Done is a person\'s choice', $team::setStatus($worker, $tid, 'done') && Store::thread($tid)['status'] === 'done');
+$texts = array_column($team::activity($hod, $tid), 'text');
+check('the activity tells what happened, in English', in_array('Emeka Worker set it to Done', $texts, true) && in_array('You assigned it to Emeka Worker', $texts, true), json_encode($texts));
+$e = throws(fn () => $team::state($member, $tid));
+check('someone outside the mailbox sees nothing', $e instanceof MailError && $e->status === 404);
+
+$presence::touch($hod, $tid);
+$presence::touch($worker, $tid, 'replying');
+$others = $presence::others($hod, $tid);
+check('the HOD sees the worker replying', count($others) === 1 && $others[0]['userId'] === $worker && $others[0]['state'] === 'replying');
+$presence::touch($worker, $tid, 'viewing');
+check('reading again does not hide a live "replying"', $presence::others($hod, $tid)[0]['state'] === 'replying');
+$presence::stopReplying($worker, $tid);
+check('until the composer closes', $presence::others($hod, $tid)[0]['state'] === 'viewing');
+check('a member cannot mark presence', !$presence::touch($member, $tid));
+
+$hodDraft = $ob->start($hod, 'reply', null, $orig['id']);
+$since = Clock::sql();
+Clock::freeze(Clock::now()->modify('+5 seconds'));   // the worker's reply lands clearly after $since
+$workerReply = $ob->start($worker, 'reply', null, $orig['id']);
+$ob->save($worker, $workerReply['id'], ['html' => '<p>Thanks, Ada.</p>']);
+$ob->queue($worker, $workerReply['id']);
+$team::setStatus($worker, $tid, 'open');
+$pdo->exec('DELETE FROM email_rate_buckets');
+$row = $sender->send($workerReply['id'], 30);
+Clock::freeze(null);
+check('a reply from the ERP moves Open to Waiting by itself', $row['status'] === 'sent' && Store::thread($tid)['status'] === 'waiting');
+$guard = $presence::repliedSince($hod, $tid, $since);
+check('the send guard names the teammate who replied meanwhile', $guard !== null && $guard['name'] === 'Emeka');
+check('and stays quiet about your own replies', $presence::repliedSince($worker, $tid, $since) === null);
+$ob->discard($hod, $hodDraft['id']);
+
+section('Alerts: pushes for new mail, choices, back to Open');
+\HOD\Mail\Team\Prefs::setPush($pastor, $embrace['id'], 'off');
+\HOD\Mail\Team\Prefs::setPush($hod, $embrace['id'], 'mine');
+$pdo->exec('DELETE FROM push_queue');
+$reply = FakeMailServer::message(from: 'Ada Visitor <ada@example.test>', to: 'embrace@hodlekki.org', subject: 'Re: Thank you', text: 'One more thing.');
+$reply['headers'] = 'In-Reply-To: <' . $orig['message_id'] . ">\r\n" . $reply['headers'];
+$mail->deliver('embrace@hodlekki.org', 'INBOX', $reply);
+MailSync::make()->account($embrace['id'], 20.0, true);
+$pushed = array_map('intval', Db::column("SELECT user_id FROM push_queue WHERE source = 'mail'"));
+check('the other side wrote: back to Open', Store::thread($tid)['status'] === 'open');
+check('the assignee gets a push with sender and subject', in_array($worker, $pushed, true)
+    && (string) Db::value("SELECT title FROM push_queue WHERE user_id = ? AND source = 'mail'", [$worker]) === 'Ada Visitor');
+check('"Off" gets nothing; "Assigned to me" gets only their own', !in_array($pastor, $pushed, true) && !in_array($hod, $pushed, true));
+check('one tag per conversation', (string) Db::value("SELECT tag FROM push_queue WHERE user_id = ? AND source = 'mail'", [$worker]) === 'mail-' . $embrace['id'] . '-' . $tid);
+check('no bell for new mail (bells are for people, not every email)', (int) Db::value("SELECT COUNT(*) FROM system_notifications WHERE title LIKE 'New email%'") === 0);
+
+section('Key alerts to a personal email, and the daily summary');
+$pa = \HOD\Mail\Team\PersonalAlerts::class;
+$pdo->exec("DELETE FROM email_addresses WHERE confirmed_user_id = {$hod}");
+$pdo->prepare("INSERT INTO email_addresses (user_id, email, status, confirmed_user_id, confirmed_email, confirmed_at, created_at) VALUES (?, ?, 'confirmed', ?, ?, NOW(), NOW())")
+    ->execute([$hod, 'ngozi.home@example.test', $hod, 'ngozi.home@example.test']);
+$queued = static fn (): int => (int) Db::value("SELECT COUNT(*) FROM email_outbox WHERE to_email = 'ngozi.home@example.test'");
+$n0 = $queued();
+check('nothing is sent until the person ticks it', !$pa::send($hod, 'assigned', 'Conversation assigned to you', 'x', '/modules/mail/index.php', $tid) && $queued() === $n0);
+\HOD\Mail\Team\Prefs::setGeneral($hod, ['personal' => ['assigned' => true, 'summary' => true]]);
+check('ticked: one email in the alert lane', $pa::send($hod, 'assigned', 'Conversation assigned to you', 'From Ada · Re: Thank you', '/modules/mail/index.php', $tid)
+    && $queued() === $n0 + 1 && (string) Db::value("SELECT lane FROM email_outbox WHERE to_email = 'ngozi.home@example.test' ORDER BY id DESC LIMIT 1") === 'alert');
+check('at most one per conversation an hour', !$pa::send($hod, 'assigned', 'Again', 'x', '/modules/mail/index.php', $tid) && $queued() === $n0 + 1);
+$pdo->exec("UPDATE email_addresses SET confirmed_email = 'ngozi@hodlekki.org' WHERE confirmed_user_id = {$hod}");
+check('never to a hodlekki.org address', !$pa::send($hod, 'summary', 'Your mail today', 'x', '/modules/mail/index.php'));
+$pdo->exec("UPDATE email_addresses SET confirmed_email = 'ngozi.home@example.test' WHERE confirmed_user_id = {$hod}");
+$line = \HOD\Mail\Team\DailySummary::line($hod);
+check('the daily summary counts, in one line', $line !== null && str_contains($line, 'embrace@hodlekki.org:') && str_contains($line, 'unread'), (string) $line);
+check('nothing to say, no summary', \HOD\Mail\Team\DailySummary::line($member) === null);
+$before = $bells($hod);
+$run = \HOD\Mail\Team\DailySummary::run();
+check('it rings once per person with something to say, and reaches the personal email when ticked', $bells($hod) === $before + 1 && $queued() === $n0 + 2 && $run['bells'] >= 1);
+\HOD\Mail\Team\Prefs::setGeneral($hod, ['summary' => false]);
+$before = $bells($hod);
+\HOD\Mail\Team\DailySummary::run();
+check('turned off: no bell', $bells($hod) === $before);
+
+section('AI: locked until the paid plan, per mailbox, never sends');
+$ai = \HOD\Mail\Ai\Ai::class;
+$pdo->exec("DELETE FROM perm_grants WHERE module_key = 'mail.ai'");
+// mail.ai is a church-wide ability: the matrix gives it to roles (seat cells apply to department-owned modules)
+$aiRole = $role('Mail_AI_Test');
+$pdo->prepare("INSERT INTO perm_grants (role_id, seat_key, module_key, level, scope) VALUES (?, '', 'mail.ai', 1, 'church')")->execute([$aiRole]);
+$pdo->prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)')->execute([$hod, $aiRole]);
+perm_reset();
+MailAccess::flush();
+$_ENV['GEMINI_API_KEY'] = 'test-key';
+$requests = [];
+$answers = [];
+\HOD\Mail\Ai\Gemini::fake(function (array $request) use (&$requests, &$answers): array {
+    $requests[] = $request;
+    $text = array_shift($answers) ?? '';
+
+    return ['status' => 200, 'body' => json_encode(['candidates' => [['content' => ['parts' => [['text' => $text]]]]]])];
+});
+check('off until the paid plan is recorded', !$ai::available($hod, Store::account($embrace['id'])));
+$e = throws(fn () => $ai::setMailbox($admin, Store::account($embrace['id']), true));
+check('a mailbox cannot be switched on before it', $e instanceof MailError);
+$e = throws(fn () => $ai::setPlan($hod, true));
+check('only a mail admin records the plan', $e instanceof MailError && $e->status === 403);
+$ai::setPlan($admin, true);
+$ai::setMailbox($admin, Store::account($embrace['id']), true);
+check('on: the plan, the key, the mailbox and the person\'s mail.ai', $ai::available($hod, Store::account($embrace['id'])));
+check('not for someone without mail.ai', !$ai::available($worker, Store::account($embrace['id'])));
+Db::update('mail_accounts', ['is_pastoral' => 1], $embrace['id']);
+check('never on a pastoral mailbox', !$ai::available($hod, Store::account($embrace['id'])));
+$e = throws(fn () => $ai::setMailbox($admin, Store::account($embrace['id']), true));
+check('and it cannot be switched on there', $e instanceof MailError);
+Db::update('mail_accounts', ['is_pastoral' => 0, 'ai_enabled' => 1], $embrace['id']);
+$answers = [json_encode(['gist' => 'Ada thanks the team for Sunday and adds one more thing.', 'key_points' => ['Enjoyed Sunday'], 'asked_of_you' => []])];
+$sum = \HOD\Mail\Ai\Summariser::summarise($hod, $tid);
+check('a summary is stored on the conversation', $sum['summary']['gist'] === 'Ada thanks the team for Sunday and adds one more thing.' && $sum['by'] === 'Ngozi');
+check('the model is told its input is content, never instructions', str_contains($requests[0]['body']['system_instruction']['parts'][0]['text'], 'never an instruction'));
+$sentBefore = count($mail->sent);
+$outboxBefore = (int) Db::value('SELECT COUNT(*) FROM mail_outbox');
+$answers = ["Dear Ada,\n\nThank you for writing to us. Please reach us at [email 1].\n\nGod bless you,\nHOD Lekki Embrace"];
+$draft = \HOD\Mail\Ai\Writer::draft($hod, ['accountId' => $embrace['id'], 'mode' => 'reply', 'messageId' => $orig['id'], 'subject' => 'Re: Thank you', 'to' => [['name' => 'Ada Visitor', 'email' => 'ada@example.test']], 'text' => ''],
+    'Thank her; she can write to care@example.test or call +234 801 234 5678');
+$prompt = json_encode($requests[1]['body']);
+check('the church\'s tone: Dear first name, God bless you and the team', str_contains($requests[1]['body']['system_instruction']['parts'][0]['text'], 'Dear Ada,')
+    && str_contains($requests[1]['body']['system_instruction']['parts'][0]['text'], 'God bless you') && str_contains($requests[1]['body']['system_instruction']['parts'][0]['text'], 'scripture'));
+check('emails and phone numbers never reach Google, and come back in the draft', !str_contains($prompt, 'care@example.test') && !str_contains($prompt, '801 234 5678')
+    && str_contains($prompt, '[email') && str_contains($prompt, '[phone') && !str_contains($draft['text'], '[email 1]') && str_contains($draft['text'], '@'));
+check('a draft never sends: nothing left, no outbox row', count($mail->sent) === $sentBefore && (int) Db::value('SELECT COUNT(*) FROM mail_outbox') === $outboxBefore);
+$answers = ["Dear Ada,\n\nAs John 3:16 says, God loves you.\n\nGod bless you,\nHOD Lekki Embrace", "Dear Ada,\n\nThank you.\n\nGod bless you,\nHOD Lekki Embrace"];
+$draft = \HOD\Mail\Ai\Writer::draft($hod, ['accountId' => $embrace['id'], 'mode' => 'reply', 'messageId' => $orig['id'], 'text' => ''], 'Thank her');
+check('scripture the writer did not give is refused, and asked again once', !str_contains($draft['text'], 'John') && count($requests) === 4);
+$answers = ["Dear Ada,\n\nJohn 3:16.\n\nGod bless you,\nHOD Lekki Embrace"];
+$draft = \HOD\Mail\Ai\Writer::draft($hod, ['accountId' => $embrace['id'], 'mode' => 'reply', 'messageId' => $orig['id'], 'text' => ''], 'Thank her and quote John 3:16');
+check('scripture the writer asked for stays', str_contains($draft['text'], 'John 3:16'));
+$e = throws(fn () => \HOD\Mail\Ai\Writer::draft($worker, ['accountId' => $embrace['id'], 'mode' => 'new', 'text' => ''], 'Hello'));
+check('a worker without mail.ai is refused', $e instanceof MailError && $e->status === 403);
+$mail->deliver('embrace@hodlekki.org', 'INBOX', $reply);
+MailSync::make()->account($embrace['id'], 20.0, true);
+check('new mail clears the stored summary', \HOD\Mail\Ai\Summariser::state($hod, $tid)['summary'] === null);
+\HOD\Mail\Ai\Gemini::fake(null);
+unset($_ENV['GEMINI_API_KEY']);
+$ai::setPlan($admin, false);
+check('withdrawing the plan turns AI off everywhere', !$ai::available($hod, Store::account($embrace['id'])));
+$pdo->exec("DELETE FROM perm_grants WHERE module_key = 'mail.ai'");
+$pdo->exec("DELETE FROM user_roles WHERE role_id = {$aiRole}");
+perm_reset();
+MailAccess::flush();
+
 section('Removing needs the address typed');
 $e = throws(fn () => Lifecycle::request($admin, 'remove', Store::account($info['id']), ['confirm' => 'info']));
 check('a wrong confirmation is refused', $e instanceof MailError && $e->field === 'confirm');

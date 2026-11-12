@@ -1,7 +1,7 @@
 # Mail: the church's mailboxes in the ERP
 
-Runbook and contracts for the Mail module. PR 3 of 4 (this document grows with each): 1 foundation and
-Mailboxes · 2 reading · **3 writing and signatures** · 4 teamwork, alerts and AI. Design and the decisions behind it:
+Runbook and contracts for the Mail module. PR 4 of 4 (this document grows with each): 1 foundation and
+Mailboxes · 2 reading · 3 writing and signatures · **4 teamwork, alerts and AI**. Design and the decisions behind it:
 the lead's design notes (11 Nov 2026). The engine is ported from bureau.lpc.cm's Courrier, which runs on this same
 cPanel server.
 
@@ -213,6 +213,70 @@ Rules:
   On shared mailboxes the conversation's timeline gets a `sent` entry (PR 4 shows it).
 - The composer raises `mail:compose-opened`, `mail:compose-closed`, `mail:sent`, `mail:composing` (PR 4's "someone
   is replying") and offers `window.HODMailComposer` (current, replaceBody, insertHtml, open) for PR 4's writing help.
+## 7e. Teamwork, alerts and AI (PR 4)
+
+| Piece | What |
+|---|---|
+| `includes/mail/Team/` | `MailTeam` (assign, status, activity, the team bar), `MailPresence` (who is reading or replying; the send guard), `NewMail` (what new mail sets off), `Prefs` (a person's choices), `PersonalAlerts` (key alerts to a personal email), `DailySummary`, `team_config.php`. |
+| `includes/mail/Ai/` | `Ai` (the four gates), `Gemini` (HTTPS, fakeable), `Summariser`, `Writer` (the church's tone, the scripture check), `Privacy` (placeholders), `Limits`, `MailText`, `ai_config.php`. |
+| `includes/mail/Listeners/team.php` | `mail.received` → `NewMail::received`; `mail.threads_merged` → a line in the activity. |
+| `api/mail_team_api.php` | GET `state`, `summary`; POST (JSON, CSRF) `presence`, `assign`, `status`, `activity`, `guard`, `summarise`, `draft`, `prefs_push`, `prefs_general`. |
+| `includes/mail/mounts/thread_team.php`, `thread_summary.php`, `assets/ui/js/pages/mail-team.js` | The team bar and the summary card above the messages. |
+| `modules/mail/settings.php`, `mail-settings.js` | My mail settings: pushes per mailbox, the daily summary, key alerts to the personal email. |
+| `db/migrations/20261205090000_mail_team_alerts.sql` | `mail_user_prefs`, `mail_alert_log`. Assignment, status, presence and activity use PR 1's columns and tables. |
+
+**Teamwork** (shared mailboxes only):
+
+- **Assign** needs the *Read, send and assign* level; the picker lists only people who can reply (*Read and send*).
+  The assignee gets a bell (bells also push) and, if they ticked it, a key alert to their personal email.
+- **Open / Waiting / Done**: a reply leaving from the ERP moves Open to **Waiting** by itself; mail from the other side
+  moves Waiting or Done back to **Open**; Done is a person's choice (*Read and send*). Each change is a line in the
+  activity ("Emeka set it to Done", "Waiting: a reply went out").
+- **Someone is replying**: presence marks of 60 seconds (`mail_presence`), renewed every 20 seconds while the tab is
+  visible and the person active in the last 5 minutes; the composer turns the mark into "replying".
+- **Send guard**: when a teammate's reply left after you opened the composer, Send stops once ("Emeka replied") with
+  *Send anyway*.
+- No internal notes (owner).
+
+**Alerts**:
+
+- **New mail** pushes each reader, minus whoever sent it from the ERP or from their own address, filtered by their
+  choice for that mailbox (*All new mail*, *Assigned to me*, *Off*). `push_enqueue()` directly, source `mail`, never
+  a bell (a bell per email would bury every other alert); quiet hours apply; one tag per conversation; more than 3
+  in one run become one push.
+- **Unread badge** on Mail in both shells (PR 1).
+- **Bells** only for things addressed to a person: an assignment, a send that failed, a mailbox needing a reset or
+  nearly full, an admin job that failed, an export request.
+- **Daily summary** at 06:45 (`Nightly::summary`), only when there is something to say: unread per mailbox, open over
+  a day, assigned to you (oldest), waiting for replies. Counts only. One bell, unless turned off.
+- **Key alerts to a personal email**, for anyone who ticks them on My mail settings: new mail in my personal mailbox,
+  a conversation assigned to me, the daily summary, a mailbox I manage needs attention. The address is the personal
+  email the person confirmed for the church (`member_confirmed_email`; the mailbox never confirms addresses). Sent in
+  the email foundation's **alert** lane (`email_send_doc`, so it shares the hourly budget): **sender and subject
+  only, never the body or attachments**; never to a hodlekki.org address; at most one per conversation per hour and
+  20 a day (`mail_alert_log`).
+
+**AI** (Gemini 2.5 Flash, on press, **never sends**). Available on a mailbox only when all four hold:
+
+1. a mail admin recorded, on the Mailboxes screen (Health tab), that the owner confirmed the Gemini project is on a
+   **paid plan** (`mail_settings` `ai.paid_plan_confirmed`, who and when); withdrawing it turns AI off everywhere;
+2. `GEMINI_API_KEY` is set;
+3. a mail admin switched it on for that mailbox (`mail_accounts.ai_enabled`, off by default); **never** offered, and
+   refused by the server, on personal mailboxes or mailboxes marked pastoral;
+4. the person reads the mailbox and holds **`mail.ai`** in Roles & permissions (a church-wide ability: give it to
+   roles; seat cells apply only to department-owned modules).
+
+- **Summary**: gist, key points, what is asked of us; stored on the conversation, cleared when new mail arrives.
+- **Draft**: shown as text in the composer; it enters the message only on *Use draft* or *Insert*; the person edits
+  and sends. Tone: warm and respectful, "Dear {first name},", closes "God bless you," and the team name (the
+  mailbox's display name); **scripture only when the writer put it in**: a draft adding a Bible reference the writer
+  did not give is refused and asked again once.
+- What the model reads: the last 30 messages, quotes stripped, 4,000 characters each, never attachments, never Spam,
+  Trash or Drafts. **Phone numbers and email addresses become placeholders** before the prompt leaves and are put
+  back in the answer. 30 drafts and 30 summaries per person per hour. One log line on a failure, never the prompt or
+  the answer.
+- This sends mail content to Google, which the house rule forbids for other modules. The owner asked for it; it is a
+  written exception, limited by the four gates above (also in AGENTS.md).
 ## 8. Export of a departed holder's mail
 
 Requested on the Mailboxes screen (reason required). Two approvals by two different people, one per side. Then a job
@@ -241,7 +305,8 @@ up". After the deploy (lead + owner):
   against scripted servers over real sockets), and reading (`read_unit.php`: an XSS corpus through the sanitizer,
   the two JBS fixes, the frame's policy, text, dates, search words, the partials, the endpoints, short copy), and
   writing (`compose_unit.php`: the editor's HTML cleaned, addresses, the quote, the signature escaped and checked,
-  file types, the endpoint's CSRF and limits, the strict-CSP preview).
+  file types, the endpoint's CSRF and limits, the strict-CSP preview), and teamwork, alerts and AI (`team_unit.php`:
+  placeholders for phones and addresses, the scripture check, the AI gates, AI never sends, CSRF, English).
 - `php tests/mail/integration.php` (integration job, on the database `tests/special_events/db_setup.php` built,
   MySQL 8 and MariaDB 10.11; the migration carries the `_mail_` marker so it must apply on both): access through the
   real `can()`, grants by seat key and role, personal privacy, the quota and the race for the last slot, every job,
@@ -250,5 +315,9 @@ up". After the deploy (lead + owner):
   opening marks read, folder actions refused to a reader and Undo, picture trust per person; writing: a reader
   cannot answer, someone else's draft is 404, cleaning and bad addresses, files and their limit, the server draft,
   Undo, sent once within the budget with threading headers and the file, credited and marked answered, retries,
-  failures with a bell, schedules, pruning, a stuck send never re-sent, suggestions, the signature.
+  failures with a bell, schedules, pruning, a stuck send never re-sent, suggestions, the signature; teamwork: assign
+  needs Assign and an assignee who can reply, status rules (Waiting after a reply, Open when they write), presence,
+  the send guard; alerts: pushes by choice, no bell per email, key alerts (ticked only, alert lane, one per hour per
+  conversation, never to hodlekki.org), the daily summary; AI: the four gates, pastoral refused, the tone, privacy
+  placeholders, the scripture check, a draft never sends, new mail clears a summary.
 - Fakes: `tests/mail/support/FakeMailServer.php` (behaves like Dovecot; ported from Courrier), `FakeUapi.php`.

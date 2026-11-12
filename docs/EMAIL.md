@@ -237,11 +237,32 @@ absence ladders) to people with the module's `manage` right. Actions:
 | What | How |
 | ---- | ---- |
 | Switch on / off | Rules start OFF. "Switch on" first shows `automation_preview()` in words ("23 people are already past a step (14 by email, 7 by SMS, 2 unreachable)"); absence rules then choose **Start fresh** (baseline) or **Include them**. |
-| Settings | Who (journey: stop status and weeks; absence: statuses, weekly check day/time), sender name and reply-to, each step's day/time or missed Sundays, each SMS (character and text count), each team/pastor alert. `automation_tab_apply()` changes only those; `automation_rule_save()` validates and refuses a stale version. Email documents stay as they are until the block editor (next PR). |
+| Settings | Who (journey: stop status and weeks; absence: statuses, weekly check day/time), sender name and reply-to, each step's day/time or missed Sundays, each SMS (character and text count), each team/pastor alert. `automation_tab_apply()` changes only those; `automation_rule_save()` validates and refuses a stale version. |
+| Edit email | Each email step's **Edit** opens the block editor (below) in the panel's dialog with that step's (or week's) document (`email_doc`); **Save email** validates it on the server and writes it into the rule with the version check (`save_email`, `automation_tab_with_email()`). |
 | Preview | `api/email_preview.php?module=&step=&week=`: the real render for the viewer (example streak/week), untracked, in a `sandbox=""` frame (never `srcdoc`), with its own CSP (`default-src 'none'; style-src 'unsafe-inline'; img-src data: <site>`). Embrace's strict CSP adds `frame-src 'self'` for it. |
 | Send test | The step's email to the tester's own confirmed address: lane `test`, account mail (always arrives, no unsubscribe link), subject "Test: …". |
 | Recent runs | The last runs with their counts; **Who** lists each person, the step and the result from `automation_sends`. |
 | Overlap | A warning when Assimilation and Charis cover the same status. |
+
+## 2d. The block editor (`assets/ui/js/email-editor.js`, `includes/campaigns/editor.php`)
+
+`window.HODEmail.mount(root, {doc, onSave, storageKey, savedAt})`: framework-free, strict CSP (no inline script or
+style). Used by the Automation tab; Campaigns will use it too.
+
+- **Blocks** in a column; text blocks are edited in place (`contenteditable`) with Bold, Italic, Link (Ctrl+K),
+  bulleted and numbered lists and merge-field chips, and turned back into the JSON tree on every change
+  (`toContent`); every other block is edited in the side panel. Pasting inserts plain text only; dropping is
+  refused. Move: the arrows, the drag handle, or Alt+↑/↓ (announced). The footer is added for you.
+- **Saving** asks the server (`api/email_editor_api.php` `check` = `email_doc_validate()`) first and lists the
+  reasons it refuses; the caller's `onSave` gets the cleaned document.
+- **Preview**: `draft` keeps a validated copy in the session (five at most) and `api/email_draft_preview.php?d=`
+  renders it for the viewer in a `sandbox=""` frame, with its own CSP. Never `srcdoc`.
+- **Pictures** (`upload`): 5 MB at most, JPG/PNG/GIF/WebP by content, re-encoded with GD (pixels only, at most
+  1200 px wide; PNG stays PNG, the rest become JPEG for every mail app), named by us under
+  `uploads/email/YYYY/MM/`, whose `.htaccess` serves pictures only and runs nothing.
+- **Templates** (`email_templates`): save, list, use (replaces after a confirm), remove (archived).
+- **Autosave** in the browser (`localStorage`, per email): a newer unsaved copy is offered back (Restore / Discard).
+- Access: anyone with Embrace, Assimilation or Charis `manage` (`email_editor_allowed()`), plus CSRF.
 
 ## 3. For other modules
 

@@ -75,6 +75,9 @@ function compose_state(array $row, int $userId): array
         'kind' => $row['kind'],
         'status' => $row['status'],
         'accountId' => $row['account_id'],
+        'shared' => $account ? Store::isShared($account) : false,
+        'ai' => $account !== null && class_exists(\HOD\Mail\Ai\Ai::class) && \HOD\Mail\Ai\Ai::available($userId, $account),
+        'openedAt' => Clock::sql(),   // the send guard asks for teammates' replies after this
         'threadId' => $row['thread_id'],
         'messageId' => $row['reply_to_message_id'],
         'title' => ['reply' => 'Reply', 'reply_all' => 'Reply all', 'forward' => 'Forward'][$row['kind']] ?? 'New message',
