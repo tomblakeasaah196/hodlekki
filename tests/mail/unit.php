@@ -141,7 +141,7 @@ foreach (array_keys($classes) as $class) {
 check('every HOD\\Mail class the module names exists', !$missing, implode(', ', $missing));
 
 $migrations = glob("$root/db/migrations/*_mail_*.sql");
-check('the Mail migrations carry the _mail_ marker (core, then reading)', array_map('basename', $migrations) === ['20261128090000_mail_core.sql', '20261201090000_mail_read.sql']);
+check('the Mail migrations carry the _mail_ marker (core, reading, writing)', array_map('basename', $migrations) === ['20261128090000_mail_core.sql', '20261201090000_mail_read.sql', '20261203090000_mail_compose.sql']);
 foreach ($migrations as $migration) {
     $sql = (string) preg_replace('/^--.*$/m', '', (string) file_get_contents($migration));
     check(basename($migration) . ': idempotent DDL only, no DELIMITER', !preg_match('/\bDELIMITER\b|CREATE TABLE (?!IF NOT EXISTS)|\bDROP |ALTER TABLE/', $sql));

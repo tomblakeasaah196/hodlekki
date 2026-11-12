@@ -35,6 +35,30 @@ if (!function_exists('mail_ready')) {
     }
 }
 
+if (!function_exists('mail_compose_ready')) {
+    /**
+     * Writing (PR 3) has its tables (migration 20261203090000_mail_compose). The code reaches the server before
+     * the migration runs: until then the composer is not drawn, so no Reply button leads nowhere.
+     */
+    function mail_compose_ready(bool $fresh = false): bool
+    {
+        static $ready = null;
+        if ($ready !== null && !$fresh) {
+            return $ready;
+        }
+        try {
+            $ready = (int) Db::value(
+                "SELECT COUNT(*) FROM information_schema.tables
+                  WHERE table_schema = DATABASE() AND table_name IN ('mail_outbox', 'mail_signatures', 'mail_compose_files')"
+            ) === 3;
+        } catch (Throwable $e) {
+            $ready = false;
+        }
+
+        return $ready;
+    }
+}
+
 if (!function_exists('mail_can')) {
     /**
      * May this person (default: the signed-in one) do $action? Module abilities ('mail.admin', …) need no mailbox;
