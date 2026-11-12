@@ -7,7 +7,12 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 api = (ROOT / "api/charis_api.php").read_text(encoding="utf-8")
-page = (ROOT / "modules/charis/index.php").read_text(encoding="utf-8")
+page_php = (ROOT / "modules/charis/index.php").read_text(encoding="utf-8")
+scripts = "\n".join((ROOT / p).read_text(encoding="utf-8") for p in (
+    "assets/ui/js/pages/charis.js",
+    "assets/ui/js/pages/charis-ops.js",
+))
+page = page_php + "\n" + scripts
 modals = (ROOT / "includes/charis_modals.php").read_text(encoding="utf-8")
 report = (ROOT / "includes/charis_awol_pdf.php").read_text(encoding="utf-8")
 helper = (ROOT / "includes/charis_helpers.php").read_text(encoding="utf-8")
@@ -44,7 +49,7 @@ require("SELECT user_id FROM attendance WHERE event_id" not in api
         and "SELECT user_id FROM attendance WHERE event_id" not in helper,
         "AWOL detection must not fall back to the incomplete attendance table")
 require("resolved_at = NOW()" in api, "case resolution must persist a resolution timestamp")
-require("followup_id\" id=\"resolveWelfareFollowupId" in modals,
+require('name="followup_id" id="charis-resolve-followup"' in modals,
         "manual welfare resolution must carry its follow-up ID")
 require("charis_secure_welfare_notes" in api and "charis_secure_welfare_notes" in report,
         "dashboard and PDF must apply the same note-visibility rules")
@@ -52,8 +57,11 @@ require("$charis_access['is_manager']" in report,
         "confidential AWOL reports must remain restricted to Charis leadership")
 require("createdOnOrBefore" in helper and "$date_end . ' 23:59:59'" in report,
         "historical PDFs must not expose notes written after the report period")
-require("function inlineArg" in page and "function jsEscape" not in page,
-        "dynamic inline handlers must HTML-escape JSON string arguments")
+# Strict CSP: no inline handlers anywhere; rows carry escaped data-* values.
+require(not re.search(r"\son[a-z]+\s*=\s*[\"']", page_php + modals + scripts),
+        "Charis markup must not use inline event handlers")
+require("'mode' => 'strict'" in page_php and "esc(data[k]" in scripts,
+        "the page is strict and builds its buttons with escaped data attributes")
 require("charis_parse_date" in report and "366" in report,
         "custom report ranges must be validated and bounded")
 require("data:image/png;base64" in report, "the PNG report logo must use the correct data URI MIME type")
@@ -62,12 +70,12 @@ require("CREATE TABLE IF NOT EXISTS charis_welfare_notes" in migration,
 require("column_name = 'resolved_at'" in migration,
         "welfare assignments need a guarded resolved_at migration")
 
-for modal_id in ("birthdaysOverviewModal", "lifeEventsOverviewModal", "welfareOverviewModal", "awolConfigModal"):
-    require(f'id="{modal_id}"' in modals, f"missing compact overview/config modal: {modal_id}")
+for dialog_id in ("charis-birthdays", "charis-life-events", "charis-awol-config", "charis-case", "charis-notes"):
+    require(f"ui_dialog_start('{dialog_id}'" in modals, f"missing Charis dialog: {dialog_id}")
 
 api_actions = set(re.findall(r"case\s+'([^']+)'", api))
 front_actions = set(re.findall(
-    r'(?:name="action"\s+value="|action\s*:\s*[\'\"]|action\s*=\s*[\'\"])([a-zA-Z0-9_]+)',
+    r'(?:name="action"\s+value="|(?<![\w-])action\s*:\s*[\'\"]|(?<![\w-])action\s*=\s*[\'\"])([a-zA-Z0-9_]+)',
     page + modals,
 ))
 missing_actions = sorted(front_actions - api_actions)

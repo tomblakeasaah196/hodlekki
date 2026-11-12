@@ -281,12 +281,14 @@
      * Error carrying .code, .field and .response otherwise, and shows the
      * message as a toast unless { quiet: true }. Form-encoded by default (what
      * the endpoints read from $_POST); { json: true } sends JSON; a FormData
-     * passes through untouched (uploads).
+     * passes through untouched (uploads). { headers: {...} } adds request
+     * headers (Charis sends its own CSRF header this way).
      */
     function api(url, opts) {
         opts = opts || {};
         var method = (opts.method || 'POST').toUpperCase();
         var headers = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+        Object.keys(opts.headers || {}).forEach(function (key) { headers[key] = opts.headers[key]; });
         var body;
         var payload = opts.data || {};
 
