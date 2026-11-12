@@ -77,6 +77,28 @@ function trainings_view_media(?array $media, string $title): string
         . ' referrerpolicy="strict-origin-when-cross-origin"></iframe>';
 }
 
+/**
+ * A PowerPoint deck in the page: Microsoft's Office web viewer, which fetches
+ * the deck from our site by its absolute address (privacy.php says so), plus
+ * a Download button that always works. Only /uploads/trainings/ decks.
+ */
+function trainings_view_deck(string $deckUrl, string $title, string $name = '', int $slides = 0): string
+{
+    if (!preg_match('#^/uploads/trainings/\d{8}_[0-9a-f]{16}\.pptx$#', $deckUrl)) {
+        return '';
+    }
+    $absolute = function_exists('site_url') ? site_url($deckUrl) : $deckUrl;
+    $src = TRAININGS_OFFICE_VIEWER . '?src=' . rawurlencode($absolute);
+    return '<div class="ui-stack ui-stack--sm">'
+        . '<iframe class="w-full aspect-video rounded-xl border-0 bg-surface-sunken" src="' . ui_e($src) . '" title="' . ui_e('Slides: ' . $title) . '"'
+        . ' loading="lazy" allow="fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>'
+        . '<div class="flex flex-wrap items-center gap-2">'
+        . ui_button('Download slides', ['variant' => 'secondary', 'size' => 'sm', 'icon' => 'download', 'href' => $deckUrl,
+            'attrs' => ['download' => $name !== '' ? $name : true]])
+        . ($slides > 0 ? '<span class="ui-meta">' . $slides . ($slides === 1 ? ' slide' : ' slides') . '</span>' : '')
+        . '</div></div>';
+}
+
 /** A reading's text: paragraphs, escaped. */
 function trainings_view_text(string $text): string
 {

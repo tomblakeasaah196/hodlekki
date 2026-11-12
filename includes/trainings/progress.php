@@ -472,7 +472,9 @@ function trainings_learner_item(array $item): array
         // PR 2 owns the exam; the learner goes to its page (null until PR 2 is here).
         'exam' => ['take_url' => trainings_exam_take_url((int) $item['id'])],
         'video', 'audio' => ['media' => $media($d)],
-        'reading' => ['text' => (string) ($d['text'] ?? ''), 'pdf' => (string) ($d['pdf'] ?? ''), 'pdf_name' => (string) ($d['pdf_name'] ?? '')],
+        // A deck's slide text (slides_text) is never part of what a learner gets.
+        'reading' => ['text' => (string) ($d['text'] ?? ''), 'pdf' => (string) ($d['pdf'] ?? ''), 'pdf_name' => (string) ($d['pdf_name'] ?? ''),
+                      'deck' => (string) ($d['deck'] ?? ''), 'deck_name' => (string) ($d['deck_name'] ?? ''), 'slides' => (int) ($d['slides'] ?? 0)],
         'assignment' => ['kind' => (string) ($d['kind'] ?? 'written'), 'instructions' => (string) ($d['instructions'] ?? ''),
                          'prompts' => array_values((array) ($d['prompts'] ?? [])), 'max_mark' => (int) ($d['max_mark'] ?? 10),
                          'pass_mark' => (int) ($d['pass_mark'] ?? 5), 'media' => $media((array) ($d['media'] ?? []))],

@@ -31,6 +31,7 @@ if (is_file(dirname(__DIR__) . '/exams/bootstrap.php')) {
 if (is_file(dirname(__DIR__) . '/training_live/bootstrap.php')) {
     require_once dirname(__DIR__) . '/training_live/bootstrap.php';
 }
+require_once __DIR__ . '/pptx.php';
 require_once __DIR__ . '/build.php';
 require_once __DIR__ . '/people.php';
 require_once __DIR__ . '/progress.php';

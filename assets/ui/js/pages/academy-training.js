@@ -213,7 +213,7 @@
     function current(form, key, text) {
         var node = form.querySelector('[data-trb-current="' + key + '"]');
         if (!node) return;
-        if (key === 'pdf') {
+        if (key === 'pdf' || key === 'deck') {
             node.hidden = !text;
             var name = node.querySelector('[data-trb-current-name]');
             if (name) name.textContent = text || '';
@@ -240,6 +240,7 @@
         current(form, 'audio', '');
         current(form, 'media', '');
         current(form, 'pdf', '');
+        current(form, 'deck', '');
         var d = item ? (item.details || {}) : {};
         if (item) {
             if (item.type === 'live') {
@@ -256,6 +257,7 @@
             } else if (item.type === 'reading') {
                 form.elements.text.value = d.text || '';
                 current(form, 'pdf', d.pdf ? (d.pdf_name || 'Reading.pdf') : '');
+                current(form, 'deck', d.deck ? (d.deck_name || 'Slides.pptx') + (d.slides ? ' · ' + d.slides + ' slides' : '') : '');
             } else if (item.type === 'assignment') {
                 form.elements.assignment_kind.value = d.kind || 'written';
                 form.elements.instructions.value = d.instructions || '';
@@ -319,6 +321,70 @@
                 api('certificate_revoke', { enrolment_id: btn.getAttribute('data-enrolment'), reason: reason }, btn)
                     .then(function () { flash('Certificate revoked.'); }).catch(function () {});
             });
+    });
+
+    /* ------------------------------------------------------------ add slides (several .pptx at once) */
+
+    var DECK_MAX = 30 * 1024 * 1024;
+    var slidesForm = document.getElementById('trb-slides-form');
+
+    /** The chosen files in name order (Day 2 before Day 10). */
+    function chosenDecks() {
+        var input = slidesForm ? slidesForm.elements.decks : null;
+        var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
+        return files.sort(function (a, b) { return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }); });
+    }
+
+    function deckProblem(file) {
+        if (!/\.pptx$/i.test(file.name)) return 'not a .pptx';
+        if (file.size > DECK_MAX) return 'over 30 MB';
+        return '';
+    }
+
+    HOD.actions.on('trb.slides', function (btn) {
+        if (!slidesForm) return;
+        slidesForm.reset();
+        slidesForm.elements.section_id.value = btn.getAttribute('data-section');
+        slidesForm.querySelector('[data-trb-slides-list]').textContent = '';
+        slidesForm.querySelector('[data-trb-slides-progress]').textContent = '';
+        HOD.dialog.open('trb-slides');
+    });
+
+    HOD.actions.on('trb.slidesPick', function () {
+        var list = slidesForm.querySelector('[data-trb-slides-list]');
+        list.textContent = '';
+        chosenDecks().forEach(function (file) {
+            var why = deckProblem(file);
+            list.appendChild(el('li', why ? 'text-danger' : '', file.name + (why ? ' (' + why + ')' : '')));
+        });
+    });
+
+    HOD.actions.on('trb.slidesSave', function (form) {
+        var decks = chosenDecks();
+        var btn = document.querySelector('button[form="trb-slides-form"]');
+        var progress = form.querySelector('[data-trb-slides-progress]');
+        if (!decks.length) { HOD.toast('Choose the PowerPoint files first.', 'warning'); return; }
+        var bad = decks.filter(deckProblem);
+        if (bad.length) { HOD.toast(bad[0].name + ' cannot be added: ' + deckProblem(bad[0]) + '.', 'warning'); return; }
+        HOD.busy(btn, true);
+        var added = 0;
+        // One request per deck, in order: each is up to 30 MB, and a batch could be 7 or more.
+        decks.reduce(function (chain, file, i) {
+            return chain.then(function () {
+                progress.textContent = 'Adding ' + (i + 1) + ' of ' + decks.length + ': ' + file.name;
+                var body = new FormData();
+                body.append('training_id', tid);
+                body.append('section_id', form.elements.section_id.value);
+                body.append('pptx_file', file, file.name);
+                return HOD.api(API, { action: 'slides_add', data: body }).then(function () { added++; });
+            });
+        }, Promise.resolve()).then(function () {
+            flash(added === 1 ? '1 slide deck added.' : added + ' slide decks added.');
+        }).catch(function () {
+            HOD.busy(btn, false);
+            progress.textContent = added ? added + ' added before the problem. Fix that file and add the rest.' : '';
+            if (added) window.setTimeout(function () { flash(added + ' added; add the rest again.'); }, 2500);
+        });
     });
 
     /* ------------------------------------------------------------ the people picker */

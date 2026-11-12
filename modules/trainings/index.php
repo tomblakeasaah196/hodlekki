@@ -6,7 +6,8 @@
 // Rendered on the server (it reads well as an offline copy); actions go to
 // /api/trainings_api.php from assets/ui/js/pages/trainings.js. Access: the
 // 'trainings' row of the permission matrix, own records (everyone signed in).
-// YouTube and Spotify play embedded: frame-src allows exactly those two hosts.
+// YouTube and Spotify play embedded, and PowerPoint decks show in Microsoft's Office
+// viewer: frame-src allows exactly those three hosts (TRAININGS_FRAME_HOSTS).
 require_once __DIR__ . '/../../includes/trainings/bootstrap.php';
 require_once __DIR__ . '/../../includes/trainings/view.php';
 $ui = [
@@ -14,7 +15,7 @@ $ui = [
     'mode' => 'strict',
     // training-live.js (PR 3) logs each press of Join class for attendance, then the link opens as usual.
     'scripts' => array_merge(['/assets/ui/js/pages/trainings.js'], function_exists('training_live_url') ? ['/assets/ui/js/pages/training-live.js'] : []),
-    'csp' => ['frame-src' => TRAININGS_EMBED_HOSTS],
+    'csp' => ['frame-src' => TRAININGS_FRAME_HOSTS],
 ];
 require_once '../../includes/header.php';
 $me = (int) $_SESSION['user_id'];
@@ -120,6 +121,9 @@ $isStaff = can('trainings', 'view', 'church');
 <?php elseif ($item['type'] === 'video' || $item['type'] === 'audio'): ?>
                             <?= trainings_view_media($d['media'], $item['title']) ?>
 <?php elseif ($item['type'] === 'reading'): ?>
+<?php if ($d['deck'] !== ''): ?>
+                            <?= trainings_view_deck($d['deck'], $item['title'], $d['deck_name'], $d['slides']) ?>
+<?php endif; ?>
                             <?= trainings_view_text($d['text']) ?>
 <?php if ($d['pdf'] !== ''): ?>
                             <div><?= ui_button('Open PDF', ['variant' => 'secondary', 'icon' => 'file-down', 'href' => $d['pdf'],
