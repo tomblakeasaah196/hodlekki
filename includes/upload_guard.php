@@ -11,6 +11,8 @@
 // uploads/ and assets/uploads/ that refuses to serve any script file.
 //
 //   hod_upload_store($_FILES['x'], $absDir, $urlPrefix, $kinds) -> ['ok', 'url', 'error']
+//   hod_upload_store_data_image($dataUrl, $absDir, $urlPrefix)   -> ['ok', 'url', 'error']
+//     (a cropped photo sent as a PNG or JPEG data: URL, checked to really be one)
 
 const HOD_UPLOAD_DOCS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'txt', 'rtf', 'odt', 'ods', 'odp'];
 const HOD_UPLOAD_IMAGES = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
@@ -57,6 +59,56 @@ if (!function_exists('hod_upload_store')) {
         $name = hod_upload_name($ext);
         if (!move_uploaded_file((string) $file['tmp_name'], rtrim($absDir, '/') . '/' . $name)) {
             return ['ok' => false, 'url' => null, 'error' => 'Could not save the file.'];
+        }
+
+        return ['ok' => true, 'url' => $urlPrefix . $name, 'error' => null];
+    }
+}
+
+if (!function_exists('hod_image_from_data_url')) {
+    /**
+     * The image inside a data: URL, when it really is a PNG or JPEG of at most
+     * $maxBytes: ['bytes' => …, 'ext' => 'png'|'jpg']. Null for anything else
+     * (another type, broken base64, too big, or bytes that are not that image).
+     */
+    function hod_image_from_data_url(string $dataUrl, int $maxBytes = 5000000): ?array
+    {
+        if (!preg_match('#^data:image/(png|jpeg);base64,([A-Za-z0-9+/=\r\n]+)$#', $dataUrl, $m)) {
+            return null;
+        }
+        $bytes = base64_decode($m[2], true);
+        if ($bytes === false || $bytes === '' || strlen($bytes) > $maxBytes) {
+            return null;
+        }
+        $info = @getimagesizefromstring($bytes);
+        if (!$info || !in_array($info[2], [IMAGETYPE_PNG, IMAGETYPE_JPEG], true)) {
+            return null;
+        }
+
+        return ['bytes' => $bytes, 'ext' => $info[2] === IMAGETYPE_PNG ? 'png' : 'jpg'];
+    }
+}
+
+if (!function_exists('hod_upload_store_data_image')) {
+    /**
+     * Store a cropped photo sent as a data: URL (PNG or JPEG, at most
+     * $maxBytes) in $absDir under a random name with the image's real
+     * extension. The folder is made 0755.
+     *
+     * @return array{ok: bool, url: ?string, error: ?string}
+     */
+    function hod_upload_store_data_image(string $dataUrl, string $absDir, string $urlPrefix, int $maxBytes = 5000000): array
+    {
+        $image = hod_image_from_data_url($dataUrl, $maxBytes);
+        if ($image === null) {
+            return ['ok' => false, 'url' => null, 'error' => 'The photo could not be read. Crop it again.'];
+        }
+        if (!is_dir($absDir) && !mkdir($absDir, 0755, true) && !is_dir($absDir)) {
+            return ['ok' => false, 'url' => null, 'error' => 'Could not save the photo.'];
+        }
+        $name = hod_upload_name($image['ext']);
+        if (file_put_contents(rtrim($absDir, '/') . '/' . $name, $image['bytes']) === false) {
+            return ['ok' => false, 'url' => null, 'error' => 'Could not save the photo.'];
         }
 
         return ['ok' => true, 'url' => $urlPrefix . $name, 'error' => null];
