@@ -3,7 +3,9 @@
 // server (includes/campaigns/automation_tab.php). Every action goes through
 // /api/automation_api.php; answers that change the panel carry it again and it
 // is swapped in place. The email preview is a sandboxed frame on
-// /api/email_preview.php (its own CSP; never srcdoc).
+// /api/email_preview.php (its own CSP; never srcdoc). "Edit" opens the block
+// editor (assets/ui/js/email-editor.js) in the panel's dialog; "Save email"
+// validates it on the server and writes it into the rule.
 (function () {
     'use strict';
 
@@ -133,6 +135,61 @@
         }).catch(function () {}).finally(function () { HOD.busy(button, false); });
     }
 
+    // The block editor (assets/ui/js/email-editor.js) in the panel's dialog:
+    // one open editor per module.
+    var editors = {};
+
+    function edit(button) {
+        var module = button.getAttribute('data-module');
+        var step = button.getAttribute('data-step');
+        var week = button.getAttribute('data-week') || '1';
+        var dialogId = 'auto-' + module + '-editor';
+        var dialog = document.getElementById(dialogId);
+        var row = button.closest('[data-automation-step]');
+        var title = row ? row.querySelector('.ui-h3') : null;
+        var series = row && row.querySelector('details');
+        HOD.busy(button, true);
+        post(module, 'email_doc', { step: step, week: week }).then(function (res) {
+            dialog.querySelector('[data-automation-editor-name]').textContent = (title ? title.textContent : '') + (series ? ', week ' + week : '');
+            var root = dialog.querySelector('[data-automation-editor-root]');
+            root.innerHTML = '';
+            var savedAt = res.saved_at ? new Date(String(res.saved_at).replace(' ', 'T')) : null;
+            editors[module] = {
+                step: step,
+                week: week,
+                version: res.version,
+                editor: window.HODEmail.mount(root, {
+                    doc: res.doc,
+                    storageKey: 'hod-email-' + module + '-' + step + '-' + week,
+                    savedAt: savedAt && !isNaN(savedAt.getTime()) ? savedAt.toISOString() : null
+                })
+            };
+            HOD.dialog.open(dialogId, button);
+        }).catch(function () {}).finally(function () { HOD.busy(button, false); });
+    }
+
+    function saveEmail(button) {
+        var module = button.getAttribute('data-module');
+        var open = editors[module];
+        if (!open) return;
+        open.editor.opts.onSave = function (doc) {
+            return HOD.api(API, {
+                action: 'save_email', json: true, quiet: true,
+                data: { module: module, step: open.step, week: open.week, version: open.version, doc: doc }
+            }).then(function (res) {
+                delete editors[module];
+                HOD.dialog.close('auto-' + module + '-editor');
+                swap(module, res);
+                HOD.toast(res.message || 'Email saved.', 'success');
+                return true;
+            }).catch(function (err) {
+                open.editor.showErrors(err.response && err.response.errors ? err.response.errors : [err.message]);
+                return false;
+            });
+        };
+        open.editor.save(button);
+    }
+
     function smsCount(field) {
         var target = document.getElementById(field.getAttribute('data-count-target'));
         if (!target) return;
@@ -156,5 +213,7 @@
         HOD.actions.on('automation.test', test);
         HOD.actions.on('automation.run', who);
         HOD.actions.on('automation.sms-count', smsCount);
+        HOD.actions.on('automation.edit', edit);
+        HOD.actions.on('automation.save-email', saveEmail);
     });
 })();

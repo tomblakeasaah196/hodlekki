@@ -10,8 +10,9 @@
 //
 // What the tab edits: when each step happens (day and time, or missed
 // Sundays), who the rule covers, the sender name and reply-to, each SMS, and
-// each team/pastor alert. The email documents themselves are edited in the
-// block editor (next PR); until then they stay the defaults (defaults.php).
+// each team/pastor alert. Each email opens in the block editor
+// (assets/ui/js/email-editor.js, includes/campaigns/editor.php) and is saved
+// back into the rule (save_email), validated like everything else.
 // Rules are created OFF; switching one on is always a person's choice.
 
 require_once __DIR__ . '/bootstrap.php';
@@ -302,6 +303,7 @@ function automation_tab_email_row(string $module, string $stepKey, int $week, ar
         . '<div class="min-w-0"><p class="ui-meta">' . ui_e($title ?? 'Email') . '</p>'
         . '<p class="truncate font-medium text-ink">' . ui_e((string) ($doc['subject'] ?? '')) . '</p></div>'
         . '<div class="flex shrink-0 gap-2">'
+        . ui_button('Edit', ['variant' => 'secondary', 'size' => 'sm', 'icon' => 'pencil', 'attrs' => $attrs + ['data-action' => 'automation.edit']])
         . ui_button('Preview', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'eye', 'attrs' => $attrs + ['data-action' => 'automation.preview']])
         . ui_button('Send test', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'send', 'attrs' => $attrs + ['data-action' => 'automation.test']])
         . '</div></div>';
@@ -469,7 +471,7 @@ function automation_tab_html(PDO $pdo, string $module, array $o = []): string
         . automation_tab_runs_html($rule, automation_tab_runs($pdo, (int) $rule['id']))
         . '</div></section>';
 
-    // Dialogs: switch on, preview.
+    // Dialogs: switch on, preview, the email editor (assets/ui/js/email-editor.js).
     $html .= ui_dialog_start($id . '-enable', ['title' => 'Switch on?', 'size' => 'sm'])
         . '<p data-automation-enable-line>…</p>'
         . ($kind === 'absence'
@@ -490,8 +492,39 @@ function automation_tab_html(PDO $pdo, string $module, array $o = []): string
         . '</div></div>'
         . '<div class="overflow-hidden rounded-ui-lg border border-line bg-surface-sunken"><iframe class="mx-auto block h-[70vh] w-full max-w-[640px] bg-white" title="Email preview" sandbox="" referrerpolicy="no-referrer" data-automation-frame></iframe></div>'
         . ui_dialog_end(ui_button('Close', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]]));
+    $html .= ui_dialog_start($id . '-editor', ['title' => 'Edit email', 'size' => 'xl'])
+        . '<p class="ui-meta mb-3" data-automation-editor-name></p><div data-automation-editor-root></div>'
+        . ui_dialog_end(
+            ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
+            . ui_button('Save email', ['variant' => 'primary', 'attrs' => ['data-action' => 'automation.save-email', 'data-module' => $module]])
+        );
 
     return $html . '</div>';
+}
+
+/**
+ * The rule's settings with one step's email (week $week of a series)
+ * replaced by $doc. Null when the step has no email (alerts) or no such week.
+ * The result still goes through automation_rule_save() and its validation.
+ */
+function automation_tab_with_email(array $rule, string $stepKey, int $week, $doc): ?array
+{
+    $config = $rule['config'];
+    foreach ($config['steps'] as $i => $step) {
+        if (($step['key'] ?? '') !== $stepKey || ($step['target'] ?? 'member') !== 'member') {
+            continue;
+        }
+        if (isset($step['series'])) {
+            if (!isset($step['series'][$week - 1])) {
+                return null;
+            }
+            $config['steps'][$i]['series'][$week - 1]['email'] = $doc;
+        } else {
+            $config['steps'][$i]['email'] = $doc;
+        }
+        return $config;
+    }
+    return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -501,7 +534,8 @@ function automation_tab_html(PDO $pdo, string $module, array $o = []): string
 /**
  * One action of the tab. The caller has checked can($module, 'manage') and
  * the CSRF token. $do: panel | save | switch_preview | enable | disable |
- * test | run_people. Answers carry the panel again where it changed.
+ * test | run_people | email_doc | save_email. Answers carry the panel again
+ * where it changed.
  *
  * @return array{status:string, message?:string, html?:string, line?:string, people?:list<array>}
  */
@@ -548,6 +582,27 @@ function automation_tab_action(PDO $pdo, string $module, string $do, array $in, 
 
         case 'run_people':
             return ['status' => 'success', 'people' => automation_tab_run_people($pdo, $rule, (int) ($in['run'] ?? 0))];
+
+        case 'email_doc':
+            $week = max(1, (int) ($in['week'] ?? 1));
+            $doc = automation_tab_step_doc($rule, (string) ($in['step'] ?? ''), $week);
+            if ($doc === null) {
+                return ['status' => 'error', 'message' => 'This step has no email.'];
+            }
+            return ['status' => 'success', 'doc' => $doc, 'version' => (int) $rule['version'],
+                    'saved_at' => (string) ($rule['updated_at'] ?? $rule['created_at'] ?? '')];
+
+        case 'save_email':
+            $week = max(1, (int) ($in['week'] ?? 1));
+            $config = automation_tab_with_email($rule, (string) ($in['step'] ?? ''), $week, $in['doc'] ?? null);
+            if ($config === null) {
+                return ['status' => 'error', 'message' => 'This step has no email.'];
+            }
+            $r = automation_rule_save($pdo, $module, $config, $viewerId, isset($in['version']) ? (int) $in['version'] : null);
+            if (empty($r['ok'])) {
+                return ['status' => 'error', 'message' => implode(' ', array_slice((array) $r['errors'], 0, 3)), 'errors' => $r['errors']];
+            }
+            return ['status' => 'success', 'message' => 'Email saved.', 'html' => $panel()];
     }
     return ['status' => 'error', 'message' => 'Unknown action.'];
 }
