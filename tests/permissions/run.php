@@ -397,6 +397,23 @@ ok('report fits one screen', substr_count($report, "\n") <= 24, (string) substr_
 require __DIR__ . '/admin_tests.php';
 
 // ---------------------------------------------------------------------------
+section('River of Life checks each write');
+$rolApi = '';   // the code, comments stripped
+foreach (token_get_all((string) file_get_contents($root . '/api/rol_api.php')) as $tok) {
+    if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+        $rolApi .= is_array($tok) ? $tok[1] : $tok;
+    }
+}
+ok('rol_api needs the CSRF token on writes', str_contains($rolApi, 'csrf_require();'));
+ok('each write asks its own level (it was View for all)',
+    str_contains($rolApi, "api_require_can('river_of_life', \$levels[\$action]);") && str_contains($rolApi, "'assign_member' => 'create'")
+    && str_contains($rolApi, "'mark_attendance' => 'edit'") && str_contains($rolApi, "'remove_member' => 'delete'"));
+ok('role, mark and assignee come from fixed lists or the team',
+    str_contains($rolApi, 'in_array($role_category, $rol_categories, true)') && str_contains($rolApi, 'in_array($status, $rol_marks, true)')
+    && str_contains($rolApi, "perm_module_team(\$pdo, 'river_of_life')), true)"));
+ok('the unreachable audio upload is gone', !str_contains($rolApi, 'upload_audio_key') && !str_contains($rolApi, 'move_uploaded_file'));
+
+// ---------------------------------------------------------------------------
 section('AI in Mail for every role (owner, 12 Nov 2026)');
 $aiSql = perm_test_migration('20261206090000_perm_ai_for_every_role.sql');
 ok('mail.ai migration is portable (no ON DUPLICATE / INSERT IGNORE)', !preg_match('/ON DUPLICATE|INSERT IGNORE/i', $aiSql));
