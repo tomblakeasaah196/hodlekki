@@ -198,6 +198,28 @@
         --ui-info-soft: var(--blue-50);
         --ui-info-border: var(--blue-200);
 
+        /* Accent hues: they tell things apart at a glance (the dashboard's
+         * cards), so they never stand for a status; that is what success,
+         * warning and danger are for. Same family as the avatar colours.
+         * Ink is AA on white and on its own soft tint. */
+        --ui-hue-navy: var(--navy-700);
+        --ui-hue-navy-soft: var(--navy-100);
+        --ui-hue-navy-line: var(--navy-200);
+        --ui-hue-rose: #9B1C22;
+        --ui-hue-rose-soft: #FBE6E7;
+        --ui-hue-rose-line: #F2C2C5;
+        --ui-hue-violet: #4D3A8F;
+        --ui-hue-violet-soft: #ECE7FA;
+        --ui-hue-violet-line: #D6CCF2;
+        --ui-hue-gold: #7A4A00;
+        --ui-hue-gold-soft: #FCEFD6;
+        --ui-hue-gold-line: #F0D49B;
+        --ui-hue-teal: #1C5F66;
+        --ui-hue-teal-soft: #DDF1F3;
+        --ui-hue-teal-line: #B3DDE2;
+        /* The warm welcome wash Connect is printed on. */
+        --ui-warm: #FFF8F1;
+
         --ui-focus: #3D74E6;
         --ui-focus-ring: 0 0 0 3px rgba(29, 53, 106, .16);
         --ui-focus-ring-danger: 0 0 0 3px rgba(209, 25, 32, .14);
@@ -2770,6 +2792,170 @@
         .cx .cx-step-in,
         .cx .cx-step-in--back { animation: none !important; }
         .cx .ui-btn { transform: none !important; }
+    }
+
+    /* ---------- Home dashboard (index.php) ---------- */
+    /* Connect's family: the welcome sits on the same warm wash, and each key
+       number carries a calm hue of its own (an icon chip and a soft glow) so
+       the eye can tell the cards apart. "Needs you" cards (dashboard_api.php
+       sets needs) take a stronger tint and a pill in their hue. Motion is
+       opt-in and happens once: dashboard.js adds .dash-enter on the first
+       load only when the reader has not asked for reduced motion, and live
+       refreshes update the cards in place. Only transform and opacity move. */
+    .dash-hello {
+        --dash-ease: cubic-bezier(.22, 1, .36, 1);
+        position: relative;
+        isolation: isolate;
+        margin-bottom: var(--ui-section-gap);
+        padding: 20px;
+        border: 1px solid rgba(209, 25, 32, .1);
+        border-radius: var(--ui-radius-xl);
+        background:
+            radial-gradient(26rem 15rem at 100% 0%, rgba(209, 25, 32, .13), transparent 70%),
+            radial-gradient(24rem 15rem at 0% 100%, rgba(29, 53, 106, .06), transparent 70%),
+            var(--ui-warm);
+    }
+    .dash-hello .ui-page-header { margin-bottom: 0; }
+    .dash-hello .ui-h1 { font-size: clamp(1.5rem, 1.15rem + 1.5vw, 2.125rem); line-height: 1.15; letter-spacing: -.025em; }
+    .dash-hello .ui-page-header__description { margin-top: 8px; color: #454C5C; }
+    @media (min-width: 1024px) {
+        .dash-hello { padding: 28px 32px; }
+    }
+
+    /* Navy unless a hue modifier below says otherwise (same specificity, so
+       the modifiers must stay after this rule). */
+    .dash-kpi {
+        --dash-hue: var(--ui-hue-navy);
+        --dash-hue-soft: var(--ui-hue-navy-soft);
+        --dash-hue-line: var(--ui-hue-navy-line);
+    }
+    /* .ui-card.dash-kpi outranks a.ui-card / button.ui-card (display: block). */
+    .ui-card.dash-kpi {
+        container-type: inline-size;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas: "chip status" "value value" "title title" "note note";
+        align-items: center;
+        align-content: start;   /* a shorter card keeps its rows together */
+        gap: 0 8px;
+        padding: var(--ui-card-pad);
+        background:
+            radial-gradient(12rem 8rem at 100% 0%, var(--dash-hue-soft), transparent 72%),
+            var(--ui-surface);
+        transition: transform 320ms cubic-bezier(.22, 1, .36, 1),
+                    box-shadow 320ms cubic-bezier(.22, 1, .36, 1),
+                    border-color var(--ui-dur-fast) var(--ui-ease);
+    }
+    .dash-kpi--navy { --dash-hue: var(--ui-hue-navy); --dash-hue-soft: var(--ui-hue-navy-soft); --dash-hue-line: var(--ui-hue-navy-line); }
+    .dash-kpi--rose { --dash-hue: var(--ui-hue-rose); --dash-hue-soft: var(--ui-hue-rose-soft); --dash-hue-line: var(--ui-hue-rose-line); }
+    .dash-kpi--violet { --dash-hue: var(--ui-hue-violet); --dash-hue-soft: var(--ui-hue-violet-soft); --dash-hue-line: var(--ui-hue-violet-line); }
+    .dash-kpi--gold { --dash-hue: var(--ui-hue-gold); --dash-hue-soft: var(--ui-hue-gold-soft); --dash-hue-line: var(--ui-hue-gold-line); }
+    .dash-kpi--teal { --dash-hue: var(--ui-hue-teal); --dash-hue-soft: var(--ui-hue-teal-soft); --dash-hue-line: var(--ui-hue-teal-line); }
+
+    .dash-kpi__chip {
+        grid-area: chip;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 11px;
+        background: var(--dash-hue-soft);
+        color: var(--dash-hue);
+    }
+    .dash-kpi__chip .ui-icon { width: 19px; height: 19px; stroke-width: 2; }
+    .dash-kpi__status {
+        grid-area: status;
+        justify-self: end;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 4px;
+        min-width: 0;
+    }
+    .dash-kpi__value {
+        grid-area: value;
+        margin-top: 14px;
+        font-size: 1.75rem;
+        font-size: clamp(1.5rem, 19cqi, 2rem);
+        line-height: 1.1;
+        font-weight: 700;
+        letter-spacing: -.025em;
+        color: var(--ui-heading);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    .dash-kpi__title {
+        grid-area: title;
+        margin-top: 4px;
+        font-size: var(--ui-text-md);
+        line-height: 1.25rem;
+        font-weight: 600;
+        color: var(--ui-text);
+    }
+    .dash-kpi__note {
+        grid-area: note;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        margin-top: 2px;
+        font-size: var(--ui-text-sm);
+        line-height: 1.125rem;
+        color: var(--ui-text-muted);
+    }
+    /* "Needs you": a stronger wash, an edge in the card's hue and a pill. */
+    .ui-card.dash-kpi--needs {
+        border-color: var(--dash-hue-line);
+        background:
+            radial-gradient(16rem 10rem at 100% 0%, var(--dash-hue-soft), transparent 78%),
+            linear-gradient(to bottom, var(--dash-hue-soft), var(--ui-surface) 85%);
+    }
+    .dash-kpi--needs .dash-kpi__chip {
+        background: var(--ui-surface);
+        box-shadow: inset 0 0 0 1px var(--dash-hue-line);
+    }
+    .dash-needs {
+        display: inline-flex;
+        align-items: center;
+        height: 22px;
+        padding: 0 9px;
+        border-radius: 999px;
+        background: var(--dash-hue);
+        color: #FFFFFF;
+        font: 600 var(--ui-text-xs)/1 var(--ui-font-sans);
+        white-space: nowrap;
+    }
+
+    /* Cards that open details or link out lift a little under a pointer and
+       settle when pressed. */
+    @media (hover: hover) {
+        a.ui-card.dash-kpi:hover,
+        button.ui-card.dash-kpi:hover {
+            transform: translate3d(0, -3px, 0);
+            border-color: var(--dash-hue-line);
+            box-shadow: 0 16px 32px -18px color-mix(in srgb, var(--dash-hue) 55%, transparent), var(--ui-shadow-sm);
+        }
+    }
+    a.ui-card.dash-kpi:active,
+    button.ui-card.dash-kpi:active {
+        transform: scale(.985);
+        transition-duration: var(--ui-dur-fast);
+    }
+
+    /* The first load: the cards rise into place one after another. */
+    .dash-enter > .dash-kpi { animation: dash-rise 640ms cubic-bezier(.22, 1, .36, 1) backwards; }
+    .dash-enter > .dash-kpi:nth-child(2) { animation-delay: 70ms; }
+    .dash-enter > .dash-kpi:nth-child(3) { animation-delay: 140ms; }
+    .dash-enter > .dash-kpi:nth-child(4) { animation-delay: 210ms; }
+    .dash-enter > .dash-kpi:nth-child(n+5) { animation-delay: 280ms; }
+    @keyframes dash-rise {
+        from { opacity: 0; transform: translate3d(0, 14px, 0); }
+        to { opacity: 1; transform: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .dash-enter > .dash-kpi { animation: none !important; }
+        .ui-card.dash-kpi { transform: none !important; transition-property: border-color, box-shadow; }
     }
 
     /* A dialog that fills the screen (a document reader). */

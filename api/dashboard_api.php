@@ -265,11 +265,14 @@ try {
             ['key' => 'workforce', 'title' => 'Workforce', 'value' => $workforce,
              'note' => 'Serving in a department'],
             // New Pipeline + Follow-ups Due in one card: what needs a call is the number.
+            // needs: the card is waiting on someone (dashboard.js marks it "Needs you").
             ['key' => 'first_timers', 'title' => 'First timers', 'value' => $followups['open'],
              'note' => number_format($pipeline['total']) . ' in pipeline'
-                 . ($followups['unassigned'] > 0 ? ' · ' . number_format($followups['unassigned']) . ' unassigned' : '')],
+                 . ($followups['unassigned'] > 0 ? ' · ' . number_format($followups['unassigned']) . ' unassigned' : ''),
+             'needs' => $followups['open'] > 0 || $followups['unassigned'] > 0],
             ['key' => 'pending_qa', 'title' => 'Pending Q&A', 'value' => $qa['total'],
-             'note' => $qa['oldest'] ? 'Oldest from ' . dash_short_date((string) $qa['oldest']) : 'All answered'],
+             'note' => $qa['oldest'] ? 'Oldest from ' . dash_short_date((string) $qa['oldest']) : 'All answered',
+             'needs' => $qa['total'] > 0],
             ['key' => 'sunday', 'title' => $sunday['is_today'] ? "Today's Service" : 'Last Sunday', 'value' => $sunday['total'],
              'note' => $sundayNote, 'trend' => $sundayTrend],
         ];
@@ -309,7 +312,7 @@ try {
         $response['metrics']['unread_alerts'] = $unread;
         $response['cards'] = [
             ['key' => 'alerts', 'title' => 'Unread Alerts', 'value' => $unread,
-             'note' => $unread === 0 ? 'All caught up' : 'Tap to see them'],
+             'note' => $unread === 0 ? 'All caught up' : 'Tap to see them', 'needs' => $unread > 0],
         ];
     }
 

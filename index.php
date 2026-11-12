@@ -24,11 +24,13 @@ $dashGreeting = $dashHour < 12 ? 'Good morning' : ($dashHour < 17 ? 'Good aftern
 $dashName = trim((string) ($_SESSION['first_name'] ?? ''));
 ?>
 <div class="ui-page">
-    <?= ui_page_header([
-        'title' => $dashGreeting . ($dashName !== '' ? ', ' . $dashName : ''),
-        'description' => date('l, j F') . ' · how the household is doing, and what needs you today.',
-        'actions' => ui_button('Connect QR code', ['icon' => 'qr-code', 'attrs' => ['data-action' => 'dash.qr']]),
-    ]) ?>
+    <div class="dash-hello">
+        <?= ui_page_header([
+            'title' => $dashGreeting . ($dashName !== '' ? ', ' . $dashName : ''),
+            'description' => date('l, j F') . ". The household is glad you're here.",
+            'actions' => ui_button('Connect QR code', ['icon' => 'qr-code', 'attrs' => ['data-action' => 'dash.qr']]),
+        ]) ?>
+    </div>
 
     <div class="ui-stack">
         <section aria-labelledby="dash-kpis">
