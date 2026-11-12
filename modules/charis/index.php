@@ -13,6 +13,7 @@ $ui = [
         '/assets/js/celebrants_export.js',
         '/assets/ui/js/pages/charis.js',
         '/assets/ui/js/pages/charis-ops.js',
+        '/assets/ui/js/email-editor.js',
         '/assets/ui/js/pages/automation.js',
     ],
     // The Automation tab's email preview: a sandboxed frame on api/email_preview.php.

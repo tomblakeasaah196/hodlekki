@@ -66,6 +66,27 @@ $tool = static fn (string $cmd, string $icon, string $label, string $extra = '')
                 <span class="mc-tool-sep" aria-hidden="true"></span>
                 <?= $tool('data-mc="link"', 'link', 'Link (Ctrl+K)') ?>
                 <?= $tool('data-cmd="removeFormat"', 'remove-formatting', 'Clear formatting') ?>
+                <span class="mt-grow" aria-hidden="true"></span>
+                <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm mc-ai-btn" data-mc="ai" aria-expanded="false" aria-controls="mc-ai" hidden><?= ui_icon('sparkles', 'ui-icon--sm') ?> AI draft</button>
+            </div>
+            <div class="mc-ai" id="mc-ai" data-mc-ai hidden>
+                <div class="mc-ai-row">
+                    <label class="mc-label" for="mc-ai-instruction">What to say</label>
+                    <?= mail_info('AI writes in the church\'s tone: "Dear …", then "God bless you" and the team name. It adds scripture only if you write it here. Read and change the draft before you send; AI never sends.') ?>
+                </div>
+                <textarea id="mc-ai-instruction" class="ui-input" rows="2" maxlength="2000" data-mc-ai-instruction placeholder="Thank them; the retreat starts at 9am"></textarea>
+                <p class="mc-field-error" data-error-for="instruction" hidden></p>
+                <div class="mc-ai-actions">
+                    <button type="button" class="ui-btn ui-btn--primary ui-btn--sm" data-mc="ai-draft">Write draft</button>
+                    <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-mc="ai-close">Close</button>
+                </div>
+                <div class="mc-ai-result" data-mc-ai-result hidden>
+                    <div class="mc-ai-text" data-mc-ai-text></div>
+                    <div class="mc-ai-actions">
+                        <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" data-mc="ai-use">Use draft</button>
+                        <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-mc="ai-insert">Insert</button>
+                    </div>
+                </div>
             </div>
             <div class="mc-linkbar" data-mc-linkbar hidden>
                 <label class="mc-label" for="mc-link-url">Link</label>
@@ -143,4 +164,5 @@ $tool = static fn (string $cmd, string $icon, string $label, string $extra = '')
     'maxBytes' => (int) ComposeConfig::get('max_attachment_bytes'),
     'maxLabel' => $max,
     'undoSeconds' => (int) ComposeConfig::get('undo_seconds', 10),
+    'teamApi' => '/api/mail_team_api.php',
 ]) ?>

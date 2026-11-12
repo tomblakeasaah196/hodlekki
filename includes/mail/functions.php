@@ -59,6 +59,27 @@ if (!function_exists('mail_compose_ready')) {
     }
 }
 
+if (!function_exists('mail_team_ready')) {
+    /** Teamwork, alerts and AI (PR 4) have their tables (migration 20261205090000_mail_team_alerts) */
+    function mail_team_ready(bool $fresh = false): bool
+    {
+        static $ready = null;
+        if ($ready !== null && !$fresh) {
+            return $ready;
+        }
+        try {
+            $ready = (int) Db::value(
+                "SELECT COUNT(*) FROM information_schema.tables
+                  WHERE table_schema = DATABASE() AND table_name IN ('mail_user_prefs', 'mail_alert_log')"
+            ) === 2;
+        } catch (Throwable $e) {
+            $ready = false;
+        }
+
+        return $ready;
+    }
+}
+
 if (!function_exists('mail_can')) {
     /**
      * May this person (default: the signed-in one) do $action? Module abilities ('mail.admin', …) need no mailbox;

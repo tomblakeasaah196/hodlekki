@@ -181,3 +181,39 @@ function embrace_worker_history_for_visitors(PDO $pdo, array $visitorIds): array
 
     return $byVisitor;
 }
+
+// The Connect card's optional columns: left blank, they are left OUT of the
+// INSERT (embrace_connect_insert()), so each column keeps its own default.
+const EMBRACE_CONNECT_OPTIONAL = ['email', 'gender', 'dob', 'physical_address', 'latitude', 'longitude'];
+
+/**
+ * The Connect card's INSERT into users: every given column, but an optional
+ * one (EMBRACE_CONNECT_OPTIONAL) only when the visitor filled it in. A blank
+ * optional field is omitted rather than sent as NULL or '': the column's
+ * default then applies, NULL where it allows NULL and 'To be updated' for
+ * physical_address (NOT NULL DEFAULT 'To be updated' in the live schema,
+ * where an explicit NULL failed with MySQL 1048 and the card was lost,
+ * 12 Nov 2026). '' would break the ENUM, DATE and UNIQUE columns.
+ *
+ * @param array<string, mixed> $fields column => value (null or '' = not given)
+ * @return array{0:string, 1:list<mixed>} the SQL and its parameters
+ */
+function embrace_connect_insert(array $fields, string $table = 'users'): array
+{
+    if (!preg_match('/^[a-z_]+$/', $table)) {
+        throw new InvalidArgumentException('Bad table name.');
+    }
+    $cols = [];
+    $vals = [];
+    foreach ($fields as $col => $value) {
+        if (!is_string($col) || !preg_match('/^[a-z_]+$/', $col)) {
+            throw new InvalidArgumentException('Bad column name.');
+        }
+        if (in_array($col, EMBRACE_CONNECT_OPTIONAL, true) && ($value === null || $value === '')) {
+            continue;
+        }
+        $cols[] = $col;
+        $vals[] = $value;
+    }
+    return ['INSERT INTO ' . $table . ' (' . implode(', ', $cols) . ') VALUES (' . implode(', ', array_fill(0, count($cols), '?')) . ')', $vals];
+}

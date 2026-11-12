@@ -24,6 +24,13 @@
 - Your signature is added when the message leaves: full on new mail, short on replies. Change your numbers on
   **My signature** (link in the composer).
 - If a message does not go, the bell tells you; open it from the Outbox to fix it or send it again.
+- **Shared mailboxes**: above a conversation, set **Open**, **Waiting** or **Done** and choose who it is assigned to
+  (HODs and others with *assign*). It goes to Waiting by itself when a reply leaves, and back to Open when they
+  write again. You see who else is reading or replying; if a teammate replied while you were writing, Send asks first.
+- **Alerts**: **My mail settings** (the sliders button) chooses pushes per mailbox (all, assigned to me, off), the
+  daily summary, and which key alerts go to your personal email (sender and subject only).
+- **AI** (only on mailboxes where it is switched on): **Summarize** above a conversation, and **AI draft** in the
+  composer. Read and change the draft before you send: AI never sends anything.
 - There is no password to remember or type: the church's mail is read in the app only.
 
 ## For mail admins (the Mailboxes screen)
@@ -43,6 +50,9 @@ Open **Mail**, then **Mailboxes**.
   *Read, send and assign*, *Manage*. Mail admins do not read a mailbox unless a line gives them access.
 - **Reset password**, **Suspend** / **Resume**, **Storage limit**, **Automatic reply**, **Remove mailbox** (type the
   address to confirm: its mail is deleted on the server).
+- **AI in Mail** (Health tab): once the owner confirms the Gemini plan is paid, **Record paid plan**, then **Turn on**
+  per mailbox (never personal or pastoral ones). People also need *AI summaries and draft replies in Mail* in
+  Roles & permissions.
 - **Activity**: every action and whether the server did it. **Health**: what the system checks, and the number of
   slots kept for personal mailboxes.
 
