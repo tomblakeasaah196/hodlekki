@@ -144,6 +144,15 @@ foreach ([
     'e/index.php'          => 'Special Events public pages',
 ] as $file => $label) {
     $source = (string) @file_get_contents($repoRoot . '/' . $file);
+    // A page rebuilt on a layout gets both partials from it: the public
+    // layout always, the standalone one when the page asks for the launch
+    // screen ('boot' => true).
+    if (str_contains($source, 'ui_public_open(')) {
+        $source .= (string) @file_get_contents($repoRoot . '/includes/ui/public.php');
+    }
+    if (str_contains($source, 'ui_standalone_open(') && str_contains($source, "'boot' => true")) {
+        $source .= (string) @file_get_contents($repoRoot . '/includes/ui/standalone.php');
+    }
     ok($label . ' has the head partial', str_contains($source, 'pwa_head.php'), $file);
     ok($label . ' has the launch screen', str_contains($source, 'pwa_boot.php'), $file);
 }

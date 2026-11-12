@@ -13,3 +13,6 @@ sanitize.php
 # 11 Nov 2026 (permissions PR 2): a stale copy of api/event_report_pdf.php that
 # nothing links to, reachable directly with only a role-name check.
 includes/event_report_pdf.php
+
+# 12 Nov 2026 (UI PR 4): monitor_confirm.php moved to the standalone layout.
+assets/css/monitor_public.css
