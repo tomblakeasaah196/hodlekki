@@ -261,8 +261,8 @@ Rules:
 1. a mail admin recorded, on the Mailboxes screen (Health tab), that the owner confirmed the Gemini project is on a
    **paid plan** (`mail_settings` `ai.paid_plan_confirmed`, who and when); withdrawing it turns AI off everywhere;
 2. `GEMINI_API_KEY` is set;
-3. a mail admin switched it on for that mailbox (`mail_accounts.ai_enabled`, off by default); **never** offered, and
-   refused by the server, on personal mailboxes or mailboxes marked pastoral;
+3. a mail admin switched it on for that mailbox (`mail_accounts.ai_enabled`, off by default). **Any** mailbox may
+   have it, personal and pastoral ones too (owner, 12 Nov 2026: "every mailbox should use it");
 4. the person reads the mailbox and holds **`mail.ai`** in Roles & permissions (a church-wide ability: give it to
    roles; seat cells apply only to department-owned modules).
 

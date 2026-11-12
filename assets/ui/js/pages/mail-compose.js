@@ -76,16 +76,20 @@
      * Server-built HTML with inline styles (the signature, the quoted original) shown on this strict-CSP page: the
      * page refuses style attributes from markup, so each one moves to the element's CSSOM style, which the policy
      * allows. The HTML itself comes from escaped values (HOD\Mail\Compose\Signatures, MessageBuilder::quote).
+     * The attributes are renamed BEFORE parsing: a DOMParser document inherits the page's policy, so parsing a
+     * style attribute as such was itself reported as a blocked inline style (monitor, 12 Nov 2026).
      */
+    var STYLE_ATTR = 'data-hod-style';
     function paint(target, html) {
         target.textContent = '';
         if (!html) return;
-        var doc = new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html');
+        var renamed = String(html).replace(/(<[a-zA-Z][^<>]*?\s)style(\s*=)/g, '$1' + STYLE_ATTR + '$2');
+        var doc = new DOMParser().parseFromString('<div>' + renamed + '</div>', 'text/html');
         var styled = [];
-        doc.body.querySelectorAll('[style]').forEach(function (n) {
-            styled.push([n, n.getAttribute('style')]);
+        doc.body.querySelectorAll('[' + STYLE_ATTR + ']').forEach(function (n) {
+            styled.push([n, n.getAttribute(STYLE_ATTR)]);
         });
-        styled.forEach(function (pair) { pair[0].removeAttribute('style'); });
+        styled.forEach(function (pair) { pair[0].removeAttribute(STYLE_ATTR); });
         var root = document.importNode(doc.body.firstChild, true);
         var copies = root.querySelectorAll('*');
         var originals = doc.body.firstChild.querySelectorAll('*');
