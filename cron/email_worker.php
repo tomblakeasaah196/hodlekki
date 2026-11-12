@@ -56,6 +56,20 @@ if (in_array('--status', $args, true)) {
     exit(0);
 }
 
+// Campaigns that are due become emails (and texts) first, so this run can
+// start sending them (includes/campaigns/campaigns.php). Never stops the worker.
+if (!in_array('--dry-run', $args, true)) {
+    try {
+        $t = campaigns_tick($pdo);
+        if ($t['expanded'] + $t['finished'] + $t['failed'] > 0) {
+            $line(sprintf('campaigns: %d started, %d finished, %d failed', $t['expanded'], $t['finished'], $t['failed']));
+        }
+    } catch (Throwable $e) {
+        $line('campaigns: ERROR ' . $e->getMessage());
+        error_log('[campaigns] tick: ' . $e->getMessage());
+    }
+}
+
 try {
     $r = email_worker_run($pdo, ['dry_run' => in_array('--dry-run', $args, true)]);
     if ($r['locked']) {

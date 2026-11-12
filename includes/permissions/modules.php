@@ -88,6 +88,9 @@ return [
     'contact_extractor' => ['label' => 'Contact extractor (every phone number)', 'group' => 'operations', 'max' => 'view', 'extras' => ['export'],
         'partitioned' => false],
     'sms_studio' => ['label' => 'SMS Studio', 'group' => 'operations', 'max' => 'delete', 'extras' => ['manage'], 'partitioned' => false],
+    // Email campaigns (docs/EMAIL.md, "Campaigns"): a campaign belongs to the whole church or to one department.
+    // Create = write and send your own; Edit = any in scope; Delete = drafts; Manage = email settings.
+    'campaigns' => ['label' => 'Email Campaigns', 'group' => 'operations', 'max' => 'delete', 'extras' => ['manage'], 'partitioned' => true],
     'assets' => ['label' => 'Asset Management', 'group' => 'operations', 'max' => 'delete', 'extras' => [], 'partitioned' => false],
     'pastoral' => ['label' => 'Pastoral Desk', 'group' => 'operations', 'max' => 'edit', 'extras' => ['manage'], 'partitioned' => false,
         'own' => 'what you submitted'],
