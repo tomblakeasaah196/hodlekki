@@ -2870,6 +2870,12 @@
         white-space: nowrap;
     }
     .ui-nav__item .ui-count { box-shadow: 0 0 0 2px var(--ui-nav-bg); }
+    /* An entry with a one-line description (registry 'info', e.g. Trainings):
+       an (i) beside the link in the phone menu; on a computer the line shows
+       on hover instead (ui.js, data-tooltip-info), so the (i) is hidden there. */
+    .ui-nav__row { display: flex; align-items: center; gap: 2px; }
+    .ui-nav__row > .ui-nav__item { flex: 1 1 auto; min-width: 0; }
+    .ui-nav__info .ui-info__btn { width: 44px; height: 44px; margin: 0; color: var(--ui-nav-section); }
 
     .ui-sidebar__footer {
         flex: none;
@@ -3095,6 +3101,7 @@
             min-height: 40px;
             font-size: var(--ui-text-md);
         }
+        .ui-nav__info { display: none; }
         .ui-nav__item + .ui-nav__item,
         .ui-nav__list > li + li { margin-top: 2px; }
         .ui-main-col {

@@ -42,6 +42,8 @@ function ui_nav_sections(): array
  * match     module folder names (or 'index.php') that mark it active
  * keywords  extra words the search should find it by
  * tabs      tab id => label, for the search's "#tab=" deep links
+ * info      optional: one line about the module, shown on hover (desktop) and
+ *           behind an (i) beside the link in the phone menu
  * badge     optional: fn(PDO, array $ctx): int — a count shown on the link
  * when_exists  true: listed only once the href's file exists (a module whose
  *           screens land in a later PR keeps its place here meanwhile)
@@ -59,6 +61,12 @@ function ui_nav_registry(): array
             'match' => ['bible'],
             'keywords' => ['bible', 'scripture', 'kjv', 'nkjv', 'niv', 'amp', 'amplified', 'verse', 'read', 'devotion', 'study', 'journal', 'notes', 'highlights', 'reading plan'],
             'tabs' => ['read' => 'Read', 'search' => 'Search', 'notes' => 'My Study', 'plans' => 'Reading Plans']],
+        // The learner's side of the HOD Academy (owner's answer 1): every signed-in person.
+        ['key' => 'trainings', 'label' => 'Trainings', 'icon' => 'graduation-cap', 'href' => '/modules/trainings/', 'section' => 'command',
+            'match' => ['trainings'], 'keywords' => ['trainings', 'classes', 'academy', 'courses', 'learning', 'study', 'exams', 'certificates',
+                'membership class', 'maturity class', 'live class', 'assignment'],
+            'info' => 'Your classes, live sessions, exams and certificates in one place.',
+            'tabs' => ['mine' => 'My trainings', 'catalogue' => 'Catalogue']],
         ['key' => 'hymnal', 'label' => 'Hymnary', 'icon' => 'music', 'href' => '/modules/hymnal/', 'section' => 'command',
             'match' => ['hymnal'],
             'keywords' => ['hymn', 'hymnal', 'hymnary', 'song', 'songs', 'worship', 'choir', 'sol-fa', 'solfa', 'tonic solfa', 'notes', 'score',
@@ -91,9 +99,10 @@ function ui_nav_registry(): array
         ['key' => 'charis', 'label' => 'Charis (Welfare)', 'icon' => 'heart-handshake', 'href' => '/modules/charis/', 'section' => 'growth',
             'match' => ['charis'], 'keywords' => ['welfare', 'care', 'benevolence', 'support'],
             'tabs' => ['welfare' => 'Welfare', 'events' => 'Event Planning', 'finance' => 'Finance', 'library' => 'Library', 'howto' => 'How To Use']],
+        // The Academy's builder (TRAININGS-PLAN.md): only for those who may run trainings, see ui_nav_can_access().
         ['key' => 'academy', 'label' => 'HOD Academy', 'icon' => 'graduation-cap', 'href' => '/modules/academy/', 'section' => 'growth',
-            'match' => ['academy'], 'keywords' => ['school', 'lms', 'courses', 'classes', 'study', 'exams', 'learning'],
-            'tabs' => ['student-dash' => 'My Noticeboard', 'student-study' => 'Study & Assignments', 'student-exam' => 'Examination Portal', 'student-result' => 'My Result Slip']],
+            'match' => ['academy'], 'keywords' => ['academy', 'school', 'lms', 'courses', 'trainings', 'build', 'assign', 'graduates', 'membership class', 'maturity class'],
+            'tabs' => ['trainings' => 'Trainings', 'mark' => 'To mark', 'confirm' => 'To confirm']],
 
         ['key' => 'junior_church', 'label' => 'Junior Church', 'icon' => 'baby', 'href' => '/modules/junior_church/', 'section' => 'units',
             'match' => ['junior_church'], 'keywords' => ['kids', 'children', 'sunday school'],
@@ -233,7 +242,7 @@ function ui_nav_context(PDO $pdo): array
 /** The permission module behind a navigation entry (the same key, except where noted). */
 function ui_nav_module(string $key): string
 {
-    return ['system_health' => 'monitor'][$key] ?? $key;
+    return ['system_health' => 'monitor', 'academy' => 'trainings'][$key] ?? $key;
 }
 
 /**
@@ -247,6 +256,12 @@ function ui_nav_module(string $key): string
 function ui_nav_can_access(string $key, array $ctx): bool
 {
     $perm = $ctx['perm'] ?? null;
+    if ($key === 'academy') {
+        // Trainings is member-facing (everyone has the learner's page); its
+        // staff side shows only to those who reach beyond their own records.
+        return is_array($perm) && function_exists('perm_ctx_scope')
+            && (!empty($perm['breakglass']) || perm_scope_beyond_own(perm_ctx_scope($perm, 'trainings', 'view')));
+    }
     if (is_array($perm) && function_exists('perm_ctx_nav_visible') && perm_ctx_nav_visible($perm, ui_nav_module($key))) {
         return true;
     }

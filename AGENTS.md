@@ -903,7 +903,8 @@ status: someone clocked in three times still read "1st Timer".
 - **Every writer of `users.spiritual_status` must record itself.** Read
   `ladder_status_of()` before the UPDATE and call `ladder_note_change()` after
   it (see `events_api.php` `update_person_details`, `congregation_api.php`,
-  `embrace_api.php` `promote_member`, `academy_api.php`). A writer that skips
+  `embrace_api.php` `promote_member`, `trainings_confirm()` in
+  `includes/trainings/progress.php`). A writer that skips
   this makes event reports and the Embrace list wrong without any error.
   Initial statuses on INSERT need no history row.
 - **Event reports read status AS AT THE EVENT'S DAY**, never `u.spiritual_status`:
@@ -1206,6 +1207,72 @@ breaks without noticing:
   per page; `/e/` sends its own.
 - `includes/header.php` and `includes/footer.php` are thin: the shell is
   `includes/ui/shell.php`. The variables pages read from header.php are kept.
+
+## Trainings: the new HOD Academy (added 2026-11-12)
+
+Plan and the owner's 16 answers: `TRAININGS-PLAN.md` (shared notes). Code:
+`includes/trainings/` (`bootstrap.php` is the entry point), one endpoint
+`api/trainings_api.php` → `trainings_action()` in `includes/trainings/actions.php`,
+pages `modules/trainings/` (learners), `modules/academy/` + `training.php`
+(the Academy's builder), `auth/training_invite.php` (visitor invites),
+`cron/trainings_daily.php` (06:30). Tests: `tests/trainings/run.php`.
+
+- **The tables are a shared contract** (PR 2 exams, PR 3 Google Meet build
+  on them): `trainings`, `training_sections`, `training_items`,
+  `training_enrolments`, `training_assignments`, `training_progress`, plus
+  `training_invites`. Never rename a column; `tests/trainings/run.php` pins
+  every name. Other PRs add their own tables keyed on `training_items.id`
+  and keep their own fields inside `training_items.details`. A live item's
+  `meet_url` / `meet_event_id` are PR 3's: the builder stores a pasted link
+  as `link`, never writes those two, and keeps every key it does not own
+  when an item is edited (it never edits an `exam` item's details).
+- **Exams are PR 2's** (`includes/exams/`, `docs/EXAMS.md`). Trainings loads
+  `includes/exams/bootstrap.php` when it is there and links only through its
+  helpers (`trainings_exam_setup_url()` / `trainings_exam_take_url()` wrap
+  `exam_url_setup()` / `exam_url_take()`); no exam path is written here. The
+  builder offers the Exam kind only once those helpers exist.
+- **Access** is the `trainings` row (it took over the retired `academy` row,
+  cells and owners copied by `20261208090200`). Staff checks use the
+  church-wide target: `can('trainings', 'edit', 'church')`; PR 2 asks
+  `can('trainings', 'manage', <department_id> or 'church')`. A learner's own
+  records use `perm_person($uid)`; a learner is anyone with a non-withdrawn
+  enrolment (`active` or `completed`) in a published training. The nav shows
+  **Trainings** to everyone (with its (i) line) and **HOD Academy** only to
+  those who reach beyond their own records (`ui_nav_can_access('academy')`).
+- **Progress** is one `training_progress` row per learner per item, in the
+  words shared with PR 2: `completed`, `submitted` (an assignment waiting
+  for a tutor) or `returned` (marked below its pass mark). An exam row
+  (PR 2's `exam_progress_hook()`, which does not write `updated_at`, so that
+  column may be NULL) counts only when `data.passed` is true. Learners mark
+  videos, audio and readings done themselves; a tutor ticks live classes
+  attended (PR 3 automates it from Meet) and marks assignments. Completion
+  (`pass_rule`): every required item completed, live classes at
+  `live_percent` %. It is forward-only, checked after every change here, by
+  `trainings_recheck_enrolment($pdo, $enrolmentId)` (for PR 2 / PR 3 to call
+  after writing progress), and on the learner's next look.
+- **Confirming official classes** is the Academy's one click (Approve):
+  Membership Class moves 1st/2nd/3rd Timer, Visitor and Non-Member to
+  Member through `ladder_status_of()` / `ladder_note_change()` (source
+  `training_membership`), never lowering anyone; Maturity Class changes no
+  status and is read with `trainings_ready_to_serve($pdo, $uid)`.
+- **Media:** links first. Only YouTube (played from youtube-nocookie.com) and
+  Spotify embed, through `trainings_media_parse()`; the two pages that play
+  them add exactly `TRAININGS_EMBED_HOSTS` to `frame-src`. Uploads (audio
+  MP3/M4A ≤ 50 MB, reading PDF ≤ 20 MB) go through `upload_guard.php` and are
+  sniffed (`trainings_sniff_bytes()`), stored in `/uploads/trainings/`
+  under random names, and deleted with their item.
+- **Invites** are for people with no sign-in: one link (sha256-stored,
+  once, 7 days, a newer one replaces it, 3 a day). Accepting confirms the
+  email through `email_capture_start()` / `email_capture_confirm()` and sets
+  the password under `security_password_problems()`, then signs the person
+  in as a password sign-in does and lands them in Trainings.
+- **Degrade before the migration:** `trainings_ready()` is false until the
+  core tables exist; pages show "Almost ready", the API answers
+  `FEATURE_NOT_READY`, IDI shows an empty Academy pipeline.
+- The old Academy's tables were **renamed** `*_retired_20261112` (never
+  dropped; the lead drops them later with the owner). SMS Studio's
+  "Academy applicant" source reads `academy_applications` only when that
+  table exists, so it simply stops matching.
 
 ## Common pitfalls spotted during onboarding
 
