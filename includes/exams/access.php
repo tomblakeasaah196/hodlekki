@@ -271,8 +271,28 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
             if (!exams_may_manage($pdo, $imp['training_id'])) {
                 return $forbidden();
             }
-            $r = exam_import_confirm($pdo, (string) $in['token'], $me, !empty($in['ready']));
-            return $r['ok'] ? ['status' => 'success', 'message' => $r['message'], 'imported' => $r['imported']] : $fail($r['message']);
+            // From an exam's set-up page: this training's bank, always Ready,
+            // and into that exam in the same step (exam_import_into_exam()).
+            $into = null;
+            if (!empty($in['item'])) {
+                $into = exam_item($pdo, (int) $in['item']);
+                if ($into === null) {
+                    return $fail('That exam no longer exists.', [], 'NOT_FOUND');
+                }
+                if ($imp['training_id'] !== (int) $into['training_id']) {
+                    return $fail('That file was checked for another bank. Upload it again.');
+                }
+            }
+            $r = exam_import_confirm($pdo, (string) $in['token'], $me, $into !== null || !empty($in['ready']));
+            if (!$r['ok']) {
+                return $fail($r['message']);
+            }
+            if ($into === null) {
+                return ['status' => 'success', 'message' => $r['message'], 'imported' => $r['imported'], 'question_ids' => $r['question_ids']];
+            }
+            $put = exam_import_into_exam($pdo, $into, $r['question_ids'], $me);
+            return ['status' => 'success', 'message' => exams_import_exam_message($r, $put), 'imported' => $r['imported'],
+                    'question_ids' => $r['question_ids'], 'into' => $put['state'], 'added' => $put['added']] + exams_setup_view($pdo, $into);
     }
 
     // ---- One exam item ----------------------------------------------------
@@ -355,6 +375,24 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
             return ['status' => 'success', 'message' => 'Handed in.'] + exams_take_view($pdo, $item, $me);
     }
     return $fail('Unknown action.');
+}
+
+/** What the set-up page says after Import: the bank, then the exam. */
+function exams_import_exam_message(array $r, array $put): string
+{
+    $n = (int) $r['imported'];
+    $bank = $n === 0 ? 'No new questions.' : $n . ($n === 1 ? ' new question' : ' new questions') . ' in the bank.';
+    $added = (int) $put['added'];
+    $exam = [
+        'saved' => $added . ($added === 1 ? ' question' : ' questions') . ' added to this exam and saved.',
+        'unsaved' => 'Ticked below: press Save to keep them in this exam.',
+        'unchanged' => $r['question_ids'] === [] ? 'Nothing to add to this exam.' : 'They are all in this exam already.',
+        'started' => 'People have started this exam, so its questions can\'t change.',
+        'failed' => 'Not added to the exam: ' . (string) (($put['errors'] ?? [''])[0]),
+    ][$put['state']] ?? '';
+    $notReady = (int) ($r['not_ready'] ?? 0);
+    $left = $notReady > 0 ? ' ' . $notReady . ($notReady === 1 ? ' is' : ' are') . ' in the bank but not Ready, so left out.' : '';
+    return trim($bank . ' ' . $exam . $left);
 }
 
 /** An import row as the check screen shows it. */

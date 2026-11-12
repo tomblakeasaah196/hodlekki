@@ -29,7 +29,7 @@ echo ui_json_script('exams-config', ['page' => 'setup', 'item' => (int) $item['i
         'title' => 'Exam set-up',
         'description' => $item['title'] . ' · ' . $item['training_title'],
         'info' => 'People can start the exam between the opening and closing times. Each person gets one attempt, with the questions and options in their own order, and a countdown; at zero it is handed in by itself. Answers are checked on the server. If someone keeps leaving the exam tab you get a note. People see the right answers and explanations only for the questions they got wrong, and only once the answers are shown (see Answers).',
-        'back' => ['href' => '/modules/exams/?training=' . (int) $item['training_id'], 'label' => 'Question bank'],
+        'back' => ['href' => exam_url_bank((int) $item['training_id']), 'label' => 'Question bank'],
     ]) ?>
 
     <?= ui_tabs(['settings' => ['label' => 'Settings', 'icon' => 'settings'], 'results' => ['label' => 'Results', 'icon' => 'chart-column']], 'settings', 'Exam sections') ?>
@@ -66,7 +66,9 @@ echo ui_json_script('exams-config', ['page' => 'setup', 'item' => (int) $item['i
                     <div class="mb-3 flex flex-wrap gap-2">
                         <?= ui_button('Select all', ['variant' => 'ghost', 'size' => 'sm', 'attrs' => ['data-action' => 'ex.pick-all']]) ?>
                         <?= ui_button('Clear', ['variant' => 'ghost', 'size' => 'sm', 'attrs' => ['data-action' => 'ex.pick-none']]) ?>
-                        <?= ui_button('Question bank', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'arrow-up-right', 'href' => '/modules/exams/?training=' . (int) $item['training_id']]) ?>
+                        <?= ui_button('Import questions', ['variant' => 'secondary', 'size' => 'sm', 'icon' => 'upload', 'attrs' => ['data-action' => 'ex.import-open']]) ?>
+                        <?= ui_button('Download template', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'file-down', 'href' => '/api/exams_api.php?action=template']) ?>
+                        <?= ui_button('Question bank', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'arrow-up-right', 'href' => exam_url_bank((int) $item['training_id'])]) ?>
                     </div>
                     <div class="ui-stack ui-stack--sm" data-ex-pool><p class="ui-meta">Loading…</p></div>
                 </div>
@@ -87,6 +89,28 @@ echo ui_json_script('exams-config', ['page' => 'setup', 'item' => (int) $item['i
     <?= ui_dialog_end(
         ui_button('Close', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
         . ui_button('Hand in now', ['variant' => 'danger', 'attrs' => ['data-action' => 'ex.end', 'data-ex-end' => true, 'hidden' => true]])
+    ) ?>
+
+    <?php // Import straight into this exam: this training's bank, saved as Ready, then chosen here (docs/EXAMS.md §3). ?>
+    <?= ui_dialog_start('ex-import', ['title' => 'Import questions', 'size' => 'lg']) ?>
+        <div data-ex-import-pick>
+            <form class="ui-stack" id="ex-import-form" data-action="ex.import-check" novalidate>
+                <p>Fill in the <a class="ui-link" href="/api/exams_api.php?action=template">Excel template</a>, then upload it.</p>
+                <div class="ui-field">
+                    <label class="ui-label" for="ex-import-file">Excel file (.xlsx)</label>
+                    <input class="ui-input" type="file" id="ex-import-file" name="sheet" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                </div>
+            </form>
+        </div>
+        <div data-ex-import-result hidden>
+            <p class="font-medium" data-ex-import-summary aria-live="polite"></p>
+            <div class="mt-3 max-h-[50vh] overflow-auto" data-ex-import-rows></div>
+            <p class="ui-meta mt-3" data-ex-import-into>They are saved as Ready and added to this exam.</p>
+        </div>
+    <?= ui_dialog_end(
+        ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
+        . ui_button('Check file', ['variant' => 'secondary', 'type' => 'submit', 'attrs' => ['form' => 'ex-import-form', 'data-ex-import-check' => true]])
+        . ui_button('Import', ['variant' => 'primary', 'attrs' => ['data-action' => 'ex.import-confirm', 'data-ex-import-go' => true, 'hidden' => true]])
     ) ?>
 </div>
 <?php require_once '../../includes/footer.php'; ?>

@@ -36,6 +36,19 @@ exams and question import tests").
   row N) / Example → **Import** (`exam_import_confirm()`) adds the good rows, Ready unless the tutor unticks it. The
   file is never stored; the checked rows wait in `training_question_imports` for a day. A confirm runs once.
   Up to 500 questions per file, 5 MB.
+- **Straight into an exam:** the exam set-up page (`modules/exams/setup`) has **Import questions** and **Download
+  template** too. There the bank is the training's (no choice), the rows are saved as Ready, and the confirm
+  (`import_confirm` with `item`) puts them in that exam in the same step (`exam_import_into_exam()`):
+  - a saved exam nobody has started is saved at once, its rules unchanged, and the page says so;
+  - an exam not saved yet gets them ticked, with the totals, and the tutor presses **Save** (its rules aren't set);
+  - once people have started, the questions can't change, so they go to the bank only, and the page says so.
+
+  The file's questions that were already in the bank (found by `import_hash`) and are Ready join the exam too, so a
+  re-import adds nothing twice to the bank or the exam. Drafts and archived ones are left out, and counted. The
+  questions stay in the bank, so other exams can use them.
+- **Finding the bank:** **Question bank** in the HOD Academy header and on each training's builder (Trainings Edit,
+  through `exam_url_bank()`), and the global search ("question bank", "questions", "import questions"), from the
+  Academy's search-only `links` entry in `includes/ui/nav.php`.
 
 ## 3. Exams (`engine.php`), "fair and firm"
 
@@ -82,7 +95,8 @@ attempt that is still running.
   it calls `trainings_recheck_enrolment()`, which may complete the training. A failure is logged and never breaks
   marking. PR 1's `includes/trainings/bootstrap.php` loads this module; the hook loads PR 1 on first use.
 - Links for PR 1's pages: `exam_url_setup($itemId)` → `/modules/exams/setup?item=N` (Academy builder: "Set up exam"),
-  `exam_url_take($itemId)` → `/modules/exams/take?item=N` (learner: "Start exam"). The bank: `/modules/exams/?training=N`.
+  `exam_url_take($itemId)` → `/modules/exams/take?item=N` (learner: "Start exam"). The bank: `exam_url_bank($trainingId)` →
+  `/modules/exams/?training=N` ("Question bank" in the Academy header and the builder).
 
 ## 6. For PR 4 (AI)
 

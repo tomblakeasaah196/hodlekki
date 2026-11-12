@@ -53,6 +53,7 @@ $sub = TRAININGS_STATUSES[$t['status']] . ' · ' . (TRAININGS_LENGTHS[$t['length
     . ($dated && $t['starts_on'] ? ' · ' . trainings_view_range($t['starts_on'], $t['ends_on']) : '');
 
 $actions = ui_button('Preview', ['variant' => 'ghost', 'icon' => 'eye', 'href' => '/modules/trainings/?t=' . $tid]);
+$actions .= $canEdit && function_exists('exam_url_bank') ? ui_button('Question bank', ['variant' => 'ghost', 'icon' => 'clipboard-list', 'href' => exam_url_bank($tid)]) : '';   // docs/EXAMS.md
 $actions .= $canEdit && function_exists('exam_url_ai') ? ui_button('AI help', ['variant' => 'ghost', 'icon' => 'sparkles', 'href' => exam_url_ai($tid)]) : '';   // PR 4b (docs/EXAMS.md §7)
 if ($canEdit && $t['status'] !== 'published') {
     $actions .= ui_button('Publish', ['variant' => 'primary', 'icon' => 'send', 'attrs' => ['data-action' => 'trb.status', 'data-status' => 'publish']]);

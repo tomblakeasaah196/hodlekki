@@ -190,6 +190,43 @@ function exam_save(PDO $pdo, array $item, array $in, int $actor): array
     return ['ok' => true, 'exam' => exam_get($pdo, (int) $item['id'])];
 }
 
+/**
+ * Put imported questions into an exam (the set-up page's Import questions).
+ * They join the ones already chosen; a question already in it is not added
+ * twice. A saved exam nobody has started is saved at once, its rules
+ * unchanged. One not saved yet waits for the tutor's Save, because its
+ * rules aren't set: the page ticks them. Once people have started, its
+ * questions can't change, so they stay in the bank only.
+ *
+ * @param list<int> $ids Ready questions of this training's bank (exam_import_confirm()'s question_ids)
+ * @return array{state:string, added:int, errors?:list<string>} state: saved | unchanged | unsaved | started | failed
+ */
+function exam_import_into_exam(PDO $pdo, array $item, array $ids, int $actor): array
+{
+    $ids = array_values(array_unique(array_map('intval', $ids)));
+    $exam = exam_get($pdo, (int) $item['id']);
+    if ($ids === []) {
+        return ['state' => 'unchanged', 'added' => 0];
+    }
+    if ($exam === null) {
+        return ['state' => 'unsaved', 'added' => count($ids)];
+    }
+    if (exam_attempt_count($pdo, (int) $exam['id']) > 0) {
+        return ['state' => 'started', 'added' => 0];
+    }
+    $new = array_values(array_diff($ids, $exam['question_ids']));
+    if ($new === []) {
+        return ['state' => 'unchanged', 'added' => 0];
+    }
+    $r = exam_save($pdo, $item, [
+        'window_open' => (string) ($exam['window_open'] ?? ''), 'window_close' => (string) ($exam['window_close'] ?? ''),
+        'minutes' => $exam['minutes'], 'pass_percent' => $exam['pass_percent'], 'leave_alert' => $exam['leave_alert'],
+        'shuffle' => $exam['shuffle'], 'part_marks' => $exam['part_marks'],
+        'question_ids' => array_merge($exam['question_ids'], $new),
+    ], $actor);
+    return $r['ok'] ? ['state' => 'saved', 'added' => count($new)] : ['state' => 'failed', 'added' => 0, 'errors' => $r['errors']];
+}
+
 /** not_open | open | closed */
 function exam_window(array $exam, DateTimeImmutable $now): string
 {
@@ -791,6 +828,12 @@ function exam_url_setup(int $itemId): string
 function exam_url_take(int $itemId): string
 {
     return '/modules/exams/take?item=' . $itemId;
+}
+
+/** The question bank: one training's, or the default one (the Academy's and the builder's headers link here). */
+function exam_url_bank(?int $trainingId = null): string
+{
+    return '/modules/exams/' . ($trainingId ? '?training=' . $trainingId : '');
 }
 
 /** AI help for a training (PR 4b; the builder's header links here). */
