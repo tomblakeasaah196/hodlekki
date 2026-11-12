@@ -67,8 +67,12 @@ return [
         'partitioned' => false, 'own' => 'cases and tasks assigned to you'],
     'pastoral_notes' => ['label' => 'Notes marked for pastors (Charis, Embrace)', 'group' => 'growth', 'max' => 'view', 'extras' => [],
         'partitioned' => false],
-    'academy' => ['label' => 'HOD Academy', 'group' => 'growth', 'max' => 'delete', 'extras' => ['approve', 'manage'], 'partitioned' => false,
-        'member' => true, 'own' => 'your applications, courses and exams'],
+    // Trainings (the new HOD Academy, TRAININGS-PLAN.md). It took over the retired 'academy' row: migration
+    // 20261208090200 copied its cells and owners. Create = build and assign trainings; Edit = any training, mark
+    // work; Delete = remove a training; Approve = confirm graduates (Membership Class → Member, Maturity Class →
+    // ready to serve); Manage = the Academy's settings. Own records: a learner's trainings and handed-in work.
+    'trainings' => ['label' => 'Trainings (HOD Academy)', 'group' => 'growth', 'max' => 'delete', 'extras' => ['approve', 'manage'],
+        'partitioned' => false, 'member' => true, 'own' => 'your trainings and the work you hand in'],
 
     'junior_church' => ['label' => 'Junior Church', 'group' => 'units', 'max' => 'delete', 'extras' => [], 'partitioned' => false],
     'river_of_life' => ['label' => 'River of Life (Choir)', 'group' => 'units', 'max' => 'delete', 'extras' => [], 'partitioned' => false],

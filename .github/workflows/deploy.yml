@@ -254,8 +254,21 @@ jobs:
             exit 1
           fi
           php tests/status_ladder_test.php
-          # Who may read and post on an Academy cohort's noticeboard.
-          php tests/academy_forum_access_test.php
+
+      - name: Trainings tests (the new HOD Academy)
+        run: |
+          set -euo pipefail
+
+          # No MySQL, no network: the length wizard and templates, items and
+          # media links, Assign and newcomers, invites (through the real email
+          # identity flow), progress, marking, completion and confirming, and
+          # every can() decision of the API, against SQLite built from the
+          # real migrations. It prints SKIP and exits 0 without pdo_sqlite.
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
+            echo "::error::pdo_sqlite is missing — the Trainings tests would be skipped"
+            exit 1
+          fi
+          php tests/trainings/run.php
 
       - name: Dashboard numbers and sign-in tests
         run: |

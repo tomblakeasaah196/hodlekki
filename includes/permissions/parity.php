@@ -28,6 +28,23 @@ const PERM_PARITY_LEAD_GAINS = [
     'roles' => ['view' => ['Resident_Pastor']],
 ];
 
+// A module that replaced a legacy one under a new key: the old rules for the
+// old key are compared with can() on the new key (Trainings took over the
+// Academy's row, migration 20261208090200).
+const PERM_PARITY_SUCCESSORS = ['academy' => 'trainings'];
+
+/** The legacy abilities with each retired key renamed to its successor. */
+function perm_parity_legacy_renamed(array $abilities): array
+{
+    foreach (PERM_PARITY_SUCCESSORS as $old => $new) {
+        if (array_key_exists($old, $abilities)) {
+            $abilities[$new] = $abilities[$old];
+            unset($abilities[$old]);
+        }
+    }
+    return $abilities;
+}
+
 /** The new side, as the switched pages will ask it. */
 function perm_parity_new_abilities(array $ctx): array
 {
@@ -71,7 +88,7 @@ function perm_parity_legacy_union(array $snap, array $depts): array
             }
         }
     }
-    return $union;
+    return perm_parity_legacy_renamed($union);
 }
 
 /** The old rules without the retired global Director / HOD roles (decision 2). */
@@ -79,7 +96,7 @@ function perm_parity_legacy_without_retired(array $snap, array $depts): array
 {
     $snap['roles'] = array_values(array_diff($snap['roles'], ['Director', 'HOD']));
     $snap['ar'] = $snap['roles'][0] ?? 'Member';
-    return legacy_abilities($snap, $depts);
+    return perm_parity_legacy_renamed(legacy_abilities($snap, $depts));
 }
 
 /**
@@ -91,7 +108,7 @@ function perm_parity_person(PDO $pdo, int $userId, ?array $depts = null): array
 {
     $depts ??= legacy_departments($pdo);
     $snap = legacy_snapshot($pdo, $userId);
-    $legacy = legacy_abilities($snap, $depts);
+    $legacy = perm_parity_legacy_renamed(legacy_abilities($snap, $depts));
     $ctx = perm_resolve($pdo, $userId);
     $new = perm_parity_new_abilities($ctx);
 
@@ -133,7 +150,7 @@ function perm_parity_person(PDO $pdo, int $userId, ?array $depts = null): array
                     $hadRetired = array_intersect(['Director', 'HOD'], $snap['roles']) !== [];
                     if ($hadRetired && perm_scope_covers($now, $withoutRetired[$module][$ability] ?? $none)) {
                         $cat = 'lost global role';
-                    } elseif ($module === 'academy' && perm_parity_academy_inactive_only($snap, $depts)) {
+                    } elseif ($module === 'trainings' && perm_parity_academy_inactive_only($snap, $depts)) {
                         $cat = 'academy roster';
                     } else {
                         $cat = 'UNEXPECTED loss';
@@ -148,7 +165,7 @@ function perm_parity_person(PDO $pdo, int $userId, ?array $depts = null): array
     $nav = [];
     $oldNav = legacy_nav($snap, $legacy);
     foreach ($oldNav as $key => $was) {
-        $is = perm_ctx_nav_visible($ctx, $key);
+        $is = perm_ctx_nav_visible($ctx, PERM_PARITY_SUCCESSORS[$key] ?? $key);
         if ($was !== $is) {
             $nav[] = ['module' => $key, 'kind' => $is ? 'link added' : 'dead link removed'];
         }

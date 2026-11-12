@@ -160,15 +160,20 @@ function ui_shell_open(PDO $pdo, array $page): void
         <div class="ui-nav__section">
             <p class="ui-nav__heading" id="nav-<?= ui_e($section['key']) ?>"><?= ui_e($section['label']) ?></p>
             <ul class="ui-nav__list" aria-labelledby="nav-<?= ui_e($section['key']) ?>">
-<?php foreach ($section['items'] as $item): ?>
-                <li>
-                    <a class="ui-nav__item" href="<?= ui_e($item['href']) ?>"<?= $item['active'] ? ' aria-current="page"' : '' ?> data-tooltip="<?= ui_e($item['label']) ?>" data-tooltip-side="right">
+<?php foreach ($section['items'] as $item):
+    // A one-line description (registry 'info'): on hover on a computer, behind an (i) in the phone menu.
+    $navInfo = (string) ($item['info'] ?? ''); ?>
+                <li<?= $navInfo !== '' ? ' class="ui-nav__row"' : '' ?>>
+                    <a class="ui-nav__item" href="<?= ui_e($item['href']) ?>"<?= $item['active'] ? ' aria-current="page"' : '' ?> data-tooltip="<?= ui_e($navInfo !== '' ? $item['label'] . ': ' . $navInfo : $item['label']) ?>" data-tooltip-side="right"<?= $navInfo !== '' ? ' data-tooltip-info aria-describedby="nav-info-' . ui_e($item['key']) . '"' : '' ?>>
                         <?= ui_icon($item['icon']) ?>
                         <span class="ui-nav__label"><?= ui_e($item['label']) ?></span>
 <?php if ($item['count'] > 0): ?>
                         <span class="ui-count" title="<?= ui_e($item['badge_title'] ?? '') ?>"><?= $item['count'] > 99 ? '99+' : (int) $item['count'] ?></span>
 <?php endif; ?>
                     </a>
+<?php if ($navInfo !== ''): ?>
+                    <?= ui_info($navInfo, 'About ' . $item['label'], ['class' => 'ui-nav__info', 'id' => 'nav-info-' . $item['key']]) ?>
+<?php endif; ?>
                 </li>
 <?php endforeach; ?>
             </ul>
