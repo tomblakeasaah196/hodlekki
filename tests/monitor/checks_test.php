@@ -111,6 +111,39 @@ if (monitor_table_exists($mailDb, 'mail_accounts')) {
     }
 }
 
+// ---- Google (Trainings' Meet links): red when revoked, amber when not set up or not connected
+$gOk = ['ready' => true, 'client' => true, 'key' => true, 'connected' => true, 'status' => 'connected', 'last_ok' => $now - 300, 'last_error' => null];
+eq('Google: integrations not installed, nothing to watch', 'ok', monitor_check_google(['ready' => false], $now)['state']);
+$revoked = monitor_check_google(['status' => 'revoked', 'connected' => false] + $gOk, $now);
+eq('Google withdrew access: red', 'bad', $revoked['state']);
+has('…and the fix says Connect again', (string) $revoked['fix'], 'Connect again');
+eq('no client in .env: amber', 'warn', monitor_check_google(['client' => false] + $gOk, $now)['state']);
+eq('no vault key: amber', 'warn', monitor_check_google(['key' => false] + $gOk, $now)['state']);
+eq('not connected: amber', 'warn', monitor_check_google(['connected' => false, 'status' => null] + $gOk, $now)['state']);
+eq('a permission refused on the last call: amber', 'warn', monitor_check_google(['last_error' => 'scopes 2026-11-11 09:00:00'] + $gOk, $now)['state']);
+$gFine = monitor_check_google(['last_error' => 'quota 2026-11-11 09:00:00'] + $gOk, $now);
+eq('connected, a passing quota error: fine', 'ok', $gFine['state']);
+has('…and says when the last call worked', $gFine['detail'], 'Last call worked 5 minutes ago');
+ok('Google alerts at once when red', in_array('google', monitor_urgent_checks(), true));
+$gDb = monitor_test_db();
+if (!monitor_table_exists($gDb, 'integration_settings')) {
+    eq('Google facts: no integration_settings, not installed', ['ready' => false], monitor_facts_google($gDb));
+    $gDb->exec('CREATE TABLE integration_settings (setting_key VARCHAR(64) NOT NULL PRIMARY KEY, setting_value TEXT NULL, updated_by INT NULL, updated_at DATETIME NULL)');
+    try {
+        $gIns = $gDb->prepare('INSERT INTO integration_settings (setting_key, setting_value) VALUES (?, ?)');
+        foreach (['google.status' => 'revoked', 'google.refresh_token' => 'v1:abcd1234:xyz', 'google.last_error' => 'revoked 2026-11-11 09:00:00'] as $k => $v) {
+            $gIns->execute([$k, $v]);
+        }
+        $gf = monitor_facts_google($gDb);
+        eq('Google facts: revoked read back, never the token', ['ready' => true, 'connected' => false, 'status' => 'revoked'],
+            ['ready' => $gf['ready'], 'connected' => $gf['connected'], 'status' => $gf['status']]);
+        lacks('…no secret in the facts', (string) json_encode($gf), 'v1:abcd1234');
+        eq('Google facts to verdict: red', 'bad', monitor_check_google($gf, $now)['state']);
+    } finally {
+        $gDb->exec('DROP TABLE integration_settings');
+    }
+}
+
 // ---- Server
 eq('database answering slowly: worth a look', 'warn', monitor_check_db(['query_ms' => 400, 'connect_ms' => 20])['state']);
 eq('database unreachable: bad', 'bad', monitor_check_db(['error' => 'gone away'])['state']);
