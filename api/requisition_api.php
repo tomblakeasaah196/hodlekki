@@ -19,16 +19,11 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// CSRF Validation for all state-changing requests
+// CSRF: the shared token (includes/csrf.php) on every POST, sent by HOD.api
+// as X-CSRF-Token. It replaces this module's own csrf_token (UI foundation).
+csrf_require();
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 $is_post = $_SERVER['REQUEST_METHOD'] === 'POST';
-
-if ($is_post && !in_array($action, ['fetch_form_data', 'fetch_my_requisitions', 'fetch_requisition_detail', 'fetch_director_queue', 'fetch_approval_queue', 'fetch_finance_queue', 'fetch_analytics', 'check_signature_vault', 'fetch_accounts_funds'])) {
-    $client_csrf = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    if (empty($client_csrf) || !hash_equals($_SESSION['csrf_token'] ?? '', $client_csrf)) {
-        exit(json_encode(['status' => 'error', 'message' => 'Security token validation failed. Please refresh the page.']));
-    }
-}
 
 $user_id    = (int)$_SESSION['user_id'];
 
