@@ -14,7 +14,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 $failed = 0;
-foreach (['unit.php', 'protocol_unit.php', 'protocol_wire.php', 'read_unit.php'] as $file) {
+foreach (['unit.php', 'protocol_unit.php', 'protocol_wire.php', 'read_unit.php', 'compose_unit.php'] as $file) {
     echo "=== tests/mail/{$file}\n";
     passthru(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/' . $file), $code);
     if ($code !== 0) {

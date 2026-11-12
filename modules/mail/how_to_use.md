@@ -16,7 +16,14 @@
 - **Archive**, **Spam**, **Trash** and **Move to…** are on top of a conversation; a message after each one offers
   **Undo**. Press **?** for the keyboard shortcuts.
 - Out-of-office answers are marked **Automatic reply**.
-- Answering conversations arrives with the next Mail update.
+- **New message**, and on a conversation **Reply**, **Reply all** or **Forward**, open the composer. It saves as you
+  type; close it and the draft waits in **Drafts** and on the **Outbox** page (the clock button).
+- After **Send** you have 10 seconds to **Undo**. The arrow beside Send schedules it (tomorrow or next Monday at
+  08:00, or a time you pick).
+- Files: **Attach**, or drop them on the message; 18 MB together. Send to 50 people at most; use Campaigns for more.
+- Your signature is added when the message leaves: full on new mail, short on replies. Change your numbers on
+  **My signature** (link in the composer).
+- If a message does not go, the bell tells you; open it from the Outbox to fix it or send it again.
 - There is no password to remember or type: the church's mail is read in the app only.
 
 ## For mail admins (the Mailboxes screen)

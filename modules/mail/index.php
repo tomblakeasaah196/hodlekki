@@ -11,13 +11,14 @@
  * script then swaps the list and the reader with pieces from api/mail_api.php drawn by the same partials.
  *
  * Mounts (HOD\Mail\Read\Partial::mount): composer (PR 3), thread_team (PR 4, shared mailboxes), thread_summary.
- * Until a mount exists nothing that leads to it is drawn.
+ * Until a mount exists nothing that leads to it is drawn. ?compose=<outbox id> opens one of the person's drafts
+ * (links from the Outbox page); assets/ui/js/pages/mail-compose.js does nothing on a page without the composer.
  */
 $ui = [
     'title'   => 'Mail',
     'mode'    => 'strict',
     'styles'  => ['/assets/css/mail.css'],
-    'scripts' => ['/assets/ui/js/pages/mail.js'],
+    'scripts' => ['/assets/ui/js/pages/mail-compose.js', '/assets/ui/js/pages/mail.js'],
 ];
 require_once __DIR__ . '/../../includes/header.php';
 require_once __DIR__ . '/../../includes/mail/bootstrap.php';
@@ -102,6 +103,7 @@ $boxName = fn (array $a) => Store::isShared($a) ? (string) $a['display_name'] : 
         'description' => $account['email'],
         'actions' => ($canSend ? ui_button('New message', ['variant' => 'primary', 'icon' => 'pencil', 'attrs' => ['data-compose' => 'new', 'title' => 'New message (c)']]) : '')
             . ui_button('Check mail', ['variant' => 'ghost', 'icon' => 'refresh-cw', 'icon_only' => true, 'attrs' => ['data-action' => 'refresh']])
+            . ($canSend ? ui_button('Outbox', ['variant' => 'ghost', 'icon' => 'clock', 'icon_only' => true, 'href' => '/modules/mail/outbox.php']) : '')
             . ui_button('Shortcuts', ['variant' => 'ghost', 'icon' => 'circle-help', 'icon_only' => true, 'class' => 'mr-hide-phone', 'attrs' => ['data-dialog-open' => 'mail-keys']])
             . $adminLink,
     ]) ?>
@@ -237,6 +239,7 @@ $boxName = fn (array $a) => Store::isShared($a) ? (string) $a['display_name'] : 
     'page' => $list['page'] ?? 1,
     'thread' => $reader['thread'] ?? null,
     'stamp' => $counts['stamp'] ?? null,
+    'compose' => $canSend && preg_match('/^[0-9a-f-]{36}$/', (string) ($_GET['compose'] ?? '')) ? (string) $_GET['compose'] : null,
     'poll' => 60,
 ]) ?>
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

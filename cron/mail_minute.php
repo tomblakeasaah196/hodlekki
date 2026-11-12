@@ -6,7 +6,7 @@
  *
  *   1. admin jobs (cPanel through `uapi`: create, bring in, reset, suspend, remove, …), then the mailbox count
  *      when it is 5 minutes old or a job was queued;
- *   2. (PR 3) the outbox: messages due to leave;
+ *   2. the outbox: messages due to leave (each takes the domain's hourly budget; HOD\Mail\Compose\OutboxSender);
  *   3. sync: every active mailbox, least recently synced first, within a 45 s budget.
  *
  * One run at a time (a database lock): an overlapping run exits at once. Flags:
@@ -26,6 +26,7 @@ require_once __DIR__ . '/../includes/mail/bootstrap.php';
 
 use HOD\Mail\Admin\Jobs;
 use HOD\Mail\Admin\Quota;
+use HOD\Mail\Compose\OutboxSender;
 use HOD\Mail\Config;
 use HOD\Mail\Db;
 use HOD\Mail\Sync\MailSync;
@@ -63,6 +64,14 @@ try {
         }
     } catch (Throwable $e) {
         error_log('Mail cron: jobs: ' . $e->getMessage());
+    }
+
+    if (!in_array('--jobs-only', $args, true) && $only === null && mail_compose_ready()) {
+        try {
+            $say('outbox', OutboxSender::make()->due());
+        } catch (Throwable $e) {
+            error_log('Mail cron: outbox: ' . $e->getMessage());
+        }
     }
 
     if (!in_array('--jobs-only', $args, true)) {

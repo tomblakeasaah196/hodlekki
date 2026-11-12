@@ -3,7 +3,7 @@
 /**
  * Mail, PR 2 (reading): what needs no server and no database. A sender's HTML made safe (an XSS corpus, the two
  * JBS HQ fixes: links that wrap tables, and dark-only CSS), the reader's document and its policy, plain text,
- * dates and sizes, search words, the partials (no Reply until the composer exists), the page's endpoints (own
+ * dates and sizes, search words, the partials (Reply only with the composer), the page's endpoints (own
  * CSP, sniffed files) and the short copy.
  *
  *   php tests/mail/read_unit.php
@@ -144,7 +144,7 @@ check('the waiting filter exists for shared mailboxes', in_array('waiting', Thre
 check('personal mailboxes have no teamwork filters', ThreadList::filtersFor(['kind' => 'personal']) === ['all', 'unread']);
 
 section('Pieces of the page');
-check('no composer yet, so no Reply anywhere', !Partial::mounted('composer'));
+check('the composer is a mount (PR 3), so Reply exists', is_file("{$root}/includes/mail/mounts/composer.php"));
 check('a mount name cannot leave its folder', !Partial::mounted('../partials/list') && Partial::mount('../x') === '');
 foreach (['list', 'reader_head', 'message', 'live', 'live_list'] as $name) {
     $src = (string) file_get_contents("{$root}/includes/mail/Read/partials/{$name}.php");

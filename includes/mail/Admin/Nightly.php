@@ -138,6 +138,8 @@ final class Nightly
             'presence' => Db::exec('DELETE FROM mail_presence WHERE expires_at < ?', [Clock::sql()]),
             'outbox' => Db::exec("DELETE FROM mail_outbox WHERE status IN ('sent', 'cancelled') AND updated_at < ?", [Clock::sql(-30 * 86400)]),
             'jobs' => Db::exec("DELETE FROM mail_admin_jobs WHERE status IN ('done', 'cancelled') AND finished_at < ?", [Clock::sql(-90 * 86400)]),
+            // drafts opened and never written in (the page was left), once writing has its tables
+            'untouched_drafts' => function_exists('mail_compose_ready') && mail_compose_ready() ? \HOD\Mail\Compose\Outbox::make()->pruneUntouched() : 0,
         ];
     }
 }
