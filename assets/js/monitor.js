@@ -37,6 +37,11 @@
     var seen = {};
     var reported = 0;
     var timer = null;
+    // Set once the page is being left: whatever fails after that is the
+    // browser cancelling loads, not something a person saw break.
+    var leaving = false;
+    window.addEventListener('pagehide', function () { leaving = true; });
+    window.addEventListener('beforeunload', function () { leaving = true; });
 
     function device() {
         var ua = navigator.userAgent || '';
@@ -104,6 +109,14 @@
         var t = ev.target;
         if (t && t !== window && t.tagName) {
             var url = t.currentSrc || t.src || t.href || '';
+            // Not failures a person sees: a prefetch/prerender hint the browser
+            // dropped (leaving a page cancels it), an inline data:/blob: image,
+            // or anything that fails while the page is being left.
+            var rel = String(t.rel || '').toLowerCase();
+            if (leaving || /^(data|blob):/i.test(url)
+                || (t.tagName === 'LINK' && /prefetch|prerender|preconnect|preload|modulepreload/.test(rel))) {
+                return;
+            }
             if (url) {
                 add({ type: 'resource', msg: 'Could not load ' + url, src: url, tag: String(t.tagName).toLowerCase() });
             }

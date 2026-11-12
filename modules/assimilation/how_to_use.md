@@ -286,9 +286,14 @@ If the church has **no number on file** for someone, their card says so and
 the Call and WhatsApp buttons are hidden. **Log** still works, so a visit or
 a message passed on through someone else can be recorded.
 
-Tapping a card opens the logging sheet: channel chips, outcome chips, notes
-with a **microphone** and **Clean up with AI**, prayer points, and quick
-next-touch pills (Tomorrow, In 3 days, Next Sunday, In a week).
+Tapping **Log** on a card opens the logging sheet (it slides up from the
+bottom on a phone): channel chips, outcome chips, notes with a **microphone**
+and **Tidy with AI**, prayer points, and quick next-touch pills (Tomorrow,
+In 3 days, Next Sunday, In a week).
+
+The page has the same look as the rest of the app since November 2026: the
+church bar at the top, one card per step, and the (i) icons for the details.
+Nothing a volunteer does on it changed.
 
 **Only these things are shown on that page**: name as "First L.", phone, when
 they were last in church, their attendance trend, their departments, their
@@ -312,7 +317,7 @@ configured, they say so and nothing else breaks.
   the person. The volunteer reviews it and chooses to keep it; **both the raw
   and the tidied version are stored**, and the volunteer's own words remain
   the record.
-- **Suggest a gentle opening line** writes one warm opening sentence from the
+- **Suggest an opener** writes one warm opening sentence from the
   first name, how long since they were last in church, the stage of the
   follow-up and the last note. Nothing else about the person is sent.
 
@@ -354,6 +359,37 @@ Monday and happening next month.
 The volunteer page (`/assimilation`) is part of the app too, so a volunteer who
 only ever opens that link can install it from there and get their own call list
 assignments on their phone. Quiet hours are under the same gear icon.
+
+## 10c. Automation (the absence follow-up)
+
+Managers see an **Automation** tab. It holds one rule, *Absence follow-up*,
+which is **off** until a manager switches it on. Once on, it checks attendance
+once a week (Monday 09:00 by default, after Sunday is in) and, for the statuses
+it covers (Visitor and Non-Member by default):
+
+1. after **2** missed Sundays, emails the person "We miss you" (or texts them
+   through SMS Studio when they have no confirmed email; nothing when they have
+   neither, or unsubscribed);
+2. after **4**, tells the Assimilation team with a notification naming them;
+3. after **8**, tells their region pastor (else the Resident Pastor).
+
+Each step happens once per absence, and again if they come back and drift away
+later. Streaks come from the same attendance rules as the Charis AWOL list.
+Nobody gets two messages from the church in one day, whichever module sends.
+
+In the tab you can change the day and time of the weekly check, who it covers,
+the number of missed Sundays for each step, the SMS, the two alerts, and the
+sender name and reply address. **Preview** shows the email as it will look
+(phone or desktop) and **Send test** sends it to your own confirmed email.
+**Recent runs** lists each weekly check and, under **Who**, what happened to
+each person. The email wording itself is edited in the email editor (coming
+next); until then it is the church's default.
+
+**Switching on** first shows how many people are already past a step today.
+Choose **Start fresh** (only people who pass a step from now on hear anything:
+no flood of pastor alerts on day one) or **Include them** (they are reached at
+the next weekly check). A warning shows when Charis's rule covers the same
+statuses: untick them in one of the two tabs. Guide: `docs/EMAIL.md`.
 
 ## 11. For developers
 

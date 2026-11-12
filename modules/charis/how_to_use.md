@@ -43,6 +43,23 @@ Calling someone or writing a note does not take them off the list. A case closes
 
 Press **AWOL report** on the Welfare tab. Choose a month or a date range. A confidential PDF downloads with the cases tracked and the rule that was in force.
 
+## Automation: the absence follow-up
+
+People who can change the AWOL rules also see an **Automation** tab. Its one
+rule, *Absence follow-up*, is **off** until someone switches it on. Then, once a
+week (Monday 09:00 by default), for Members, Workers and Pastors on the AWOL
+streaks: after **2** missed Sundays it emails them "We miss you" (or texts
+them through SMS Studio when they have no confirmed email); after **4** it
+tells the Charis team; after **8**, their region pastor (else the Resident
+Pastor). Each step once per absence; nobody gets two church messages in a day.
+
+In the tab: the weekly check's day and time, who it covers, the missed Sundays
+for each step, the SMS and the two alerts, and the sender. **Preview** and
+**Send test** show the email; **Recent runs** shows who got what. **Switch on**
+first says how many people are already past a step: **Start fresh** (only new
+crossings) or **Include them**. A warning shows when Assimilation's rule covers
+the same people.
+
 ## Welfare: birthdays and life events
 
 - **Birthdays** lists the members (and Junior Church children) with birthdays this month and next.

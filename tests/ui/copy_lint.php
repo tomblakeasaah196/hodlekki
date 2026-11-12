@@ -111,7 +111,7 @@ function copy_pages(string $root): array
         $src = (string) file_get_contents($file->getPathname());
         $strict = (bool) preg_match("/'mode'\\s*=>\\s*'strict'/", $src);
         $usesShell = (bool) preg_match('/require(_once)?[^;]*header\.php/', $src);
-        $standalone = !$usesShell && (stripos($src, '<!DOCTYPE') !== false || strpos($src, 'ui_public_open(') !== false);
+        $standalone = !$usesShell && (stripos($src, '<!DOCTYPE') !== false || strpos($src, 'ui_public_open(') !== false || strpos($src, 'ui_standalone_open(') !== false);
         if ($strict || $standalone) {
             $pages[$path] = $src;
         }

@@ -1,145 +1,76 @@
 <?php
 // /live_radio.php
-// Baseline security headers (nosniff, referrer, framing, permissions): this
-// page does not load includes/db.php on every request, which is where every
-// other page gets them.
-require_once __DIR__ . '/includes/security_headers.php';
-security_send_baseline_headers();
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Live Service | Household of David</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: { hodBlue: '#1e3a8a', hodRed: '#ef4444' },
-                    fontFamily: { sans: ['Inter', 'sans-serif'], heading: ['Montserrat', 'sans-serif'] }
-                }
-            }
-        }
-    </script>
-    <style>
-        body { background-color: #070c24; color: white; overflow: hidden; }
-        .glass-card {
-            background: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-        .pulse-ring { animation: pulse 2s infinite; }
-        @keyframes pulse { 
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-        /* Audio Visualizer Animation */
-        .bar { width: 4px; background: #ef4444; border-radius: 4px; display: inline-block; margin: 0 2px; animation: eq 1.5s ease-in-out infinite alternate; transform-origin: bottom; }
-        .bar:nth-child(1) { animation-delay: -0.2s; height: 10px; }
-        .bar:nth-child(2) { animation-delay: -0.4s; height: 20px; }
-        .bar:nth-child(3) { animation-delay: -0.1s; height: 15px; }
-        .bar:nth-child(4) { animation-delay: -0.5s; height: 25px; }
-        .bar:nth-child(5) { animation-delay: -0.3s; height: 12px; }
-        .paused .bar { animation-play-state: paused; height: 4px !important; transition: height 0.3s; }
-    </style>
-    <?php require_once __DIR__ . '/includes/pwa_head.php'; ?>
-</head>
-<body class="flex flex-col items-center justify-center min-h-screen p-6 relative">
-<?php require_once __DIR__ . '/includes/pwa_boot.php'; ?>
-    
-    <!-- Background Blur Effect -->
-    <div class="absolute inset-0 z-0">
-        <div class="absolute top-0 left-0 w-64 h-64 bg-hodBlue rounded-full mix-blend-screen filter blur-[80px] opacity-30 animate-pulse"></div>
-        <div class="absolute bottom-0 right-0 w-64 h-64 bg-hodRed rounded-full mix-blend-screen filter blur-[80px] opacity-20"></div>
-    </div>
+// The Sunday service audio player. The stream address and the on-air switch
+// are set in Envision (system_settings zeno_stream_url / is_live_audio_on,
+// the same two api/public_sermons_api.php reads); they are read here so the
+// strict CSP can allow exactly that stream (Zeno redirects to its own
+// *.zeno.fm hosts). Script: assets/ui/js/pages/live-radio.js.
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/ui/standalone.php';
 
-    <!-- Main Player Card -->
-    <div class="glass-card w-full max-w-sm rounded-3xl p-8 relative z-10 flex flex-col items-center text-center shadow-2xl">
-        
-        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-6">Household of David Lekki</p>
-        
-        <!-- Live Indicator Image -->
-        <div class="relative w-32 h-32 mb-8">
-            <div class="absolute inset-0 rounded-full border-2 border-hodRed/30 pulse-ring" id="liveRing"></div>
-            <img src="/assets/images/hod_logo.svg" onerror="this.src='https://placehold.co/150x150/1e3a8a/FFF?text=HOD'" class="w-full h-full object-cover rounded-full bg-hodBlue p-4 border border-white/10 shadow-lg">
-            <div class="absolute bottom-0 right-2 bg-hodRed text-white text-[9px] font-black uppercase px-2 py-0.5 rounded border border-black" id="statusBadge">LIVE</div>
+$radio = ['stream' => '', 'live' => false];
+try {
+    $rows = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('zeno_stream_url', 'is_live_audio_on')")
+        ->fetchAll(PDO::FETCH_KEY_PAIR);
+    // An http:// address is upgraded: the page is https, and browsers upgrade
+    // mixed audio anyway (Zeno serves both).
+    $url = preg_replace('#^http://#i', 'https://', trim((string) ($rows['zeno_stream_url'] ?? '')));
+    $radio['stream'] = preg_match('#^https://[^\s"<>]+$#i', $url) ? $url : '';
+    $radio['live'] = (int) ($rows['is_live_audio_on'] ?? 0) === 1;
+} catch (Throwable $e) {
+    error_log('live_radio settings: ' . $e->getMessage());
+}
+$mediaSources = ['https://*.zeno.fm'];
+if ($radio['stream'] !== '') {
+    $parts = parse_url($radio['stream']);
+    if (!empty($parts['host'])) {
+        $mediaSources[] = 'https://' . $parts['host'] . (!empty($parts['port']) ? ':' . (int) $parts['port'] : '');
+    }
+}
+
+ui_standalone_open('Live Service', [
+    'bare' => true,
+    'boot' => true,
+    'csp' => ['media-src' => array_values(array_unique($mediaSources))],
+    'scripts' => ['/assets/ui/js/pages/live-radio.js'],
+]);
+echo ui_json_script('radio-config', $radio);
+$onAir = $radio['live'] && $radio['stream'] !== '';
+?>
+<div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#070c24] via-hodBlue to-black p-4 text-white">
+    <div class="w-full max-w-sm rounded-ui-xl border border-white/10 bg-white/5 p-8 text-center shadow-ui-lg">
+        <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Household of David Lekki</p>
+
+        <div class="relative mx-auto my-8 grid h-40 w-40 place-items-center">
+            <span class="absolute inset-0 rounded-full border-4 <?= $onAir ? 'border-hodRed/40 motion-safe:animate-ping' : 'border-white/10' ?>" id="radio-ring" aria-hidden="true"></span>
+            <span class="relative grid h-36 w-36 place-items-center rounded-full bg-white p-5">
+                <img src="/assets/images/hod_logo.svg" alt="HOD Lekki" class="h-full w-full object-contain" width="104" height="104">
+            </span>
+            <span class="absolute -bottom-2 rounded-full px-3 py-1 text-xs font-bold tracking-widest <?= $onAir ? 'bg-hodRed' : 'bg-white/20' ?>" id="radio-badge"><?= $onAir ? 'LIVE' : 'OFFLINE' ?></span>
         </div>
 
-        <h1 class="text-2xl font-heading font-bold text-white mb-2">Sunday Service</h1>
-        <p class="text-sm text-gray-400 mb-8">Audio Broadcast</p>
+        <h1 class="font-display text-3xl font-bold">Sunday Service</h1>
+        <p class="mt-1 text-white/70">Audio Broadcast</p>
 
-        <!-- Hidden Audio Element -->
-        <audio id="radioPlayer" preload="none"></audio>
+        <audio id="radio-player" preload="none"></audio>
 
-        <!-- Custom Controls -->
-        <div class="w-full flex flex-col items-center">
-            <!-- Visualizer -->
-            <div class="h-8 flex items-end justify-center mb-6 paused" id="visualizer">
-                <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="mt-8 flex flex-col items-center gap-5">
+            <div class="flex h-7 items-end gap-1" id="radio-eq" aria-hidden="true">
+                <span class="h-2.5 w-1 rounded-full bg-hodRed opacity-40"></span>
+                <span class="h-5 w-1 rounded-full bg-hodRed opacity-40"></span>
+                <span class="h-4 w-1 rounded-full bg-hodRed opacity-40"></span>
+                <span class="h-6 w-1 rounded-full bg-hodRed opacity-40"></span>
+                <span class="h-3 w-1 rounded-full bg-hodRed opacity-40"></span>
             </div>
-
-            <button id="playPauseBtn" class="w-16 h-16 bg-white text-hodBlue rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform">
-                <!-- Play Icon (Default) -->
-                <svg id="iconPlay" class="w-8 h-8 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                <!-- Pause Icon -->
-                <svg id="iconPause" class="w-8 h-8 hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            <button type="button" class="grid h-20 w-20 place-items-center rounded-full bg-hodRed text-white shadow-ui-lg transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+                id="radio-toggle" data-action="radio.toggle" aria-label="Play" aria-pressed="false"<?= $onAir ? '' : ' disabled' ?>>
+                <svg class="ml-1 h-9 w-9" id="radio-icon-play" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                <svg class="h-9 w-9" id="radio-icon-pause" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             </button>
         </div>
-        
-        <p class="text-[10px] text-gray-500 mt-8">You can minimize this window to keep listening.</p>
+
+        <p class="mt-8 text-sm text-white/60"><?= $onAir ? 'You can minimize this window to keep listening.' : 'The broadcast is off air.' ?></p>
     </div>
-
-    <script>
-        $(document).ready(function() {
-            const API_URL = '/api/public_sermons_api.php';
-            const player = document.getElementById('radioPlayer');
-            const btn = $('#playPauseBtn');
-            const visualizer = $('#visualizer');
-            const liveRing = $('#liveRing');
-            const statusBadge = $('#statusBadge');
-
-            let streamUrl = '';
-
-            // Fetch URL
-            $.getJSON(API_URL, { action: 'check_live_broadcast' }, function(res) {
-                if(res.status === 'success' && res.stream_url) {
-                    streamUrl = res.stream_url;
-                    player.src = streamUrl;
-                    if(res.is_live === 0) {
-                        statusBadge.text('OFFLINE').removeClass('bg-hodRed').addClass('bg-gray-600');
-                        liveRing.removeClass('pulse-ring border-hodRed/30').addClass('border-gray-600/30');
-                        btn.prop('disabled', true).addClass('opacity-50 cursor-not-allowed');
-                    }
-                }
-            });
-
-            btn.on('click', function() {
-                if (!streamUrl) return;
-                
-                if (player.paused) {
-                    // Force refresh cache so it catches the live edge, not buffered audio
-                    player.src = streamUrl + '?t=' + new Date().getTime(); 
-                    player.play();
-                    $('#iconPlay').addClass('hidden');
-                    $('#iconPause').removeClass('hidden');
-                    visualizer.removeClass('paused');
-                } else {
-                    player.pause();
-                    $('#iconPlay').removeClass('hidden');
-                    $('#iconPause').addClass('hidden');
-                    visualizer.addClass('paused');
-                }
-            });
-
-            // Handle buffering/stalls automatically
-            player.addEventListener('waiting', () => visualizer.addClass('paused'));
-            player.addEventListener('playing', () => visualizer.removeClass('paused'));
-        });
-    </script>
-</body>
-</html>
+</div>
+<?php
+ui_standalone_close();

@@ -1,21 +1,14 @@
 # Pages still allowed to load the Tailwind play CDN (tests/ui/run.php).
 # This list may only SHRINK: rebuild a page on the shared components, then
 # delete its line here in the same commit. Never add a line.
-assimilation.php
-auth/change_password.php
-auth/login.php
-auth/setup_password.php
 checkin.php
 connect.php
 idi_mobilization.php
-live_radio.php
 modules/checkin_monitor/index.php
 modules/checkin_qr/index.php
 modules/contact_extractor/index.php
 modules/event_qr/index.php
 modules/event_report/index.php
 parent_portal.php
-reach.php
 register.php
 testimonies.php
-verify.php

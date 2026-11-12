@@ -23,6 +23,16 @@ module.exports = {
             // The shell, its partials and the shared PHP that prints markup.
             '../../../includes/**/*.php',
             '../../../index.php',
+            // Standalone and public pages rebuilt on the foundation (sign-in,
+            // the password and email-link pages, verify, live radio, the
+            // monitor links). Pages still on the Tailwind CDN are not scanned.
+            '../../../auth/*.php',
+            '../../../email/*.php',
+            '../../../verify.php',
+            '../../../live_radio.php',
+            '../../../monitor_confirm.php',
+            '../../../reach.php',
+            '../../../assimilation.php',
             // Every staff screen, including the Bible and the Hymnary, which
             // sit inside the shell even though their design is their own.
             '../../../modules/**/*.php',

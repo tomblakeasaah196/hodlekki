@@ -119,7 +119,9 @@ $rc = pclose($fh);
 
 echo str_repeat('-', 60) . "\n";
 if ($rc !== 0) {
-    http_response_code(500);
+    // The status line went out with the first streamed byte, so a 500 can no
+    // longer be set here (it only logged "headers already sent"). The
+    // workflow fails the job on the missing "[webhook] DEPLOY OK" line.
     echo "[webhook] DEPLOY FAILED (exit code {$rc})\n";
     exit;
 }

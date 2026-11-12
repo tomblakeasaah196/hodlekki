@@ -9,7 +9,9 @@
 $ui = [
     'title' => 'Assimilation',
     'mode' => 'strict',
-    'scripts' => ['/assets/ui/js/pages/assimilation.js', '/assets/ui/js/pages/assimilation-find.js'],
+    'scripts' => ['/assets/ui/js/pages/assimilation.js', '/assets/ui/js/pages/assimilation-find.js', '/assets/ui/js/pages/automation.js'],
+    // The Automation tab's email preview: a sandboxed frame on api/email_preview.php.
+    'csp' => ['frame-src' => ["'self'"]],
 ];
 require_once '../../includes/header.php';
 require_once __DIR__ . '/../../includes/assimilation_helpers.php';
@@ -52,7 +54,7 @@ try {
 $assim_tabs = $assim_manager
     ? ['find' => ['label' => 'Find people', 'icon' => 'search'], 'followup' => ['label' => 'Follow-up', 'icon' => 'phone'],
         'team' => ['label' => 'Team', 'icon' => 'users-round'], 'analytics' => ['label' => 'Analytics', 'icon' => 'chart-column'],
-        'howto' => ['label' => 'Guide', 'icon' => 'circle-help']]
+        'automation' => ['label' => 'Automation', 'icon' => 'bell-ring'], 'howto' => ['label' => 'Guide', 'icon' => 'circle-help']]
     : ['followup' => ['label' => 'Follow-up', 'icon' => 'phone'], 'team' => ['label' => 'Team', 'icon' => 'users-round'],
         'howto' => ['label' => 'Guide', 'icon' => 'circle-help']];
 $assim_first = (string) array_key_first($assim_tabs);
@@ -235,9 +237,20 @@ $headerActions = ui_button('Volunteer page', ['variant' => 'secondary', 'icon' =
     </section>
 <?php endif; ?>
 
-    <?php /* Mount point for the Automation tab (campaigns PR 4, api/automation_api.php):
-       add an 'automation' entry to $assim_tabs (managers) and its
-       <section id="panel-automation" data-tab-panel="automation"> here. */ ?>
+    <!-- Automation: the absence follow-up rule (managers; includes/campaigns/automation_tab.php) -->
+<?php if ($assim_manager): ?>
+    <section id="panel-automation" data-tab-panel="automation" class="ui-tab-panel" hidden>
+<?php
+    require_once __DIR__ . '/../../includes/campaigns/automation_tab.php';
+    try {
+        echo automation_tab_html($pdo, 'assimilation');
+    } catch (Throwable $e) {
+        error_log('[automation] Assimilation tab failed: ' . $e->getMessage());
+        echo ui_banner('danger', ['title' => 'Automation did not load', 'text' => 'Reload the page to try again.']);
+    }
+?>
+    </section>
+<?php endif; ?>
     <!-- Guide ------------------------------------------------------------ -->
     <section id="panel-howto" data-tab-panel="howto" class="ui-tab-panel" hidden>
         <div class="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
