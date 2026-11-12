@@ -131,48 +131,48 @@ try {
                 exit;
             }
 
-            // Process Base64 Image
-            if (!empty($image_base64)) {
-                $image_parts = explode(";base64,", $image_base64);
-                if (count($image_parts) == 2) {
-                    $image_base64_decoded = base64_decode($image_parts[1]);
-                    
-                    // Same target directory as the Admin module
-                    $upload_dir = '../uploads/profiles/children/';
-                    if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-                    
-                    $filename = 'child_' . time() . '_' . rand(1000, 9999) . '.png';
-                    if (file_put_contents($upload_dir . $filename, $image_base64_decoded)) {
-                        $picture_path = '/uploads/profiles/children/' . $filename;
-                        
-                        $updateStmt = $pdo->prepare("UPDATE junior_church_roster SET picture_path = ? WHERE id = ?");
-                        $updateStmt->execute([$picture_path, $child_id]);
-                        
-                        // NOTIFICATION TRIGGER: Alert Junior Church Leadership
-                        $jc_leaders = perm_module_leaders($pdo, 'junior_church', 'hod');
+            // The cropped photo: a PNG or JPEG data URL, checked to really be
+            // one (getimagesizefromstring), at most 5 MB, stored under a random
+            // name with its real extension in a 0755 folder: the same folder and
+            // checks as the Junior Church module (includes/upload_guard.php).
+            if (!is_string($image_base64) || $image_base64 === '') {
+                echo json_encode(['status' => 'error', 'message' => 'Choose a photo first.']);
+                exit;
+            }
+            require_once __DIR__ . '/../includes/upload_guard.php';
+            $stored = hod_upload_store_data_image(
+                $image_base64,
+                __DIR__ . '/../uploads/profiles/children/',
+                '/uploads/profiles/children/'
+            );
+            if (!$stored['ok']) {
+                echo json_encode(['status' => 'error', 'message' => $stored['error']]);
+                exit;
+            }
+            $picture_path = $stored['url'];
 
-                        if (!empty($jc_leaders)) {
-                            // Get child name for context
-                            $cStmt = $pdo->prepare("SELECT child_first_name, child_last_name FROM junior_church_roster WHERE id = ?");
-                            $cStmt->execute([$child_id]);
-                            $child = $cStmt->fetch(PDO::FETCH_ASSOC);
-                            $childName = $child ? "{$child['child_first_name']} {$child['child_last_name']}" : "A child";
+            $updateStmt = $pdo->prepare("UPDATE junior_church_roster SET picture_path = ? WHERE id = ?");
+            $updateStmt->execute([$picture_path, $child_id]);
 
-                            $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Child Profile Updated', ?, '/modules/junior_church/index.php')");
-                            $alertMsg = "A parent has updated the profile picture for {$childName} via the Parent Portal.";
-                            
-                            foreach($jc_leaders as $leader_id) {
-                                $notifStmt->execute([$leader_id, $alertMsg]);
-                            }
-                        }
-                        
-                        echo json_encode(['status' => 'success', 'message' => 'Child profile picture updated successfully!']);
-                        exit;
-                    }
+            // NOTIFICATION TRIGGER: Alert Junior Church Leadership
+            $jc_leaders = perm_module_leaders($pdo, 'junior_church', 'hod');
+
+            if (!empty($jc_leaders)) {
+                // Get child name for context
+                $cStmt = $pdo->prepare("SELECT child_first_name, child_last_name FROM junior_church_roster WHERE id = ?");
+                $cStmt->execute([$child_id]);
+                $child = $cStmt->fetch(PDO::FETCH_ASSOC);
+                $childName = $child ? "{$child['child_first_name']} {$child['child_last_name']}" : "A child";
+
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Child Profile Updated', ?, '/modules/junior_church/index.php')");
+                $alertMsg = "A parent has updated the profile picture for {$childName} via the Parent Portal.";
+
+                foreach ($jc_leaders as $leader_id) {
+                    $notifStmt->execute([$leader_id, $alertMsg]);
                 }
             }
-            
-            echo json_encode(['status' => 'error', 'message' => 'Failed to process image payload.']);
+
+            echo json_encode(['status' => 'success', 'message' => 'Child profile picture updated successfully!']);
             break;
 
         // ==========================================
