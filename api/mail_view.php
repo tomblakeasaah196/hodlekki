@@ -70,7 +70,9 @@ if (!$body || $body['kind'] !== 'html') {
 
 $img = "'self' data:" . ($images ? ' https: http:' : '');
 header('Content-Type: text/html; charset=utf-8');
-header('Cache-Control: private, no-store');
+// no-transform: Cloudflare must not rewrite the message (its email obfuscation turns every address into
+// "[email protected]" plus a decoder script, which this sandboxed, script-free frame never runs).
+header('Cache-Control: private, no-store, no-transform');
 header('Referrer-Policy: no-referrer');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');

@@ -172,6 +172,8 @@ foreach (array_keys($classes) as $class) {
 }
 check('every HOD\\Mail class the module names exists', !$missing, implode(', ', $missing));
 
+check('the message frame tells Cloudflare not to rewrite it (no-transform)',
+    str_contains((string) file_get_contents("$root/api/mail_view.php"), "header('Cache-Control: private, no-store, no-transform');"));
 check('the Mail page lets its own message frames load (frame-src self)',
     str_contains((string) file_get_contents("$root/modules/mail/index.php"), "'csp'     => ['frame-src' => [\"'self'\"]]"));
 $migrations = glob("$root/db/migrations/*_mail_*.sql");
