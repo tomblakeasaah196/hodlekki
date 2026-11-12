@@ -13,8 +13,14 @@
 
 const TRAININGS_AUDIO_MAX_BYTES = 50 * 1024 * 1024;
 const TRAININGS_PDF_MAX_BYTES = 20 * 1024 * 1024;
+const TRAININGS_PPTX_MAX_BYTES = 30 * 1024 * 1024;
 const TRAININGS_UPLOAD_URL = '/uploads/trainings/';
 const TRAININGS_EMBED_HOSTS = ['https://www.youtube-nocookie.com', 'https://open.spotify.com'];
+// PowerPoint decks play in Microsoft's Office web viewer, which fetches the deck from our site
+// (privacy.php says so). Only the two Trainings pages that show decks allow it in frame-src.
+const TRAININGS_OFFICE_HOST = 'https://view.officeapps.live.com';
+const TRAININGS_OFFICE_VIEWER = TRAININGS_OFFICE_HOST . '/op/embed.aspx';
+const TRAININGS_FRAME_HOSTS = [...TRAININGS_EMBED_HOSTS, TRAININGS_OFFICE_HOST];
 const TRAININGS_DEFAULT_PASS = ['required' => 'all', 'live_percent' => 100];
 
 // ---------------------------------------------------------------------------
@@ -685,6 +691,22 @@ function trainings_item_details(string $type, array $in, array $old, array $file
             } elseif (!empty($old['pdf'])) {
                 $replaced[] = (string) $old['pdf'];
             }
+            // A PowerPoint deck (shown in the Office viewer), with its slides' text for search and the AI.
+            $f = $files['pptx_file'] ?? null;
+            if (is_array($f) && ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $deck = trainings_deck_from_upload($f);
+                if (!$deck['ok']) {
+                    return ['error' => $deck['error'], 'field' => 'pptx_file'];
+                }
+                if (!empty($old['deck'])) {
+                    $replaced[] = (string) $old['deck'];
+                }
+                $d += $deck['details'];
+            } elseif (!empty($old['deck']) && empty($in['remove_deck'])) {
+                $d += array_intersect_key($old, array_flip(['deck', 'deck_name', 'slides', 'slides_text']));
+            } elseif (!empty($old['deck'])) {
+                $replaced[] = (string) $old['deck'];
+            }
             return ['details' => $d, 'replaced' => $replaced];
 
         case 'assignment':
@@ -759,7 +781,7 @@ function trainings_item_missing(array $item): bool
     return match ((string) $item['type']) {
         'video' => empty($d['embed']),
         'audio' => empty($d['embed']) && empty($d['file']),
-        'reading' => trim((string) ($d['text'] ?? '')) === '' && empty($d['pdf']),
+        'reading' => trim((string) ($d['text'] ?? '')) === '' && empty($d['pdf']) && empty($d['deck']),
         'assignment' => trim((string) ($d['instructions'] ?? '')) === '' && empty($d['prompts'])
             || (($d['kind'] ?? '') === 'sermon_review' && empty($d['media'])),
         default => false,
@@ -851,13 +873,14 @@ function trainings_media_start(string $t): int
 }
 
 /**
- * Store an uploaded audio file (MP3/M4A, ≤ 50 MB) or reading (PDF, ≤ 20 MB).
- * @return array{ok:bool, url?:string, name?:string, error?:string}
+ * Store an uploaded audio file (MP3/M4A, ≤ 50 MB), reading (PDF, ≤ 20 MB) or
+ * PowerPoint deck (.pptx, ≤ 30 MB).
+ * @return array{ok:bool, url?:string, name?:string, error?:string, path?:string}
  */
 function trainings_upload(array $file, string $kind): array
 {
-    $max = $kind === 'pdf' ? TRAININGS_PDF_MAX_BYTES : TRAININGS_AUDIO_MAX_BYTES;
-    $allowed = $kind === 'pdf' ? ['pdf'] : ['mp3', 'm4a'];
+    $max = ['pdf' => TRAININGS_PDF_MAX_BYTES, 'pptx' => TRAININGS_PPTX_MAX_BYTES][$kind] ?? TRAININGS_AUDIO_MAX_BYTES;
+    $allowed = ['pdf' => ['pdf'], 'pptx' => ['pptx']][$kind] ?? ['mp3', 'm4a'];
     $err = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
     if ($err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE || (int) ($file['size'] ?? 0) > $max) {
         return ['ok' => false, 'error' => 'The file is too big. Use up to ' . (int) ($max / 1048576) . ' MB.'];
@@ -867,7 +890,7 @@ function trainings_upload(array $file, string $kind): array
     }
     $ext = hod_upload_extension((string) ($file['name'] ?? ''), $allowed);
     if ($ext === '' || !trainings_sniff((string) $file['tmp_name'], $ext)) {
-        return ['ok' => false, 'error' => $kind === 'pdf' ? 'Choose a PDF file.' : 'Choose an MP3 or M4A file.'];
+        return ['ok' => false, 'error' => ['pdf' => 'Choose a PDF file.', 'pptx' => 'Choose a PowerPoint (.pptx) file.'][$kind] ?? 'Choose an MP3 or M4A file.'];
     }
     $dir = dirname(__DIR__, 2) . rtrim(TRAININGS_UPLOAD_URL, '/');
     $stored = hod_upload_store($file, $dir, TRAININGS_UPLOAD_URL, $allowed);
@@ -875,12 +898,16 @@ function trainings_upload(array $file, string $kind): array
         return ['ok' => false, 'error' => (string) $stored['error']];
     }
     $name = trainings_text(pathinfo((string) ($file['name'] ?? ''), PATHINFO_FILENAME), 80);
-    return ['ok' => true, 'url' => (string) $stored['url'], 'name' => ($name !== '' ? $name : 'File') . '.' . $ext];
+    return ['ok' => true, 'url' => (string) $stored['url'], 'name' => ($name !== '' ? $name : 'File') . '.' . $ext,
+        'path' => $dir . '/' . basename((string) $stored['url'])];
 }
 
-/** Do the first bytes say this really is an MP3 / M4A / PDF? */
+/** Do the first bytes say this really is an MP3 / M4A / PDF? (A .pptx is opened and its parts checked.) */
 function trainings_sniff(string $path, string $ext): bool
 {
+    if ($ext === 'pptx') {
+        return trainings_pptx_check($path);
+    }
     $h = @fopen($path, 'rb');
     if ($h === false) {
         return false;
@@ -896,6 +923,7 @@ function trainings_sniff_bytes(string $head, string $ext): bool
         'pdf' => str_starts_with($head, '%PDF-'),
         'mp3' => str_starts_with($head, 'ID3') || (strlen($head) >= 2 && ord($head[0]) === 0xFF && (ord($head[1]) & 0xE0) === 0xE0),
         'm4a' => strlen($head) >= 8 && substr($head, 4, 4) === 'ftyp',
+        'pptx' => str_starts_with($head, "PK"),   // the zip magic; trainings_pptx_check() looks inside
         default => false,
     };
 }
@@ -903,7 +931,7 @@ function trainings_sniff_bytes(string $head, string $ext): bool
 /** An uploaded file of ours (random name under /uploads/trainings/), removed from disk. */
 function trainings_forget_file(string $url): void
 {
-    if (!preg_match('#^/uploads/trainings/(\d{8}_[0-9a-f]{16}\.(mp3|m4a|pdf))$#', $url, $m)) {
+    if (!preg_match('#^/uploads/trainings/(\d{8}_[0-9a-f]{16}\.(mp3|m4a|pdf|pptx))$#', $url, $m)) {
         return;
     }
     $path = dirname(__DIR__, 2) . '/uploads/trainings/' . $m[1];
@@ -914,11 +942,68 @@ function trainings_forget_file(string $url): void
 
 function trainings_item_forget_files(array $details): void
 {
-    foreach ([$details['file'] ?? null, $details['pdf'] ?? null, $details['media']['file'] ?? null] as $url) {
+    foreach ([$details['file'] ?? null, $details['pdf'] ?? null, $details['deck'] ?? null, $details['media']['file'] ?? null] as $url) {
         if (is_string($url) && $url !== '') {
             trainings_forget_file($url);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// PowerPoint decks (includes/trainings/pptx.php)
+// ---------------------------------------------------------------------------
+
+/**
+ * Store an uploaded .pptx and read its slides' text.
+ * @return array{ok:bool, details?:array, title?:string, error?:string}
+ */
+function trainings_deck_from_upload(array $file): array
+{
+    $up = trainings_upload($file, 'pptx');
+    if (!$up['ok']) {
+        return ['ok' => false, 'error' => (string) $up['error']];
+    }
+    return ['ok' => true, 'details' => trainings_deck_details((string) $up['path'], (string) $up['url'], (string) $up['name']),
+        'title' => trainings_title_from_file((string) ($file['name'] ?? ''))];
+}
+
+/** A stored deck's details: where it is, its name, how many slides, and their text (never sent to a browser). */
+function trainings_deck_details(string $absPath, string $url, string $name): array
+{
+    $text = trainings_pptx_text($absPath);
+    return ['deck' => $url, 'deck_name' => $name, 'slides' => $text['slides'], 'slides_text' => $text['text']];
+}
+
+/**
+ * "Add slides": one reading item per deck, named from its file, at the end of
+ * the chosen card (the page sends the decks one by one, in name order).
+ * @param array $deck ['details' => trainings_deck_details(), 'title' => …]
+ */
+function trainings_slides_add(PDO $pdo, array $t, int $sectionId, array $deck): array
+{
+    $section = trainings_section_get($pdo, $sectionId);
+    if ($section === null || (int) $section['training_id'] !== (int) $t['id']) {
+        return ['ok' => false, 'message' => 'Choose the card it belongs to.', 'field' => 'section_id'];
+    }
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM training_items WHERE training_id = ?');
+    $stmt->execute([$t['id']]);
+    if ((int) $stmt->fetchColumn() >= TRAININGS_MAX_ITEMS) {
+        return ['ok' => false, 'message' => 'A training holds up to ' . TRAININGS_MAX_ITEMS . ' items.'];
+    }
+    $stmt = $pdo->prepare('SELECT MAX(position) FROM training_items WHERE section_id = ?');
+    $stmt->execute([$sectionId]);
+    $pdo->prepare('INSERT INTO training_items (training_id, section_id, position, type, title, required, details, created_at)
+                   VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
+        ->execute([$t['id'], $sectionId, (int) $stmt->fetchColumn() + 1, 'reading', trainings_text($deck['title'] ?? 'Slides', 160) ?: 'Slides',
+                   trainings_json(['text' => ''] + (array) $deck['details']), trainings_sql_dt()]);
+    return ['ok' => true, 'id' => (int) $pdo->lastInsertId()];
+}
+
+/** An item's details as a page or a JSON reply may carry them: never the slides' text. */
+function trainings_details_for_browser(array $details): array
+{
+    unset($details['slides_text']);
+    return $details;
 }
 
 // ---------------------------------------------------------------------------

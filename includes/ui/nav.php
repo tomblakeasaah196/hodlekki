@@ -306,6 +306,22 @@ function ui_nav_badge_assimilation(PDO $pdo, array $ctx): int
 }
 
 /**
+ * The PHP file behind a menu link, relative to the site root. Links are clean
+ * (bin/clean_urls.sh): /modules/x/ is modules/x/index.php and /auth/login is
+ * auth/login.php. 'when_exists' checks this file, never the bare folder path,
+ * which is_file() would always reject.
+ */
+function ui_nav_href_file(string $href): string
+{
+    $path = (string) parse_url($href, PHP_URL_PATH);
+    if (str_ends_with($path, '/')) {
+        return $path . 'index.php';
+    }
+
+    return pathinfo($path, PATHINFO_EXTENSION) === '' ? $path . '.php' : $path;
+}
+
+/**
  * The navigation this person sees, grouped by section, with badges and the
  * active entry resolved. Shape:
  *   [ ['key' => 'growth', 'label' => 'Growth & Retention', 'items' => [ item + 'active' + 'count' ], …], … ]
@@ -319,7 +335,7 @@ function ui_nav_visible(PDO $pdo, string $currentModule): array
     }
 
     foreach (ui_nav_registry() as $item) {
-        if (!empty($item['when_exists']) && !is_file(dirname(__DIR__, 2) . parse_url($item['href'], PHP_URL_PATH))) {
+        if (!empty($item['when_exists']) && !is_file(dirname(__DIR__, 2) . ui_nav_href_file($item['href']))) {
             continue;
         }
         if (!ui_nav_can_access($item['key'], $ctx)) {

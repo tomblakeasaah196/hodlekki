@@ -77,16 +77,63 @@ function trainings_view_media(?array $media, string $title): string
         . ' referrerpolicy="strict-origin-when-cross-origin"></iframe>';
 }
 
-/** A reading's text: paragraphs, escaped. */
+/**
+ * A PowerPoint deck in the page: Microsoft's Office web viewer, which fetches
+ * the deck from our site by its absolute address (privacy.php says so), plus
+ * a Download button that always works. Only /uploads/trainings/ decks.
+ */
+function trainings_view_deck(string $deckUrl, string $title, string $name = '', int $slides = 0): string
+{
+    if (!preg_match('#^/uploads/trainings/\d{8}_[0-9a-f]{16}\.pptx$#', $deckUrl)) {
+        return '';
+    }
+    $absolute = function_exists('site_url') ? site_url($deckUrl) : $deckUrl;
+    $src = TRAININGS_OFFICE_VIEWER . '?src=' . rawurlencode($absolute);
+    return '<div class="ui-stack ui-stack--sm">'
+        . '<iframe class="w-full aspect-video rounded-xl border-0 bg-surface-sunken" src="' . ui_e($src) . '" title="' . ui_e('Slides: ' . $title) . '"'
+        . ' loading="lazy" allow="fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>'
+        . '<div class="flex flex-wrap items-center gap-2">'
+        . ui_button('Download slides', ['variant' => 'secondary', 'size' => 'sm', 'icon' => 'download', 'href' => $deckUrl,
+            'attrs' => ['download' => $name !== '' ? $name : true]])
+        . ($slides > 0 ? '<span class="ui-meta">' . $slides . ($slides === 1 ? ' slide' : ' slides') . '</span>' : '')
+        . '</div></div>';
+}
+
+/** A reading's text: paragraphs, escaped, with web addresses as links. */
 function trainings_view_text(string $text): string
 {
     $out = '';
     foreach (preg_split("/\n{2,}/", trim($text)) ?: [] as $para) {
         if (trim($para) !== '') {
-            $out .= '<p>' . nl2br(ui_e(trim($para)), false) . '</p>';
+            $out .= '<p>' . nl2br(trainings_view_linkify(trim($para)), false) . '</p>';
         }
     }
     return $out !== '' ? '<div class="ui-prose">' . $out . '</div>' : '';
+}
+
+/**
+ * Escape plain text and turn each http(s) address in it into a link that opens
+ * in a new tab (a free book, an article). Only http and https: anything else
+ * stays text. Trailing punctuation (a full stop, a closing bracket) is not part
+ * of the address.
+ */
+function trainings_view_linkify(string $raw): string
+{
+    $out = '';
+    $pos = 0;
+    if (preg_match_all('~\bhttps?://[^\s<>"\']+~i', $raw, $m, PREG_OFFSET_CAPTURE)) {
+        foreach ($m[0] as [$url, $at]) {
+            $url = rtrim($url, '.,;:!?)]}');
+            if (strlen($url) <= strlen('https://')) {
+                continue;
+            }
+            $out .= ui_e(substr($raw, $pos, $at - $pos))
+                . '<a class="break-all" href="' . ui_e($url) . '" target="_blank" rel="noopener noreferrer nofollow">' . ui_e($url) . '</a>';
+            $pos = $at + strlen($url);
+        }
+    }
+
+    return $out . ui_e(substr($raw, $pos));
 }
 
 /** A learner's status for one item, as a badge. */

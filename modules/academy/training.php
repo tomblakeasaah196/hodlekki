@@ -14,7 +14,7 @@ $ui = [
     'title' => 'Training builder',
     'mode' => 'strict',
     'scripts' => ['/assets/ui/js/pages/academy-training.js'],
-    'csp' => ['frame-src' => TRAININGS_EMBED_HOSTS],
+    'csp' => ['frame-src' => TRAININGS_FRAME_HOSTS],
 ];
 require_once '../../includes/header.php';
 require_can('trainings', 'view', 'church');
@@ -43,7 +43,8 @@ foreach ($sections as $s) {
     foreach ($s['items'] as $i) {
         $missing += $i['needs_content'] ? 1 : 0;
         $itemMap[$i['id']] = ['id' => $i['id'], 'section_id' => $i['section_id'], 'type' => $i['type'], 'title' => $i['title'],
-            'starts_at' => $i['starts_at'], 'minutes' => $i['minutes'], 'required' => $i['required'], 'details' => $i['details']];
+            'starts_at' => $i['starts_at'], 'minutes' => $i['minutes'], 'required' => $i['required'],
+            'details' => trainings_details_for_browser($i['details'])];
     }
 }
 $statusTone = ['published' => 'success', 'draft' => 'neutral', 'archived' => 'warning'];
@@ -122,12 +123,22 @@ if ($canEdit && $t['status'] !== 'published') {
 <?php endif; ?>
                     </span>
                 </li>
+<?php if ($i['type'] === 'reading' && !empty($i['details']['deck'])): ?>
+                <li class="ui-list__item block">
+                    <details>
+                        <summary class="ui-meta cursor-pointer">Show slides</summary>
+                        <div class="pt-3"><?= trainings_view_deck((string) $i['details']['deck'], $i['title'], (string) ($i['details']['deck_name'] ?? ''),
+                            (int) ($i['details']['slides'] ?? 0)) ?></div>
+                    </details>
+                </li>
+<?php endif; ?>
 <?php endforeach; ?>
             </ul>
 <?php endif; ?>
 <?php if ($canEdit): ?>
-            <div class="ui-card__footer">
+            <div class="ui-card__footer flex flex-wrap gap-2">
                 <?= ui_button('Add item', ['variant' => 'soft', 'size' => 'sm', 'icon' => 'plus', 'attrs' => ['data-action' => 'trb.item', 'data-section' => $s['id']]]) ?>
+                <?= ui_button('Add slides', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'upload', 'attrs' => ['data-action' => 'trb.slides', 'data-section' => $s['id']]]) ?>
             </div>
 <?php endif; ?>
         </section>
@@ -253,7 +264,7 @@ if ($canEdit && $t['status'] !== 'published') {
         <?= ui_field('select', ['name' => 'type', 'id' => 'trb-type', 'label' => 'Kind', 'required' => true,
             'options' => array_intersect_key(TRAININGS_ITEM_TYPES, array_flip(trainings_builder_types())), 'attrs' => ['data-action-change' => 'trb.itemType']]) ?>
         <?= ui_field('text', ['name' => 'title', 'id' => 'trb-title', 'label' => 'Name', 'required' => true, 'attrs' => ['maxlength' => 160]]) ?>
-        <?= ui_field('select', ['name' => 'section_id', 'id' => 'trb-section', 'label' => 'Card', 'required' => true,
+        <?= ui_field('select', ['name' => 'section_id', 'id' => 'trb-item-section', 'label' => 'Card', 'required' => true,
             'options' => array_column(array_filter($sections, static fn ($s) => (int) $s['id'] > 0), 'title', 'id'), 'attrs' => ['data-action-change' => 'trb.itemType']]) ?>
         <?= ui_field('date', ['name' => 'date', 'id' => 'trb-date', 'label' => 'Day', 'class' => 'trb-when-week', 'optional' => true]) ?>
         <?= ui_field('time', ['name' => 'time', 'id' => 'trb-time', 'label' => 'Time', 'class' => 'trb-when', 'optional' => true]) ?>
@@ -291,6 +302,10 @@ if ($canEdit && $t['status'] !== 'published') {
         <?= ui_field('textarea', ['name' => 'text', 'id' => 'trb-text', 'label' => 'Text', 'optional' => true, 'attrs' => ['rows' => 8, 'maxlength' => 20000]]) ?>
         <?= ui_field('file', ['name' => 'pdf_file', 'id' => 'trb-pdf', 'label' => 'PDF', 'optional' => true, 'hint' => 'Up to 20 MB.', 'attrs' => ['accept' => '.pdf,application/pdf']]) ?>
         <label class="ui-check" data-trb-current="pdf" hidden><input type="checkbox" name="remove_pdf" value="1"><span>Remove the PDF<span class="ui-check__hint" data-trb-current-name></span></span></label>
+        <?= ui_field('file', ['name' => 'pptx_file', 'id' => 'trb-pptx', 'label' => 'PowerPoint', 'optional' => true, 'hint' => '.pptx, up to 30 MB.',
+            'info' => 'Learners see the slides in the page (through Microsoft\'s Office viewer) and can download them.',
+            'attrs' => ['accept' => '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation']]) ?>
+        <label class="ui-check" data-trb-current="deck" hidden><input type="checkbox" name="remove_deck" value="1"><span>Remove the slides<span class="ui-check__hint" data-trb-current-name></span></span></label>
     </fieldset>
 
     <fieldset class="ui-fieldset" data-trb-type="exam" hidden>
@@ -322,6 +337,21 @@ if ($canEdit && $t['status'] !== 'published') {
 </form>
 <?= ui_dialog_end(ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
     . ui_button('Save item', ['variant' => 'primary', 'type' => 'submit', 'attrs' => ['form' => 'trb-item-form']])) ?>
+
+<?= ui_dialog_start('trb-slides', ['title' => 'Add slides', 'description' => 'One reading per PowerPoint, in name order.']) ?>
+<form id="trb-slides-form" class="ui-form" data-action="trb.slidesSave" novalidate>
+    <input type="hidden" name="training_id" value="<?= $tid ?>">
+    <?= ui_field('select', ['name' => 'section_id', 'id' => 'trb-slides-section', 'label' => 'Card', 'required' => true,
+        'options' => array_column(array_filter($sections, static fn ($s) => (int) $s['id'] > 0), 'title', 'id')]) ?>
+    <?= ui_field('file', ['name' => 'decks', 'id' => 'trb-slides-files', 'label' => 'PowerPoint files', 'required' => true, 'hint' => '.pptx, up to 30 MB each.',
+        'info' => 'Each file becomes one reading, named from its file name, added at the end of the card in name order (Day 1, Day 2 …).',
+        'attrs' => ['multiple' => true, 'accept' => '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'data-action-change' => 'trb.slidesPick']]) ?>
+    <ol class="ui-stack ui-stack--sm list-decimal pl-5 text-sm text-ink" data-trb-slides-list></ol>
+    <p class="ui-meta" data-trb-slides-progress aria-live="polite"></p>
+</form>
+<?= ui_dialog_end(ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
+    . ui_button('Add slides', ['variant' => 'primary', 'type' => 'submit', 'icon' => 'upload', 'attrs' => ['form' => 'trb-slides-form']])) ?>
 
 <?= ui_dialog_start('trb-section', ['title' => 'Edit card', 'size' => 'sm']) ?>
 <form id="trb-section-form" class="ui-form" data-action="trb.sectionSave" data-ui-validate novalidate>
