@@ -155,6 +155,7 @@ here builds SMTP settings in code.
 | `email/c.php` | A tracked link: records the click and redirects only to a target stored with that email (never an open redirect); anything unknown goes home. |
 | `email/o.php` | The open pixel (campaigns that ask for it only): counted once, always a 1×1 GIF. |
 | `auth/reset_password.php` | The reset link's page: new password, the one policy, every session signed out. |
+| `modules/profile/index.php` | The **Your email** card (`includes/campaigns/profile_card.php`, engine in `profile.php`, actions `email_*` in `api/profile_api.php`): the confirmed address, a waiting one (Resend, or drop it), Change email (the new address waits beside the old; mail keeps going to the confirmed one until its link is tapped), and the **Church news** switch. The switch writes the consent log (method `profile`; switching on records the wording beside it). Profile no longer saves `users.real_email` as a free field. |
 
 All four are **standalone strict pages** (`includes/ui/standalone.php`): the
 foundation's tokens, components, `ui.js` and strict CSP, one centred card,
@@ -195,7 +196,8 @@ never undoes an unsubscribe.
 church messages come with membership, with one-tap unsubscribe in every email.
 `email_may_send_news()` allows them with a confirmed address unless they
 withdrew or unsubscribed; visitors still need the box. The sign-in prompt and
-Profile show no news box.
+Profile show no news box; Profile's switch is how anyone turns church news
+off or back on (a visitor turning it on is a "yes").
 
 **Referrer-Policy:** never `no-referrer` on a folder whose pages post their own
 CSRF-checked forms: browsers then send `Origin: null` and `csrf_same_origin()`
