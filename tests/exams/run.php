@@ -94,6 +94,11 @@ function et_db(): PDO
             $pdo->exec($ix);
         }
     }
+    $alters = (string) file_get_contents(__DIR__ . '/../../db/migrations/20261209090100_trainings_exams_review.sql');
+    preg_match_all("/'ALTER TABLE (\\w+) ADD COLUMN ([^']+)'/", $alters, $am, PREG_SET_ORDER);
+    foreach ($am as [, $table, $col]) {
+        $pdo->exec("ALTER TABLE {$table} ADD COLUMN " . preg_replace('/\\b(DATETIME|INT)\\b/', 'TEXT', $col));
+    }
     foreach ([
         'CREATE TABLE users (id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, spiritual_status TEXT)',
         'CREATE TABLE system_notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT, message TEXT, link_url TEXT)',
@@ -504,7 +509,8 @@ et_ok('start: the paper, and nothing about which answer is right',
 et_eq('answer through the API', 'success', exams_action($p, 'answer', ['item' => 100, 'n' => 1, 'chosen' => [0]], 2)['status']);
 $p->exec("INSERT INTO training_progress (enrolment_id, item_id, status, completed_at, data) VALUES (1, 101, 'completed', '2027-02-01 08:00:00', '{\"by\":\"self\"}')");
 $handed = exams_action($p, 'submit', ['item' => 100], 2);
-et_eq('hand in: the result, no window close so the review is open', ['done', 100, true], [$handed['state'], (int) $handed['result']['percent'], $handed['result']['review_open']]);
+et_eq('hand in: the result; no closing time and no end date, so the answers wait for the tutor', ['done', 100, false, 'tutor'],
+    [$handed['state'], (int) $handed['result']['percent'], $handed['result']['review_open'], $handed['result']['review_when']]);
 $prog = $p->query('SELECT status, data, updated_at FROM training_progress WHERE enrolment_id = 1 AND item_id = 100')->fetch();
 et_eq('PR 1: progress written through trainings_progress_put() (completed, passed, with updated_at)', ['completed', true, true],
     [$prog['status'] ?? null, json_decode((string) ($prog['data'] ?? ''), true)['passed'] ?? null, !empty($prog['updated_at'])]);
@@ -538,6 +544,49 @@ preg_match_all("/call\\('([a-z_]+)'|action: '([a-z_]+)'/", $js, $m);
 $calls = array_values(array_unique(array_filter(array_merge($m[1], $m[2]))));
 et_eq('every action the script calls exists in exams_action() (' . count($calls) . ')', [],
     array_values(array_filter($calls, static fn ($a) => !str_contains($acts, "case '{$a}':"))));
+
+// ===========================================================================
+et_section('10. When the answers show (nobody still to sit it can be helped)');
+// ===========================================================================
+$r = et_db();
+$GLOBALS['et_grants'] = array_merge(['trainings:edit:"church"'], $learners);
+et_at('2027-03-01 09:00');
+$rq = exam_question_save($r, null, 10, ['qtype' => 'true_false', 'body' => 'Is the sky green?', 'correct_text' => 'False', 'explanation' => 'It is blue.', 'status' => 'approved'], 1);
+$rset = static fn (array $over) => exam_save($r, exam_item($r, 100), $over + ['window_open' => '', 'window_close' => '', 'minutes' => 10, 'pass_percent' => 50,
+    'shuffle' => 0, 'leave_alert' => 3, 'question_ids' => [$rq['id']]], 1)['exam'];
+$ex = $rset(['window_close' => '2027-03-05T12:00']);
+$state = static fn (string $at) => exam_review_state($r, exam_get($r, 100), exams_dt($at));
+et_eq('a closing time: hidden before it, with when', [false, 'close', '2027-03-05 12:00:00'], array_values($state('2027-03-05 11:59')));
+et_eq('…shown from it', true, $state('2027-03-05 12:00')['open']);
+$ex = $rset(['window_close' => '']);
+$r->exec("UPDATE trainings SET ends_on = '2027-03-10' WHERE id = 10");
+et_eq('no closing time but an end date: hidden until the day after it', [false, 'end', '2027-03-11 00:00:00'], array_values($state('2027-03-10 23:59')));
+et_eq('…shown from then', true, $state('2027-03-11 00:00')['open']);
+$r->exec('UPDATE trainings SET ends_on = NULL WHERE id = 10');
+et_eq('neither (self-paced): hidden until a tutor shows them, with no date to give', [false, 'tutor', null], array_values($state('2030-01-01 00:00')));
+// Ada sits it and gets it wrong.
+$a = exam_start($r, exam_get($r, 100), 2)['attempt'];
+exam_answer($r, $a, 1, [0]);
+exam_submit($r, $a['id'], 'learner');
+$res = exams_action($r, 'take', ['item' => 100], 2)['result'];
+et_eq('her result: the score, how many wrong, no answers, and why not yet', [0, 1, [], 'tutor', null],
+    [(int) $res['percent'], $res['wrong_count'], $res['wrong'], $res['review_when'], $res['review_at']]);
+$GLOBALS['et_grants'] = $learners;
+et_eq('a learner cannot press the switch', 'FORBIDDEN', exams_action($r, 'answers', ['item' => 100, 'show' => 1], 2)['code'] ?? null);
+$GLOBALS['et_grants'] = array_merge(['trainings:edit:"church"'], $learners);
+$shown = exams_action($r, 'answers', ['item' => 100, 'show' => 1], 1);
+et_eq('the tutor shows the answers', ['success', true, 'shown'], [$shown['status'], $shown['review']['open'], $shown['review']['when']]);
+$res = exams_action($r, 'take', ['item' => 100], 2)['result'];
+et_eq('…now she sees the right answer and the explanation for the one she got wrong', [true, 'False', 'It is blue.'],
+    [$res['review_open'], $res['wrong'][0]['right'] ?? null, $res['wrong'][0]['explanation'] ?? null]);
+et_eq('…and who showed them is kept', 1, exam_get($r, 100)['answers_shown_by']);
+exams_action($r, 'answers', ['item' => 100, 'show' => 0], 1);
+et_eq('hiding them again goes back to the rule', [false, 'tutor'], [$state('2027-03-02 09:00')['open'], $state('2027-03-02 09:00')['when']]);
+$rset(['window_close' => '2027-06-01T12:00']);
+exam_show_answers($r, exam_get($r, 100), true, 1);
+et_eq('a tutor may also show them before the closing time', [true, 'shown'], [$state('2027-03-02 09:00')['open'], $state('2027-03-02 09:00')['when']]);
+$intro = exams_take_view($r, exam_item($r, 100), 3);
+et_eq('the learner sees when answers show before starting', ['ready', 'shown', true], [$intro['state'], $intro['review']['when'], $intro['review']['open']]);
 
 exams_set_clock(false);
 echo PHP_EOL . $GLOBALS['et_passed'] . ' passed, ' . $GLOBALS['et_failed'] . ' failed' . PHP_EOL;

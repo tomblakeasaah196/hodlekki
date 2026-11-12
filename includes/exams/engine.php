@@ -18,7 +18,7 @@
 //   - marking happens on the server, once, when the attempt ends; several-
 //     answer questions earn part marks only when the exam says so;
 //   - afterwards a person sees their score, and — for the questions they got
-//     wrong, once the exam has closed — the right answer and the stored
+//     wrong, once nobody can still be helped by them (exam_review_state()) — the right answer and the stored
 //     explanation. Nothing calls the AI while marking.
 // Exams hang off PR 1's training items (type 'exam'); exam_progress_hook()
 // tells PR 1's training_progress when someone has finished.
@@ -55,6 +55,9 @@ function exam_decode(array $row): array
     foreach (['id', 'item_id', 'training_id', 'minutes', 'pass_percent', 'shuffle', 'part_marks', 'leave_alert', 'created_by', 'updated_by'] as $k) {
         $row[$k] = $row[$k] === null ? null : (int) $row[$k];
     }
+    // The tutor's "Show answers" switch (migration 20261209090100; absent before it runs).
+    $row['answers_shown_at'] = $row['answers_shown_at'] ?? null;
+    $row['answers_shown_by'] = isset($row['answers_shown_by']) ? (int) $row['answers_shown_by'] : null;
     $row['question_ids'] = array_values(array_map('intval', json_decode((string) $row['question_ids_json'], true) ?: []));
     unset($row['question_ids_json']);
     return $row;
@@ -199,10 +202,45 @@ function exam_window(array $exam, DateTimeImmutable $now): string
     return 'open';
 }
 
-/** The right answers and explanations may be shown once nobody can still be taking it. */
-function exam_review_open(array $exam, DateTimeImmutable $now): bool
+/**
+ * When a learner may see the right answers and explanations for the
+ * questions they got wrong: only once nobody can still be helped by them.
+ *   shown  a tutor pressed Show answers (answers_shown_at), at any time;
+ *   close  the exam has a closing time: from then;
+ *   end    no closing time, but the training has an end date: the day after it;
+ *   tutor  neither (self-paced): only when a tutor shows them.
+ * ("Once everyone enrolled has sat it" was left out: someone enrolling later
+ * would reopen the leak.)
+ *
+ * @return array{open:bool, when:string, at:?string}
+ */
+function exam_review_state(PDO $pdo, array $exam, ?DateTimeImmutable $now = null): array
 {
-    return $exam['window_close'] === null || $now >= exams_dt((string) $exam['window_close']);
+    $now ??= exams_now();
+    if (!empty($exam['answers_shown_at'])) {
+        return ['open' => true, 'when' => 'shown', 'at' => (string) $exam['answers_shown_at']];
+    }
+    if ($exam['window_close'] !== null) {
+        return ['open' => $now >= exams_dt((string) $exam['window_close']), 'when' => 'close', 'at' => (string) $exam['window_close']];
+    }
+    $ends = null;
+    if (exams_table_exists($pdo, 'trainings')) {
+        $stmt = $pdo->prepare('SELECT ends_on FROM trainings WHERE id = ?');
+        $stmt->execute([(int) $exam['training_id']]);
+        $ends = $stmt->fetchColumn() ?: null;
+    }
+    if ($ends !== null && preg_match('/^\d{4}-\d{2}-\d{2}/', (string) $ends)) {
+        $from = exams_dt(substr((string) $ends, 0, 10) . ' 00:00:00')->modify('+1 day');
+        return ['open' => $now >= $from, 'when' => 'end', 'at' => exams_sql_dt($from)];
+    }
+    return ['open' => false, 'when' => 'tutor', 'at' => null];
+}
+
+/** The tutor's switch: show the answers to everyone who has finished (or hide them again). */
+function exam_show_answers(PDO $pdo, array $exam, bool $show, int $actor): void
+{
+    $pdo->prepare('UPDATE training_exams SET answers_shown_at = ?, answers_shown_by = ? WHERE id = ?')
+        ->execute([$show ? exams_sql_dt(exams_now()) : null, $show ? $actor : null, (int) $exam['id']]);
 }
 
 // ---------------------------------------------------------------------------
@@ -597,13 +635,14 @@ function exam_tell_tutors(PDO $pdo, array $exam, array $attempt, int $leaves): v
 
 /**
  * What a person sees after their exam: the score, and for the questions
- * they got wrong (once the exam has closed) the right answer and the stored
- * explanation.
+ * they got wrong (once exam_review_state() opens the review) the right
+ * answer and the stored explanation; until then, when that will be.
  */
 function exam_result_for_learner(PDO $pdo, array $exam, array $attempt, ?DateTimeImmutable $now = null): array
 {
     $now ??= exams_now();
-    $open = exam_review_open($exam, $now);
+    $review = exam_review_state($pdo, $exam, $now);
+    $open = $review['open'];
     $wrong = [];
     $count = 0;
     foreach (exam_attempt_rows($pdo, (int) $attempt['id']) as $r) {
@@ -625,7 +664,7 @@ function exam_result_for_learner(PDO $pdo, array $exam, array $attempt, ?DateTim
         'score' => $attempt['score'], 'max' => $attempt['max_score'], 'percent' => $attempt['percent'],
         'passed' => (bool) $attempt['passed'], 'pass_percent' => (int) $exam['pass_percent'],
         'questions' => $count, 'wrong_count' => count($wrong), 'review_open' => $open,
-        'review_at' => $open ? null : (string) $exam['window_close'], 'wrong' => $open ? $wrong : [],
+        'review_when' => $review['when'], 'review_at' => $open ? null : $review['at'], 'wrong' => $open ? $wrong : [],
     ];
 }
 

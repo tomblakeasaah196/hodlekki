@@ -39,7 +39,7 @@ echo ui_json_script('exams-config', ['page' => 'bank', 'training_id' => $bank['i
     <?= ui_page_header([
         'title' => 'Question bank',
         'description' => 'Questions for your exams.',
-        'info' => 'Three kinds of question: one answer, several answers, and true/false. Write them here, or download the Excel template, fill it in and import it: every row is checked before anything is added, and importing the same file again adds nothing twice. Only questions marked Ready can go in an exam. The explanation is shown only to people who get a question wrong, after the exam closes.',
+        'info' => 'Three kinds of question: one answer, several answers, and true/false. Write them here, or download the Excel template, fill it in and import it: every row is checked before anything is added, and importing the same file again adds nothing twice. Only questions marked Ready can go in an exam. The explanation is shown only to people who get a question wrong, once the answers are shown.',
         'actions' => ui_button('Template', ['variant' => 'ghost', 'icon' => 'download', 'href' => '/api/exams_api.php?action=template'])
             . ui_button('Import', ['variant' => 'secondary', 'icon' => 'upload', 'attrs' => ['data-action' => 'ex.import-open']])
             . ui_button('Add question', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-action' => 'ex.add']]),
@@ -70,7 +70,7 @@ echo ui_json_script('exams-config', ['page' => 'bank', 'training_id' => $bank['i
                 <?= ui_field('text', ['name' => 'topic', 'id' => 'ex-q-topic', 'label' => 'Topic', 'optional' => true, 'attrs' => ['maxlength' => 120]]) ?>
             </div>
             <?= ui_field('textarea', ['name' => 'explanation', 'id' => 'ex-q-expl', 'label' => 'Explanation', 'optional' => true,
-                'info' => 'Shown only to people who get this wrong, after the exam closes. Say why the answer is right.', 'attrs' => ['rows' => 3, 'maxlength' => 2000]]) ?>
+                'info' => 'Shown only to people who get this wrong, once the answers are shown (see the exam\'s set-up). Say why the answer is right.', 'attrs' => ['rows' => 3, 'maxlength' => 2000]]) ?>
             <label class="ui-check"><input type="checkbox" name="ready" value="1"><span>Ready to use</span></label>
             <p class="ui-meta" data-ex-q-locked hidden>Used in an exam: only the explanation and topic can change.</p>
         </form>

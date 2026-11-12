@@ -246,6 +246,7 @@
                 (chosen.indexOf(q.id) !== -1 ? ' checked' : '') + ' data-action-change="ex.total"><span><span class="whitespace-pre-line">' + esc(q.text) + '</span>' +
                 '<span class="ui-check__hint">' + esc([q.type_label, plural(q.marks, 'mark', 'marks'), q.topic, q.shared ? 'Shared bank' : ''].filter(Boolean).join(' · ')) + '</span></span></label>';
         }).join('') : '<p class="ui-meta">No Ready questions yet. Add some in the question bank and mark them Ready.</p>';
+        reviewSetup(v.review);
         var locked = v.started > 0;
         one('[data-ex-locked]').innerHTML = locked
             ? '<div class="ui-banner ui-banner--info mb-4" role="status">' + HOD.icon('info') + '<div class="ui-banner__body"><p class="ui-banner__text">' +
@@ -254,6 +255,43 @@
         all('[data-ex-pool] input, #ex-exam-form [name="minutes"], #ex-exam-form [name="pass_percent"], #ex-exam-form [name="shuffle"], #ex-exam-form [name="part_marks"]')
             .forEach(function (i) { i.disabled = locked; });
         total();
+    }
+
+    /** The set-up's Answers line and switch. */
+    function reviewSetup(r) {
+        var line = one('[data-ex-review]');
+        var btn = one('[data-ex-answers]');
+        if (!r) {
+            line.textContent = 'Save the exam first.';
+            btn.hidden = true;
+            return;
+        }
+        var text = {
+            shown: 'Shown since ' + when(r.at) + '.',
+            close: (r.open ? 'Shown since ' : 'Shown from ') + when(r.at) + ', when it closes.',
+            end: (r.open ? 'Shown since ' : 'Shown from ') + when(r.at) + ', after the training ends.',
+            tutor: 'Hidden until you show them.'
+        };
+        line.textContent = text[r.when] || '';
+        var shown = r.when === 'shown';
+        btn.hidden = r.open && !shown;
+        btn.setAttribute('data-show', shown ? '0' : '1');
+        btn.querySelector('span').textContent = shown ? 'Hide answers' : 'Show answers';
+    }
+
+    function answers(btn) {
+        var show = btn.getAttribute('data-show') === '1';
+        var ask = show
+            ? HOD.confirm({ title: 'Show the answers?', message: 'Everyone who has finished sees the right answers to the ones they got wrong. Anyone still to sit it could be told them.', confirmLabel: 'Show' })
+            : Promise.resolve(true);
+        ask.then(function (yes) {
+            if (!yes) return;
+            HOD.busy(btn, true);
+            call('answers', { item: cfg.item, show: show ? 1 : 0 }).then(function (res) {
+                fillSetup(res);
+                HOD.toast(res.message, 'success');
+            }).catch(function () {}).finally(function () { HOD.busy(btn, false); });
+        });
     }
 
     function total() {
@@ -361,6 +399,13 @@
 
     var take = { view: null, deadline: 0, timer: null, ending: false };
 
+    /** "after the exam closes, Fri 20 Nov, 12:00" and the like. */
+    function reviewWhen(kind, at) {
+        if (kind === 'close') return 'after the exam closes, ' + when(at);
+        if (kind === 'end') return 'after the training ends, ' + when(at);
+        return 'once your tutor releases them';
+    }
+
     function clock() {
         var left = Math.max(0, Math.round((take.deadline - Date.now()) / 1000));
         var m = Math.floor(left / 60), s = left % 60;
@@ -392,6 +437,8 @@
                 '<div><dt class="ui-meta">Minutes</dt><dd class="text-xl font-semibold">' + v.minutes + '</dd></div>' +
                 '<div><dt class="ui-meta">To pass</dt><dd class="text-xl font-semibold">' + v.pass_percent + '%</dd></div></dl>' +
                 '<p>' + esc(line) + ' One attempt; the clock starts when you press Start.</p>' +
+                (v.review ? '<p class="ui-meta">' + esc(v.review.open ? 'Answers to any you get wrong show right after.'
+                    : 'Answers to any you get wrong show ' + reviewWhen(v.review.when, v.review.at) + '.') + '</p>' : '') +
                 (v.window === 'open' ? '<div><button type="button" class="ui-btn ui-btn--primary" data-action="ex.start"><span>Start</span></button></div>' : '') +
                 '</div></section>';
             return;
@@ -485,7 +532,7 @@
         if (r.wrong_count === 0) {
             body = '<p class="mt-4 text-center">Every answer right. Well done.</p>';
         } else if (!r.review_open) {
-            body = '<p class="mt-4 text-center">' + esc(plural(r.wrong_count, 'answer was', 'answers were') + ' not right. The right answers and why appear here after the exam closes, ' + when(r.review_at) + '.') + '</p>';
+            body = '<p class="mt-4 text-center">' + esc(plural(r.wrong_count, 'answer was', 'answers were') + ' not right. The right answers and why show here ' + reviewWhen(r.review_when, r.review_at) + '.') + '</p>';
         } else {
             body = '<h2 class="ui-h3 mt-6 mb-2">To learn from</h2><ol class="ui-stack">' + r.wrong.map(function (w) {
                 return '<li class="ui-card"><div class="ui-card__body"><p class="ui-meta">Question ' + w.n + (w.part ? ' · ' + w.part + ' of ' + w.marks + ' marks' : '') + '</p>' +
@@ -527,6 +574,7 @@
             HOD.actions.on('ex.results', results);
             HOD.actions.on('ex.attempt', attempt);
             HOD.actions.on('ex.end', endAttempt);
+            HOD.actions.on('ex.answers', answers);
             loadSetup().then(function () { results(); }).catch(function () {});
             document.addEventListener('ui:tab', function (e) { if (e.detail && e.detail.tab === 'results') results(); });
         } else if (cfg.page === 'take') {

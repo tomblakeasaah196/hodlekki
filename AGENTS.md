@@ -1060,7 +1060,8 @@ Guide and contracts: `docs/EXAMS.md`. Code: `includes/exams/` (entry
   on the server at Start; marking happens on the server, once, in
   `exam_submit()`. Never send `correct_json` or an explanation to a learner
   before they have handed in; after, only for the questions they got wrong,
-  once the exam has closed.
+  once `exam_review_state()` opens (the closing time; else the day after the
+  training ends; else a tutor's Show answers).
 - Marking never calls the AI (explanations are stored per question).
 - Access: tutors `can('trainings', 'edit', 'church')` (PR 1's staff check);
   learners their own records and an enrolment. Decided only in

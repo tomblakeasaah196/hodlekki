@@ -104,6 +104,7 @@ function exams_setup_view(PDO $pdo, array $item): array
         'exam' => $exam,
         'started' => $exam !== null ? exam_attempt_count($pdo, (int) $exam['id']) : 0,
         'window' => $exam !== null ? exam_window($exam, $now) : 'not_set',
+        'review' => $exam !== null ? exam_review_state($pdo, $exam, $now) : null,
         'pool' => array_map(static fn ($q) => exams_question_row($q) + ['shared' => $q['training_id'] === null], $pool),
     ];
 }
@@ -124,6 +125,7 @@ function exams_take_view(PDO $pdo, array $item, int $userId): array
         'opens' => $exam['window_open'], 'closes' => $exam['window_close'],
         'minutes' => $exam['minutes'], 'questions' => count($exam['question_ids']), 'pass_percent' => $exam['pass_percent'],
         'part_marks' => (bool) $exam['part_marks'],
+        'review' => exam_review_state($pdo, $exam, $now),
     ];
     if ($attempt === null) {
         return $view + ['state' => 'ready'];
@@ -226,7 +228,7 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
     if ($item === null) {
         return $fail('That exam no longer exists.', [], 'NOT_FOUND');
     }
-    $tutor = in_array($do, ['setup', 'exam_save', 'results', 'attempt', 'end_attempt'], true);
+    $tutor = in_array($do, ['setup', 'exam_save', 'answers', 'results', 'attempt', 'end_attempt'], true);
     if ($tutor && !exams_may_manage($pdo, (int) $item['training_id'])) {
         return $forbidden();
     }
@@ -238,6 +240,14 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
             $r = exam_save($pdo, $item, $in, $me);
             return $r['ok'] ? ['status' => 'success', 'message' => 'Exam saved.'] + exams_setup_view($pdo, $item)
                             : $fail(implode(' ', array_slice($r['errors'], 0, 3)), $r['errors']);
+
+        case 'answers':
+            $exam = exam_get($pdo, (int) $item['id']);
+            if ($exam === null) {
+                return $fail('Set the exam up first.');
+            }
+            exam_show_answers($pdo, $exam, !empty($in['show']), $me);
+            return ['status' => 'success', 'message' => !empty($in['show']) ? 'Answers shown.' : 'Answers hidden.'] + exams_setup_view($pdo, $item);
 
         case 'results':
             $exam = exam_get($pdo, (int) $item['id']);
