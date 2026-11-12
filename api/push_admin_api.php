@@ -11,15 +11,16 @@
  * reach the whole congregation, so it has its own gate and its own file
  * rather than a second branch inside a member endpoint.
  *
- * Auth: Super Admin or Resident Pastor, checked against the live roles table
- * through security_is_admin() — not $_SESSION['active_role'], which the member
- * can switch themselves.
+ * Auth: the 'alerts' row of Roles & permissions, read live from the database
+ * (never the session's switchable role). View reads the health panel; Manage
+ * sends broadcasts and flips the switches. Writes need the CSRF token.
  * ============================================================================
  */
 
 require_once '../includes/db.php';
 require_once '../includes/push_helpers.php';
 require_once '../includes/security_helpers.php';
+csrf_require();
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id'])) {
@@ -31,6 +32,7 @@ $user_id = (int) $_SESSION['user_id'];
 
 if (!can('alerts', 'view')
     || (in_array($_POST['action'] ?? $_GET['action'] ?? '', ['set_switch', 'broadcast'], true) && !can('alerts', 'manage'))) {
+    http_response_code(403);
     echo json_encode([
         'status'  => 'error',
         'message' => 'The Alerts Centre is not open to you.',

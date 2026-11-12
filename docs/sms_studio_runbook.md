@@ -3,8 +3,14 @@
 Written after the 2026-10-21 audit (branch `claude/sms-cron-audit-r4yh04`),
 when "Background sender stopped · last run 2 days ago" turned out to be a
 crontab that had lost every hodlekki line. Everything below is what to check
-**before** pressing *Send Campaign* on a large audience, and what to expect
+**before** pressing *Send campaign* on a large audience, and what to expect
 while it runs.
+
+Since 12 Nov 2026 the page is on the UI foundation (strict CSP; the behaviour is
+`assets/ui/js/pages/sms-studio.js`, every request still the same to
+`api/sms_api.php`). The tabs are Compose, Campaigns, History, **Blocked** (was
+Suppression; `?tab=suppression` still opens it) and Settings; longer help sits
+behind the (i) buttons.
 
 ## 1. The cron job (the sender)
 
@@ -68,7 +74,7 @@ and `/home/smartqaq/sms_worker.log`), and **running**.
 
 ## 4. Before the campaign
 
-1. **Suppression tab**: review the list. Numbers there get nothing (₦0). Release anyone who should receive this send. The confirm dialog also counts how many of the selected numbers are suppressed. A number is suppressed automatically after three carrier failures in a row, and a DND refusal on the default route counts as one, so people blocked only by DND end up here over time.
+1. **Blocked tab** (it was called Suppression): review the list. Numbers there get nothing (₦0). Release anyone who should receive this send. The confirm dialog also counts how many of the selected numbers are suppressed. A number is suppressed automatically after three carrier failures in a row, and a DND refusal on the default route counts as one, so people blocked only by DND end up here over time.
 2. **Campaigns tab**: nothing should be *Queued* or *Sending* from earlier — the worker sends in id order, so old rows go out first and spend the wallet.
 3. **Audience**: pick it, *Select shown*, and read the info line: valid numbers, invalid left out, shared numbers merged, numbers left out (opted out / marked invalid).
 4. **Message**: keep the rendered text (with the `HODLEKKI: ` prefix, which the preview shows) under 160 GSM-7 characters for one page. The counter warns when the prefix pushes someone onto a second page. The naira sign `₦`, emoji and a few symbols switch a text to Unicode (70 characters per page, about three times the bill); write `NGN` or `N` instead.
@@ -91,4 +97,4 @@ and `/home/smartqaq/sms_worker.log`), and **running**.
 - History → filter **Failed**: a DND-active number on the default route shows as failed and its unit is refunded by BulkSMS (the Studio shows the cost at submission; the wallet is the authoritative figure). Those people can only be reached through the corporate route.
 - *Resend* on a single message is for failed rows. A *Submitted · awaiting report* row was already accepted by BulkSMS (its ID is in the row): resending it sends and bills it again, so the Studio asks first; use *Check delivery now* instead. An *Outcome unknown* row asks for confirmation because the message may already have gone out.
 - If the worker ever shows **Paused: BulkSMS refused N messages in a row**, the cause is systemic (API token, sender ID, account standing). Fix it in Settings or on the BulkSMS account; the held-back rows are tried again every five minutes on their own.
-- After three carrier failures in a row a number is auto-suppressed; check the Suppression tab after a large send and release numbers that were only DND-blocked if the corporate route becomes available.
+- After three carrier failures in a row a number is auto-suppressed; check the Blocked tab after a large send and release numbers that were only DND-blocked if the corporate route becomes available.

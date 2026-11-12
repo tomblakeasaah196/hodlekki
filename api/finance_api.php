@@ -1,22 +1,41 @@
 <?php
 // /api/finance_api.php
+//
+// Finance & stewardship (modules/finance/index.php, assets/ui/js/pages/finance.js).
+// Access: the 'finance' row of Roles & permissions. View reads, Create logs a
+// transaction, Edit changes the setup (accounts, funds, categories), Delete
+// removes a transaction or a setup row.
 
 require_once '../includes/db.php';
+csrf_require();
 header('Content-Type: application/json');
 
-// 1. Core Security & Session Check
-if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['status' => 'error', 'message' => 'Unauthorized access. Please log in.']);
-    exit;
-}
-
-$user_id = $_SESSION['user_id'];
+$user_id = $_SESSION['user_id'] ?? null;
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
-// 2. Finance: the 'finance' row of the permission matrix.
-if (!can('finance', 'view')) {
-    echo json_encode(['status' => 'error', 'message' => 'Access Denied. Financial module is highly restricted.']);
-    exit;
+api_require_can('finance', 'view');
+$levels = [
+    'save_transaction' => 'create',
+    'delete_transaction' => 'delete',
+    'save_account' => 'edit',
+    'save_fund' => 'edit',
+    'save_category' => 'edit',
+    'delete_account' => 'delete',
+    'delete_fund' => 'delete',
+    'delete_category' => 'delete',
+];
+if (isset($levels[$action])) {
+    api_require_can('finance', $levels[$action]);
+}
+
+/** A stored receipt path as a link the page may open: our own uploads folder only. */
+function finance_receipt_href(?string $stored): ?string
+{
+    if ($stored === null || !preg_match('#^(?:\.\./)*/?uploads/finance/([A-Za-z0-9._-]+)$#', $stored, $m) || str_contains($m[1], '..')) {
+        return null;
+    }
+
+    return '/uploads/finance/' . $m[1];
 }
 
 try {
@@ -42,6 +61,10 @@ try {
                 ORDER BY t.transaction_date DESC, t.id DESC
                 LIMIT 100
             ")->fetchAll();
+            foreach ($transactions as &$tx) {
+                $tx['receipt_href'] = finance_receipt_href($tx['receipt_url'] ?? null);
+            }
+            unset($tx);
 
             // 3. IDI Analytics: Current Month Overview
             $currentMonth = date('Y-m');
@@ -77,7 +100,7 @@ try {
             $type = $_POST['transaction_type'] ?? '';
             $account_id = $_POST['account_id'] ?? '';
             $fund_id = $_POST['fund_id'] ?? '';
-            $category_id = $_POST['category_id'] ?? null;
+            $category_id = ($_POST['category_id'] ?? '') !== '' ? $_POST['category_id'] : null;
             $amount = floatval($_POST['amount'] ?? 0);
             $desc = trim($_POST['description'] ?? '');
             
@@ -85,15 +108,15 @@ try {
                 exit(json_encode(['status' => 'error', 'message' => 'Please fill all required transaction fields with a valid amount.']));
             }
 
-            // Optional Receipt Upload
+            // Optional receipt: JPG, PNG or PDF only, under a random name (includes/upload_guard.php).
             $receipt_url = null;
-            if (isset($_FILES['receipt_file']) && $_FILES['receipt_file']['error'] === UPLOAD_ERR_OK) {
-                $upload_dir = '../uploads/finance/';
-                if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-                $filename = time() . '_REC_' . preg_replace('/[^a-zA-Z0-9.\-_]/', '', basename($_FILES['receipt_file']['name']));
-                if (move_uploaded_file($_FILES['receipt_file']['tmp_name'], $upload_dir . $filename)) {
-                    $receipt_url = '../../uploads/finance/' . $filename; 
+            if (isset($_FILES['receipt_file']) && $_FILES['receipt_file']['error'] !== UPLOAD_ERR_NO_FILE) {
+                require_once __DIR__ . '/../includes/upload_guard.php';
+                $stored = hod_upload_store($_FILES['receipt_file'], __DIR__ . '/../uploads/finance/', '../../uploads/finance/', ['jpg', 'jpeg', 'png', 'pdf']);
+                if (!$stored['ok']) {
+                    exit(json_encode(['status' => 'error', 'field' => 'receipt_file', 'message' => $stored['error']]));
                 }
+                $receipt_url = $stored['url'];
             }
 
             // Begin Transaction to ensure DB integrity
@@ -264,6 +287,9 @@ try {
     }
 
 } catch (PDOException $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     error_log("Finance API Error: " . $e->getMessage());
     echo json_encode(['status' => 'error', 'message' => 'Database error occurred. Check system logs.']);
 }

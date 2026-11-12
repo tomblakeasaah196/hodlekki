@@ -916,7 +916,7 @@ function sms_send_guard(PDO $pdo, $phone, $body, $skipDuplicate = false) {
         $st->execute([$phone]);
         if (($reason = $st->fetchColumn()) !== false) {
             return "Blocked: {$phone} is on the suppression list (" . ($reason ?: 'no reason given') . "). "
-                 . "Release it on the Suppression tab to send again. Nothing was sent (₦0).";
+                 . "Release it on the Blocked tab to send again. Nothing was sent (₦0).";
         }
     } catch (PDOException $e) { /* table may not exist yet — ignore */ }
 
