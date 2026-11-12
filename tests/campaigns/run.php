@@ -1303,6 +1303,136 @@ ct_ok('the tab shows only with the manage right: Embrace, Assimilation, Charis',
     && str_contains($chr, "(\$charisCanConfigure ? ['automation' => ['label' => 'Automation'")
     && str_contains($chr, "<?php if (\$charisCanConfigure): ?>
     <section id=\"panel-automation\"") && str_contains($chr, "'frame-src' => [\"'self'\"]"));
+ct_section('16g. The block editor: drafts, pictures, templates');
+// ===========================================================================
+require_once __DIR__ . '/../../includes/campaigns/editor.php';
+$e = ct_db();
+ct_at('2027-06-07 11:00');
+$_SESSION['email_drafts'] = [];
+$goodDoc = ['v' => 1, 'subject' => 'Hello {{first_name}}', 'preheader' => '', 'blocks' => [
+    ['type' => 'heading', 'level' => 1, 'align' => 'left', 'text' => 'Welcome'],
+    ['type' => 'text', 'align' => 'left', 'content' => [['k' => 'p', 'r' => [['t' => 'Hi '], ['t' => '{{first_name}}', 'b' => 1]]]]],
+]];
+$d = email_editor_draft_put($goodDoc);
+ct_ok('a draft is kept, validated (the footer added), behind a token', preg_match('/^[A-Za-z0-9_-]{22}$/', $d['token']) === 1
+    && $d['errors'] === [] && end(email_editor_draft_get($d['token'])['blocks'])['type'] === 'footer');
+$bad = email_editor_draft_put(['v' => 1, 'subject' => '', 'blocks' => [['type' => 'script', 'src' => 'x']]]);
+ct_ok('…a bad draft is kept too (the preview shows what it can) with its errors', $bad['errors'] !== []
+    && email_editor_draft_get($bad['token'])['blocks'] === [['type' => 'footer']]);
+ct_eq('…an unknown or malformed token finds nothing', [null, null], [email_editor_draft_get('nope'), email_editor_draft_get('../../etc')]);
+for ($i = 0; $i < 6; $i++) {
+    email_editor_draft_put($goodDoc);
+}
+ct_ok('…only the newest five are kept', count($_SESSION['email_drafts']) === 5 && email_editor_draft_get($d['token']) === null);
+
+$tmp = sys_get_temp_dir() . '/hod-eml-' . bin2hex(random_bytes(4));
+mkdir($tmp);
+$make = static function (string $kind, int $w, int $h) use ($tmp): array {
+    $img = imagecreatetruecolor($w, $h);
+    imagefill($img, 0, 0, imagecolorallocate($img, 200, 30, 40));
+    $path = $tmp . '/in-' . $kind . '-' . $w;
+    match ($kind) {
+        'png' => imagepng($img, $path),
+        'jpg' => imagejpeg($img, $path),
+        'gif' => imagegif($img, $path),
+    };
+    return ['name' => 'photo.php.' . $kind, 'tmp_name' => $path, 'size' => filesize($path), 'error' => UPLOAD_ERR_OK, 'type' => 'text/x-php'];
+};
+$root = $tmp . '/uploads-email';
+$at = campaigns_dt('2027-06-07 11:00');
+$png = email_editor_store_image($make('png', 300, 200), $root, $at);
+ct_ok('a PNG is re-encoded as PNG under uploads/email/2027/06, named by us', $png['ok']
+    && preg_match('#/uploads/email/2027/06/20270607-[0-9a-f]{16}\.png$#', (string) $png['src']) === 1
+    && is_file($root . '/2027/06/' . basename((string) $png['src'])));
+ct_ok('…the URL is one the email documents accept', email_doc_image_ok((string) $png['src']));
+ct_ok('…and the folder runs nothing, serving only pictures', is_file($root . '/.htaccess')
+    && str_contains((string) file_get_contents($root . '/.htaccess'), 'Require all denied'));
+$big = email_editor_store_image($make('jpg', 2400, 1200), $root, $at);
+ct_ok('a wide JPEG is shrunk to 1200 px (twice the email width)', $big['ok'] && $big['width'] === 1200 && $big['height'] === 600
+    && str_ends_with((string) $big['src'], '.jpg'));
+$gif = email_editor_store_image($make('gif', 100, 100), $root, $at);
+ct_ok('a GIF becomes a JPEG (what every mail app shows)', $gif['ok'] && str_ends_with((string) $gif['src'], '.jpg'));
+file_put_contents($tmp . '/fake', "<?php echo 'hi'; ?>\x89PNG");
+ct_eq('a script dressed as a picture is refused', 'Use a JPG, PNG, GIF or WebP picture.',
+    email_editor_store_image(['tmp_name' => $tmp . '/fake', 'size' => 30, 'error' => UPLOAD_ERR_OK], $root, $at)['message'] ?? null);
+ct_eq('a picture over 5 MB is refused', 'That picture is too large (5 MB at most).',
+    email_editor_store_image(['tmp_name' => $tmp . '/fake', 'size' => 6 * 1024 * 1024, 'error' => UPLOAD_ERR_OK], $root, $at)['message'] ?? null);
+ct_eq('an upload error is said plainly', 'The picture did not arrive. Try again.',
+    email_editor_store_image(['error' => UPLOAD_ERR_PARTIAL], $root, $at)['message'] ?? null);
+ct_eq('only pictures are written (no copy of the upload, no client name)', 3, count(glob($root . '/2027/06/*')));
+
+$t = email_template_save($e, '  Welcome  email ', $goodDoc, 300);
+ct_ok('a template is saved with a tidy name', $t['ok'] && email_templates_list($e)[0]['name'] === 'Welcome email');
+ct_eq('…and comes back as a clean document', 'Hello {{first_name}}', email_template_get($e, $t['id'])['doc']['subject']);
+ct_ok('…an invalid document is not kept', !email_template_save($e, 'Broken', ['v' => 1, 'subject' => '', 'blocks' => []], 300)['ok']);
+ct_eq('…a template needs a name', ['Give the template a name (120 characters at most).'], email_template_save($e, ' ', $goodDoc, 300)['errors']);
+ct_ok('…saving over it updates it', email_template_save($e, 'Welcome (v2)', $goodDoc, 300, $t['id'])['ok']
+    && email_templates_list($e)[0]['name'] === 'Welcome (v2)' && count(email_templates_list($e)) === 1);
+ct_ok('…removing it hides it (kept, archived)', email_template_archive($e, $t['id'], 300) && email_templates_list($e) === []
+    && email_template_get($e, $t['id']) === null && ct_count($e, 'email_templates') === 1);
+
+$chk = email_editor_action($e, 'check', ['doc' => $goodDoc], 300);
+ct_ok('"check" answers ok with the cleaned document', $chk['ok'] && end($chk['doc']['blocks'])['type'] === 'footer');
+$chk = email_editor_action($e, 'check', ['doc' => ['v' => 1, 'subject' => 'x', 'blocks' => [['type' => 'button', 'label' => 'Go', 'href' => 'javascript:alert(1)']]]], 300);
+ct_ok('…and refuses a javascript: link with the reason', !$chk['ok'] && in_array('Button (block 1) needs a link starting with https://.', $chk['errors'], true));
+ct_eq('an unknown editor action is refused', 'error', email_editor_action($e, 'drop', [], 300)['status']);
+
+$root2 = __DIR__ . '/../../';
+$eapi = (string) file_get_contents($root2 . 'api/email_editor_api.php');
+$dprev = (string) file_get_contents($root2 . 'api/email_draft_preview.php');
+ct_ok('the editor API needs an Automation manage right and the CSRF token',
+    str_contains($eapi, 'if (!email_editor_allowed()) {') && str_contains($eapi, 'csrf_require();'));
+ct_ok('the draft preview needs it too, with its own locked-down CSP',
+    str_contains($dprev, 'if (!email_editor_allowed()) {') && str_contains($dprev, "default-src 'none'; style-src 'unsafe-inline'"));
+$js = (string) file_get_contents($root2 . 'assets/ui/js/email-editor.js');
+ct_ok('the editor pastes plain text only, previews in a sandboxed frame, never srcdoc',
+    str_contains($js, "getData('text/plain')") && str_contains($js, 'sandbox=""') && !preg_match('/\.srcdoc\b|srcdoc\s*=/', $js)
+    && !preg_match('/\.innerHTML\s*=\s*[^;]*getData\(/', $js));
+array_map('unlink', glob($root . '/2027/06/*') ?: []);
+@unlink($root . '/.htaccess');
+@rmdir($root . '/2027/06'); @rmdir($root . '/2027'); @rmdir($root);
+array_map('unlink', glob($tmp . '/*') ?: []);
+@rmdir($tmp);
+
+// ===========================================================================
+ct_section('16h. Editing a step\'s email from the Automation tab');
+// ===========================================================================
+$w = ct_db();
+ct_at('2027-06-08 09:00');
+$wr = automation_tab_rule($w, 'embrace');
+ct_eq('every email step has an Edit button (six weeks and two reminders)', 8,
+    substr_count(automation_tab_html($w, 'embrace'), 'data-action="automation.edit"'));
+ct_ok('…and the panel carries the editor dialog', str_contains(automation_tab_html($w, 'embrace'), 'data-automation-editor-root'));
+$got = automation_tab_action($w, 'embrace', 'email_doc', ['step' => 'welcome', 'week' => '3'], 300);
+ct_ok('the editor gets week 3\'s email and the rule version', $got['status'] === 'success'
+    && $got['doc'] === automation_step($wr, 'welcome')['series'][2]['email'] && $got['version'] === (int) $wr['version']);
+$newDoc = $got['doc'];
+$newDoc['subject'] = 'Week three, {{first_name}}';
+$sv = automation_tab_action($w, 'embrace', 'save_email', ['step' => 'welcome', 'week' => 3, 'version' => $got['version'], 'doc' => $newDoc], 300);
+$after = automation_rule_get($w, 'embrace');
+ct_ok('saving it changes week 3 only, and answers with the panel', $sv['status'] === 'success' && str_contains($sv['html'], 'Week three, {{first_name}}')
+    && automation_step($after, 'welcome')['series'][2]['email']['subject'] === 'Week three, {{first_name}}'
+    && automation_step($after, 'welcome')['series'][1] === automation_step($wr, 'welcome')['series'][1]
+    && automation_step($after, 'midweek') === automation_step($wr, 'midweek'));
+$stale = automation_tab_action($w, 'embrace', 'save_email', ['step' => 'welcome', 'week' => 3, 'version' => $got['version'], 'doc' => $newDoc], 300);
+ct_ok('saving over someone else\'s change is refused', $stale['status'] === 'error' && str_contains($stale['message'], 'Someone else changed'));
+$badDoc = $newDoc;
+$badDoc['blocks'][] = ['type' => 'button', 'label' => 'Go', 'href' => 'javascript:alert(1)'];
+$bad = automation_tab_action($w, 'embrace', 'save_email', ['step' => 'midweek', 'week' => 1, 'version' => (int) $after['version'], 'doc' => $badDoc], 300);
+ct_ok('an invalid email is refused with the reason, nothing saved', $bad['status'] === 'error'
+    && str_contains($bad['message'], 'needs a link starting with https://') && automation_step(automation_rule_get($w, 'embrace'), 'midweek') === automation_step($wr, 'midweek'));
+ct_eq('an alert step has no email to edit', 'error', automation_tab_action($w, 'charis', 'email_doc', ['step' => 'team_alert'], 300)['status']);
+ct_eq('…nor to save into', 'error', automation_tab_action($w, 'charis', 'save_email', ['step' => 'pastor_alert', 'doc' => $newDoc], 300)['status']);
+ct_eq('a week past the series is refused', 'error', automation_tab_action($w, 'embrace', 'save_email', ['step' => 'welcome', 'week' => 9, 'doc' => $newDoc], 300)['status']);
+$aapi = (string) file_get_contents(__DIR__ . '/../../api/automation_api.php');
+ct_ok('the tab API reads JSON (the editor\'s document) as well as forms, behind the same gate',
+    str_contains($aapi, "stripos((string) (\$_SERVER['CONTENT_TYPE'] ?? ''), 'application/json') === 0")
+    && strpos($aapi, "api_require_can(\$module, 'manage');") < strpos($aapi, 'echo json_encode(automation_tab_action('));
+foreach (['embrace', 'assimilation', 'charis'] as $m) {
+    $src = (string) file_get_contents(__DIR__ . '/../../modules/' . $m . '/index.php');
+    ct_ok("{$m} loads the editor before the tab script",
+        strpos($src, '/assets/ui/js/email-editor.js') !== false && strpos($src, '/assets/ui/js/email-editor.js') < strpos($src, '/assets/ui/js/pages/automation.js'));
+}
 
 // ===========================================================================
 ct_section('17. Every function the module calls exists');

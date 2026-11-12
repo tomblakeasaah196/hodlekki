@@ -60,6 +60,17 @@ first says how many people are already past a step: **Start fresh** (only new
 crossings) or **Include them**. A warning shows when Assimilation's rule covers
 the same people.
 
+**Edit** opens the email editor. Type in a text block (the toolbar has Bold,
+Italic, Link, bulleted and numbered lists, and **Insert field** for things like
+the person's first name, filled in for each person). Add a heading, picture,
+button, Bible verse, quote, signature, divider or space with **Add block**;
+change the chosen block on the right. Move a block with its arrows, by
+dragging its handle, or with Alt+↑/↓. Pasted text arrives plain. **Preview**
+in the editor shows the real email; **Save email** checks it (a button needs an
+https:// link, a verse must be in the KJV) and saves it. Unsaved changes are
+kept on your device and offered back if the window closes. **Templates** saves
+an email for later and reuses it.
+
 ## Welfare: birthdays and life events
 
 - **Birthdays** lists the members (and Junior Church children) with birthdays this month and next.
