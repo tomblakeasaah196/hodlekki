@@ -83,6 +83,67 @@ function dept_notify(PDO $pdo, $user_id, string $title, string $message, string 
         ->execute([$user_id, $title, $message, $link]);
 }
 
+/** One perm_history row for a roster change (Departments writes, permissions design §5.2). */
+function dept_seat_history(PDO $pdo, string $type, int $uid, int $deptId, string $rosterValue, ?array $before, ?array $after): void
+{
+    perm_history_add($pdo, [
+        'via' => 'departments', 'change_type' => $type, 'subject_user_id' => $uid, 'department_id' => $deptId,
+        'seat_key' => perm_seat_key_for($pdo, $rosterValue), 'before' => $before, 'after' => $after,
+    ]);
+}
+
+/**
+ * Is there room for one more $rosterValue seat in this department this year?
+ * Null when there is, else the one line to show. The department's own limit
+ * (Roles & permissions → Seats) wins over the seat type's; a seat type the
+ * department does not use is refused.
+ */
+function dept_seat_room(PDO $pdo, int $deptId, string $rosterValue, int $yearId): ?string
+{
+    $key = perm_seat_key_for($pdo, $rosterValue);
+    if ($key === null) {
+        return 'That seat is not in use. Reload the page.';
+    }
+    if ((perm_department_seats($pdo)[$deptId][$key] ?? true) === false) {
+        return 'This department does not use that seat.';
+    }
+    $stmt = $pdo->prepare('SELECT max_holders FROM perm_department_seats WHERE department_id = ? AND seat_key = ?');
+    $stmt->execute([$deptId, $key]);
+    $max = $stmt->fetchColumn();
+    if ($max === false || $max === null) {
+        $max = perm_seat_types($pdo)[$key]['max_holders'] ?? null;
+    }
+    if ($max === null || (int) $max <= 0) {
+        return null;
+    }
+    $count = $pdo->prepare("SELECT COUNT(*) FROM user_departments
+                             WHERE department_id = ? AND ministry_year_id = ? AND role_in_dept = ? AND roster_status = 'Active'");
+    $count->execute([$deptId, $yearId, $rosterValue]);
+    $label = perm_seat_types($pdo)[$key]['label'];
+    return (int) $count->fetchColumn() >= (int) $max
+        ? "This department already has its {$max} {$label} seat" . ((int) $max === 1 ? '' : 's') . '.'
+        : null;
+}
+
+/** After a rollover: a seat.renew history row per carried seat, and one message per person. */
+function dept_rollover_tell(PDO $pdo, array $carried, array $ctx): void
+{
+    $names = [];
+    foreach ($pdo->query('SELECT id, name FROM departments')->fetchAll(PDO::FETCH_ASSOC) as $d) {
+        $names[(int) $d['id']] = $d['name'];
+    }
+    $labels = dept_role_labels();
+    foreach ($carried as $uid => $seats) {
+        $words = [];
+        foreach ($seats as [$deptId, $role]) {
+            dept_seat_history($pdo, 'seat.renew', (int) $uid, (int) $deptId, $role, null, ['year' => $ctx['year_label']]);
+            $words[] = ($labels[$role] ?? str_replace('_', ' ', $role)) . ', ' . ($names[$deptId] ?? '');
+        }
+        dept_notify($pdo, (int) $uid, 'Serving in ' . $ctx['year_label'],
+            'You serve as ' . implode('; ', $words) . " in {$ctx['year_label']}. Thank you!", '/modules/profile/index.php');
+    }
+}
+
 function dept_fail(string $message, string $code = 'error'): void
 {
     echo json_encode(['status' => 'error', 'code' => $code, 'message' => $message]);
@@ -91,7 +152,7 @@ function dept_fail(string $message, string $code = 'error'): void
 
 function dept_role_label(string $role): string
 {
-    return DEPT_ROLE_LABELS[$role] ?? str_replace('_', ' ', $role);
+    return dept_role_labels()[$role] ?? str_replace('_', ' ', $role);
 }
 
 function dept_clean_membership($value): string
@@ -188,6 +249,7 @@ function dept_set_leader(PDO $pdo, array $ctx, array $dept, string $role, ?int $
         $out['outgoing'] = trim(implode(' ', array_filter($nameStmt->fetch(PDO::FETCH_NUM) ?: [])));
 
         dept_remove_roster_row($pdo, $ctx, $old, $dept_id);
+        dept_seat_history($pdo, 'seat.remove', $old, $dept_id, $role, ['seat' => $role], null);
         dept_notify(
             $pdo,
             $old,
@@ -213,6 +275,7 @@ function dept_set_leader(PDO $pdo, array $ctx, array $dept, string $role, ?int $
         }
 
         dept_put_roster_row($pdo, $ctx, $new_user_id, $dept_id, $role, 'Primary', true);
+        dept_seat_history($pdo, 'seat.add', $new_user_id, $dept_id, $role, null, ['seat' => $role, 'year' => $ctx['year_label']]);
 
         $out['incoming'] = trim($person['first_name'] . ' ' . $person['last_name']);
         dept_notify(
@@ -409,15 +472,15 @@ try {
             // and relieves the sitting leader — that is how a vacancy is made.
             $transitions = [];
             $seats = [
-                'Assoc_Pastor' => $ap_id,
-                'Director'     => $dir_id,
-                'HOD'          => $hod_id,
+                'pastor_in_charge' => ['assoc_pastor_id', $ap_id],
+                'director'         => ['director_id', $dir_id],
+                'hod'              => ['hod_id', $hod_id],
             ];
             // Only touch a seat that the form actually sent, so a partial form
             // can never silently vacate a seat.
-            foreach ($seats as $role => $new_id) {
-                $field = ['Assoc_Pastor' => 'assoc_pastor_id', 'Director' => 'director_id', 'HOD' => 'hod_id'][$role];
-                if (!array_key_exists($field, $_POST)) {
+            foreach ($seats as $seatKey => [$field, $new_id]) {
+                $role = dept_seat_value($seatKey);
+                if ($role === '' || !array_key_exists($field, $_POST)) {
                     continue;
                 }
                 if (!dept_may_appoint($pdo, (int) $dept['id'], $role)) {
@@ -472,7 +535,8 @@ try {
                 'id'        => (int) $dept['id'],
                 'parent_id' => $dept['parent_id'] === null ? null : (int) $dept['parent_id'],
             ]);
-            foreach (['Assoc_Pastor' => 'ap', 'Director' => 'dir', 'HOD' => 'hod'] as $role => $prefix) {
+            foreach (['pastor_in_charge' => 'ap', 'director' => 'dir', 'hod' => 'hod'] as $seatKey => $prefix) {
+                $role = dept_seat_value($seatKey);
                 $leader_id = getActiveLeaderId($pdo, $dept_id, $role, $year_id);
                 $info[$prefix . '_id'] = $leader_id;
                 if ($leader_id) {
@@ -511,9 +575,9 @@ try {
                    JOIN departments sub ON ud.department_id = sub.id
                   WHERE sub.parent_id = ? AND ud.ministry_year_id = ?
                     AND ud.roster_status = 'Active'
-                    AND ud.role_in_dept NOT IN ('Assoc_Pastor', 'Director', 'HOD')"
+                    AND ud.role_in_dept NOT IN (" . dept_in(dept_leader_roles()) . ")"
             );
-            $subCountStmt->execute([$dept_id, $year_id]);
+            $subCountStmt->execute(array_merge([$dept_id, $year_id], dept_leader_roles()));
             $subCounts = $subCountStmt->fetch(PDO::FETCH_ASSOC) ?: [];
             $sub_unit_counts = [
                 'primary'   => (int) ($subCounts['sub_primary'] ?? 0),
@@ -540,7 +604,7 @@ try {
                 $r['record_id'] = (int) $r['record_id'];
                 $r['user_id']   = (int) $r['user_id'];
                 $active_user_ids[] = $r['user_id'];
-                if (in_array($r['role_in_dept'], DEPT_LEADER_ROLES, true)) {
+                if (in_array($r['role_in_dept'], dept_leader_roles(), true)) {
                     $leaders[] = $r;
                 } elseif ($r['membership_type'] === 'Secondary') {
                     $secondary[] = $r;
@@ -580,14 +644,14 @@ try {
         case 'assign_worker':
             $dept_id   = (int) ($_POST['department_id'] ?? 0);
             $worker_id = (int) ($_POST['user_id'] ?? 0);
-            $role      = $_POST['role_in_dept'] ?? 'Worker';
+            $role      = (string) ($_POST['role_in_dept'] ?? dept_seat_value('worker'));
             $membership = dept_clean_membership($_POST['membership_type'] ?? 'Primary');
 
             if (!$dept_id || !$worker_id) {
                 dept_fail('Department and person are required.');
             }
-            if (!in_array($role, ['Worker', 'Member', 'Sub_Unit_Head', 'Deputy_HOD'], true)) {
-                dept_fail('That role cannot be assigned here. Use Edit Settings to appoint leadership.');
+            if (!isset(dept_member_seats()[$role])) {
+                dept_fail('That seat cannot be given here. Use Edit Settings for leaders.');
             }
 
             $year = dept_active_year($pdo);
@@ -603,6 +667,9 @@ try {
             }
             if (!dept_may_appoint($pdo, $dept_id, $role)) {
                 dept_fail('You can only appoint seats ranked below your own in this department.');
+            }
+            if ($problem = dept_seat_room($pdo, $dept_id, $role, (int) $year['id'])) {
+                dept_fail($problem);
             }
 
             $userStmt = $pdo->prepare("SELECT gender, first_name, last_name FROM users WHERE id = ?");
@@ -638,6 +705,7 @@ try {
             $pdo->beginTransaction();
             dept_put_roster_row($pdo, $ctx, $worker_id, $dept_id, $role, $membership, true);
             $pdo->commit();
+            dept_seat_history($pdo, 'seat.add', $worker_id, $dept_id, $role, null, ['membership' => $membership, 'year' => $ctx['year_label']]);
 
             dept_notify(
                 $pdo,
@@ -704,7 +772,7 @@ try {
             if (!dept_can_manage($scope, (int) $record['department_id'])) {
                 dept_fail('You can only manage departments you lead.');
             }
-            if (in_array($record['role_in_dept'], DEPT_LEADER_ROLES, true)) {
+            if (in_array($record['role_in_dept'], dept_leader_roles(), true)) {
                 dept_fail('Leadership seats are changed with Edit Settings → Leadership, so the seat is never left empty by accident.');
             }
             if (!dept_may_appoint($pdo, (int) $record['department_id'], (string) $record['role_in_dept'])) {
@@ -716,6 +784,7 @@ try {
                     SET roster_status = 'Removed', is_active = 0, end_date = CURDATE()
                   WHERE id = ?"
             )->execute([$record_id]);
+            dept_seat_history($pdo, 'seat.remove', (int) $record['user_id'], (int) $record['department_id'], (string) $record['role_in_dept'], ['membership' => $record['membership_type']], null);
 
             dept_notify(
                 $pdo,
@@ -762,7 +831,7 @@ try {
             if (!dept_can_manage($scope, (int) $record['department_id'])) {
                 dept_fail('You can only manage departments you lead.');
             }
-            if (in_array($record['role_in_dept'], DEPT_LEADER_ROLES, true)) {
+            if (in_array($record['role_in_dept'], dept_leader_roles(), true)) {
                 dept_fail('A leadership seat is always a Primary commitment. Change the seat first.');
             }
 
@@ -784,7 +853,7 @@ try {
             $role      = $_POST['role'] ?? '';
             $new_id    = empty($_POST['user_id']) ? null : (int) $_POST['user_id'];
 
-            if (!$dept_id || !in_array($role, DEPT_LEADER_ROLES, true)) {
+            if (!$dept_id || !in_array($role, dept_leader_roles(), true)) {
                 dept_fail('Department and a valid leadership role are required.');
             }
 
@@ -1018,7 +1087,15 @@ try {
             $new_year_id = (int) $pdo->lastInsertId();
             $ctx = ['year_id' => $new_year_id, 'year_label' => 'Ministry Year ' . $label, 'season' => (int) date('Y', strtotime($start))];
 
-            // 2. Install the worksheet.
+            // 2. Install the worksheet. Seats are the seat types in use (a
+            // Deputy HOD stays a Deputy HOD); anything else becomes a Member.
+            $allowed = [];
+            foreach (dept_seat_types() as $t) {
+                if ((int) $t['is_archived'] === 0) {
+                    $allowed[(string) $t['roster_value']] = true;
+                }
+            }
+            $carried = [];
             $installed = 0;
             $leaders    = 0;
             $seen = [];
@@ -1033,22 +1110,27 @@ try {
                 }
                 $seen[$person . ':' . $dept_id] = true;
 
-                $role = $a['role_in_dept'] ?? 'Member';
-                if (!in_array($role, ['Assoc_Pastor', 'Director', 'HOD', 'Deputy_HOD', 'Sub_Unit_Head', 'Worker', 'Member'], true)) {
-                    $role = 'Member';
+                $role = (string) ($a['role_in_dept'] ?? '');
+                if (!isset($allowed[$role])) {
+                    $role = dept_seat_value('member');   // an unknown seat never becomes a leader
                 }
-                $membership = in_array($role, DEPT_LEADER_ROLES, true)
+                $membership = in_array($role, dept_leader_roles(), true)
                     ? 'Primary'
                     : dept_clean_membership($a['membership_type'] ?? 'Primary');
 
                 dept_put_roster_row($pdo, $ctx, $person, $dept_id, $role, $membership, true);
+                $carried[$person][] = [$dept_id, $role];
                 $installed++;
-                if (in_array($role, DEPT_LEADER_ROLES, true)) {
+                if (in_array($role, dept_leader_roles(), true)) {
                     $leaders++;
                 }
             }
 
             $pdo->commit();
+
+            // Every carried seat is renewed for the new year: history, and one
+            // message per person naming their seats (not one per seat).
+            dept_rollover_tell($pdo, $carried, $ctx);
 
             echo json_encode([
                 'status'  => 'success',

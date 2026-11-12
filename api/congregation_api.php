@@ -383,14 +383,7 @@ try {
             $pushStmt->execute([$target_id]);
 
             // NOTIFICATION TRIGGER: Alert Charis Directors and HODs of the urgent manual flag
-            $charisLeadersStmt = $pdo->query("
-                SELECT ud.user_id 
-                FROM user_departments ud 
-                JOIN departments d ON ud.department_id = d.id 
-                WHERE (d.name LIKE '%Charis%' OR d.name LIKE '%Welfare%') 
-                AND ud.role_in_dept IN ('Director', 'HOD') AND ud.is_active = 1
-            ");
-            $charis_leaders = $charisLeadersStmt->fetchAll(PDO::FETCH_COLUMN);
+            $charis_leaders = perm_module_leaders($pdo, 'charis', 'hod');
 
             if (!empty($charis_leaders)) {
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Urgent Welfare Flag', ?, '/modules/charis/index.php')");

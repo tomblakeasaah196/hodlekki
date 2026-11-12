@@ -143,7 +143,7 @@ function monitor_test_platform_sql(): array
 {
     return [
         "CREATE TABLE users (id INTEGER PRIMARY KEY, first_name TEXT, account_status TEXT DEFAULT 'active')",
-        'CREATE TABLE roles (id INTEGER PRIMARY KEY, role_name TEXT NOT NULL)',
+        'CREATE TABLE roles (id INTEGER PRIMARY KEY, role_name TEXT NOT NULL, is_break_glass INTEGER NOT NULL DEFAULT 0)',
         'CREATE TABLE user_roles (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, role_id INTEGER, is_frozen INTEGER DEFAULT 0)',
         'CREATE TABLE system_notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT, message TEXT, link_url TEXT)',
     ];
@@ -172,7 +172,7 @@ function monitor_test_db(?string $file = null): PDO
     foreach (array_merge(monitor_test_schema_sql(), monitor_test_platform_sql()) as $stmt) {
         $pdo->exec($stmt);
     }
-    $pdo->exec("INSERT INTO roles (id, role_name) VALUES (1, 'Super_Admin'), (2, 'Resident_Pastor'), (4, 'Church_Member')");
+    $pdo->exec("INSERT INTO roles (id, role_name, is_break_glass) VALUES (1, 'Super_Admin', 1), (2, 'Resident_Pastor', 0), (4, 'Church_Member', 0)");
     $pdo->exec("INSERT INTO users (id, first_name) VALUES (1, 'Admin'), (2, 'Frozen'), (3, 'Member')");
     $pdo->exec('INSERT INTO user_roles (user_id, role_id, is_frozen) VALUES (1, 1, 0), (2, 1, 1), (3, 4, 0)');
 
@@ -197,10 +197,10 @@ function monitor_test_mysql(string $dsn): PDO
     $pdo->exec($sql);
     $pdo->exec($sql);   // a second run must change nothing (forward-only, idempotent)
     $pdo->exec("CREATE TABLE users (id INT PRIMARY KEY, first_name VARCHAR(80), account_status VARCHAR(12) DEFAULT 'active') ENGINE=InnoDB");
-    $pdo->exec('CREATE TABLE roles (id INT PRIMARY KEY, role_name VARCHAR(40) NOT NULL) ENGINE=InnoDB');
+    $pdo->exec('CREATE TABLE roles (id INT PRIMARY KEY, role_name VARCHAR(40) NOT NULL, is_break_glass TINYINT NOT NULL DEFAULT 0) ENGINE=InnoDB');
     $pdo->exec('CREATE TABLE user_roles (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, role_id INT, is_frozen TINYINT DEFAULT 0) ENGINE=InnoDB');
     $pdo->exec('CREATE TABLE system_notifications (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, title VARCHAR(150), message TEXT, link_url VARCHAR(255)) ENGINE=InnoDB');
-    $pdo->exec("INSERT INTO roles (id, role_name) VALUES (1, 'Super_Admin'), (2, 'Resident_Pastor'), (4, 'Church_Member')");
+    $pdo->exec("INSERT INTO roles (id, role_name, is_break_glass) VALUES (1, 'Super_Admin', 1), (2, 'Resident_Pastor', 0), (4, 'Church_Member', 0)");
     $pdo->exec("INSERT INTO users (id, first_name) VALUES (1, 'Admin'), (2, 'Frozen'), (3, 'Member')");
     $pdo->exec('INSERT INTO user_roles (user_id, role_id, is_frozen) VALUES (1, 1, 0), (2, 1, 1), (3, 4, 0)');
 

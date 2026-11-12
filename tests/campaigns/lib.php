@@ -150,6 +150,9 @@ function ct_db(bool $withModule = true): PDO
     }
     $pdo->exec("INSERT INTO user_roles (user_id, role_id) VALUES (900, 2)");
     $pdo->exec("INSERT INTO user_departments (user_id, department_id, is_active, role_in_dept) VALUES (901, 10, 1, 'HOD'), (903, 20, 1, 'Director')");
+    // Team alerts ask the permission engine who leads Charis and who the pastors are.
+    require_once __DIR__ . '/../permissions/install.php';
+    perm_test_install($pdo);
     return $pdo;
 }
 

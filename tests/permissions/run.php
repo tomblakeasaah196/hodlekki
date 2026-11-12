@@ -336,5 +336,8 @@ eq('exit code 2 on a planted loss', 2, perm_parity_exit_code(perm_parity_run($pd
 $report = perm_parity_render($pdo, perm_parity_run($pdo), false);
 ok('report fits one screen', substr_count($report, "\n") <= 24, (string) substr_count($report, "\n"));
 
+// PR 3: changing the permission data, view-as, end dates.
+require __DIR__ . '/admin_tests.php';
+
 echo "\n{$GLOBALS['perm_test_passed']} passed, {$GLOBALS['perm_test_failed']} failed\n";
 exit($GLOBALS['perm_test_failed'] === 0 ? 0 : 1);

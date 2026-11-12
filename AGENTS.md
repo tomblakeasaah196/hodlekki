@@ -1071,6 +1071,43 @@ audit: `permissions-design.md` (shared notes); tests: `tests/permissions/run.php
   a page) with `can()` person by person; exit 0 means only decided changes.
 - **Degrade before the migration:** every function is a closed no-op until the
   `perm_*` tables exist.
+- **Changing the data** (PR 3) goes through `includes/permissions/admin.php`
+  (matrix cells, roles, who holds a role and until when, seat types, which seats
+  a department uses, module owners, history, view-as) and
+  `includes/permissions/expiry.php` (renew, the daily run). Never write
+  `perm_grants`, `user_roles` or `perm_*` rows by hand from a module. Three rules
+  hold there: **fits within** (nobody gives or takes more than they hold;
+  break-glass fits everything), **one `perm_history` row per change**, and a
+  person who gains or loses a role is told. `role_assignment_logs` is retired
+  (kept for old rows, written by nothing). Screen: `modules/roles/` +
+  `api/roles_api.php` (View: Super Admins and the Resident Pastor; every change:
+  Manage = Super Admins).
+- **View as** a person or a role (`$_SESSION['perm_view_as']`): `perm_current()`
+  returns the subject's access cut down to the viewer's and read-only (only
+  `view` survives). Decide anything that must stay the person's own with
+  `perm_real_current()` (the roles screen, Stop). The shell shows the banner.
+- **End dates** (`perm_config.expiry_enforced`): a seat ends on its own end
+  date, else its ministry year's end; a role on `ends_on`; break-glass never.
+  Switching them on must never cut anyone off: migration `20261202090000` turns
+  them on only if nothing live is already past its end; otherwise only
+  `perm_expiry_switch_on()` (Roles & permissions → Enforce end dates, refused
+  while `perm_expiry_blockers()` is not empty, kept in history) does it — never
+  the daily job. System Health and `bin/permissions_parity.php` (End dates
+  section) show what blocks it and who would lose access. `cron/permissions_daily.php`
+  (00:10) tells holders and their pastor 14 days before, sends the year-end
+  summary to whoever may roll over the year, and closes what ended. Renewing is
+  one click (`modules/departments/renew.php`, People tab).
+- **Who is told:** church-wide work → `perm_office_holders($pdo, $module,
+  $level)` (people whose ROLE reaches it church-wide, plus Super Admins);
+  a department's own work → `perm_department_leaders($pdo, $deptId)` or
+  `perm_module_leaders($pdo, $module, 'hod')` (HOD and above in the departments
+  that own the module); a module's team → `perm_module_team()`. Never pick an
+  audience by role name, department name or id:
+  `tests/permissions/hardcoding_allowlist.txt` is empty and must stay so.
+- **Departments seats** come from the seat types (`dept_seat_value('hod')`,
+  `dept_member_seats()`, `dept_leader_roles()` in `includes/department_helpers.php`),
+  with each department's seat limits (`dept_seat_room()`). The rollover keeps
+  each person's seat.
 
 ## Mail (added 2026-11-11)
 

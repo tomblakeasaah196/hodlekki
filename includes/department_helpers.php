@@ -21,16 +21,69 @@
 //                   user_departments (header.php nav clearance, special_events,
 //                   reach, charis …).
 
-const DEPT_LEADER_ROLES = ['Assoc_Pastor', 'Director', 'HOD'];
+// Seats come from the permission engine's seat types (perm_seat_types), never
+// from a list here: renaming a seat type renames it everywhere, and a seat type
+// a department does not use is refused. The three one-person leadership seats
+// are named by their STABLE keys (permissions design §1b).
+const DEPT_LEADER_SEAT_KEYS = ['pastor_in_charge', 'director', 'hod'];
 
-const DEPT_ROLE_LABELS = [
-    'Assoc_Pastor'  => 'Pastor in Charge',
-    'Director'      => 'Director in Charge',
-    'HOD'           => 'Head of Department',
-    'Sub_Unit_Head' => 'Sub-Unit Head',
-    'Worker'        => 'Worker',
-    'Member'        => 'Member',
-];
+/** seat key => seat type row (empty before the permission tables exist). */
+function dept_seat_types(): array
+{
+    $pdo = function_exists('perm_pdo') ? perm_pdo() : null;
+    return $pdo ? perm_seat_types($pdo) : [];
+}
+
+/** The roster value stored in user_departments.role_in_dept for a stable seat key. */
+function dept_seat_value(string $key): string
+{
+    return (string) (dept_seat_types()[$key]['roster_value'] ?? '');
+}
+
+/** Roster values of the leadership seats changed in Edit Settings (Pastor in charge, Director, HOD). */
+function dept_leader_roles(): array
+{
+    return array_values(array_filter(array_map('dept_seat_value', DEPT_LEADER_SEAT_KEYS)));
+}
+
+/** roster value => label, for every seat type. */
+function dept_role_labels(): array
+{
+    $out = [];
+    foreach (dept_seat_types() as $t) {
+        $out[(string) $t['roster_value']] = (string) $t['label'];
+    }
+    return $out;
+}
+
+/** Seats a roster row may be given with "Add person" (everything but the leadership seats), highest rank first. */
+function dept_member_seats(): array
+{
+    $out = [];
+    $types = dept_seat_types();
+    uasort($types, static fn ($a, $b) => (int) $b['seat_rank'] <=> (int) $a['seat_rank']);
+    foreach ($types as $key => $t) {
+        if ((int) $t['is_archived'] === 0 && !in_array($key, DEPT_LEADER_SEAT_KEYS, true)) {
+            $out[(string) $t['roster_value']] = (string) $t['label'];
+        }
+    }
+    return $out;
+}
+
+/** "ORDER BY" by seat rank: [FIELD(col, ?, ?, …), values]. */
+function dept_seat_order(string $col): array
+{
+    $types = dept_seat_types();
+    uasort($types, static fn ($a, $b) => (int) $b['seat_rank'] <=> (int) $a['seat_rank']);
+    $values = array_values(array_map(static fn ($t) => (string) $t['roster_value'], $types));
+    return $values === [] ? ['0', []] : ['FIELD(' . $col . ', ' . implode(', ', array_fill(0, count($values), '?')) . ')', $values];
+}
+
+/** "?, ?, ?" for an IN list. */
+function dept_in(array $values): string
+{
+    return $values === [] ? 'NULL' : implode(', ', array_fill(0, count($values), '?'));
+}
 
 /**
  * True once 20261111090000_department_ministry_years.sql has been applied.
@@ -201,10 +254,10 @@ function dept_year_departments(PDO $pdo, int $year_id): array
            JOIN users u ON ud.user_id = u.id
           WHERE ud.ministry_year_id = ?
             AND ud.roster_status = 'Active'
-            AND ud.role_in_dept IN ('Assoc_Pastor', 'Director', 'HOD')
+            AND ud.role_in_dept IN (" . dept_in(dept_leader_roles()) . ")
           ORDER BY ud.id ASC"
     );
-    $leaderStmt->execute([$year_id]);
+    $leaderStmt->execute(array_merge([$year_id], dept_leader_roles()));
 
     $leaders = [];
     foreach ($leaderStmt->fetchAll(PDO::FETCH_ASSOC) as $l) {
@@ -241,11 +294,11 @@ function dept_year_roster(PDO $pdo, int $year_id, array $dept_ids = []): array
         $params = array_merge($params, $dept_ids);
     }
 
-    $sql .= " ORDER BY FIELD(ud.role_in_dept, 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head', 'Worker', 'Member'),
-                       u.first_name ASC, u.last_name ASC";
+    [$order, $orderParams] = dept_seat_order('ud.role_in_dept');
+    $sql .= " ORDER BY {$order}, u.first_name ASC, u.last_name ASC";
 
     $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    $stmt->execute(array_merge($params, $orderParams));
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -288,7 +341,7 @@ function dept_report_dataset(PDO $pdo, array $year): array
             'phone'         => $r['phone'],
             'email'         => $r['email'],
             'role_in_dept'  => $r['role_in_dept'],
-            'sub_unit_head' => $r['role_in_dept'] === 'Sub_Unit_Head',
+            'sub_unit_head' => $r['role_in_dept'] === dept_seat_value('sub_unit_head'),
             'joined'        => !empty($r['joined_at']) ? date('j M Y', strtotime($r['joined_at'])) : null,
         ];
     };
@@ -296,7 +349,7 @@ function dept_report_dataset(PDO $pdo, array $year): array
     $build = function (array $dept) use ($by_dept, $shape) {
         $primary = $secondary = [];
         foreach ($by_dept[$dept['id']] ?? [] as $r) {
-            if (in_array($r['role_in_dept'], DEPT_LEADER_ROLES, true)) {
+            if (in_array($r['role_in_dept'], dept_leader_roles(), true)) {
                 continue;                       // leaders get their own line
             }
             if ($r['membership_type'] === 'Secondary') {
@@ -307,7 +360,7 @@ function dept_report_dataset(PDO $pdo, array $year): array
         }
 
         $leaders = [];
-        foreach (DEPT_LEADER_ROLES as $role) {
+        foreach (dept_leader_roles() as $role) {
             $leaders[$role] = isset($dept['leaders'][$role])
                 ? [
                     'user_id' => (int) $dept['leaders'][$role]['user_id'],
@@ -405,6 +458,7 @@ function dept_report_dataset(PDO $pdo, array $year): array
 /** Flat, one-row-per-person list for the "All Workers" Excel sheet. */
 function dept_flat_worker_rows(PDO $pdo, int $year_id): array
 {
+    [$order, $orderParams] = dept_seat_order('ud.role_in_dept');
     $stmt = $pdo->prepare(
         "SELECT d.name AS department, d.parent_id,
                 ud.role_in_dept, ud.membership_type, ud.season, ud.joined_at,
@@ -414,9 +468,8 @@ function dept_flat_worker_rows(PDO $pdo, int $year_id): array
            JOIN departments d ON ud.department_id = d.id
           WHERE ud.ministry_year_id = ?
             AND ud.roster_status = 'Active'
-          ORDER BY d.name ASC, FIELD(ud.role_in_dept, 'Assoc_Pastor', 'Director', 'HOD', 'Sub_Unit_Head', 'Worker', 'Member'),
-                   u.first_name ASC, u.last_name ASC"
+          ORDER BY d.name ASC, {$order}, u.first_name ASC, u.last_name ASC"
     );
-    $stmt->execute([$year_id]);
+    $stmt->execute(array_merge([$year_id], $orderParams));
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }

@@ -80,7 +80,7 @@ When someone you met actually comes to church, open the lead and click **They ca
 
 - creates their profile as a **1st Timer**, with "Invited by: Reach — capturer — campaign";
 - copies their phone, address and prayer request;
-- notifies Embrace leaders (and IDI, to review the new profile);
+- notifies the Embrace leaders — the HOD and above in the departments that own Embrace (Roles & permissions → Seats) — and the IDI team, to review the new profile (nobody gets both messages);
 - moves the lead to **Visited Church**.
 
 **Forgot to click it?** No problem. When Embrace registers a first timer, the system checks their phone number against Reach. If it matches, the lead moves to **Visited Church** automatically and the assignee and capturer are told *"They came to church!"*.
