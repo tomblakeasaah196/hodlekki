@@ -1,4 +1,4 @@
--- /db/migrations/20261201090000_perm_expiry_on.sql
+-- /db/migrations/20261202090000_perm_expiry_on.sql
 --
 -- Permissions PR 3: end dates count from now on (design §5.7, lead decision 4).
 --

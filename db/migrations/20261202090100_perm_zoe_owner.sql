@@ -1,4 +1,4 @@
--- /db/migrations/20261201090100_perm_zoe_owner.sql
+-- /db/migrations/20261202090100_perm_zoe_owner.sql
 --
 -- Permissions PR 3: the Zoe department owns the Zoe module.
 --

@@ -1087,7 +1087,7 @@ audit: `permissions-design.md` (shared notes); tests: `tests/permissions/run.php
   `view` survives). Decide anything that must stay the person's own with
   `perm_real_current()` (the roles screen, Stop). The shell shows the banner.
 - **End dates are enforced** (`perm_config.expiry_enforced = 1`, migration
-  `20261201090000`): a seat ends on its own end date, else its ministry year's
+  `20261202090000`): a seat ends on its own end date, else its ministry year's
   end; a role on `ends_on`; break-glass never. `cron/permissions_daily.php`
   (00:10) tells holders and their pastor 14 days before, sends the year-end
   summary to whoever may roll over the year, and closes what ended. Renewing is

@@ -15,7 +15,7 @@ function perm_admin_db(): PDO
     $pdo->exec('ALTER TABLE users ADD COLUMN email TEXT');
     $pdo->exec('CREATE TABLE system_notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT,
                 message TEXT, link_url TEXT, is_read INTEGER DEFAULT 0)');
-    $pdo->exec(perm_test_migration('20261201090000_perm_expiry_on.sql'));
+    $pdo->exec(perm_test_migration('20261202090000_perm_expiry_on.sql'));
     perm_reset();
     return $pdo;
 }
@@ -55,8 +55,8 @@ function perm_admin_refused(string $label, string $code, callable $fn): void
 // ---------------------------------------------------------------------------
 section('PR 3: the expiry migration switches end dates on');
 $pdo = perm_admin_db();
-ok('expiry_enforced = 1 after 20261201090000', perm_expiry_enforced($pdo));
-$pdo->exec(perm_test_migration('20261201090000_perm_expiry_on.sql'));
+ok('expiry_enforced = 1 after 20261202090000', perm_expiry_enforced($pdo));
+$pdo->exec(perm_test_migration('20261202090000_perm_expiry_on.sql'));
 eq('running it twice leaves one row', 1, (int) $pdo->query("SELECT COUNT(*) FROM perm_config WHERE cfg_key = 'expiry_enforced'")->fetchColumn());
 
 // ---------------------------------------------------------------------------
@@ -326,7 +326,7 @@ eq('the senior pastor: the highest appoint rank', [$rp], perm_senior_pastor_ids(
 $pdo->exec("UPDATE users SET account_status = 'suspended' WHERE id = {$charisHod}");
 eq('a suspended account is not told', [], perm_module_leaders($pdo, 'charis', 'hod'));
 $pdo->exec("INSERT INTO perm_module_owners (module_key, department_id) VALUES ('zoe', 7)");
-$pdo->exec(perm_test_migration('20261201090100_perm_zoe_owner.sql'));
+$pdo->exec(perm_test_migration('20261202090100_perm_zoe_owner.sql'));
 eq('the Zoe owner migration is idempotent', 1, (int) $pdo->query("SELECT COUNT(*) FROM perm_module_owners WHERE module_key = 'zoe' AND department_id = 7")->fetchColumn());
 
 require_once __DIR__ . '/../../includes/department_helpers.php';
