@@ -41,6 +41,12 @@ if ($canMark) {
 if ($canApprove) {
     $tabs['confirm'] = ['label' => 'To confirm', 'count' => count($toConfirm)];
 }
+// Who signs certificates (includes/trainings/certificates.php): Manage only.
+$canManage = $ready && can('trainings', 'manage', 'church') && trainings_certs_ready($pdo);
+$settings = $canManage ? trainings_settings($pdo) : [];
+if ($canManage) {
+    $tabs['settings'] = 'Settings';
+}
 ?>
 <div class="ui-page">
     <?= ui_page_header([
@@ -140,6 +146,36 @@ if ($canApprove) {
             </ul>
         </form>
 <?php endif; ?>
+    </section>
+<?php endif; ?>
+
+<?php if ($canManage): ?>
+    <section data-tab-panel="settings" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" class="ui-tab-panel ui-stack ui-stack--md" hidden>
+        <form class="ui-card" id="acd-settings-form" data-action="acd.settings" data-ui-validate novalidate>
+            <div class="ui-card__header ui-card__header--divided">
+                <h2 class="ui-card__title">Certificates</h2>
+                <?= ui_info('Every certificate carries this signature, name and title, a code and a QR code that anyone can check at hodlekki.org/verify.', 'About certificates') ?>
+            </div>
+            <div class="ui-card__body ui-stack ui-stack--md">
+                <div class="ui-form-grid">
+                    <?= ui_field('text', ['name' => 'signatory_name', 'label' => 'Signed by', 'optional' => true, 'value' => $settings['signatory_name'],
+                        'attrs' => ['maxlength' => 120]]) ?>
+                    <?= ui_field('text', ['name' => 'signatory_title', 'label' => 'Their title', 'required' => true, 'value' => $settings['signatory_title'],
+                        'attrs' => ['maxlength' => 120]]) ?>
+                </div>
+<?php if ($settings['signature_image'] !== '' && trainings_signature_path($settings['signature_image']) !== null): ?>
+                <div class="ui-stack ui-stack--sm">
+                    <img class="h-16 w-auto max-w-xs rounded-ui border border-line bg-surface p-2" src="<?= ui_e($settings['signature_image']) ?>" alt="The signature on certificates">
+                    <label class="ui-check"><input type="checkbox" name="remove_signature" value="1"><span>Remove the signature</span></label>
+                </div>
+<?php endif; ?>
+                <?= ui_field('file', ['name' => 'signature_file', 'label' => 'Signature image', 'optional' => true, 'hint' => 'PNG or JPEG, up to 2 MB.',
+                    'attrs' => ['accept' => '.png,.jpg,.jpeg,image/png,image/jpeg']]) ?>
+            </div>
+            <div class="ui-card__footer flex justify-end">
+                <?= ui_button('Save settings', ['variant' => 'primary', 'type' => 'submit']) ?>
+            </div>
+        </form>
     </section>
 <?php endif; ?>
 <?php endif; ?>

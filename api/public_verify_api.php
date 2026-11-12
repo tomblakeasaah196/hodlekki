@@ -94,7 +94,18 @@ try {
                 exit;
             }
 
-            // 5. If no matches found in either table
+            // 5. Check 3: a Trainings certificate (CERT-XXXX-XXXX, the QR on it).
+            //    Revoked and replaced ones answer too, saying so.
+            if (str_starts_with($code, 'CERT-')) {
+                require_once '../includes/trainings/bootstrap.php';
+                $cert = trainings_certificate_lookup($pdo, $code);
+                if ($cert !== null) {
+                    echo json_encode(['status' => 'success', 'data' => trainings_certificate_verify_reply($cert)]);
+                    exit;
+                }
+            }
+
+            // 6. If no matches found in any table
             echo json_encode([
                 'status' => 'error', 
                 'message' => 'No record found. The code may be invalid, or the document has not been digitally stamped.'

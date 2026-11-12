@@ -298,6 +298,31 @@
             });
     });
 
+    /* ------------------------------------------------------------ certificates */
+
+    HOD.actions.on('trb.certIssue', function (btn) {
+        var again = btn.getAttribute('data-has') === '1';
+        HOD.confirm({
+            title: again ? 'Reissue the certificate?' : 'Issue a certificate?',
+            message: again ? 'The old code stops verifying; ' + btn.getAttribute('data-name') + ' gets a new one.'
+                : btn.getAttribute('data-name') + ' can download it from Trainings.',
+            confirmLabel: again ? 'Reissue' : 'Issue certificate'
+        }).then(function (yes) {
+            if (!yes) return;
+            api('certificate_issue', { enrolment_id: btn.getAttribute('data-enrolment') }, btn)
+                .then(function (res) { flash('Certificate ' + res.code + (again ? ' reissued.' : ' issued.')); }).catch(function () {});
+        });
+    });
+
+    HOD.actions.on('trb.certRevoke', function (btn) {
+        HOD.prompt({ title: 'Revoke the certificate?', label: 'Why (shown on the verify page)', required: true, confirmLabel: 'Revoke certificate', tone: 'danger' })
+            .then(function (reason) {
+                if (reason === null || reason === undefined || String(reason).trim() === '') return;
+                api('certificate_revoke', { enrolment_id: btn.getAttribute('data-enrolment'), reason: reason }, btn)
+                    .then(function () { flash('Certificate revoked.'); }).catch(function () {});
+            });
+    });
+
     /* ------------------------------------------------------------ add slides (several .pptx at once) */
 
     var DECK_MAX = 30 * 1024 * 1024;

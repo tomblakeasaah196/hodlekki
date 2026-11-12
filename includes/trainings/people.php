@@ -324,7 +324,7 @@ function trainings_learners(PDO $pdo, array $t): array
             'status' => $e['status'], 'due_on' => $e['due_on'], 'completed_at' => $e['completed_at'],
             'confirmed_at' => $e['confirmed_at'], 'signin' => (string) ($r['password_hash'] ?? '') !== '',
             'invited_at' => $r['invited_at'], 'done' => $sum['done'], 'required' => $sum['required'],
-            'percent' => $sum['percent'], 'to_mark' => $sum['to_mark']];
+            'percent' => $sum['percent'], 'to_mark' => $sum['to_mark'], 'certificate' => (string) ($e['certificate_no'] ?? '')];
     }
     return $out;
 }

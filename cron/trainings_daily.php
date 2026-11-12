@@ -6,7 +6,7 @@
 // the people its groups cover today and did not before (a new 1st Timer, a
 // worker who joined a department), with the press's due period from today.
 // The Academy page runs the same sweep when it opens, so this is the safety
-// net. Exams and live-class reminders arrive with later PRs (TRAININGS-PLAN.md).
+// net. It also sends the day-before and due reminders (includes/trainings/reminders.php).
 //
 //   30 6 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/trainings_daily.php >/dev/null 2>&1
 
@@ -29,6 +29,10 @@ try {
     if (function_exists('training_live_daily')) {
         echo 'trainings: attendance read for ' . training_live_daily($pdo) . " class(es)\n";
     }
+    // PR 4a: the day-before and due reminders (cron/automation_tick.php sends them too, every 5 minutes,
+    // with the hour-before ones); training_reminders makes sure nothing goes twice.
+    $r = trainings_reminders_run($pdo);
+    echo "trainings: {$r['sent']} reminder(s) sent\n";
 } catch (Throwable $e) {
     error_log('[trainings] daily run failed: ' . $e->getMessage());
     echo "trainings: failed, see the error log\n";
