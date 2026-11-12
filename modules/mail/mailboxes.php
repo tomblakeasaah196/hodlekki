@@ -64,7 +64,7 @@ $tab = $isAdmin ? 'boxes' : 'exports';
     <?= ui_page_header([
         'title' => 'Mailboxes',
         'description' => "Mailboxes on {$domain}.",
-        'back' => ['href' => '/modules/mail/index.php', 'label' => 'Mail'],
+        'back' => ['href' => '/modules/mail/', 'label' => 'Mail'],
         'info' => 'Who works from each mailbox, the quota of 15, and the actions waiting for the server. The server makes each change within a minute.',
         'actions' => ($isAdmin ? ui_button('Add mailbox', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-dialog-open' => 'mb-new']]) : ''),
     ]) ?>

@@ -411,7 +411,7 @@ try {
                 exit;
             }
 
-            $public_url = reach_absolute_url('/reach.php?c=' . rawurlencode($campaign['slug']));
+            $public_url = reach_absolute_url('/reach?c=' . rawurlencode($campaign['slug']));
 
             $blurb_parts = [];
             if (!empty($campaign['meta_description'])) {
@@ -800,11 +800,11 @@ try {
             $embrace_leaders = array_values(array_diff(perm_module_leaders($pdo, 'embrace', 'hod'), $idi_users));
             reach_notify($pdo, $embrace_leaders, 'New 1st Timer from Reach',
                 "{$lead_name} was met through Reach ({$lead['campaign_title']}) and is waiting in the Embrace queue.",
-                '/modules/embrace/index.php');
+                '/modules/embrace/');
             if (!$existing_id) {
                 reach_notify($pdo, $idi_users, 'New Reach Profile',
                     "A profile for {$lead_name} was created from Reach. Please review the entry.",
-                    '/modules/congregation/index.php');
+                    '/modules/congregation/');
             }
 
             echo json_encode([

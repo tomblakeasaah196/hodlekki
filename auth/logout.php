@@ -30,6 +30,6 @@ auth_remember_forget_current($pdo);
 security_destroy_current_session();
 
 // 5. Redirect back to the login page securely
-header("Location: /auth/login.php");
+header("Location: /auth/login");
 exit;
 ?>

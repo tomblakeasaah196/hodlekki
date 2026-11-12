@@ -242,7 +242,7 @@ try {
         case 'broadcast':
             $title   = trim((string) ($_POST['title'] ?? ''));
             $message = trim((string) ($_POST['message'] ?? ''));
-            $link    = trim((string) ($_POST['link'] ?? '/index.php'));
+            $link    = trim((string) ($_POST['link'] ?? '/'));
 
             if ($title === '' || mb_strlen($title) > 120) {
                 echo json_encode(['status' => 'error', 'message' => 'Give it a title of 120 characters or fewer.']);
@@ -255,7 +255,7 @@ try {
             // Same rule the push layer enforces: a notification can only ever
             // point at this site.
             if ($link === '' || !str_starts_with($link, '/') || str_starts_with($link, '//') || str_contains($link, '\\')) {
-                $link = '/index.php';
+                $link = '/';
             }
 
             $audience = push_admin_audience($pdo, $_POST);

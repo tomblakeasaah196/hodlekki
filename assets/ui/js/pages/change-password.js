@@ -23,7 +23,7 @@
         HOD.busy(btn, true);
         HOD.api('/api/profile_api.php', { data: new FormData(form), quiet: true }).then(function () {
             HOD.toast('Password updated. Taking you in...', 'success');
-            setTimeout(function () { window.location.href = cfg.after || '/index.php'; }, 1200);
+            setTimeout(function () { window.location.href = cfg.after || '/'; }, 1200);
         }).catch(function (err) {
             HOD.busy(btn, false);
             HOD.toast(err.code === 'NETWORK' ? 'Network error. Please try again.' : (err.message || 'Could not update the password.'), 'danger');

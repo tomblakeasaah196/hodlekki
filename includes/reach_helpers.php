@@ -63,7 +63,7 @@ function reach_is_member(PDO $pdo, int $user_id): bool {
         && in_array($user_id, perm_module_team($pdo, 'reach'), true);
 }
 
-function reach_notify(PDO $pdo, array $user_ids, string $title, string $message, string $link = '/modules/reach/index.php'): void {
+function reach_notify(PDO $pdo, array $user_ids, string $title, string $message, string $link = '/modules/reach/'): void {
     $user_ids = array_unique(array_filter(array_map('intval', $user_ids)));
     if (!$user_ids) {
         return;

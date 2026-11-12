@@ -237,7 +237,7 @@ try {
             $idi_users = perm_module_team($pdo, 'idi');   // the department that owns Data Insights
 
             if (!empty($idi_users)) {
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Congregation Profile', ?, '/modules/congregation/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Congregation Profile', ?, '/modules/congregation/')");
                 $alertMessage = "A new profile for {$first_name} {$last_name} has been manually added to the master congregation database.";
                 
                 foreach($idi_users as $uid) {
@@ -386,7 +386,7 @@ try {
             $charis_leaders = perm_module_leaders($pdo, 'charis', 'hod');
 
             if (!empty($charis_leaders)) {
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Urgent Welfare Flag', ?, '/modules/charis/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Urgent Welfare Flag', ?, '/modules/charis/')");
                 $alertMessage = "{$memberName} has been manually flagged from the Congregation Roster for an urgent welfare check due to absence.";
                 
                 foreach($charis_leaders as $leader_id) {

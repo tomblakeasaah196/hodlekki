@@ -16,7 +16,7 @@ header('Content-Type: application/json');
 
 // 2. Security Check
 if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['status' => 'error', 'message' => 'Unauthorized access.', 'redirect' => '/auth/login.php']);
+    echo json_encode(['status' => 'error', 'message' => 'Unauthorized access.', 'redirect' => '/auth/login']);
     exit;
 }
 
@@ -65,7 +65,7 @@ try {
                     'note'    => 'Someone serving in two departments is listed under both and counted once in the total.',
                     'empty'   => 'Nobody is on a live roster yet.',
                 ];
-                $detail['link'] = ['href' => '/modules/departments/index.php', 'label' => 'Open Departments'];
+                $detail['link'] = ['href' => '/modules/departments/', 'label' => 'Open Departments'];
                 break;
 
             // New Pipeline and Follow-ups Due, one card (owner, 12 Nov 2026).
@@ -102,7 +102,7 @@ try {
                          'hint'  => 'Came a 4th Sunday before their follow-up was finished.'],
                     ],
                 ];
-                $detail['link'] = ['href' => '/modules/embrace/index.php', 'label' => 'Open Embrace'];
+                $detail['link'] = ['href' => '/modules/embrace/', 'label' => 'Open Embrace'];
                 break;
 
             case 'pending_qa':
@@ -120,7 +120,7 @@ try {
                         ['label' => 'Over 4 weeks', 'value' => $q['older']],
                     ],
                 ];
-                $detail['link'] = ['href' => '/modules/pastoral/index.php', 'label' => 'Open Pastoral Desk'];
+                $detail['link'] = ['href' => '/modules/pastoral/', 'label' => 'Open Pastoral Desk'];
                 break;
 
             case 'sunday':
@@ -156,7 +156,7 @@ try {
                     }
                     $detail['sections'][] = ['heading' => 'Recent Sundays', 'rows' => $recent];
                 }
-                $detail['link'] = ['href' => '/modules/events/index.php', 'label' => 'Open Attendance Tracking'];
+                $detail['link'] = ['href' => '/modules/events/', 'label' => 'Open Attendance Tracking'];
                 break;
 
             case 'team':
@@ -178,7 +178,7 @@ try {
                     'note'    => count($rows) > 1 ? 'Someone serving in two of your units is counted once in the total.' : '',
                     'empty'   => 'No live rosters to show.',
                 ];
-                $detail['link'] = ['href' => '/modules/departments/index.php', 'label' => 'Open Departments'];
+                $detail['link'] = ['href' => '/modules/departments/', 'label' => 'Open Departments'];
                 break;
 
             case 'alerts':

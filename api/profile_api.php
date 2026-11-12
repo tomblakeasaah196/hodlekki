@@ -71,7 +71,7 @@ try {
                 $uName = $uStmt->fetch(PDO::FETCH_ASSOC);
                 $memberName = $uName ? "{$uName['first_name']} {$uName['last_name']}" : "A member";
 
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Profile Update Alert', ?, '/modules/congregation/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Profile Update Alert', ?, '/modules/congregation/')");
                 $alertMsg = "{$memberName} has autonomously updated their personal information and location in the member portal.";
                 
                 foreach($idi_users as $uid) {
@@ -171,7 +171,7 @@ try {
                     $uName = $uStmt->fetch(PDO::FETCH_ASSOC);
                     $memberName = $uName ? "{$uName['first_name']} {$uName['last_name']}" : "A member";
 
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Wedding Media', ?, '/modules/charis/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Wedding Media', ?, '/modules/charis/')");
                     $alertMsg = "{$memberName} has uploaded a new wedding picture for their anniversary celebration.";
                     
                     foreach($charis_leaders as $leader_id) {
@@ -213,7 +213,7 @@ try {
                 $uName = $uStmt->fetch(PDO::FETCH_ASSOC);
                 $memberName = $uName ? "{$uName['first_name']} {$uName['last_name']}" : "A member";
 
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Name Change Request', ?, '/modules/pastoral/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Name Change Request', ?, '/modules/pastoral/')");
                 $alertMsg = "{$memberName} has submitted an official name change request. Please review the pastoral desk suggestions.";
                 
                 foreach($admins as $admin_id) {

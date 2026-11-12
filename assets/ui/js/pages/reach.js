@@ -89,7 +89,7 @@
                 + '<div class="ui-card__body flex flex-1 flex-col gap-4">'
                 + '<div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="ui-meta">' + esc(typeLabel(c.campaign_type)) + '</p>'
                 + '<h3 class="truncate text-base font-semibold text-ink">' + esc(c.title) + '</h3>'
-                + '<p class="truncate text-xs text-ink-subtle">/reach.php?c=' + esc(c.slug) + '</p></div>' + statusBadge(c.status) + '</div>'
+                + '<p class="truncate text-xs text-ink-subtle">/reach?c=' + esc(c.slug) + '</p></div>' + statusBadge(c.status) + '</div>'
                 + '<dl class="grid grid-cols-3 gap-2 text-center">'
                 + '<div class="ui-card ui-card--sunken px-2 py-2"><dt class="ui-meta">Date</dt><dd class="mt-0.5 text-xs font-medium text-ink">' + esc(c.nice_date || '—') + '</dd></div>'
                 + '<div class="ui-card ui-card--sunken px-2 py-2"><dt class="ui-meta">Souls</dt><dd class="ui-num mt-0.5 text-sm font-semibold text-ink">' + esc(c.souls_count) + '</dd></div>'

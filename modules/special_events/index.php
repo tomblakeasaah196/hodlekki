@@ -20,7 +20,7 @@ if ($se_access === 'none') {
             This module belongs to Envision. Ask an Envision HOD or Director to add
             you to the department, or to the crew of a specific event.
         </p>
-        <a href="/index.php" class="inline-flex items-center gap-2 mt-6 px-5 py-2.5 rounded-xl bg-hodBlue text-white font-semibold hover:bg-blue-900 transition-colors">
+        <a href="/" class="inline-flex items-center gap-2 mt-6 px-5 py-2.5 rounded-xl bg-hodBlue text-white font-semibold hover:bg-blue-900 transition-colors">
             Back to the dashboard
         </a>
     </div>

@@ -22,12 +22,12 @@ require_once __DIR__ . '/../includes/campaigns/bootstrap.php';
 require_once __DIR__ . '/../includes/ui/standalone.php';
 
 if (empty($_SESSION['user_id'])) {
-    header('Location: /auth/login.php');
+    header('Location: /auth/login');
     exit;
 }
 $uid = (int) $_SESSION['user_id'];
-$next = auth_safe_next((string) ($_POST['next'] ?? $_GET['next'] ?? '')) ?? '/index.php';
-$self = '/auth/add_email.php?next=' . rawurlencode($next);
+$next = auth_safe_next((string) ($_POST['next'] ?? $_GET['next'] ?? '')) ?? '/';
+$self = '/auth/add_email?next=' . rawurlencode($next);
 
 if (!email_identity_ready($pdo)) {
     header('Location: ' . $next);
@@ -83,12 +83,12 @@ if ($state['confirmed'] !== null) {
 }
 $firstName = trim((string) ($_SESSION['first_name'] ?? ''));
 $hidden = ui_csrf_field() . '<input type="hidden" name="next" value="' . ui_e($next) . '">';
-$linkBtn = static fn (string $do, string $label): string => '<form method="post" action="/auth/add_email.php" class="inline">'
+$linkBtn = static fn (string $do, string $label): string => '<form method="post" action="/auth/add_email" class="inline">'
     . $hidden . '<input type="hidden" name="do" value="' . ui_e($do) . '">'
     . '<button type="submit" class="ui-link">' . ui_e($label) . '</button></form>';
 
 ui_standalone_open($state['pending'] !== null && $error === null ? 'Check your inbox' : 'Add your email',
-    ['footer' => '<a class="ui-link" href="/auth/logout.php">Sign out</a>']);
+    ['footer' => '<a class="ui-link" href="/auth/logout">Sign out</a>']);
 
 if ($state['pending'] !== null && $error === null): ?>
     <h1 class="ui-h2">Check your inbox</h1>
@@ -116,7 +116,7 @@ if ($state['pending'] !== null && $error === null): ?>
     <?php if ($error !== null): ?>
         <?= ui_banner('danger', ['title' => 'Please check this', 'text' => $error]) ?>
     <?php endif; ?>
-    <form method="post" action="/auth/add_email.php" class="ui-form" data-ui-validate novalidate>
+    <form method="post" action="/auth/add_email" class="ui-form" data-ui-validate novalidate>
         <?= $hidden ?>
         <input type="hidden" name="do" value="save">
         <?= ui_field('email', [
@@ -130,7 +130,7 @@ if ($state['pending'] !== null && $error === null): ?>
         ]) ?>
         <?= ui_button('Send link', ['variant' => 'primary', 'type' => 'submit', 'block' => true]) ?>
     </form>
-    <form method="post" action="/auth/add_email.php" class="text-center">
+    <form method="post" action="/auth/add_email" class="text-center">
         <?= $hidden ?>
         <input type="hidden" name="do" value="skip">
         <button type="submit" class="ui-link">I don't have an email</button>

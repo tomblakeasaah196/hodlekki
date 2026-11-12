@@ -107,7 +107,7 @@ $CSRF = $_SESSION['checkin_csrf'];
     <img src="/assets/images/hod_logo.svg" alt="HOD" class="h-8 object-contain" onerror="this.style.display='none'">
     <span class="font-['Montserrat'] font-bold tracking-widest text-sm text-white/90">STUDIO</span>
   </div>
-  <a href="/modules/events/index.php" class="text-white/50 hover:text-white text-sm font-medium transition-colors">Close</a>
+  <a href="/modules/events/" class="text-white/50 hover:text-white text-sm font-medium transition-colors">Close</a>
 </nav>
 
 <!-- MAIN APP CONTAINER -->
@@ -208,7 +208,7 @@ $('#eventSelect').on('change', function(){
 /* ---------- 2. Build Poster Layout ---------- */
 function buildPoster(){
   const ev = currentEvent;
-  const url = window.location.origin + '/checkin.php?event=' + ev.token;
+  const url = window.location.origin + '/checkin?event=' + ev.token;
   const banner = ev.banner_image_url ? `style="background-image:url('${esc(ev.banner_image_url)}');"` : '';
   
   const logoFallback = "this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIvPjxwYXRoIGQ9Ik0xMiA4djhNMCAwIi8+PC9zdmc+'";

@@ -10,12 +10,12 @@ $r = monitor_recipient_add($db, 'Owner@Example.org', 1);
 ok('adding an address sends a confirmation link', $r['ok'] && count($GLOBALS['mt_mail']) === 1);
 $mail = $GLOBALS['mt_mail'][0];
 eq('…to that address, lowercased', 'owner@example.org', $mail['to']);
-preg_match('#monitor_confirm\.php\?t=([0-9]+\.[0-9a-f]{48})#', $mail['text'], $m);
+preg_match('#monitor_confirm\?t=([0-9]+\.[0-9a-f]{48})#', $mail['text'], $m);   // clean address (Nov 2026)
 ok('…carrying a confirmation link', isset($m[1]));
 eq('until it is clicked the address gets no alerts', [], monitor_recipients_active($db));
 eq('adding it twice is fine (a fresh link)', true, monitor_recipient_add($db, 'owner@example.org', 1)['ok']);
 eq('…and the first link no longer works', false, monitor_recipient_confirm($db, $m[1])['ok']);
-preg_match('#monitor_confirm\.php\?t=([0-9]+\.[0-9a-f]{48})#', end($GLOBALS['mt_mail'])['text'], $m2);
+preg_match('#monitor_confirm\?t=([0-9]+\.[0-9a-f]{48})#', end($GLOBALS['mt_mail'])['text'], $m2);
 eq('a wrong secret is refused', false, monitor_recipient_confirm($db, preg_replace('/.$/', '0', $m2[1]) === $m2[1] ? preg_replace('/.$/', '1', $m2[1]) : preg_replace('/.$/', '0', $m2[1]))['ok']);
 monitor_test_clock('2026-11-19 10:00:00');
 eq('an expired link is refused', false, monitor_recipient_confirm($db, $m2[1])['ok']);
@@ -37,7 +37,7 @@ eq('three new fatal problems announced together', 3, $n);
 eq('…in one email', 1, count($GLOBALS['mt_mail']));
 has('…titled for all of them', $GLOBALS['mt_mail'][0]['subject'], '3 new or returning errors');
 lacks('…with every value escaped in the HTML', $GLOBALS['mt_mail'][0]['html'], '<script>alert(1)</script>');
-has('…and a stop link', $GLOBALS['mt_mail'][0]['html'], 'monitor_confirm.php?stop=');
+has('…and a stop link', $GLOBALS['mt_mail'][0]['html'], 'monitor_confirm?stop=');
 eq('one bell for each active Super_Admin (not the frozen one, not the member)', [1],
     array_map('intval', $db->query('SELECT DISTINCT user_id FROM system_notifications')->fetchAll(PDO::FETCH_COLUMN)));
 eq('a warning waits for the morning summary', 1, (int) $db->query("SELECT COUNT(*) FROM monitor_error_groups WHERE alerted_at IS NULL AND level = 'warning'")->fetchColumn());

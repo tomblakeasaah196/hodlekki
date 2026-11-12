@@ -47,6 +47,11 @@ eq('numbers become :id in the route only', ['/modules/x/42/edit', '/modules/x/:i
 eq('a token in the path is hidden', '/e/x/m/:token', monitor_clean_url('/e/x/m/a1b2c3d4e5f6a7b8c9d0e1f2')[0]);
 eq('an email or phone in the path is hidden', '/u/:value/:value', monitor_clean_url('/u/ada@x.ng/08031234567')[0]);
 eq('no host, no fragment', '/modules/events/index.php', monitor_clean_url('https://hodlekki.org/modules/events/index.php#tab=x')[0]);
+// Clean addresses (Nov 2026): the old and the new address are one page for grouping.
+eq('a folder page groups with its index.php', monitor_clean_url('/modules/events/')[1], monitor_clean_url('/modules/events/index.php?event=3')[1]);
+eq('a root page groups with its .php', '/testimonies', monitor_clean_url('/testimonies.php')[1]);
+eq('the dashboard groups as /', '/', monitor_clean_url('/index.php')[1]);
+eq('an endpoint keeps its .php', '/api/events_api.php', monitor_clean_url('/api/events_api.php?action=x')[1]);
 
 // Browsers and devices
 $android = 'Mozilla/5.0 (Linux; Android 14; SM-A146P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';

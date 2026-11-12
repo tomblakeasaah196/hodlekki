@@ -51,7 +51,7 @@ try {
                         'label' => $fullName,
                         'sub'   => trim(($row['phone'] ? $row['phone'] . ' · ' : '') . ($row['spiritual_status'] ?? '')),
                         // Deep-link: congregation roster with the search box pre-filled
-                        'url'   => '/modules/congregation/index.php#q=' . rawurlencode($fullName),
+                        'url'   => '/modules/congregation/#q=' . rawurlencode($fullName),
                     ];
                 }
             }
@@ -71,7 +71,7 @@ try {
                         'id'    => (int) $row['id'],
                         'label' => $row['title'],
                         'sub'   => trim($niceDate . ($row['event_category'] ? ' · ' . $row['event_category'] : '')),
-                        'url'   => '/modules/events/index.php',
+                        'url'   => '/modules/events/',
                     ];
                 }
             }

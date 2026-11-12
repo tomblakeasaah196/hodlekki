@@ -328,7 +328,7 @@ function perm_daily_run(PDO $pdo, ?string $today = null, bool $dryRun = false): 
     $limit = perm_add_days($today, PERM_REMIND_DAYS);
     $now = perm_now();
     $system = ['actor_user_id' => null, 'actor_label' => 'System', 'via' => 'cron'];
-    $tell = static function (array $ids, string $title, string $message, string $link = '/modules/profile/index.php') use ($pdo, $dryRun, &$report): void {
+    $tell = static function (array $ids, string $title, string $message, string $link = '/modules/profile/') use ($pdo, $dryRun, &$report): void {
         $report['messages'] += $dryRun ? count($ids) : perm_notify($pdo, $ids, $title, $message, $link);
     };
 
@@ -379,7 +379,7 @@ function perm_daily_run(PDO $pdo, ?string $today = null, bool $dryRun = false): 
         $ids = array_values(array_unique($ids));
         $tell([$uid], 'Seats ending soon', count($ids) . (count($ids) === 1 ? ' seat you look after ends' : ' seats you look after end')
             . ' within ' . PERM_REMIND_DAYS . ' days. Renew the ones that continue.',
-            '/modules/departments/renew.php?ids=' . implode(',', array_slice($ids, 0, 200)));
+            '/modules/departments/renew?ids=' . implode(',', array_slice($ids, 0, 200)));
     }
     $report['seat_reminders'] = count($remind);
     if (!$dryRun && $remind !== []) {
@@ -402,7 +402,7 @@ function perm_daily_run(PDO $pdo, ?string $today = null, bool $dryRun = false): 
         if ($r['assigned_by'] && (int) $r['assigned_by'] !== (int) $r['user_id']) {
             $name = perm_user_name(perm_user_row($pdo, (int) $r['user_id']));
             $tell([(int) $r['assigned_by']], 'A role ends soon', "{$name}'s {$label} role ends on {$date}. Renew it if it continues.",
-                '/modules/roles/index.php#tab=people');
+                '/modules/roles/#tab=people');
         }
         $report['role_reminders']++;
         if (!$dryRun) {
@@ -427,7 +427,7 @@ function perm_daily_run(PDO $pdo, ?string $today = null, bool $dryRun = false): 
                 $depts = count(array_unique(array_column($lapsing, 'department_id')));
                 $tell(perm_rollover_people($pdo), 'Ministry year ends soon',
                     count($lapsing) . ' seats in ' . $depts . ' ' . ($depts === 1 ? 'department' : 'departments') . ' end on '
-                    . perm_date_text($year['end_date']) . '. Roll over the ministry year.', '/modules/departments/index.php#rollover');
+                    . perm_date_text($year['end_date']) . '. Roll over the ministry year.', '/modules/departments/#rollover');
                 $report['summaries']++;
             }
             if (!$dryRun) {

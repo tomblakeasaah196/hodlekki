@@ -963,7 +963,7 @@ if (!function_exists('security_notify_user')) {
         try {
             $stmt = $pdo->prepare("
                 INSERT INTO system_notifications (user_id, title, message, link_url)
-                VALUES (?, ?, ?, '/modules/profile/index.php')
+                VALUES (?, ?, ?, '/modules/profile/')
             ");
             $stmt->execute([$userId, substr($title, 0, 120), $message]);
         } catch (Throwable $e) {

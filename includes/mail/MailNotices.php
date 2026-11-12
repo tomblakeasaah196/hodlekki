@@ -114,11 +114,11 @@ final class MailNotices
             $q['thread'] = $threadId;
         }
 
-        return '/modules/mail/index.php?' . http_build_query($q);
+        return '/modules/mail/?' . http_build_query($q);
     }
 
     public static function mailboxesUrl(?int $accountId = null): string
     {
-        return '/modules/mail/mailboxes.php' . ($accountId ? '?box=' . $accountId : '');
+        return '/modules/mail/mailboxes' . ($accountId ? '?box=' . $accountId : '');
     }
 }

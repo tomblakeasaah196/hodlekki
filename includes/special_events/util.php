@@ -680,7 +680,7 @@ function se_import_map(bool $withConfetti = true): array
 /** The Studio URL for one event and tab. */
 function se_studio_url(?int $eventId = null, string $tab = 'overview'): string
 {
-    $url = '/modules/special_events/index.php';
+    $url = '/modules/special_events/';
     if ($eventId !== null) {
         $url .= '?event=' . $eventId;
     }

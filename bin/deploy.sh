@@ -121,6 +121,12 @@ fi
 #     repo checkout, so the script itself is always the version just pulled.
 bash "$REPO/bin/edge_lock.sh" "$DEPLOYPATH"
 
+# 2b'. Clean addresses (bin/clean_urls.sh): /testimonies is served by
+#      testimonies.php and old .php page addresses redirect (301) to the clean
+#      one. Written right after the lock's block, so the lock still runs first.
+#      Fatal: the app's own links are clean, so without these rules they 404.
+bash "$REPO/bin/clean_urls.sh" "$DEPLOYPATH"
+
 # 2c. Uploaded files are data, never code: uploads/ and assets/uploads/ get a
 #     marked .htaccess block refusing any script file (bin/uploads_guard.sh).
 bash "$REPO/bin/uploads_guard.sh" "$DEPLOYPATH" || echo "[deploy] WARNING: uploads guard failed (not fatal)"

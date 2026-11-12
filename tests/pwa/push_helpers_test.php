@@ -45,7 +45,7 @@ check('urgency is derived', 'normal', $message['urgency']);
 
 $blank = push_message_from_notification(['id' => 1, 'title' => '', 'message' => null, 'link_url' => null]);
 check('an empty title falls back to the app name', 'HOD Lekki', $blank['title']);
-check('a missing link goes to the dashboard', '/index.php', $blank['url']);
+check('a missing link goes to the dashboard', '/', $blank['url']);
 check('a missing message is empty, not null', '', $blank['body']);
 
 suite('a notification link can never leave this site');
@@ -63,12 +63,15 @@ foreach ([
     'an empty string'            => '',
 ] as $label => $hostile) {
     $result = push_message_from_notification(['id' => 7, 'title' => 'x', 'message' => '', 'link_url' => $hostile]);
-    check($label . ' is replaced with the dashboard', '/index.php', $result['url']);
+    check($label . ' is replaced with the dashboard', '/', $result['url']);
 }
 
 foreach ([
-    '/modules/charis/index.php',
+    '/modules/charis/index.php',   // links stored before clean URLs (the server redirects them)
     '/index.php',
+    '/modules/charis/',
+    '/',
+    '/testimonies?x=1',
     '/modules/reach/index.php?tab=leads',
     '/e/chara/me',
 ] as $safe) {

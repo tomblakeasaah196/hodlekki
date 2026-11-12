@@ -405,7 +405,7 @@ function ui_no_access(?string $text = null, string $title = 'This page is not op
         'icon' => 'lock-keyhole',
         'title' => $title,
         'text' => $text ?? 'If you need it for your work, ask your head of department or a pastor to give you access.',
-        'actions' => ui_button('Go to your portal', ['variant' => 'primary', 'href' => '/modules/member_portal/index.php']),
+        'actions' => ui_button('Go to your portal', ['variant' => 'primary', 'href' => '/modules/member_portal/']),
     ]) . '</div>';
 }
 

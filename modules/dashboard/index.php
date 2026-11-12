@@ -5,5 +5,5 @@
 // resolve from this folder, so it answered HTTP 500 — while Departments still
 // linked to it ("Back to Dashboard"). The dashboard is /index.php; this URL
 // now sends people there (sign-in and the role-based landing happen there).
-header('Location: /index.php', true, 302);
+header('Location: /', true, 302);
 exit;

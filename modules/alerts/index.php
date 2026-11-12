@@ -107,8 +107,8 @@ $banners = [
                                     'attrs' => ['data-action-change' => 'alerts.edit']]) ?>
                             </div>
                         </div>
-                        <?= ui_field('text', ['name' => 'link', 'label' => 'Opens when tapped', 'value' => '/index.php',
-                            'info' => 'A path on this site, such as /modules/events/index.php. Anything else opens the dashboard.',
+                        <?= ui_field('text', ['name' => 'link', 'label' => 'Opens when tapped', 'value' => '/',
+                            'info' => 'A path on this site, such as /modules/events/. Anything else opens the dashboard.',
                             'attrs' => ['maxlength' => 255, 'data-action-input' => 'alerts.edit']]) ?>
                         <div data-alerts-preview hidden></div>
                         <div class="ui-toolbar">

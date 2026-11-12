@@ -302,7 +302,7 @@ try {
                 $embrace_leaders = array_diff(perm_module_leaders($pdo, 'embrace', 'hod'), $idi_users);
 
                 if (!empty($embrace_leaders)) {
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Connect Card', ?, '/modules/embrace/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Connect Card', ?, '/modules/embrace/')");
                     $alertMessage = "{$safe_name} has just submitted a Connect Card online and is waiting in the queue to be assigned.";
                     foreach ($embrace_leaders as $uid) {
                         $notifStmt->execute([$uid, $alertMessage]);
@@ -312,7 +312,7 @@ try {
                 // NOTIFICATION TRIGGER 2: Alert IDI
 
                 if (!empty($idi_users)) {
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Connect Card Profile', ?, '/modules/congregation/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Connect Card Profile', ?, '/modules/congregation/')");
                     $alertMessage = "A new profile for {$safe_name} was autonomously generated via the public Connect Card. Please review the entry.{$duplicate_note}";
                     foreach ($idi_users as $uid) {
                         $notifStmt->execute([$uid, $alertMessage]);

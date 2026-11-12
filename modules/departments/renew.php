@@ -57,7 +57,7 @@ $mayAny = array_filter($rows, static fn ($r) => $r['may']) !== [];
         'description' => 'Tick the seats that continue, then renew.',
         'info' => 'A renewed seat runs to the end of the next ministry year, or 12 months on if none is set up yet. '
             . 'You can renew seats ranked below your own. Seats you leave unticked end on their date.',
-        'back' => ['href' => '/modules/departments/index.php', 'label' => 'Departments'],
+        'back' => ['href' => '/modules/departments/', 'label' => 'Departments'],
     ]) ?>
 
 <?php if ($renewed > 0): ?>
@@ -71,7 +71,7 @@ $mayAny = array_filter($rows, static fn ($r) => $r['may']) !== [];
 <?php if ($rows === []): ?>
     <?= ui_empty(['icon' => 'calendar-check', 'title' => 'No seats to renew',
         'text' => 'Open this page from a "Seats ending soon" message.',
-        'actions' => ui_button('Open Departments', ['variant' => 'primary', 'href' => '/modules/departments/index.php'])]) ?>
+        'actions' => ui_button('Open Departments', ['variant' => 'primary', 'href' => '/modules/departments/'])]) ?>
 <?php else: ?>
     <form method="post" class="ui-card">
         <?= ui_csrf_field() ?>

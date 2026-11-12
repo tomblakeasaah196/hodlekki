@@ -819,7 +819,7 @@ if (isset($_GET['sermon'])) {
             const height = 600;
             const left = (screen.width - width) / 2;
             const top = (screen.height - height) / 2;
-            window.open('/live_radio.php', 'HODLiveRadio', `width=${width},height=${height},top=${top},left=${left},scrollbars=no,resizable=no,status=no,toolbar=no,menubar=no`);
+            window.open('/live_radio', 'HODLiveRadio', `width=${width},height=${height},top=${top},left=${left},scrollbars=no,resizable=no,status=no,toolbar=no,menubar=no`);
         }
         
         // Rotates every 5 seconds to give users time to read the longer passages

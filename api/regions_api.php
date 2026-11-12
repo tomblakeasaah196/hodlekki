@@ -485,7 +485,7 @@ try {
                 $region_users = $usersStmt->fetchAll(PDO::FETCH_COLUMN);
                 
                 if (!empty($region_users)) {
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, region_id, title, message, link_url) VALUES (?, ?, 'Regional Broadcast', ?, '/modules/regions/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, region_id, title, message, link_url) VALUES (?, ?, 'Regional Broadcast', ?, '/modules/regions/')");
                     foreach ($region_users as $uid) {
                         $notifStmt->execute([$uid, $target_region_id, $message]);
                     }

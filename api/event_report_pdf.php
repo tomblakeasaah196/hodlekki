@@ -17,7 +17,7 @@ use Dompdf\Options;
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../includes/db.php';
 
-if (!isset($_SESSION['user_id'])) { header('Location: /auth/login.php'); exit; }
+if (!isset($_SESSION['user_id'])) { header('Location: /auth/login'); exit; }
 // Access: Events & Attendance export in the permission matrix.
 $is_privileged = can('events', 'export');
 if (!$is_privileged) { http_response_code(403); die('Access Denied.'); }

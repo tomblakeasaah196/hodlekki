@@ -13,7 +13,7 @@ require_once __DIR__ . '/../includes/security_headers.php';
 security_send_baseline_headers();
 session_start();
 if (isset($_SESSION['user_id'])) {
-    header('Location: /index.php');
+    header('Location: /');
     exit;
 }
 
@@ -22,7 +22,7 @@ require_once __DIR__ . '/../includes/ui/standalone.php';
 
 ui_standalone_open('First-time password', [
     'scripts' => ['/assets/ui/js/pages/setup-password.js'],
-    'footer' => '<a class="ui-link" href="/auth/login.php">Back to Login</a>',
+    'footer' => '<a class="ui-link" href="/auth/login">Back to Login</a>',
 ]);
 $rules = implode(' · ', security_password_rules());
 ?>

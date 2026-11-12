@@ -128,7 +128,7 @@
             }
             let json = null;
             try { json = await res.json(); } catch (e) { /* not JSON */ }
-            if (res.status === 401) { window.location.href = '/auth/login.php'; throw apiError(json); }
+            if (res.status === 401) { window.location.href = '/auth/login'; throw apiError(json); }
             if (!json || json.status !== 'success') throw apiError(json);
             return json.data;
         },
@@ -148,7 +148,7 @@
             }
             let json = null;
             try { json = await res.json(); } catch (e) { /* not JSON */ }
-            if (res.status === 401) { window.location.href = '/auth/login.php'; throw apiError(json); }
+            if (res.status === 401) { window.location.href = '/auth/login'; throw apiError(json); }
             if (!json || json.status !== 'success') throw apiError(json);
             return json.data;
         },

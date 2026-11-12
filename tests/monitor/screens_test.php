@@ -15,7 +15,7 @@ has('the page asks monitor_user_can() before anything', $page, "if (!monitor_use
 has('…and refuses with the shared no-access state', $page, 'ui_no_access(');
 has('settings are shown only to who may change them', $page, "\$canManage = monitor_user_can(\$pdo, 'monitor.manage');");
 ok('no inline handler or style attribute on the page', !preg_match('/\son[a-z]+=|\sstyle="/i', $page));
-has('the navigation points at this page', $nav, "'href' => '/modules/monitor/index.php'");
+has('the navigation points at this page', $nav, "'href' => '/modules/monitor/'");
 
 // The script puts error text in as text: innerHTML only for our own icon markup.
 preg_match_all('/\.innerHTML\s*=/', $script, $m);
@@ -33,6 +33,6 @@ ok('the wall needs no sign-in and no database', !str_contains($wall, 'header.php
 
 // Alerts link to the right tab.
 ok('alert links open the right tab (#tab=…)', str_contains((string) file_get_contents($root . '/includes/monitor/alerts.php'), "monitor_screen_link('#tab=errors')"));
-eq('…and the link reaches the page once it exists', '/modules/monitor/index.php#tab=health', monitor_screen_link('#tab=health'));
+eq('…and the link reaches the page once it exists', '/modules/monitor/#tab=health', monitor_screen_link('#tab=health'));
 has('the page shows the monitor cron state with the exact line to copy', $page, "data-copy-target' => 'monitor-cron-line'");
 has('…amber while it is a setup step, red only once it has stopped', $page, "\$cronCheck['state'] === 'bad' ? 'danger' : 'warning'");

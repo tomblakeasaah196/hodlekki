@@ -124,7 +124,7 @@ foreach ($watchlists as $w) {
             if ($aud['volunteers']) {
                 assim_notify($pdo, $aud['volunteers'], $title,
                     "\"{$w['name']}\": {$list} just landed on your volunteer page — pick someone and call with love.",
-                    '/assimilation.php');
+                    '/assimilation');
             }
         } else {
             assim_notify($pdo, $managers, $title,

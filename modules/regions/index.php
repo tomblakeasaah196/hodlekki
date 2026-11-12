@@ -41,7 +41,7 @@ $is_admin = can('regions', 'manage');
                 'icon' => 'map-pin',
                 'title' => 'No region yet',
                 'text' => 'Add your home address to join your local hub.',
-                'actions' => ui_button('Update my address', ['variant' => 'primary', 'href' => '/modules/profile/index.php']),
+                'actions' => ui_button('Update my address', ['variant' => 'primary', 'href' => '/modules/profile/']),
             ]) ?>
         </div>
 

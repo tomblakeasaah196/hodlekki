@@ -267,7 +267,7 @@ those from the Follow-up tab.
 
 ## 8. The volunteer page
 
-Volunteers do not need a login. Share **`/assimilation.php`** with them (the
+Volunteers do not need a login. Share **`/assimilation`** with them (the
 **Volunteer page** button at the top opens it).
 
 They enter the phone number the church has for them, confirm it is them, and

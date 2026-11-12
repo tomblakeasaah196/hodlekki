@@ -50,7 +50,7 @@ echo json_encode([
     'description' => 'Household of David Lekki Centre — your church in your pocket. '
         . 'Services, departments, giving, follow-up and instant alerts.',
 
-    'start_url' => '/index.php?source=pwa',
+    'start_url' => '/?source=pwa',   // clean address; 'id' stays '/', so installs keep their identity
     'scope'     => '/',
 
     'display' => 'standalone',
@@ -93,28 +93,28 @@ echo json_encode([
             'name'        => 'My Portal',
             'short_name'  => 'Portal',
             'description' => 'Your giving, prayer requests and assignments',
-            'url'         => '/modules/member_portal/index.php?source=shortcut',
+            'url'         => '/modules/member_portal/?source=shortcut',
             'icons'       => [$icon(96)],
         ],
         [
             'name'        => 'Check In',
             'short_name'  => 'Check In',
             'description' => 'Check in to today\'s service',
-            'url'         => '/checkin.php?source=shortcut',
+            'url'         => '/checkin?source=shortcut',
             'icons'       => [$icon(96)],
         ],
         [
             'name'        => 'Sermons',
             'short_name'  => 'Sermons',
             'description' => 'Listen to the latest messages',
-            'url'         => '/sermons.php?source=shortcut',
+            'url'         => '/sermons?source=shortcut',
             'icons'       => [$icon(96)],
         ],
         [
             'name'        => 'Connect',
             'short_name'  => 'Connect',
             'description' => 'Say hello and join a department',
-            'url'         => '/connect.php?source=shortcut',
+            'url'         => '/connect?source=shortcut',
             'icons'       => [$icon(96)],
         ],
     ],

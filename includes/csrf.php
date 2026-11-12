@@ -52,7 +52,7 @@ const CSRF_EXEMPT_PREFIXES = [
     '/webhook/',
     // The error and health monitor: an emailed confirmation form (its own
     // secret link), browser beacons, and an HMAC-signed outside probe.
-    '/monitor_confirm.php',
+    '/monitor_confirm',            // a prefix: the old /monitor_confirm.php too
     '/api/monitor_intake.php',
     '/api/monitor_probe.php',
     // RFC 8058 one-click unsubscribe: mail providers POST it with no cookies

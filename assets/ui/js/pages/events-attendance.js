@@ -656,7 +656,7 @@
             footer = back + cancel;
         } else if (w.step === 'qr') {
             wizHead('Scan to connect', 'They fill in the form on their own phone.');
-            var url = window.location.origin + '/connect.php';
+            var url = window.location.origin + '/connect';
             html = '<div class="space-y-4 text-center">' +
                 '<div class="mx-auto w-48 rounded-ui border border-line bg-white p-3" id="att-wz-qr"><span class="ui-skeleton block h-40 w-full"></span></div>' +
                 '<div class="flex items-center justify-center gap-1"><p class="font-semibold text-ink">Scan for the "I\'m new here" form</p>' +
@@ -664,7 +664,7 @@
                 '<label class="sr-only" for="att-wz-url">Form link</label><input class="ui-input mx-auto max-w-sm text-center ui-num" type="text" id="att-wz-url" value="' + esc(url) + '" readonly>' +
                 '<div class="flex flex-wrap justify-center gap-2">' +
                     '<button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" data-action="att.wiz-copy">' + HOD.icon('copy') + '<span>Copy link</span></button>' +
-                    '<a class="ui-btn ui-btn--secondary ui-btn--sm" href="/connect.php" target="_blank" rel="noopener">' + HOD.icon('external-link') + '<span>Open form</span></a>' +
+                    '<a class="ui-btn ui-btn--secondary ui-btn--sm" href="/connect" target="_blank" rel="noopener">' + HOD.icon('external-link') + '<span>Open form</span></a>' +
                     '<button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-action="att.wiz-mode" data-value="staff">' + HOD.icon('pencil') + '<span>Fill it in</span></button>' +
                 '</div></div>';
             footer = back + cancel;
@@ -736,12 +736,12 @@
         var host = $('#att-wz-qr');
         import(HOD.config.vendor.qrcode).then(function (mod) {
             var qr = mod.qrcode(0, 'H');
-            qr.addData(window.location.origin + '/connect.php');
+            qr.addData(window.location.origin + '/connect');
             qr.make();
             host.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
             var svg = host.querySelector('svg');
             if (svg) { svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'QR code for the "I\'m new here" form'); }
-        }).catch(function () { host.innerHTML = '<p class="ui-meta break-all">' + esc(window.location.origin + '/connect.php') + '</p>'; });
+        }).catch(function () { host.innerHTML = '<p class="ui-meta break-all">' + esc(window.location.origin + '/connect') + '</p>'; });
     }
 
     function go(step) {
@@ -772,7 +772,7 @@
     HOD.actions.on('att.wiz-type', function (b) { att.wiz.type = b.getAttribute('data-value'); go(att.wiz.type === 'first_timer' ? 'mode' : 'basic'); });
     HOD.actions.on('att.wiz-mode', function (b) { att.wiz.mode = b.getAttribute('data-value'); go(att.wiz.mode === 'qr' ? 'qr' : 'basic'); });
     HOD.actions.on('att.wiz-dismiss', function () { wizError(''); });
-    HOD.actions.on('att.wiz-copy', function () { EV.copyText(window.location.origin + '/connect.php', $('#att-wz-url')); });
+    HOD.actions.on('att.wiz-copy', function () { EV.copyText(window.location.origin + '/connect', $('#att-wz-url')); });
     HOD.actions.on('att.wiz-back', function () {
         var w = att.wiz;
         collect();

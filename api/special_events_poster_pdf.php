@@ -16,7 +16,7 @@ require_once '../includes/db.php';
 require_once '../includes/special_events/bootstrap.php';
 
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /auth/login.php?next=' . rawurlencode('/modules/special_events/index.php'));
+    header('Location: /auth/login?next=' . rawurlencode('/modules/special_events/'));
     exit;
 }
 

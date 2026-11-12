@@ -31,7 +31,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     }
 }
 
-ui_standalone_open('Reset password', ['footer' => '<a class="ui-link" href="/auth/login.php">Back to sign in</a>']);
+ui_standalone_open('Reset password', ['footer' => '<a class="ui-link" href="/auth/login">Back to sign in</a>']);
 
 if ($done): ?>
     <h1 class="ui-h2">Check your email</h1>
@@ -43,7 +43,7 @@ if ($done): ?>
     <?php if ($error !== null): ?>
         <?= ui_banner('danger', ['title' => 'Please check this', 'text' => $error]) ?>
     <?php endif; ?>
-    <form method="post" action="/auth/forgot_password.php" class="ui-form" data-ui-validate novalidate>
+    <form method="post" action="/auth/forgot_password" class="ui-form" data-ui-validate novalidate>
         <?= ui_csrf_field() ?>
         <?= ui_field('email', [
             'name' => 'identifier',

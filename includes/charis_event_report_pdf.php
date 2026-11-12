@@ -6,7 +6,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/db.php';
 
-if (!isset($_SESSION['user_id'])) { header('Location: /auth/login.php'); exit; }
+if (!isset($_SESSION['user_id'])) { header('Location: /auth/login'); exit; }
 
 // Charis export in the permission matrix (it used to be any Director/HOD role).
 $is_privileged = function_exists('can') && can('charis', 'export');

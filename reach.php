@@ -49,7 +49,7 @@ $guide_html = $slug !== '' ? reach_markdown(reach_evangelism_guide($pdo)) : '';
 $og_title = 'Reach — Household of David Lekki Centre';
 $og_desc = 'Every soul counts. Meet people, log the encounter, watch heaven celebrate.';
 $og_image = 'https://' . $host . '/assets/images/logo_hod.png';
-$og_url = 'https://' . $host . '/reach.php' . ($slug !== '' ? '?c=' . rawurlencode($slug) : '');
+$og_url = 'https://' . $host . '/reach' . ($slug !== '' ? '?c=' . rawurlencode($slug) : '');
 $date_label = '';
 $time_label = '';
 $flyer = '';

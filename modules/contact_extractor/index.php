@@ -42,7 +42,7 @@ $CSRF = $_SESSION['ce_csrf'];
   <!-- Top bar -->
   <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col md:flex-row gap-4 md:items-center justify-between">
     <div class="flex items-center gap-4">
-      <a href="/modules/events/index.php" class="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3.5 py-2.5 rounded-xl text-sm font-bold transition-colors">
+      <a href="/modules/events/" class="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3.5 py-2.5 rounded-xl text-sm font-bold transition-colors">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Events
       </a>
       <div>

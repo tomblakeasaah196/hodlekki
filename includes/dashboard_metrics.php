@@ -458,5 +458,5 @@ function dash_sms_card(PDO $pdo): ?array
 
     return ['key' => 'sms', 'title' => 'SMS wallet', 'value' => $s['value'], 'display' => $s['display'],
             'note' => $s['note'], 'badge' => $s['badge'], 'tone' => $s['tone'],
-            'href' => '/modules/sms_studio/index.php'];
+            'href' => '/modules/sms_studio/'];
 }

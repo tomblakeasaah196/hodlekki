@@ -13,7 +13,7 @@
 // Script: assets/ui/js/pages/change-password.js.
 require_once __DIR__ . '/../includes/db.php';
 if (empty($_SESSION['user_id'])) {
-    header('Location: /auth/login.php');
+    header('Location: /auth/login');
     exit;
 }
 
@@ -32,7 +32,7 @@ $firstName = (string) ($_SESSION['first_name'] ?? 'there');
 // Where a forced change sends the member afterwards: the page they were
 // opening when they signed in (auth_api.php leaves it in place for this),
 // otherwise the dashboard.
-$afterForced = auth_safe_next($_SESSION['post_login_next'] ?? null) ?? '/index.php';
+$afterForced = auth_safe_next($_SESSION['post_login_next'] ?? null) ?? '/';
 $minLength = SECURITY_MIN_PASSWORD_LENGTH;
 $rules = implode(' · ', security_password_rules());
 
@@ -42,7 +42,7 @@ ui_standalone_open($forced ? 'Set a new password' : 'Change password', [
 ]);
 echo ui_json_script('pw-config', [
     'forced' => $forced,
-    'after' => $forced ? $afterForced : '/modules/profile/index.php#security',
+    'after' => $forced ? $afterForced : '/modules/profile/#security',
 ]);
 ?>
     <div class="flex items-start gap-3">
@@ -75,11 +75,11 @@ echo ui_json_script('pw-config', [
         <?= ui_button('Save New Password', ['variant' => 'primary', 'type' => 'submit', 'block' => true, 'attrs' => ['id' => 'pw-submit']]) ?>
         <div class="flex items-center justify-between gap-2 text-sm">
 <?php if (!$forced): ?>
-            <a class="ui-link" href="/modules/profile/index.php#security">Back to My Profile</a>
+            <a class="ui-link" href="/modules/profile/#security">Back to My Profile</a>
 <?php else: ?>
             <span class="text-ink-subtle">You cannot skip this step.</span>
 <?php endif; ?>
-            <a class="ui-link text-ink-muted" href="/auth/logout.php">Sign out</a>
+            <a class="ui-link text-ink-muted" href="/auth/logout">Sign out</a>
         </div>
     </form>
 <?php

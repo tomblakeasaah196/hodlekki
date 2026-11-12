@@ -106,8 +106,8 @@ $boxName = fn (array $a) => Store::isShared($a) ? (string) $a['display_name'] : 
         'description' => $account['email'],
         'actions' => ($canSend ? ui_button('New message', ['variant' => 'primary', 'icon' => 'pencil', 'attrs' => ['data-compose' => 'new', 'title' => 'New message (c)']]) : '')
             . ui_button('Check mail', ['variant' => 'ghost', 'icon' => 'refresh-cw', 'icon_only' => true, 'attrs' => ['data-action' => 'refresh']])
-            . ($canSend ? ui_button('Outbox', ['variant' => 'ghost', 'icon' => 'clock', 'icon_only' => true, 'href' => '/modules/mail/outbox.php']) : '')
-            . ui_button('My mail settings', ['variant' => 'ghost', 'icon' => 'sliders-horizontal', 'icon_only' => true, 'href' => '/modules/mail/settings.php'])
+            . ($canSend ? ui_button('Outbox', ['variant' => 'ghost', 'icon' => 'clock', 'icon_only' => true, 'href' => '/modules/mail/outbox']) : '')
+            . ui_button('My mail settings', ['variant' => 'ghost', 'icon' => 'sliders-horizontal', 'icon_only' => true, 'href' => '/modules/mail/settings'])
             . ui_button('Shortcuts', ['variant' => 'ghost', 'icon' => 'circle-help', 'icon_only' => true, 'class' => 'mr-hide-phone', 'attrs' => ['data-dialog-open' => 'mail-keys']])
             . $adminLink,
     ]) ?>
