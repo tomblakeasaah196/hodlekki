@@ -51,6 +51,26 @@ function ui_sprite_url(): string
 }
 
 /**
+ * Vendored libraries a page loads on demand with HOD.lib('name'): the shell,
+ * the public layout and the standalone layout all hand this to ui.js.
+ */
+function ui_vendor_map(): array
+{
+    return [
+        'chart' => ui_asset('/assets/ui/vendor/chart.js-4.5.0/chart.umd.min.js'),
+        'cropper' => ui_asset('/assets/ui/vendor/cropperjs-1.5.13/cropper.min.js'),
+        'cropper.css' => ui_asset('/assets/ui/vendor/cropperjs-1.5.13/cropper.min.css'),
+        'geoapify' => ui_asset('/assets/ui/vendor/geoapify-autocomplete-1.5.0/geocoder-autocomplete.min.js'),
+        'geoapify.css' => ui_asset('/assets/ui/vendor/geoapify-autocomplete-1.5.0/minimal.css'),
+        'html2canvas' => ui_asset('/assets/ui/vendor/html2canvas-1.4.1/html2canvas.min.js'),
+        'xlsx' => ui_asset('/assets/ui/vendor/xlsx-0.18.5/xlsx.full.min.js'),
+        'sortable' => ui_asset('/assets/ui/vendor/sortablejs-1.15.6/Sortable.min.js'),
+        // An ES module: import(HOD.config.vendor.qrcode).then(m => m.qrcode(0, 'M'))
+        'qrcode' => ui_asset('/assets/ui/vendor/qrcode-generator-1.5.0/qrcode.mjs'),
+    ];
+}
+
+/**
  * An icon from the sprite. Decorative by default (aria-hidden); pass a label
  * to make it speak for itself when it stands alone.
  *
