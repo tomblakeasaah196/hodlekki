@@ -6,13 +6,16 @@
 $ui = [
     'title' => 'Embrace Center',
     'mode' => 'strict',
-    'scripts' => ['/assets/ui/js/pages/embrace.js'],
-    // The address search (Geoapify) runs in the browser.
-    'csp' => ['connect-src' => ['https://api.geoapify.com']],
+    'scripts' => ['/assets/ui/js/pages/embrace.js', '/assets/ui/js/pages/automation.js'],
+    // The address search (Geoapify) runs in the browser. frame-src 'self': the
+    // Automation tab's email preview (a sandboxed frame on api/email_preview.php).
+    'csp' => ['connect-src' => ['https://api.geoapify.com'], 'frame-src' => ["'self'"]],
 ];
 require_once '../../includes/header.php';
 // Access: the 'embrace' row of the permission matrix (Roles & permissions).
 require_can('embrace');
+// The Automation tab (the first-timer journey): the 'manage' right.
+$embraceAutomation = can('embrace', 'manage');
 require_once '../../includes/campaigns/consent.php'; // the "Stay in touch" wording, recorded exactly as shown
 
 $embraceVisit = ['None' => 'Does not want a visit', 'In-Person' => 'In person', 'Virtual' => 'Virtual (video call)'];
@@ -29,7 +32,7 @@ $embraceVisit = ['None' => 'Does not want a visit', 'In-Person' => 'In person', 
         'pipeline' => ['label' => 'Pipeline', 'icon' => 'users'],
         'insights' => ['label' => 'Growth insights', 'icon' => 'chart-column'],
         'archive' => ['label' => 'Archive', 'icon' => 'history'],
-    ], 'pipeline', 'Embrace sections') ?>
+    ] + ($embraceAutomation ? ['automation' => ['label' => 'Automation', 'icon' => 'bell-ring']] : []), 'pipeline', 'Embrace sections') ?>
 
     <section id="panel-pipeline" data-tab-panel="pipeline" class="ui-tab-panel">
         <div class="ui-card">
@@ -92,6 +95,20 @@ $embraceVisit = ['None' => 'Does not want a visit', 'In-Person' => 'In person', 
             </div>
         </div>
     </section>
+<?php if ($embraceAutomation): ?>
+
+    <section id="panel-automation" data-tab-panel="automation" class="ui-tab-panel" hidden>
+<?php
+    require_once __DIR__ . '/../../includes/campaigns/automation_tab.php';
+    try {
+        echo automation_tab_html($pdo, 'embrace');
+    } catch (Throwable $e) {
+        error_log('[automation] Embrace tab failed: ' . $e->getMessage());
+        echo ui_banner('danger', ['title' => 'Automation did not load', 'text' => 'Reload the page to try again.']);
+    }
+?>
+    </section>
+<?php endif; ?>
 </div>
 
 <?= ui_dialog_start('emb-visitor', ['title' => 'New first timer', 'description' => 'Welcome them home with excellence.', 'size' => 'lg']) ?>

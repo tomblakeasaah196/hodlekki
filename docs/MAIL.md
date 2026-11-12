@@ -78,6 +78,12 @@ Module keys in `includes/permissions/modules.php`: `mail`, `mail.personal`, `mai
   the runner to stdin input if it exists.
 - A job left running 10 minutes is retried once; handlers check cPanel's real state first (an existing mailbox is
   given its password again rather than made twice).
+- **Which `uapi`**: `MAIL_UAPI_BINARY` when set, else the first of `/usr/bin/uapi` and `/usr/local/cpanel/bin/uapi`
+  this account can run (`Uapi::binary()`). On this CloudLinux / CageFS host the second fails from the account's own
+  shells ("Failed to execute /usr/local/cpanel/cpanel"); the first works (12 Nov 2026).
+- **Failures are visible**: every call's outcome is kept (`mail_settings` `uapi.status`). The Mailboxes Health tab
+  and `bin/mail_doctor.php` show "cPanel commands: failing — <what uapi printed>" with the time it began, and the
+  Mailboxes tab a red banner, instead of "never read yet". A printed line never carries an argument's value.
 
 ## 5. Vault
 
@@ -97,7 +103,9 @@ key lost: `bin/mail_rekey.php --reset-all`.
 
 - **Minute**: jobs; the mailbox count every 5 minutes or after a job; the outbox (section 7d); sync within 45 s. A folder
   whose MESSAGES, UNSEEN, UIDNEXT and UIDVALIDITY have not moved skips the full pass (one at least hourly).
-  `--verbose`, `--account=<id>`, `--jobs-only`.
+  `--verbose`, `--account=<id>`, `--jobs-only`. A run where a step fails (jobs, the count, the outbox, a mailbox's
+  sync) writes one dated line to `~/logs/hod-mail.log` (`MAIL_LOG_FILE` moves it; `HOD\Mail\Admin\CronLog`),
+  since the cron line sends output to /dev/null. A clean run writes nothing.
 - **Daily**: disk and the 80 % warnings; mailboxes gone from the server; the access diff (someone lost access to a
   shared mailbox -> a new password; a personal holder lost `mail.personal` or their account -> the leaving path);
   removals that are due; export downloads past 7 days; pruning.

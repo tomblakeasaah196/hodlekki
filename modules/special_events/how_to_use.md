@@ -1788,6 +1788,6 @@ notify leadership; archive after at least seven days.
 Studio access comes from **Roles & permissions** (module "Special Events"): managers
 have **Manage** (day one: the pastors and the Director/HOD of the department that owns
 Special Events, Envision), other seats in that department may create events, and crew
-on a live event keep their per-event access as before. The Settings field
-"Envision department ID" is no longer used — which department owns the module is set in
-Roles & permissions.
+on a live event keep their per-event access as before. Which department owns the module
+is set in Roles & permissions → Seats → Module owners (the old "Envision department ID"
+setting is gone).

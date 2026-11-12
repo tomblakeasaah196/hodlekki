@@ -13,7 +13,6 @@ import { boot, current, toast } from '../state.js';
 import { Card, Field, TextInput, TextArea, Button, Spinner } from '../ui.js';
 
 const LABELS = {
-    envision_department_id: ['Envision department ID', 'Which department grants Studio access. 3 unless the directory changes.'],
     default_brand_primary: ['Default primary colour', 'New events start with this.'],
     default_brand_secondary: ['Default secondary colour', ''],
     default_theme_preset: ['Default theme', ''],

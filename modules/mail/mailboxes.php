@@ -21,6 +21,7 @@ use HOD\Mail\Admin\Grants;
 use HOD\Mail\Admin\Health;
 use HOD\Mail\Admin\Jobs;
 use HOD\Mail\Admin\Quota;
+use HOD\Mail\Admin\Uapi;
 use HOD\Mail\Config;
 use HOD\Mail\MailAccess;
 use HOD\Mail\People;
@@ -42,6 +43,7 @@ if (!$isAdmin && !$approver) {
 
 $domain = Addresses::domain();
 $quota = Quota::snapshot();
+$uapiStatus = Uapi::status();
 $accounts = $isAdmin ? Store::accounts("1 = 1 ORDER BY FIELD(kind, 'church', 'department', 'personal'), email") : [];
 $openJobs = [];
 foreach ($isAdmin ? Jobs::open() : [] as $j) {
@@ -69,7 +71,7 @@ $tab = $isAdmin ? 'boxes' : 'exports';
 
     <?php if ($isAdmin): ?>
     <div class="ui-grid ui-grid--stats">
-        <div class="ui-card"><?= ui_stat(['label' => "Mailboxes on {$domain}", 'value' => $quota['domain_used'] . ' of ' . $quota['domain_quota']]) ?></div>
+        <div class="ui-card"><?= ui_stat(['label' => "Mailboxes on {$domain}", 'value' => $quota['read_at'] === null ? 'Not read yet' : $quota['domain_used'] . ' of ' . $quota['domain_quota']]) ?></div>
         <div class="ui-card"><?= ui_stat(['label' => 'Left', 'value' => (string) $quota['domain_left']]) ?></div>
         <div class="ui-card"><?= ui_stat(['label' => 'Kept for personal mailboxes', 'value' => (string) $quota['reserved_personal']]) ?></div>
         <div class="ui-card"><?= ui_stat(['label' => 'Whole hosting account', 'value' => $quota['account_max'] ? $quota['account_used'] . ' of ' . $quota['account_max'] : 'Not read yet']) ?></div>
@@ -85,7 +87,9 @@ $tab = $isAdmin ? 'boxes' : 'exports';
 
     <?php if ($isAdmin): ?>
     <section data-tab-panel="boxes" class="ui-tab-panel ui-stack">
-        <?php if ($quota['read_at'] === null): ?>
+        <?php if (($uapiStatus['ok'] ?? null) === false): ?>
+            <?= ui_banner('danger', ['title' => 'cPanel commands failing', 'text' => 'See the Health tab.', 'info' => (string) ($uapiStatus['error'] ?? '')]) ?>
+        <?php elseif ($quota['read_at'] === null): ?>
             <?= ui_banner('info', ['title' => 'Counting mailboxes', 'text' => 'Refresh in a minute.']) ?>
         <?php endif; ?>
         <div class="ui-card">
