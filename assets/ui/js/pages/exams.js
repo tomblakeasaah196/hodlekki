@@ -1,9 +1,9 @@
 // /assets/ui/js/pages/exams.js
 // Trainings exams (modules/exams/): the question bank and the Excel import,
-// an exam's set-up and results, and taking an exam. Every request goes to
-// /api/exams_api.php; the server decides access, keeps the clock and marks
-// the answers (includes/exams/). The browser never receives which option is
-// right while someone is taking an exam.
+// and an exam's set-up and results. The learner's side (one question per
+// screen) is its own script, exam-take.js (modules/exams/take.php). Every
+// request goes to /api/exams_api.php; the server decides access, keeps the
+// clock and marks the answers (includes/exams/).
 (function () {
     'use strict';
 
@@ -543,163 +543,6 @@
         });
     }
 
-    /* =====================================================================
-       Taking an exam
-       ===================================================================== */
-
-    var take = { view: null, deadline: 0, timer: null, ending: false };
-
-    /** "after the exam closes, Fri 20 Nov, 12:00" and the like. */
-    function reviewWhen(kind, at) {
-        if (kind === 'close') return 'after the exam closes, ' + when(at);
-        if (kind === 'end') return 'after the training ends, ' + when(at);
-        return 'once your tutor releases them';
-    }
-
-    function clock() {
-        var left = Math.max(0, Math.round((take.deadline - Date.now()) / 1000));
-        var m = Math.floor(left / 60), s = left % 60;
-        var el = one('[data-ex-clock]');
-        el.textContent = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s + ' left';
-        el.classList.toggle('text-danger', left <= 60);
-        if (left === 0) finish(true);
-    }
-
-    function stopClock() {
-        window.clearInterval(take.timer);
-        take.timer = null;
-        one('[data-ex-bar]').hidden = true;
-    }
-
-    function renderTake(v) {
-        take.view = v;
-        var box = one('[data-ex-take]');
-        if (v.state !== 'started') stopClock();
-        if (v.state === 'not_set') {
-            box.innerHTML = '<div class="ui-empty"><p class="ui-empty__title">Not ready yet</p><p class="ui-empty__text">Your tutor has not set this exam up yet.</p></div>';
-            return;
-        }
-        if (v.state === 'ready') {
-            var line = v.window === 'not_open' ? 'Opens ' + when(v.opens) + '.' : (v.window === 'closed' ? 'This exam has closed.' : (v.closes ? 'Open until ' + when(v.closes) + '.' : 'Open now.'));
-            box.innerHTML = '<section class="ui-card"><div class="ui-card__body ui-stack">' +
-                '<dl class="grid grid-cols-3 gap-3 text-center">' +
-                '<div><dt class="ui-meta">Questions</dt><dd class="text-xl font-semibold">' + v.questions + '</dd></div>' +
-                '<div><dt class="ui-meta">Minutes</dt><dd class="text-xl font-semibold">' + v.minutes + '</dd></div>' +
-                '<div><dt class="ui-meta">To pass</dt><dd class="text-xl font-semibold">' + v.pass_percent + '%</dd></div></dl>' +
-                '<p>' + esc(line) + ' One attempt; the clock starts when you press Start.</p>' +
-                (v.review ? '<p class="ui-meta">' + esc(v.review.open ? 'Answers to any you get wrong show right after.'
-                    : 'Answers to any you get wrong show ' + reviewWhen(v.review.when, v.review.at) + '.') + '</p>' : '') +
-                (v.window === 'open' ? '<div><button type="button" class="ui-btn ui-btn--primary" data-action="ex.start"><span>Start</span></button></div>' : '') +
-                '</div></section>';
-            return;
-        }
-        if (v.state === 'started') {
-            paper(v.paper);
-            return;
-        }
-        result(v.result);
-    }
-
-    function paper(p) {
-        var box = one('[data-ex-take]');
-        var total = p.questions.length;
-        box.innerHTML = '<ol class="ui-stack">' + p.questions.map(function (q) {
-            var kind = q.type === 'multiple' ? 'checkbox' : 'radio';
-            return '<li class="ui-card"><fieldset class="ui-card__body"><legend class="mb-2"><span class="ui-meta block">Question ' + q.n + ' of ' + total + ' · ' +
-                plural(q.marks, 'mark', 'marks') + (q.type === 'multiple' ? ' · choose all that apply' : '') + '</span>' +
-                '<span class="whitespace-pre-line font-medium">' + esc(q.text) + '</span></legend><div class="ui-stack ui-stack--sm">' +
-                q.options.map(function (o, i) {
-                    return '<label class="ui-check rounded-ui-lg border border-line px-3 py-2"><input type="' + kind + '" name="q' + q.n + '" value="' + i + '" data-n="' + q.n + '"' +
-                        (q.chosen.indexOf(i) !== -1 ? ' checked' : '') + ' data-action-change="ex.pick"><span>' + esc(o) + '</span></label>';
-                }).join('') + '</div></fieldset></li>';
-        }).join('') + '</ol>';
-        take.deadline = Date.now() + p.seconds_left * 1000;
-        one('[data-ex-bar]').hidden = false;
-        one('[data-ex-saved]').textContent = '';
-        if (!take.timer) take.timer = window.setInterval(clock, 1000);
-        clock();
-    }
-
-    function start(btn) {
-        var v = take.view;
-        HOD.confirm({ title: 'Start the exam?', message: 'One attempt, ' + v.minutes + ' minutes. The clock keeps running if you leave.', confirmLabel: 'Start' }).then(function (yes) {
-            if (!yes) return;
-            HOD.busy(btn, true);
-            call('start', { item: cfg.item }).then(renderTake).catch(function () { HOD.busy(btn, false); });
-        });
-    }
-
-    function pick(input) {
-        var n = Number(input.getAttribute('data-n'));
-        var chosen = all('input[name="q' + n + '"]:checked').map(function (i) { return Number(i.value); });
-        var saved = one('[data-ex-saved]');
-        saved.textContent = 'Saving…';
-        call('answer', { item: cfg.item, n: n, chosen: chosen }, { quiet: true, raw: true }).then(function (res) {
-            if (res.status === 'success') {
-                saved.textContent = 'Saved';
-                take.deadline = Date.now() + res.seconds_left * 1000;
-                return;
-            }
-            if (res.code === 'ENDED') {
-                HOD.toast(res.message, 'warning');
-                call('take', { item: cfg.item }).then(renderTake);
-                return;
-            }
-            saved.textContent = 'Not saved';
-            HOD.toast(res.message, 'danger');
-        }).catch(function () {
-            saved.textContent = 'Not saved: check your connection';
-        });
-    }
-
-    function finish(auto) {
-        if (take.ending) return;
-        take.ending = true;
-        stopClock();
-        call('submit', { item: cfg.item }, { quiet: true }).then(function (res) {
-            if (auto) HOD.toast('Time is up. Your answers were handed in.', 'info');
-            renderTake(res);
-        }).catch(function () {
-            // The server hands it in at the deadline anyway; show where things stand.
-            call('take', { item: cfg.item }, { quiet: true }).then(renderTake).catch(function () {});
-        }).finally(function () { take.ending = false; });
-    }
-
-    function submit() {
-        var qs = take.view && take.view.paper ? take.view.paper.questions : [];
-        var empty = qs.filter(function (q) { return !all('input[name="q' + q.n + '"]:checked').length; }).length;
-        HOD.confirm({ title: 'Hand in now?', message: empty ? plural(empty, 'question has', 'questions have') + ' no answer. You cannot change anything after this.' : 'You cannot change your answers after this.', confirmLabel: 'Hand in' })
-            .then(function (yes) { if (yes) finish(false); });
-    }
-
-    function result(r) {
-        var box = one('[data-ex-take]');
-        var head = '<section class="ui-card"><div class="ui-card__body text-center">' +
-            '<p class="text-4xl font-semibold tabular-nums">' + Math.round(r.percent) + '%</p>' +
-            '<p class="ui-meta">' + r.score + ' of ' + plural(r.max, 'mark', 'marks') + ' · ' + r.pass_percent + '% to pass</p>' +
-            '<p class="mt-2">' + (r.passed ? badge('Passed', 'success') : badge('Not passed', 'danger')) + '</p></div></section>';
-        var body;
-        if (r.wrong_count === 0) {
-            body = '<p class="mt-4 text-center">Every answer right. Well done.</p>';
-        } else if (!r.review_open) {
-            body = '<p class="mt-4 text-center">' + esc(plural(r.wrong_count, 'answer was', 'answers were') + ' not right. The right answers and why show here ' + reviewWhen(r.review_when, r.review_at) + '.') + '</p>';
-        } else {
-            body = '<h2 class="ui-h3 mt-6 mb-2">To learn from</h2><ol class="ui-stack">' + r.wrong.map(function (w) {
-                return '<li class="ui-card"><div class="ui-card__body"><p class="ui-meta">Question ' + w.n + (w.part ? ' · ' + w.part + ' of ' + w.marks + ' marks' : '') + '</p>' +
-                    '<p class="whitespace-pre-line font-medium">' + esc(w.text) + '</p>' +
-                    '<p class="mt-2 text-sm">Your answer: ' + esc(w.yours || 'none') + '</p><p class="text-sm">Right answer: ' + esc(w.right) + '</p>' +
-                    (w.explanation ? '<p class="mt-2 whitespace-pre-line">' + esc(w.explanation) + '</p>' : '') + '</div></li>';
-            }).join('') + '</ol>';
-        }
-        box.innerHTML = head + body;
-    }
-
-    function focusNote() {
-        if (!take.view || take.view.state !== 'started') return;
-        call('focus', { item: cfg.item, kind: document.hidden ? 'leave' : 'return' }, { quiet: true }).catch(function () {});
-        if (!document.hidden) HOD.toast('Leaving the exam tab is noted for your tutor.', 'warning');
-    }
-
     HOD.ready(function () {
         cfg = HOD.data('exams-config') || {};
         var page = document.querySelector('[data-exams]');
@@ -735,12 +578,6 @@
             HOD.actions.on('ex.answers', answers);
             loadSetup().then(function () { results(); }).catch(function () {});
             document.addEventListener('ui:tab', function (e) { if (e.detail && e.detail.tab === 'results') results(); });
-        } else if (cfg.page === 'take') {
-            HOD.actions.on('ex.start', start);
-            HOD.actions.on('ex.pick', pick);
-            HOD.actions.on('ex.submit', submit);
-            document.addEventListener('visibilitychange', focusNote);
-            call('take', { item: cfg.item }).then(renderTake).catch(function () {});
         }
     });
 })();
