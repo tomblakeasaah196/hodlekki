@@ -15,7 +15,7 @@ Anyone in the Reach department can capture, claim and follow up leads. **HODs, D
 
 1. On **Campaigns**, click **New Campaign**.
 2. Enter a clear **title** (for example *Ikate Street Evangelism*) and the **location**. The date and start time are already set to today and now — change them if needed, then tap a **duration** (30 min, 1 hr, 1½ hrs or 2 hrs) to fill in the end time.
-3. Optionally upload the campaign **flyer** (JPG, PNG or WebP, up to 5 MB). It becomes the WhatsApp link preview and the background of the capture page. No flyer? The **default campaign image** is used instead.
+3. Optionally upload the campaign **flyer** (JPG, PNG or WebP, up to 5 MB). It becomes the WhatsApp link preview and the picture at the top of the capture page. No flyer? The **default campaign image** is used instead.
 4. Click **Write with AI** — it writes the WhatsApp description and picks a fitting scripture from the title and location. Not quite right? Click **Another option** to cycle through up to three versions, or edit the text yourself.
 5. Choose the **form length** — how much volunteers ask each person:
    - **Quick** — name, phone, where they are spiritually and "open to a visit". About 10 seconds. Best for busy streets.
@@ -43,7 +43,7 @@ Click **Share** on a campaign card. You get:
 - a ready-made **WhatsApp message** with the description, scripture and link — tap **Send on WhatsApp**. The preview shows the flyer (or the default image);
 - a **QR code** you can print or show on a phone at the meeting point.
 
-Volunteers open the link (it also has **Tips for sharing your faith** — prayer, the Gospel in brief, inviting people, scriptures and books), enter the phone number they are registered with, confirm their name, and start logging people. For **"Where are they spiritually?"** tap every category that applies — someone can be both *Broken* and a *New Convert*. Leaving it empty saves them as *Other*. Only numbers already in our family database can capture. Voice capture fills the form from one spoken sentence — always check it before saving.
+Volunteers open the link (it also has **Tips for sharing your faith** — prayer, the Gospel in brief, inviting people, scriptures and books), enter the phone number they are registered with, confirm their name, and start logging people. For **"Where are they spiritually?"** tap every category that applies — someone can be both *Broken* and a *New Convert*. Leaving it empty saves them as *Other*. Only numbers already in our family database can capture. Voice capture (the microphone beside **Log a soul**) fills the form from one spoken sentence — always check it before saving. The capture page has the same look as the rest of the app since November 2026; nothing a volunteer does on it changed.
 
 ## 4. Working the follow-up queue
 
