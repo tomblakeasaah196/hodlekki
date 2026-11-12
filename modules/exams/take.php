@@ -20,7 +20,7 @@ if ($item === null) {
     require_once '../../includes/footer.php';
     exit;
 }
-// Access: an enrolment in the training (PR 1); the API checks every action again.
+// Access: Trainings on their own records and an enrolment in the training (PR 1); the API checks every action again.
 if (exams_learner_enrolment($pdo, $item, (int) $_SESSION['user_id']) === null) {
     echo ui_no_access('This exam is for people enrolled in ' . $item['training_title'] . '.', 'Not enrolled');
     require_once '../../includes/footer.php';

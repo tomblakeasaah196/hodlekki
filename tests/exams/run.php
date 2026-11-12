@@ -53,11 +53,14 @@ function et_at(string $when): DateTimeImmutable
     return $at;
 }
 
-/** The migration, translated to SQLite, plus stand-ins for PR 1's tables. */
+/** PR 1's real tables (Trainings core) and this module's, from their migrations, translated to SQLite. */
 function et_db(): PDO
 {
     $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
-    $sql = (string) file_get_contents(__DIR__ . '/../../db/migrations/20261209090000_trainings_exams.sql');
+    $sql = '';
+    foreach (['20261208090000_trainings_core.sql', '20261209090000_trainings_exams.sql'] as $file) {
+        $sql .= (string) file_get_contents(__DIR__ . '/../../db/migrations/' . $file) . PHP_EOL;
+    }
     $sql = (string) preg_replace('/^\s*--.*$/m', '', $sql);
     preg_match_all('/CREATE TABLE IF NOT EXISTS (\w+) \((.*?)\)\s*ENGINE=[^;]*;/s', $sql, $tables, PREG_SET_ORDER);
     foreach ($tables as [, $name, $body]) {
@@ -83,7 +86,7 @@ function et_db(): PDO
             }
             $line = (string) preg_replace('/\b(TINYINT|INT)\b/', 'INTEGER', $line);
             $line = (string) preg_replace('/\b(VARCHAR|CHAR)\(\d+\)|\bDECIMAL\(\d+,\d+\)/', 'TEXT', $line);
-            $line = (string) preg_replace('/\b(MEDIUMTEXT|DATETIME)\b/', 'TEXT', $line);
+            $line = (string) preg_replace('/\b(MEDIUMTEXT|LONGTEXT|DATETIME|DATE)\b/', 'TEXT', $line);
             $cols[] = $line;
         }
         $pdo->exec("CREATE TABLE {$name} (" . implode(', ', $cols) . ')');
@@ -92,20 +95,19 @@ function et_db(): PDO
         }
     }
     foreach ([
-        'CREATE TABLE users (id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT)',
-        "CREATE TABLE trainings (id INTEGER PRIMARY KEY, title TEXT, department_id INTEGER, status TEXT DEFAULT 'published')",
-        'CREATE TABLE training_items (id INTEGER PRIMARY KEY, training_id INTEGER, type TEXT, title TEXT)',
-        "CREATE TABLE training_enrolments (id INTEGER PRIMARY KEY AUTOINCREMENT, training_id INTEGER, user_id INTEGER, status TEXT DEFAULT 'active', UNIQUE (training_id, user_id))",
-        'CREATE TABLE training_progress (id INTEGER PRIMARY KEY AUTOINCREMENT, enrolment_id INTEGER, item_id INTEGER, status TEXT, completed_at TEXT, data TEXT, UNIQUE (enrolment_id, item_id))',
+        'CREATE TABLE users (id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, spiritual_status TEXT)',
         'CREATE TABLE system_notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT, message TEXT, link_url TEXT)',
     ] as $stmt) {
         $pdo->exec($stmt);
     }
     $pdo->exec("INSERT INTO users (id, first_name, last_name) VALUES (1, 'Tutor', 'One'), (2, 'Ada', 'Okafor'), (3, 'Ben', 'Ade'), (4, 'Cy', 'Bello'), (5, 'Dee', 'Eze')");
-    $pdo->exec("INSERT INTO trainings (id, title, department_id) VALUES (10, 'Maturity Class', 7), (20, 'Workers training', NULL)");
-    $pdo->exec("INSERT INTO training_items (id, training_id, type, title) VALUES (100, 10, 'exam', 'Final exam'), (101, 10, 'reading', 'Notes'), (200, 20, 'exam', 'Quiz')");
+    $at = '2027-01-01 09:00:00';
+    $pdo->exec("INSERT INTO trainings (id, title, department_id, status, created_at) VALUES (10, 'Maturity Class', 7, 'published', '{$at}'),
+                (20, 'Workers training', NULL, 'published', '{$at}')");
+    $pdo->exec("INSERT INTO training_items (id, training_id, position, type, title, created_at) VALUES (100, 10, 2, 'exam', 'Final exam', '{$at}'),
+                (101, 10, 1, 'reading', 'Notes', '{$at}'), (200, 20, 1, 'exam', 'Quiz', '{$at}')");
     foreach ([2, 3, 4, 5] as $uid) {
-        $pdo->prepare('INSERT INTO training_enrolments (training_id, user_id) VALUES (10, ?)')->execute([$uid]);
+        $pdo->prepare("INSERT INTO training_enrolments (training_id, user_id, status, created_at) VALUES (10, ?, 'active', ?)")->execute([$uid, $at]);
     }
     return $pdo;
 }
@@ -454,8 +456,8 @@ et_ok('…but its explanation can', exam_question_save($pdo, $used, null, ['qtyp
 // ===========================================================================
 et_section('9. Who may do what (exams_action), and the screens\' contracts');
 // ===========================================================================
-// The real can() arrives with PR 1's 'trainings' key; here a stand-in records
-// what is asked and answers from a table, so the routing is what is tested.
+// The real can() needs the permission tables; here a stand-in records what
+// is asked and answers from a table, so the routing is what is tested.
 require_once __DIR__ . '/../../includes/exams/access.php';
 $GLOBALS['et_grants'] = [];
 $GLOBALS['et_asked'] = [];
@@ -466,30 +468,48 @@ if (!function_exists('can')) {
         return in_array($module . ':' . $level . ':' . json_encode($target), $GLOBALS['et_grants'], true);
     }
 }
+if (!function_exists('perm_person')) {
+    function perm_person(int $userId): array
+    {
+        return ['person' => $userId];
+    }
+}
+$learners = array_map(static fn ($u) => 'trainings:view:{"person":' . $u . '}', [1, 2, 3, 4, 5]);
 $p = et_db();
 et_at('2027-02-01 09:00');
 $q1 = exam_question_save($p, null, 10, ['qtype' => 'true_false', 'body' => 'Is this a test?', 'correct_text' => 'True', 'explanation' => 'Yes.', 'status' => 'approved'], 1);
 exam_save($p, exam_item($p, 100), ['window_open' => '', 'window_close' => '', 'minutes' => 10, 'pass_percent' => 50, 'shuffle' => 1, 'leave_alert' => 3,
     'question_ids' => [$q1['id']]], 1);
 $GLOBALS['et_grants'] = [];
-et_eq('without Trainings Manage a tutor action is refused', 'FORBIDDEN', exams_action($p, 'setup', ['item' => 100], 1)['code'] ?? null);
-et_eq("…and the question asked is the training's department", 'trainings:manage:7', end($GLOBALS['et_asked']));
-$GLOBALS['et_grants'] = ['trainings:manage:7'];
+et_eq('without the Academy\'s Edit a tutor action is refused', 'FORBIDDEN', exams_action($p, 'setup', ['item' => 100], 1)['code'] ?? null);
+et_eq('…the question asked is PR 1\'s staff check: Trainings, Edit, church-wide', 'trainings:edit:"church"', end($GLOBALS['et_asked']));
+$GLOBALS['et_grants'] = ['trainings:view:"church"'];
+et_eq('…View alone is not enough', 'FORBIDDEN', exams_action($p, 'results', ['item' => 100], 1)['code'] ?? null);
+$GLOBALS['et_grants'] = ['trainings:edit:"church"'];
 et_eq('with it, the set-up opens', 'success', exams_action($p, 'setup', ['item' => 100], 1)['status']);
-et_eq('a training without a department asks church-wide', 'FORBIDDEN', exams_action($p, 'setup', ['item' => 200], 1)['code'] ?? null);
-et_eq('…', 'trainings:manage:"church"', end($GLOBALS['et_asked']));
-et_eq('the shared bank needs Manage church-wide', 'FORBIDDEN', exams_action($p, 'questions', ['training_id' => ''], 1)['code'] ?? null);
-et_eq('the banks a department tutor sees: their training only', [10], array_column(exams_banks($p), 'id'));
-$GLOBALS['et_grants'] = [];
+et_eq('…for every training, and the shared bank', ['success', 'success'],
+    [exams_action($p, 'setup', ['item' => 200], 1)['status'], exams_action($p, 'questions', ['training_id' => ''], 1)['status']]);
+et_eq('the banks a tutor sees: shared, then each training', [null, 10, 20], array_column(exams_banks($p), 'id'));
+et_eq('a bank that does not exist is refused', 'FORBIDDEN', exams_action($p, 'questions', ['training_id' => 999], 1)['code'] ?? null);
+$GLOBALS['et_grants'] = $learners;
 et_eq('not enrolled: no exam', 'NOT_ENROLLED', exams_action($p, 'take', ['item' => 100], 1)['code'] ?? null);
+$GLOBALS['et_grants'] = [];
+et_eq('enrolled but without Trainings on their own records: no exam', 'NOT_ENROLLED', exams_action($p, 'take', ['item' => 100], 2)['code'] ?? null);
+$GLOBALS['et_grants'] = $learners;
 $take = exams_action($p, 'take', ['item' => 100], 2);
 et_eq('enrolled: the exam, ready to start', ['success', 'ready', 1], [$take['status'], $take['state'], $take['questions']]);
 $started = exams_action($p, 'start', ['item' => 100], 2);
 et_ok('start: the paper, and nothing about which answer is right',
     $started['state'] === 'started' && !str_contains(json_encode($started), 'correct') && !str_contains(json_encode($started), 'Yes.'));
 et_eq('answer through the API', 'success', exams_action($p, 'answer', ['item' => 100, 'n' => 1, 'chosen' => [0]], 2)['status']);
+$p->exec("INSERT INTO training_progress (enrolment_id, item_id, status, completed_at, data) VALUES (1, 101, 'completed', '2027-02-01 08:00:00', '{\"by\":\"self\"}')");
 $handed = exams_action($p, 'submit', ['item' => 100], 2);
 et_eq('hand in: the result, no window close so the review is open', ['done', 100, true], [$handed['state'], (int) $handed['result']['percent'], $handed['result']['review_open']]);
+$prog = $p->query('SELECT status, data, updated_at FROM training_progress WHERE enrolment_id = 1 AND item_id = 100')->fetch();
+et_eq('PR 1: progress written through trainings_progress_put() (completed, passed, with updated_at)', ['completed', true, true],
+    [$prog['status'] ?? null, json_decode((string) ($prog['data'] ?? ''), true)['passed'] ?? null, !empty($prog['updated_at'])]);
+et_eq('PR 1: trainings_recheck_enrolment() then completes the training (the reading was done)', 'completed',
+    $p->query('SELECT status FROM training_enrolments WHERE id = 1')->fetchColumn());
 et_eq('…a learner cannot open the tutor\'s view of attempts', 'FORBIDDEN', exams_action($p, 'attempt', ['item' => 100, 'attempt_id' => 1], 2)['code'] ?? null);
 $p->exec("UPDATE trainings SET status = 'draft' WHERE id = 10");
 et_eq('a training that is not published: no exam', 'NOT_ENROLLED', exams_action($p, 'take', ['item' => 100], 3)['code'] ?? null);

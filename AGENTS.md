@@ -1062,8 +1062,10 @@ Guide and contracts: `docs/EXAMS.md`. Code: `includes/exams/` (entry
   before they have handed in; after, only for the questions they got wrong,
   once the exam has closed.
 - Marking never calls the AI (explanations are stored per question).
-- Access: tutors `can('trainings', 'manage', <training department or
-  'church'>)`; learners need an enrolment. Decided only in `exams_action()`.
+- Access: tutors `can('trainings', 'edit', 'church')` (PR 1's staff check);
+  learners their own records and an enrolment. Decided only in
+  `exams_action()`. A hand-in writes `training_progress` through
+  `trainings_progress_put()` and then calls `trainings_recheck_enrolment()`.
 - The Excel reader (`xlsx.php`) treats every upload as hostile (size caps
   before inflating, no DOCTYPE, no network); keep it that way.
 

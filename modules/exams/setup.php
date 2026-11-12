@@ -14,7 +14,7 @@ require_once '../../includes/header.php';
 require_once __DIR__ . '/../../includes/exams/access.php';
 
 $item = exams_ready($pdo) ? exam_item($pdo, (int) ($_GET['item'] ?? 0)) : null;
-// Access: Trainings, Manage, for the training's department (Roles & permissions).
+// Access: Trainings, Edit, church-wide (the Academy's staff check, Roles & permissions).
 if ($item === null || !exams_may_manage($pdo, (int) $item['training_id'])) {
     echo $item === null
         ? '<div class="ui-page ui-page--narrow">' . ui_empty(['icon' => 'file-text', 'title' => 'Exam not found', 'text' => 'It was removed, or the link is wrong.']) . '</div>'

@@ -3,11 +3,13 @@
 //
 // Who may do what, and the actions of api/exams_api.php (exams_action()).
 //
-//   Tutors (the question bank, exam set-up, results): Trainings, Manage, for
-//   the training's department (its department_id), else church-wide. The
-//   shared bank (questions with no training) needs Manage church-wide.
-//   Learners (taking an exam): an enrolment in the training (PR 1's
-//   training_enrolments, not withdrawn) while the training is published.
+//   Tutors (the question bank, exam set-up, results): Trainings, Edit,
+//   church-wide: the Academy's own rule (includes/trainings/actions.php
+//   trainings_staff_can(); seats in an owner department have it), the same
+//   one PR 1's training page asks before it links to the exam set-up.
+//   Learners (taking an exam): Trainings on their own records (as PR 1's
+//   learner pages) AND an enrolment in the training (training_enrolments,
+//   not withdrawn) while the training is published.
 // The engine (engine.php) and the bank (bank.php) never check access.
 
 require_once __DIR__ . '/bootstrap.php';
@@ -29,28 +31,28 @@ function exams_training(PDO $pdo, int $id): ?array
     return $row;
 }
 
-/** May the signed-in person manage this bank ($trainingId null = the shared bank)? */
-function exams_may_manage(PDO $pdo, ?int $trainingId): bool
+/** The Academy's staff check: Trainings at church-wide reach (Edit = any training, mark work). */
+function exams_staff_can(string $level = 'edit'): bool
 {
-    if ($trainingId === null) {
-        return can('trainings', 'manage', 'church');
-    }
-    $t = exams_training($pdo, $trainingId);
-    return $t !== null && can('trainings', 'manage', $t['department_id'] ?? 'church');
+    return can('trainings', $level, 'church');
 }
 
-/** The banks this person may manage: the shared bank first, then their trainings. */
+/** May the signed-in person work on this bank ($trainingId null = the shared bank)? */
+function exams_may_manage(PDO $pdo, ?int $trainingId): bool
+{
+    return exams_staff_can('edit') && ($trainingId === null || exams_training($pdo, $trainingId) !== null);
+}
+
+/** The banks a tutor works on: the shared bank first, then every training not archived. */
 function exams_banks(PDO $pdo): array
 {
-    $out = [];
-    if (can('trainings', 'manage', 'church')) {
-        $out[] = ['id' => null, 'title' => 'Shared bank'];
+    if (!exams_staff_can('edit')) {
+        return [];
     }
+    $out = [['id' => null, 'title' => 'Shared bank']];
     if (exams_table_exists($pdo, 'trainings')) {
-        foreach ($pdo->query("SELECT id, title, department_id FROM trainings WHERE status <> 'archived' ORDER BY title")->fetchAll(PDO::FETCH_ASSOC) as $t) {
-            if (can('trainings', 'manage', $t['department_id'] !== null ? (int) $t['department_id'] : 'church')) {
-                $out[] = ['id' => (int) $t['id'], 'title' => (string) $t['title']];
-            }
+        foreach ($pdo->query("SELECT id, title FROM trainings WHERE status <> 'archived' ORDER BY title")->fetchAll(PDO::FETCH_ASSOC) as $t) {
+            $out[] = ['id' => (int) $t['id'], 'title' => (string) $t['title']];
         }
     }
     return $out;
@@ -59,7 +61,7 @@ function exams_banks(PDO $pdo): array
 /** May this person sit the exam? Their enrolment id, or null. */
 function exams_learner_enrolment(PDO $pdo, array $item, int $userId): ?int
 {
-    if (($item['training_status'] ?? 'published') !== 'published') {
+    if (($item['training_status'] ?? 'published') !== 'published' || !can('trainings', 'view', perm_person($userId))) {
         return null;
     }
     return exam_enrolment_id($pdo, (int) $item['training_id'], $userId);

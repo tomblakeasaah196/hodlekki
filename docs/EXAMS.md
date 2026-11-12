@@ -62,17 +62,22 @@ attempt that is still running.
 
 ## 4. Access (`access.php`)
 
-- Tutors: `can('trainings', 'manage', <the training's department_id, else 'church'>)`; the shared bank needs Manage
-  church-wide. `trainings` is PR 1's permission key.
-- Learners: an enrolment in the training (`training_enrolments`, not withdrawn) while the training is `published`.
+- Tutors: `can('trainings', 'edit', 'church')`, PR 1's staff check (`trainings_staff_can()`: Edit = any training,
+  mark work; seats in an owner department have it). It is also what PR 1's training page asks before it links to the
+  exam set-up. One rule for every bank, the shared one included.
+- Learners: `can('trainings', 'view', perm_person($me))` (their own records, as PR 1's learner pages) and an enrolment
+  in the training (`training_enrolments`, not withdrawn) while the training is `published`.
 - The library never checks access; `exams_action()` decides every action.
 
 ## 5. Meeting points with PR 1 (Trainings core)
 
 - Reads `trainings` (id, title, department_id, status), `training_items` (id, training_id, type, title),
   `training_enrolments` (id, training_id, user_id, status).
-- On hand-in writes `training_progress` (`enrolment_id`, `item_id`) → status `completed`, `completed_at`, `data`
-  `{score, max, percent, passed, attempt_id}` (`exam_progress_hook()`; a failure is logged, never breaks marking).
+- On hand-in `exam_progress_hook()` writes `training_progress` (`enrolment_id`, `item_id`) through PR 1's
+  `trainings_progress_put()`: status `completed` (PR 1's words: `completed` | `submitted` | `returned`), `data`
+  `{score, max, percent, passed, attempt_id}`; PR 1 counts an exam towards completion only when `passed` is true. Then
+  it calls `trainings_recheck_enrolment()`, which may complete the training. A failure is logged and never breaks
+  marking. PR 1's `includes/trainings/bootstrap.php` loads this module; the hook loads PR 1 on first use.
 - Links for PR 1's pages: `exam_url_setup($itemId)` → `/modules/exams/setup?item=N` (Academy builder: "Set up exam"),
   `exam_url_take($itemId)` → `/modules/exams/take?item=N` (learner: "Start exam"). The bank: `/modules/exams/?training=N`.
 

@@ -704,22 +704,39 @@ function exam_enrolment_id(PDO $pdo, int $trainingId, int $userId): ?int
     return $id === false ? null : (int) $id;
 }
 
-/** Tell training_progress (PR 1) that this person has finished the exam item. Never breaks marking. */
+/**
+ * Tell PR 1 that this person has sat the exam: training_progress (enrolment,
+ * item) = 'completed' with data {score, max, percent, passed, attempt_id}
+ * (PR 1 counts it towards completion only when passed), through PR 1's own
+ * trainings_progress_put(); then trainings_recheck_enrolment(), which may
+ * complete the training. Never breaks marking: a failure is logged.
+ */
 function exam_progress_hook(PDO $pdo, array $exam, array $attempt): void
 {
     $enrolment = $attempt['enrolment_id'] ?? exam_enrolment_id($pdo, (int) $exam['training_id'], (int) $attempt['user_id']);
     if ($enrolment === null || !exams_table_exists($pdo, 'training_progress')) {
         return;
     }
-    $data = exams_json(['score' => $attempt['score'], 'max' => $attempt['max_score'], 'percent' => $attempt['percent'],
-                        'passed' => (bool) $attempt['passed'], 'attempt_id' => (int) $attempt['id']]);
-    $at = (string) $attempt['submitted_at'];
+    $data = ['score' => $attempt['score'], 'max' => $attempt['max_score'], 'percent' => $attempt['percent'],
+             'passed' => (bool) $attempt['passed'], 'attempt_id' => (int) $attempt['id']];
     try {
-        $upd = $pdo->prepare("UPDATE training_progress SET status = 'completed', completed_at = ?, data = ? WHERE enrolment_id = ? AND item_id = ?");
-        $upd->execute([$at, $data, $enrolment, (int) $exam['item_id']]);
-        if ($upd->rowCount() === 0) {
-            $pdo->prepare("INSERT INTO training_progress (enrolment_id, item_id, status, completed_at, data) VALUES (?, ?, 'completed', ?, ?)")
-                ->execute([$enrolment, (int) $exam['item_id'], $at, $data]);
+        $core = dirname(__DIR__) . '/trainings/bootstrap.php';
+        if (!function_exists('trainings_progress_put') && is_file($core)) {
+            require_once $core;   // PR 1 loads exams the other way round; here it is loaded on first use.
+        }
+        if (function_exists('trainings_progress_put')) {
+            trainings_progress_put($pdo, (int) $enrolment, (int) $exam['item_id'], 'completed', $data);
+        } else {
+            $at = (string) $attempt['submitted_at'];
+            $upd = $pdo->prepare("UPDATE training_progress SET status = 'completed', completed_at = ?, data = ? WHERE enrolment_id = ? AND item_id = ?");
+            $upd->execute([$at, exams_json($data), $enrolment, (int) $exam['item_id']]);
+            if ($upd->rowCount() === 0) {
+                $pdo->prepare("INSERT INTO training_progress (enrolment_id, item_id, status, completed_at, data) VALUES (?, ?, 'completed', ?, ?)")
+                    ->execute([$enrolment, (int) $exam['item_id'], $at, exams_json($data)]);
+            }
+        }
+        if (function_exists('trainings_recheck_enrolment')) {
+            trainings_recheck_enrolment($pdo, (int) $enrolment);
         }
     } catch (Throwable $e) {
         error_log('[exams] progress for attempt ' . $attempt['id'] . ' not recorded: ' . $e->getMessage());

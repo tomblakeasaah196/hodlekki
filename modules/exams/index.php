@@ -15,7 +15,7 @@ $ui = [
 require_once '../../includes/header.php';
 require_once __DIR__ . '/../../includes/exams/access.php';
 
-// Access: Trainings, Manage (Roles & permissions), per bank; the API checks every action again.
+// Access: Trainings, Edit, church-wide (the Academy's staff check, Roles & permissions); the API checks every action again.
 $banks = exams_ready($pdo) ? exams_banks($pdo) : [];
 if ($banks === []) {
     echo ui_no_access();

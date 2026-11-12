@@ -25,7 +25,7 @@ csrf_require();
 
 $me = (int) $_SESSION['user_id'];
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && ($_GET['action'] ?? '') === 'template') {
-    // Access: anyone who manages a question bank (Trainings, Manage).
+    // Access: the Academy's staff (Trainings, Edit, church-wide).
     if (exams_banks($pdo) === []) {
         http_response_code(403);
         header('Content-Type: text/plain; charset=utf-8');
@@ -59,7 +59,7 @@ try {
         echo json_encode(['status' => 'error', 'code' => 'FEATURE_NOT_READY', 'message' => 'Exams are being set up. Try again later.']);
         exit;
     }
-    // Access: Trainings Manage (tutors) or an enrolment (learners), decided per action.
+    // Access: Trainings Edit church-wide (tutors) or own records + an enrolment (learners), decided per action.
     $out = exams_action($pdo, (string) ($in['action'] ?? ''), $in, $me, $_FILES);
     if (($out['code'] ?? '') === 'FORBIDDEN') {
         http_response_code(403);
