@@ -118,6 +118,23 @@
         });
     });
 
+    HOD.actions.on('mb.aiplan', function (button) {
+        var on = button.dataset.confirmed === '1';
+        HOD.confirm(on
+            ? { title: 'Record paid plan?', message: 'Only when the owner confirmed the Gemini project is on a paid plan.', confirmLabel: 'Record paid plan' }
+            : { title: 'Withdraw paid plan?', message: 'AI stops everywhere until it is recorded again.', confirmLabel: 'Withdraw', tone: 'danger' }
+        ).then(function (yes) {
+            if (!yes) return;
+            post('ai_plan', { confirmed: on ? '1' : '0' }).then(function () { window.location.reload(); }).catch(function () {});
+        });
+    });
+
+    HOD.actions.on('mb.aibox', function (button) {
+        HOD.busy(button, true);
+        post('ai_mailbox', { id: button.dataset.id, on: button.dataset.on })
+            .then(function () { window.location.reload(); })
+            .catch(function () { HOD.busy(button, false); });
+    });
     HOD.actions.on('mb.remove', function (button) {
         var email = button.dataset.email;
         HOD.confirm({

@@ -148,6 +148,10 @@ final class OutboxSender
                 'data' => Db::json(['outbox_id' => $row['id'], 'kind' => $row['kind'], 'subject' => $row['payload']['subject'] ?? null]),
                 'created_at' => Clock::sql(),
             ]);
+            // A reply went out: Open → Waiting (PR 4)
+            if ($row['kind'] !== 'new') {
+                \HOD\Mail\Team\MailTeam::onSent($threadId, (int) $row['user_id']);
+            }
         }
     }
 

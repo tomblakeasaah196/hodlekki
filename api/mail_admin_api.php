@@ -139,6 +139,20 @@ try {
             HOD\Mail\Admin\Audit::log('mail_reserved_personal', (string) $n, $uid);
             $ok(Quota::snapshot());
             // no break
+        case 'ai_plan':
+            // The owner confirmed (or withdrew) the paid Gemini plan; a mail admin records it (docs/MAIL.md §7e)
+            $adminOnly();
+            HOD\Mail\Ai\Ai::setPlan($uid, ($_POST['confirmed'] ?? '') === '1');
+            HOD\Mail\Admin\Audit::log('mail_ai_plan', ($_POST['confirmed'] ?? '') === '1' ? 'confirmed' : 'withdrawn', $uid);
+            $ok(['plan' => HOD\Mail\Ai\Ai::plan()]);
+            // no break
+        case 'ai_mailbox':
+            $adminOnly();
+            $box = $account();
+            HOD\Mail\Ai\Ai::setMailbox($uid, $box, ($_POST['on'] ?? '') === '1');
+            HOD\Mail\Admin\Audit::log('mail_ai_mailbox', $box['email'] . ': ' . (($_POST['on'] ?? '') === '1' ? 'on' : 'off'), $uid);
+            $ok();
+            // no break
         case 'export_request':
             $ok(['id' => Exports::request($uid, (int) ($_POST['id'] ?? 0), (string) ($_POST['reason'] ?? ''))]);
             // no break

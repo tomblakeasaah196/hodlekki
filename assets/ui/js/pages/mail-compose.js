@@ -416,11 +416,15 @@
         schedule.hidden = true;
         confirmBox.hidden = true;
         linkbar.hidden = true;
+        aiReset(d);
     }
     function applyAccount(d) {
         state.accountId = d.accountId;
         state.signatures = d.signatures;
         state.accounts = d.accounts;
+        state.ai = d.ai;
+        state.shared = d.shared;
+        if (aiBtn) aiBtn.hidden = !d.ai;
         renderSignature();
     }
     function renderSignature() {
@@ -544,11 +548,28 @@
         emit('mail:sent', { accountId: r.accountId, threadId: r.threadId, outboxId: r.outboxId });
         restoreFocus();
     }
+    /**
+     * The send guard (PR 4): on a shared mailbox's conversation, a teammate's reply that left after this composer
+     * opened stops Send once, with "Send anyway".
+     */
     function send() {
         if (!state) return;
         clearErrors();
         if (!checkBeforeSend()) return;
         var d = state;
+        if (!d.shared || !d.threadId || d.kind === 'new' || !CFG.teamApi) { doSend(d); return; }
+        HOD.api(CFG.teamApi, { data: { action: 'guard', thread: d.threadId, since: d.openedAt }, json: true, quiet: true }).then(function (r) {
+            if (!r.replied || state !== d) { if (state === d) doSend(d); return; }
+            HOD.confirm({
+                title: r.replied.name + ' replied',
+                message: 'At ' + r.replied.at + ', after you started. Read it before sending?',
+                confirmLabel: 'Send anyway'
+            }).then(function (ok) {
+                if (ok && state === d) { d.openedAt = r.now || d.openedAt; doSend(d); }
+            });
+        }, function () { if (state === d) doSend(d); });
+    }
+    function doSend(d) {
         clearTimeout(saveTimer);
         var sendBtn = $('[data-mc="send"]');
         sendBtn.disabled = true;
@@ -822,6 +843,62 @@
         if (e.target.closest('[data-cmd], [data-mc="link"]')) e.preventDefault();
     });
 
+    // ---- AI drafts (PR 4): written on press into this composer; the person reads, changes and sends. Never sends.
+    var aiBtn = $('[data-mc="ai"]');
+    var aiPanel = $('[data-mc-ai]');
+    var aiInstruction = $('[data-mc-ai-instruction]');
+    var aiResult = $('[data-mc-ai-result]');
+    var aiText = $('[data-mc-ai-text]');
+    var aiDraft = null;
+    function aiReset(d) {
+        if (!aiBtn) return;
+        aiBtn.hidden = !(d && d.ai);
+        aiBtn.setAttribute('aria-expanded', 'false');
+        aiPanel.hidden = true;
+        aiResult.hidden = true;
+        aiText.textContent = '';
+        aiInstruction.value = '';
+        aiDraft = null;
+    }
+    function aiToggle(open) {
+        aiPanel.hidden = !open;
+        aiBtn.setAttribute('aria-expanded', String(open));
+        if (open) aiInstruction.focus();
+    }
+    function aiWrite(button) {
+        if (!state || !CFG.teamApi) return;
+        var d = state;
+        var slot = $('[data-error-for="instruction"]');
+        slot.hidden = true;
+        HOD.busy(button, true);
+        HOD.api(CFG.teamApi, { data: {
+            action: 'draft', instruction: aiInstruction.value,
+            composer: { accountId: d.accountId, mode: d.kind, messageId: d.messageId, subject: subj.value, to: chips.to.list, text: editor.innerText }
+        }, json: true, quiet: true }).then(function (r) {
+            if (state !== d) return;
+            aiDraft = r.data;
+            // Shown as text first: nothing enters the message until the person chooses it
+            aiText.textContent = r.data.text;
+            aiResult.hidden = false;
+        }, function (err) {
+            slot.textContent = err.message;
+            slot.hidden = false;
+        }).finally(function () { HOD.busy(button, false); });
+    }
+    function aiApply(replace) {
+        if (!aiDraft || !state) return;
+        if (replace) {
+            editor.innerHTML = cleanHtml(aiDraft.html);
+        } else {
+            restoreRange();
+            document.execCommand('insertHTML', false, cleanHtml(aiDraft.html));
+            saveRange();
+        }
+        touch();
+        aiToggle(false);
+        aiResult.hidden = true;
+        editor.focus();
+    }
     // ---- buttons --------------------------------------------------------------------------------------------
     form.addEventListener('click', function (e) {
         var c = e.target.closest('[data-cmd]');
@@ -850,6 +927,11 @@
             case 'discard': confirmBox.hidden = false; $('[data-mc="discard-cancel"]').focus(); break;
             case 'discard-cancel': confirmBox.hidden = true; $('[data-mc="discard"]').focus(); break;
             case 'discard-yes': discard(); break;
+            case 'ai': aiToggle(aiPanel.hidden); break;
+            case 'ai-close': aiToggle(false); break;
+            case 'ai-draft': aiWrite(b); break;
+            case 'ai-use': aiApply(true); break;
+            case 'ai-insert': aiApply(false); break;
         }
     });
     schedule.addEventListener('click', function (e) {

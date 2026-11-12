@@ -27,7 +27,7 @@ final class Nightly
     public static function run(): array
     {
         $out = [];
-        foreach (['reconcile', 'access', 'removals', 'exports', 'prune'] as $step) {
+        foreach (['reconcile', 'access', 'removals', 'exports', 'prune', 'summary'] as $step) {
             try {
                 $out[$step] = self::$step();
             } catch (Throwable $e) {
@@ -37,6 +37,12 @@ final class Nightly
         }
 
         return $out;
+    }
+
+    /** The daily summary (PR 4): a bell, and the personal email for those who chose it */
+    public static function summary(): array
+    {
+        return \HOD\Mail\Team\DailySummary::run();
     }
 
     public static function reconcile(): array
