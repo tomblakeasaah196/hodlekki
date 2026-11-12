@@ -330,6 +330,27 @@ ok('an anonymous entry never sends its author to anyone else',
     str_contains($pas, "if (!empty(\$row['is_anonymous']) && !\$mine)") && str_contains($pas, "\$row['phone'] = null;"));
 
 // ---------------------------------------------------------------------------
+section('Junior Church checks each write');
+$jcApi = '';   // the code, comments stripped
+foreach (token_get_all((string) file_get_contents($root . '/api/junior_church_api.php')) as $tok) {
+    if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+        $jcApi .= is_array($tok) ? $tok[1] : $tok;
+    }
+}
+ok('junior_church_api needs the CSRF token and keeps its per-action levels',
+    str_contains($jcApi, 'csrf_require();') && str_contains($jcApi, "'save_child' => 'edit', 'create_service' => 'create'")
+    && str_contains($jcApi, "'delete_curriculum' => 'delete'"));
+ok('the child photo is a real PNG or JPEG under a random name; the stored path never comes from the request',
+    str_contains($jcApi, 'getimagesizefromstring($bytes)') && str_contains($jcApi, 'hod_upload_name(')
+    && !str_contains($jcApi, 'existing_picture'));
+ok('documents go through the upload guard; delete only touches our own folder',
+    str_contains($jcApi, 'hod_upload_store($file') && !str_contains($jcApi, 'move_uploaded_file')
+    && str_contains($jcApi, "#^/uploads/junior_church/master_curriculums/([A-Za-z0-9._-]+)$#") && !str_contains($jcApi, '"../../"'));
+ok('the media link is YouTube or http(s); the teacher is on the team; marks come from a fixed list',
+    str_contains($jcApi, '$media_link === null') && str_contains($jcApi, "perm_module_team(\$pdo, 'junior_church')), true)")
+    && str_contains($jcApi, "in_array(\$status, ['Present', 'Absent'], true)"));
+
+// ---------------------------------------------------------------------------
 section('Holders and history');
 eq('seat holders by stable key', [$reachHod], perm_seat_holders($pdo, 'hod', 8));
 $holders = perm_holders($pdo, 'reach', 'manage');
