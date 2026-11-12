@@ -1136,8 +1136,8 @@ after `includes/db.php`), ported from bureau.lpc.cm's Courrier. Tests: `php test
 - Crons (the owner adds them): `cron/mail_minute.php` every minute, `cron/mail_daily.php` at 06:45.
 - **AI is a written exception** to the rule that church data never goes to Google (docs/MAIL.md §7e): Mail's
   summaries and drafts send mail text to Gemini only when the paid plan is recorded, the mailbox is switched on
-  (never personal or pastoral) and the person holds `mail.ai`; phone numbers and addresses become placeholders
-  first. AI never sends mail. Do not widen it without the owner.
+  (any mailbox, personal and pastoral too: the owner widened it on 12 Nov 2026) and the person holds `mail.ai`;
+  phone numbers and addresses become placeholders first. AI never sends mail. Do not widen it further without the owner.
 ## Departments module (ministry years)
 
 `modules/departments/` is ministry-year aware, and its rules are worth knowing
