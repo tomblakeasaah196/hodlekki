@@ -1,38 +1,45 @@
 <?php
 // /api/rol_api.php
+//
+// River of Life (modules/river_of_life/index.php, assets/ui/js/pages/river-of-life.js).
+// Access: the 'river_of_life' row of Roles & permissions. View reads the
+// roster and rehearsals; Create assigns a member to a section and schedules a
+// rehearsal; Edit takes the roll-call; Delete takes a member off the roster.
+// Writes need the CSRF token.
 
 require_once '../includes/db.php';
+csrf_require();
 header('Content-Type: application/json');
 
-// 1. Strict Security Gate
-if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['status' => 'error', 'message' => 'Unauthorized access.']);
-    exit;
-}
-
-$user_id = $_SESSION['user_id'];
+$user_id = $_SESSION['user_id'] ?? null;
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
-// Check Clearance: Super Admin, Pastors, or River of Life (Dept 4)
-// River of Life: the 'river_of_life' row of the permission matrix.
-$has_clearance = can('river_of_life', 'view');
-
-if (!$has_clearance) {
-    echo json_encode(['status' => 'error', 'message' => 'Access Denied: You must be in the River of Life department to access this module.']);
-    exit;
+api_require_can('river_of_life', 'view');
+$levels = [
+    'assign_member' => 'create',
+    'schedule_rehearsal' => 'create',
+    'mark_attendance' => 'edit',
+    'remove_member' => 'delete',
+];
+if (isset($levels[$action])) {
+    api_require_can('river_of_life', $levels[$action]);
 }
+
+// The fixed lists the page offers; nothing else is stored.
+$rol_categories = ['Vocalist', 'Band_Instrumentalist', 'Technical'];
+$rol_marks = ['Present', 'Absent', 'Excused'];
 
 try {
     switch ($action) {
 
         // ==========================================
-        // ACTION 1: FETCH DASHBOARD DATA (KANBAN & REHEARSALS)
+        // ACTION 1: FETCH DASHBOARD DATA (ROSTER & REHEARSALS)
         // ==========================================
         case 'fetch_dashboard':
-            
-            // A. Fetch the Roster, joining with users table for profile pics and details
+
+            // A. The roster, with what the page shows of each person
             $rosterStmt = $pdo->query("
-                SELECT r.id as roster_id, r.role_category, r.section_name, 
+                SELECT r.id as roster_id, r.role_category, r.section_name,
                        u.id as user_id, u.first_name, u.last_name, u.phone, u.picture_path, u.gender
                 FROM river_of_life_roster r
                 JOIN users u ON r.user_id = u.id
@@ -40,27 +47,20 @@ try {
             ");
             $raw_roster = $rosterStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Group the roster by Role Category and then by Section Name for the Kanban UI
-            $grouped_roster = [
-                'Vocalist' => [],
-                'Band_Instrumentalist' => [],
-                'Technical' => []
-            ];
-            
+            // Grouped by category, then by section
+            $grouped_roster = array_fill_keys($rol_categories, []);
             foreach ($raw_roster as $member) {
                 $category = $member['role_category'];
                 $section = $member['section_name'];
-                
-                if (!isset($grouped_roster[$category][$section])) {
-                    $grouped_roster[$category][$section] = [];
+                if (!isset($grouped_roster[$category])) {
+                    continue;
                 }
                 $grouped_roster[$category][$section][] = $member;
             }
 
-            // B. Fetch Rehearsals (Upcoming & Recent)
+            // B. Rehearsals (upcoming & recent)
             $rehearsalsStmt = $pdo->query("
-                SELECT r.*, 
-                       DATE_FORMAT(r.rehearsal_date, '%W, %M %D, %Y @ %h:%i %p') as nice_date,
+                SELECT r.id, r.rehearsal_date, r.focus_topic, r.status,
                        (SELECT COUNT(*) FROM rol_attendance a WHERE a.rehearsal_id = r.id AND a.status = 'Present') as present_count,
                        (SELECT COUNT(*) FROM rol_attendance a WHERE a.rehearsal_id = r.id) as total_expected
                 FROM rol_rehearsals r
@@ -69,8 +69,7 @@ try {
             ");
             $rehearsals = $rehearsalsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // C. Fetch Available Members to add to the Choir
-            // We ONLY pull people who are officially in Department 4 (River of Life) but NOT YET in the specific ROL Roster
+            // C. Who can be added: on the River of Life team, not yet in a section
             $team = array_map('intval', perm_module_team($pdo, 'river_of_life'));
             $availableStmt = $pdo->query("
                 SELECT u.id, u.first_name, u.last_name, u.gender
@@ -78,14 +77,16 @@ try {
                 WHERE u.id IN (" . ($team ? implode(',', $team) : '0') . ")
                 AND u.id NOT IN (SELECT user_id FROM river_of_life_roster)
                 ORDER BY u.first_name ASC
-            ");            $available_members = $availableStmt->fetchAll(PDO::FETCH_ASSOC);
+            ");
+            $available_members = $availableStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // D. Get Quick Stats
+            // D. Quick stats
+            $counts = array_count_values(array_column($raw_roster, 'role_category'));
             $stats = [
                 'total_members' => count($raw_roster),
-                'vocalists' => $pdo->query("SELECT COUNT(*) FROM river_of_life_roster WHERE role_category = 'Vocalist'")->fetchColumn(),
-                'band' => $pdo->query("SELECT COUNT(*) FROM river_of_life_roster WHERE role_category = 'Band_Instrumentalist'")->fetchColumn(),
-                'tech' => $pdo->query("SELECT COUNT(*) FROM river_of_life_roster WHERE role_category = 'Technical'")->fetchColumn(),
+                'vocalists' => $counts['Vocalist'] ?? 0,
+                'band' => $counts['Band_Instrumentalist'] ?? 0,
+                'tech' => $counts['Technical'] ?? 0,
             ];
 
             echo json_encode([
@@ -98,19 +99,31 @@ try {
             break;
 
         // ==========================================
-        // ACTION 2: ASSIGN MEMBER TO KANBAN SECTION
+        // ACTION 2: ASSIGN MEMBER TO A SECTION
         // ==========================================
         case 'assign_member':
-            $target_user_id = $_POST['user_id'] ?? '';
-            $role_category = $_POST['role_category'] ?? ''; // Vocalist, Band_Instrumentalist, Technical
-            $section_name = trim($_POST['section_name'] ?? ''); // e.g. Soprano, Drums, Sound
+            $target_user_id = (int) ($_POST['user_id'] ?? 0);
+            $role_category = $_POST['role_category'] ?? '';
+            $section_name = trim($_POST['section_name'] ?? '');
 
-            if (empty($target_user_id) || empty($role_category) || empty($section_name)) {
+            if ($target_user_id <= 0 || $section_name === '') {
                 echo json_encode(['status' => 'error', 'message' => 'All fields are required.']);
                 exit;
             }
+            if (!in_array($role_category, $rol_categories, true)) {
+                echo json_encode(['status' => 'error', 'field' => 'role_category', 'message' => 'Choose a role.']);
+                exit;
+            }
+            if (mb_strlen($section_name) > 50) {
+                echo json_encode(['status' => 'error', 'field' => 'section_name', 'message' => 'Keep the section to 50 characters.']);
+                exit;
+            }
+            // Only someone on the River of Life team (the page lists exactly these).
+            if (!in_array($target_user_id, array_map('intval', perm_module_team($pdo, 'river_of_life')), true)) {
+                echo json_encode(['status' => 'error', 'field' => 'user_id', 'message' => 'Choose someone on the River of Life team.']);
+                exit;
+            }
 
-            // Check if already in roster
             $checkStmt = $pdo->prepare("SELECT id FROM river_of_life_roster WHERE user_id = ?");
             $checkStmt->execute([$target_user_id]);
             if ($checkStmt->fetch()) {
@@ -121,7 +134,7 @@ try {
             $stmt = $pdo->prepare("INSERT INTO river_of_life_roster (user_id, role_category, section_name) VALUES (?, ?, ?)");
             $stmt->execute([$target_user_id, $role_category, $section_name]);
 
-            // NOTIFICATION TRIGGER: Alert the newly assigned member
+            // Tell the person
             $cleanRole = str_replace('_', ' ', $role_category);
             $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'River of Life Roster', ?, '/modules/profile/index.php')");
             $notifMsg = "You have been officially assigned to the River of Life team as a {$cleanRole} ({$section_name}).";
@@ -134,8 +147,8 @@ try {
         // ACTION 3: REMOVE MEMBER FROM ROSTER
         // ==========================================
         case 'remove_member':
-            $roster_id = $_POST['roster_id'] ?? '';
-            if ($roster_id) {
+            $roster_id = (int) ($_POST['roster_id'] ?? 0);
+            if ($roster_id > 0) {
                 $stmt = $pdo->prepare("DELETE FROM river_of_life_roster WHERE id = ?");
                 $stmt->execute([$roster_id]);
                 echo json_encode(['status' => 'success', 'message' => 'Member removed from specific section.']);
@@ -148,38 +161,41 @@ try {
         // ACTION 4: SCHEDULE A REHEARSAL
         // ==========================================
         case 'schedule_rehearsal':
-            $rehearsal_date = $_POST['rehearsal_date'] ?? ''; // Expecting datetime local format
+            $raw_date = (string) ($_POST['rehearsal_date'] ?? '');
+            $when = DateTime::createFromFormat('!Y-m-d\TH:i', $raw_date) ?: DateTime::createFromFormat('!Y-m-d H:i:s', $raw_date);
+            $rehearsal_date = $when ? $when->format('Y-m-d H:i:s') : '';
             $focus_topic = trim($_POST['focus_topic'] ?? '');
 
-            if (empty($rehearsal_date) || empty($focus_topic)) {
+            if ($rehearsal_date === '' || $focus_topic === '') {
                 echo json_encode(['status' => 'error', 'message' => 'Date, time, and focus topic are required.']);
+                exit;
+            }
+            if (mb_strlen($focus_topic) > 255) {
+                echo json_encode(['status' => 'error', 'field' => 'focus_topic', 'message' => 'Keep the focus to 255 characters.']);
                 exit;
             }
 
             $pdo->beginTransaction();
             try {
-                // 1. Create the Rehearsal
+                // 1. The rehearsal
                 $stmt = $pdo->prepare("INSERT INTO rol_rehearsals (rehearsal_date, focus_topic) VALUES (?, ?)");
                 $stmt->execute([$rehearsal_date, $focus_topic]);
-                $rehearsal_id = $pdo->lastInsertId();
+                $rehearsal_id = (int) $pdo->lastInsertId();
 
-                // 2. Pre-populate the attendance sheet with EVERYONE currently in the choir roster (Defaults to Absent)
-                $pdo->query("
+                // 2. A roll-call sheet with everyone on the roster (Absent until marked)
+                $pdo->prepare("
                     INSERT INTO rol_attendance (rehearsal_id, user_id, status)
-                    SELECT $rehearsal_id, user_id, 'Absent' FROM river_of_life_roster
-                ");
+                    SELECT ?, user_id, 'Absent' FROM river_of_life_roster
+                ")->execute([$rehearsal_id]);
 
-                // NOTIFICATION TRIGGER: Alert all ROL Members of the rehearsal
-                $rolStmt = $pdo->query("SELECT user_id FROM river_of_life_roster");
-                $rol_members = $rolStmt->fetchAll(PDO::FETCH_COLUMN);
-
+                // Tell the roster
+                $rol_members = $pdo->query("SELECT user_id FROM river_of_life_roster")->fetchAll(PDO::FETCH_COLUMN);
                 if (!empty($rol_members)) {
-                    $nice_date = date('l, M jS @ g:i A', strtotime($rehearsal_date));
+                    $nice_date = $when->format('l, M jS @ g:i A');
                     $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Rehearsal Scheduled', ?, '/modules/river_of_life/index.php')");
                     $msg = "A new rehearsal has been scheduled for {$nice_date}. Focus: {$focus_topic}. Please be punctual.";
-                    
-                    foreach($rol_members as $uid) {
-                        if ($uid != $user_id) { // Don't alert the admin making the schedule
+                    foreach ($rol_members as $uid) {
+                        if ($uid != $user_id) {
                             $notifStmt->execute([$uid, $msg]);
                         }
                     }
@@ -194,11 +210,11 @@ try {
             break;
 
         // ==========================================
-        // ACTION 5: FETCH SPECIFIC REHEARSAL ATTENDANCE
+        // ACTION 5: ONE REHEARSAL'S ROLL-CALL
         // ==========================================
         case 'fetch_attendance':
-            $rehearsal_id = $_POST['rehearsal_id'] ?? '';
-            
+            $rehearsal_id = (int) ($_POST['rehearsal_id'] ?? $_GET['rehearsal_id'] ?? 0);
+
             $stmt = $pdo->prepare("
                 SELECT a.status, a.user_id, u.first_name, u.last_name, u.picture_path, r.role_category, r.section_name
                 FROM rol_attendance a
@@ -208,73 +224,32 @@ try {
                 ORDER BY r.role_category ASC, r.section_name ASC, u.first_name ASC
             ");
             $stmt->execute([$rehearsal_id]);
-            
+
             echo json_encode(['status' => 'success', 'attendance' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
             break;
 
         // ==========================================
-        // ACTION 6: MARK INDIVIDUAL ATTENDANCE
+        // ACTION 6: MARK ONE PERSON
         // ==========================================
         case 'mark_attendance':
-            $rehearsal_id = $_POST['rehearsal_id'] ?? '';
-            $target_user_id = $_POST['user_id'] ?? '';
-            $status = $_POST['status'] ?? 'Absent'; // Present, Absent, Excused
+            $rehearsal_id = (int) ($_POST['rehearsal_id'] ?? 0);
+            $target_user_id = (int) ($_POST['user_id'] ?? 0);
+            $status = $_POST['status'] ?? '';
+
+            if (!in_array($status, $rol_marks, true)) {
+                echo json_encode(['status' => 'error', 'message' => 'Unknown mark.']);
+                exit;
+            }
 
             $stmt = $pdo->prepare("UPDATE rol_attendance SET status = ? WHERE rehearsal_id = ? AND user_id = ?");
             $stmt->execute([$status, $rehearsal_id, $target_user_id]);
 
             echo json_encode(['status' => 'success']);
             break;
-            
-        // ==========================================
-        // ACTION 7: SAVE SETLIST AUDIO KEY (10-20 SEC)
-        // ==========================================
-        case 'upload_audio_key':
-            $event_id = $_POST['event_id'] ?? '';
-            $song_id = $_POST['song_id'] ?? '';
-            $performance_key = trim($_POST['performance_key'] ?? '');
 
-            // Ensure directory exists
-            $target_dir = "../../uploads/rol_keys/";
-            if (!file_exists($target_dir)) mkdir($target_dir, 0777, true);
-
-            $audio_path = null;
-            if (isset($_FILES['audio_data']) && $_FILES['audio_data']['error'] == UPLOAD_ERR_OK) {
-                // Generate unique filename
-                $filename = uniqid('key_', true) . '.webm';
-                $target_path = $target_dir . $filename;
-                
-                if (move_uploaded_file($_FILES['audio_data']['tmp_name'], $target_path)) {
-                    $audio_path = '/uploads/rol_keys/' . $filename;
-                }
-            }
-
-            // Insert into setlist
-            $stmt = $pdo->prepare("INSERT INTO rol_event_setlists (event_id, song_id, performance_key, audio_key_path) VALUES (?, ?, ?, ?)");
-            $stmt->execute([$event_id, $song_id, $performance_key, $audio_path]);
-
-            // NOTIFICATION TRIGGER: Alert the ROL Team that practice materials are up
-            $rolStmt = $pdo->query("SELECT user_id FROM river_of_life_roster");
-            $rol_members = $rolStmt->fetchAll(PDO::FETCH_COLUMN);
-
-            if (!empty($rol_members)) {
-                // Get event title for context
-                $evtStmt = $pdo->prepare("SELECT title FROM events WHERE id = ?");
-                $evtStmt->execute([$event_id]);
-                $evtTitle = $evtStmt->fetchColumn() ?: "an upcoming service";
-
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Setlist Audio Key', ?, '/modules/river_of_life/index.php')");
-                $msg = "A new song key ({$performance_key}) has been uploaded for {$evtTitle}. Please check the setlist and start practicing!";
-                
-                foreach($rol_members as $uid) {
-                    if ($uid != $user_id) {
-                        $notifStmt->execute([$uid, $msg]);
-                    }
-                }
-            }
-
-            echo json_encode(['status' => 'success', 'message' => 'Song and audio key added to setlist!']);
-            break;
+        // upload_audio_key (a setlist with a recorded starting pitch) was removed in
+        // Nov 2026: nothing on the page could open it, song_id was always 1, and it
+        // wrote to ../../uploads/rol_keys/, outside the site, under View access.
 
         default:
             echo json_encode(['status' => 'error', 'message' => 'Invalid action requested.']);
@@ -285,4 +260,3 @@ try {
     error_log("River of Life API Error: " . $e->getMessage());
     echo json_encode(['status' => 'error', 'message' => 'A database error occurred.']);
 }
-?>
