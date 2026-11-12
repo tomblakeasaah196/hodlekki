@@ -20,7 +20,7 @@ return [
     '/assets/ui/js/pages/mail.js' => '05f30adc1681',
     '/assets/ui/js/pages/member-portal.js' => 'd65ff06f6dcf',
     '/assets/ui/js/pages/monitor.js' => 'd912c9c8e27f',
-    '/assets/ui/js/pages/profile.js' => 'ad24c9b115e7',
+    '/assets/ui/js/pages/profile.js' => 'eb795873c7d1',
     '/assets/ui/js/pages/reach.js' => '818c7d2f0230',
     '/assets/ui/js/pages/regions.js' => '44c5967790fb',
     '/assets/ui/js/pages/ui-guide.js' => '55bd00809be1',
