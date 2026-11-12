@@ -1086,9 +1086,14 @@ audit: `permissions-design.md` (shared notes); tests: `tests/permissions/run.php
   returns the subject's access cut down to the viewer's and read-only (only
   `view` survives). Decide anything that must stay the person's own with
   `perm_real_current()` (the roles screen, Stop). The shell shows the banner.
-- **End dates are enforced** (`perm_config.expiry_enforced = 1`, migration
-  `20261202090000`): a seat ends on its own end date, else its ministry year's
-  end; a role on `ends_on`; break-glass never. `cron/permissions_daily.php`
+- **End dates** (`perm_config.expiry_enforced`): a seat ends on its own end
+  date, else its ministry year's end; a role on `ends_on`; break-glass never.
+  Switching them on must never cut anyone off: migration `20261202090000` turns
+  them on only if nothing live is already past its end; otherwise only
+  `perm_expiry_switch_on()` (Roles & permissions → Enforce end dates, refused
+  while `perm_expiry_blockers()` is not empty, kept in history) does it — never
+  the daily job. System Health and `bin/permissions_parity.php` (End dates
+  section) show what blocks it and who would lose access. `cron/permissions_daily.php`
   (00:10) tells holders and their pastor 14 days before, sends the year-end
   summary to whoever may roll over the year, and closes what ended. Renewing is
   one click (`modules/departments/renew.php`, People tab).

@@ -18,6 +18,10 @@
 //       stands down (is_active = 0), so a late rollover can still carry it;
 //       an ended role row is deleted. History and a message each time.
 //   Idempotent; --dry-run counts without writing. Break-glass never ends.
+//
+// Switching end dates ON is perm_expiry_switch_on() only (Roles & permissions,
+// refused while anything live is past its end, so it never cuts anyone off);
+// the migration does the same check. The daily job never switches it.
 
 require_once __DIR__ . '/admin.php';
 
@@ -94,6 +98,149 @@ function perm_seat_renew(PDO $pdo, array $ctx, int $recordId, string $via = 'rol
     perm_notify($pdo, [(int) $seat['user_id']], 'Seat renewed', "Your seat as {$text} now runs until " . perm_date_text($new) . '.');
     perm_reset();
     return $new;
+}
+
+/**
+ * What switching end dates on would end AT ONCE: live roster rows and live
+ * dated roles already past their end date. Counted strictly, like migration
+ * 20261202090000: every live roster row, whatever its seat. Break-glass never
+ * ends, so it is never listed.
+ *
+ * @return list<array{kind:string, id:int, user_id:int, name:string, what:string, ends_on:string,
+ *                    department_id:?int, seat_key:?string}>
+ */
+function perm_expiry_blockers(PDO $pdo, ?string $today = null): array
+{
+    $today ??= perm_today();
+    if (!perm_ready($pdo)) {
+        return [];
+    }
+    $out = [];
+    $names = perm_department_names($pdo);
+    $people = [];
+    $name = static function (int $uid) use ($pdo, &$people): string {
+        return $people[$uid] ??= perm_user_name(perm_user_row($pdo, $uid));
+    };
+    try {
+        if (perm_roster_has_years($pdo)) {
+            $stmt = $pdo->prepare("SELECT ud.id, ud.user_id, ud.department_id, ud.role_in_dept, COALESCE(ud.end_date, y.end_date) AS ends_on
+                                     FROM user_departments ud LEFT JOIN ministry_years y ON y.id = ud.ministry_year_id
+                                    WHERE ud.is_active = 1 AND COALESCE(ud.roster_status, 'Active') = 'Active'
+                                      AND COALESCE(ud.end_date, y.end_date) < ?
+                                    ORDER BY ends_on, ud.id");
+            $stmt->execute([$today]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $key = perm_seat_key_for($pdo, (string) $r['role_in_dept']);
+                $out[] = [
+                    'kind' => 'seat', 'id' => (int) $r['id'], 'user_id' => (int) $r['user_id'], 'name' => $name((int) $r['user_id']),
+                    'what' => $key !== null ? perm_seat_text($pdo, $key, (int) $r['department_id'], $names)
+                        : str_replace('_', ' ', (string) $r['role_in_dept']) . ', ' . ($names[(int) $r['department_id']] ?? ''),
+                    'ends_on' => substr((string) $r['ends_on'], 0, 10), 'department_id' => (int) $r['department_id'], 'seat_key' => $key,
+                ];
+            }
+        }
+        $stmt = $pdo->prepare('SELECT ur.user_id, ur.role_id, ur.ends_on, r.role_name, r.label
+                                 FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+                                WHERE COALESCE(ur.is_frozen, 0) = 0 AND COALESCE(r.is_archived, 0) = 0
+                                  AND COALESCE(r.is_break_glass, 0) = 0 AND ur.ends_on IS NOT NULL AND ur.ends_on < ?
+                                ORDER BY ur.ends_on');
+        $stmt->execute([$today]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[] = [
+                'kind' => 'role', 'id' => (int) $r['role_id'], 'user_id' => (int) $r['user_id'], 'name' => $name((int) $r['user_id']),
+                'what' => 'Role: ' . perm_role_label($r), 'ends_on' => substr((string) $r['ends_on'], 0, 10),
+                'department_id' => null, 'seat_key' => null,
+            ];
+        }
+    } catch (Throwable $e) {
+        error_log('permissions: expiry blockers: ' . $e->getMessage());
+    }
+    return $out;
+}
+
+/** ['enforced' => bool, 'blockers' => int] for the screen and System Health. */
+function perm_expiry_status(PDO $pdo): array
+{
+    return ['enforced' => perm_expiry_enforced($pdo), 'blockers' => count(perm_expiry_blockers($pdo))];
+}
+
+/**
+ * "Enforce end dates" (Roles & permissions, roles: Manage). Refused while
+ * anything live is past its end date, so switching on never cuts anyone off.
+ * Kept in perm_history. Nothing else switches it on — not the daily job.
+ */
+function perm_expiry_switch_on(PDO $pdo, array $ctx): void
+{
+    if (!perm_ready($pdo) || perm_expiry_enforced($pdo)) {
+        return;
+    }
+    $n = count(perm_expiry_blockers($pdo));
+    if ($n > 0) {
+        throw new PermAdminError("Renew or end the {$n} past their end date first.", 'blocked');
+    }
+    perm_config_set($pdo, 'expiry_enforced', '1');
+    perm_history_add($pdo, ['via' => 'roles_screen', 'change_type' => 'config.expiry', 'actor_user_id' => perm_actor_id($ctx),
+        'before' => ['expiry_enforced' => false], 'after' => ['expiry_enforced' => true]]);
+    perm_reset();
+}
+
+/**
+ * End a seat now (the "End" next to a seat past its end date): closed the way
+ * "remove from roster" closes one. Same rank rule as appointing.
+ */
+function perm_seat_end(PDO $pdo, array $ctx, int $recordId, string $via = 'roles_screen'): void
+{
+    $seat = perm_seat_record($pdo, $recordId);
+    if ($seat === null || $seat['roster_status'] !== 'Active') {
+        throw new PermAdminError('That seat is no longer on the roster. Reload the page.', 'gone');
+    }
+    $exempt = !empty($ctx['breakglass']) || perm_ctx_can($ctx, 'roles', 'manage');
+    if (!$exempt && ($seat['seat_key'] === null || !perm_ctx_can_appoint($pdo, $ctx, (int) $seat['department_id'], $seat['seat_key']))) {
+        throw new PermAdminError('Only someone ranked above this seat can end it.', 'rank');
+    }
+    $pdo->prepare("UPDATE user_departments SET roster_status = 'Removed', is_active = 0, end_date = COALESCE(end_date, ?) WHERE id = ?")
+        ->execute([perm_today(), $recordId]);
+    $text = $seat['seat_key'] !== null ? perm_seat_text($pdo, $seat['seat_key'], (int) $seat['department_id'])
+        : str_replace('_', ' ', (string) $seat['role_in_dept']);
+    perm_history_add($pdo, ['via' => $via, 'change_type' => 'seat.remove', 'actor_user_id' => perm_actor_id($ctx),
+        'subject_user_id' => (int) $seat['user_id'], 'department_id' => (int) $seat['department_id'], 'seat_key' => $seat['seat_key'],
+        'before' => ['ends_on' => $seat['ends_on']], 'reason' => 'past its end date']);
+    perm_notify($pdo, [(int) $seat['user_id']], 'Your seat has ended', "Your seat as {$text} has ended. Thank you for serving.");
+    perm_reset();
+}
+
+/**
+ * For bin/permissions_parity.php: who would LOSE access if end dates were
+ * enforced today — each blocker's person and the modules they would no
+ * longer open. With end dates already on, the same people have lost it.
+ *
+ * @return array{enforced:bool, blockers:list<array>, people:array<int, array{name:string, items:list<string>, loses:list<string>}>}
+ */
+function perm_expiry_impact(PDO $pdo): array
+{
+    $blockers = perm_expiry_blockers($pdo);
+    $enforced = perm_expiry_enforced($pdo);
+    $people = [];
+    $state = &perm_state();
+    foreach ($blockers as $b) {
+        $people[$b['user_id']]['name'] = $b['name'];
+        $people[$b['user_id']]['items'][] = $b['what'] . ' (ended ' . perm_date_text($b['ends_on']) . ')';
+    }
+    foreach (array_keys($people) as $uid) {
+        $mods = [];
+        foreach ([false, true] as $on) {
+            perm_config($pdo, 'expiry_enforced');                 // fill the cache, then pin the switch
+            $state['config']['expiry_enforced'] = $on ? '1' : '0';
+            $mods[(int) $on] = array_keys(array_filter(perm_resolve($pdo, $uid)['abilities']));
+        }
+        $state['config'] = null;
+        $labels = [];
+        foreach (array_diff($mods[0], $mods[1]) as $m) {
+            $labels[] = (string) (perm_modules()[$m]['label'] ?? $m);
+        }
+        $people[$uid]['loses'] = $labels;
+    }
+    return ['enforced' => $enforced, 'blockers' => $blockers, 'people' => $people];
 }
 
 /** Renew a dated role by one period. Returns the new end date. */
@@ -173,7 +320,8 @@ function perm_daily_run(PDO $pdo, ?string $today = null, bool $dryRun = false): 
         return $report;
     }
     if (!perm_expiry_enforced($pdo)) {
-        $report['skipped'] = 'end dates are not switched on (perm_config.expiry_enforced)';
+        // Never switched on from here: only perm_expiry_switch_on() (Roles & permissions).
+        $report['skipped'] = 'end dates are off (Roles & permissions shows what blocks switching them on)';
         return $report;
     }
     $names = perm_department_names($pdo);

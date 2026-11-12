@@ -64,12 +64,12 @@ if (!$canView) {
     roles_fail('Roles & permissions is not open to you.', 'FORBIDDEN', 403);
 }
 
-// Reads and "view as" need View. Renewing a seat needs View plus the right to
-// appoint that seat (checked in perm_seat_renew). Everything else needs Manage,
+// Reads and "view as" need View. Renewing or ending a seat needs View plus the
+// right to appoint that seat (checked in perm_seat_renew / perm_seat_end). Everything else needs Manage,
 // and passes fits-within inside admin.php.
 $reads = ['matrix', 'roles', 'people_search', 'person', 'seats', 'history', 'impact', 'view_as_start'];
 if (!in_array($action, $reads, true)) {
-    if ($action !== 'seat_renew' && !$canManage) {
+    if (!in_array($action, ['seat_renew', 'seat_end'], true) && !$canManage) {
         roles_fail('Only a Super Admin can change roles and permissions.', 'FORBIDDEN', 403);
     }
     if (perm_view_as() !== null) {
@@ -104,6 +104,7 @@ try {
                 $modules[] = ['key' => $key, 'label' => $def['label'], 'group' => $def['group'], 'partitioned' => !empty($def['partitioned'])];
             }
             roles_out(perm_seats_overview($pdo) + ['modules' => $modules, 'can_manage' => $canManage,
+                'blockers' => perm_expiry_blockers($pdo),
                 'can_roll' => $real['breakglass'] || perm_ctx_can($real, 'departments', 'manage')]);
 
         case 'history':
@@ -122,7 +123,15 @@ try {
             $new = perm_seat_renew($pdo, $real, $int('record_id'));
             roles_out(['ends_on' => $new, 'message' => 'Renewed until ' . perm_date_text($new) . '.']);
 
+        case 'seat_end':
+            perm_seat_end($pdo, $real, $int('record_id'));
+            roles_out(['message' => 'Seat ended.']);
+
         // ---------------------------------------------------------------- changes
+        case 'expiry_on':
+            perm_expiry_switch_on($pdo, $real);
+            roles_out(['message' => 'End dates are on.']);
+
         case 'cell_set':
             $n = perm_cells_set($pdo, $real, [[
                 'holder' => (string) $in('holder'), 'module' => (string) $in('module'),

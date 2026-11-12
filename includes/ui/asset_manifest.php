@@ -24,7 +24,7 @@ return [
     '/assets/ui/js/pages/profile.js' => 'eb795873c7d1',
     '/assets/ui/js/pages/reach.js' => '818c7d2f0230',
     '/assets/ui/js/pages/regions.js' => '44c5967790fb',
-    '/assets/ui/js/pages/roles.js' => 'a447dd4b513c',
+    '/assets/ui/js/pages/roles.js' => '617f59d1ebae',
     '/assets/ui/js/pages/ui-guide.js' => '55bd00809be1',
     '/assets/ui/js/shell.js' => '4a885da3094d',
     '/assets/ui/js/ui.js' => '280699cafd81',

@@ -1111,6 +1111,20 @@ function monitor_checks_run(PDO $pdo, PDO $db, bool $slow = false): array
     $safe('php', 'Server', 'PHP (web)', fn () => monitor_check_php($web, $now));
     $safe('speed', 'Server', 'Server speed settings', fn () => monitor_check_speed($web));
     $safe('logs', 'Server', 'Log files', fn () => monitor_check_logs(monitor_facts_logs()));
+    $safe('permissions_expiry', 'Background jobs', 'Seat end dates', function () use ($pdo) {
+        require_once dirname(__DIR__) . '/permissions/expiry.php';
+        $st = perm_expiry_status($pdo);
+        if ($st['enforced']) {
+            return monitor_check('permissions_expiry', 'Background jobs', 'Seat end dates', 'ok', 'End dates are on: seats end with their ministry year unless renewed.');
+        }
+        return $st['blockers'] > 0
+            ? monitor_check('permissions_expiry', 'Background jobs', 'Seat end dates', 'warn',
+                $st['blockers'] . ' seats or roles are past their end date. Renew or end them, then switch end dates on.',
+                'Roles & permissions → Seats lists them, with Renew and End; then press Enforce end dates.')
+            : monitor_check('permissions_expiry', 'Background jobs', 'Seat end dates', 'warn',
+                'End dates are off: seats never end and nobody is reminded.',
+                'Roles & permissions → Enforce end dates (nothing is past its end, so nobody loses access).');
+    });
     $safe('monitor_key', 'Server', 'Monitor key', function () use ($dir) {
         $own = strlen(hod_monitor_env('MONITOR_SECRET')) >= 16;
         $kept = $dir !== null && is_file($dir . '/secret.key');

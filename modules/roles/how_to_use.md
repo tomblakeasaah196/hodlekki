@@ -63,6 +63,11 @@ to come back. Roles have **View as** too.
 
 ## 4. Seats
 
+**End dates off?** They are switched on only when that ends nobody's access. If some
+seats or roles are already past their end date, a banner says how many and this tab
+lists them: **Renew** or **End seat** each one, then press **Enforce end dates**
+(Super Admins; it refuses while any remain).
+
 * **Seat types**: name, rank, how many per department, whether it covers
   sub-units and whether it may appoint. You can only appoint seats ranked below
   your own (Pastor in charge 60, Director 50, HOD 40, Deputy HOD 35…).

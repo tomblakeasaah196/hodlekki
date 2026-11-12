@@ -7,14 +7,22 @@
 
 require_once __DIR__ . '/../../includes/permissions/expiry.php';
 
-/** A fresh church with notifications, contact columns and the PR 3 migration. */
-function perm_admin_db(): PDO
+/** A fresh church with notifications and contact columns, before the PR 3 migration. */
+function perm_admin_db_raw(): PDO
 {
     $pdo = perm_test_db();
     $pdo->exec('ALTER TABLE users ADD COLUMN phone TEXT');
     $pdo->exec('ALTER TABLE users ADD COLUMN email TEXT');
     $pdo->exec('CREATE TABLE system_notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT,
                 message TEXT, link_url TEXT, is_read INTEGER DEFAULT 0)');
+    perm_reset();
+    return $pdo;
+}
+
+/** …and with the PR 3 migration (an empty church: end dates switch on). */
+function perm_admin_db(): PDO
+{
+    $pdo = perm_admin_db_raw();
     $pdo->exec(perm_test_migration('20261202090000_perm_expiry_on.sql'));
     perm_reset();
     return $pdo;
@@ -377,3 +385,66 @@ foreach ($iter as $file) {
     }
 }
 eq('retired names are referenced nowhere', [], $hits);
+
+// ---------------------------------------------------------------------------
+section('PR 3: switching end dates on never cuts anyone off');
+// The migration runs against the real date (CURRENT_DATE), so the dates here
+// are far in the past (2020) or the future (2099).
+$expiryAfter = static function (PDO $pdo): bool {
+    $pdo->exec(perm_test_migration('20261202090000_perm_expiry_on.sql'));
+    perm_reset();
+    return perm_expiry_enforced($pdo);
+};
+$pdo = perm_admin_db_raw();
+$pdo->exec("INSERT INTO ministry_years (id, label, start_date, end_date, is_active) VALUES (5, '2099', '2099-01-01', '2099-12-31', 0)");
+$ok1 = perm_admin_person($pdo, 'Future');
+$pdo->prepare("INSERT INTO user_departments (user_id, department_id, role_in_dept, ministry_year_id, roster_status, is_active)
+               VALUES (?, 10, 'HOD', 5, 'Active', 1)")->execute([$ok1]);
+ok('nothing past its end: the migration switches end dates on', $expiryAfter($pdo));
+
+$pdo = perm_admin_db_raw();
+$stale = perm_admin_person($pdo, 'Stale');
+perm_test_seat($pdo, $stale, 10, 'HOD', ['end_date' => '2020-01-01']);
+ok('a live seat past its own end date keeps end dates off', !$expiryAfter($pdo));
+ok('…so that seat still gives access', perm_person_seats($pdo, $stale) !== []);
+
+$pdo = perm_admin_db_raw();
+$pdo->exec("INSERT INTO ministry_years (id, label, start_date, end_date, is_active) VALUES (6, '2020', '2020-01-01', '2020-12-31', 0)");
+$old = perm_admin_person($pdo, 'Oldyear');
+$pdo->prepare("INSERT INTO user_departments (user_id, department_id, role_in_dept, ministry_year_id, roster_status, is_active)
+               VALUES (?, 10, 'Worker', 6, 'Active', 1)")->execute([$old]);
+ok('a live seat in a ministry year that has ended keeps end dates off', !$expiryAfter($pdo));
+
+$pdo = perm_admin_db_raw();
+$dated = perm_admin_person($pdo, 'Dated');
+perm_test_role($pdo, $dated, 'Assoc_Pastor', ['ends_on' => '2020-06-30']);
+ok('a live role past its end date keeps end dates off', !$expiryAfter($pdo));
+$pdo->exec("UPDATE user_roles SET is_frozen = 1 WHERE user_id = {$dated}");
+ok('a frozen one does not count', $expiryAfter($pdo));
+
+// The switch on the Roles & permissions screen.
+$pdo = perm_admin_db_raw();
+$sa = perm_admin_person($pdo, 'Admin');
+perm_test_role($pdo, $sa, 'Super_Admin');
+$stale = perm_admin_person($pdo, 'Stale');
+perm_test_seat($pdo, $stale, 10, 'HOD', ['end_date' => '2020-01-01']);
+$expiryAfter($pdo);
+$saCtx = perm_resolve($pdo, $sa);
+eq('the screen lists what blocks it', [['seat', 'Head of Department, Charis', '2020-01-01']],
+    array_map(fn ($b) => [$b['kind'], $b['what'], $b['ends_on']], perm_expiry_blockers($pdo)));
+eq('the status says off, one blocker', ['enforced' => false, 'blockers' => 1], perm_expiry_status($pdo));
+perm_admin_refused('Enforce end dates refuses while anything is past its end', 'blocked', fn () => perm_expiry_switch_on($pdo, $saCtx));
+ok('…and stays off', !perm_expiry_enforced($pdo));
+$impact = perm_expiry_impact($pdo);
+ok('the parity report names who would lose access, and what', isset($impact['people'][$stale])
+    && in_array('Departments', $impact['people'][$stale]['loses'], true), json_encode($impact['people']));
+ok('…without switching anything', !perm_expiry_enforced($pdo) && perm_person_seats($pdo, $stale) !== []);
+eq('the daily job never switches it on', true, perm_daily_run($pdo)['skipped'] !== null && !perm_expiry_enforced($pdo));
+$record = (int) $pdo->query("SELECT id FROM user_departments WHERE user_id = {$stale}")->fetchColumn();
+perm_admin_refused('a Worker cannot end a HOD seat', 'rank', fn () => perm_seat_end($pdo, perm_resolve($pdo, $stale), $record));
+perm_seat_end($pdo, $saCtx, $record);
+eq('End seat closes it like "remove from roster"', 'Removed', $pdo->query("SELECT roster_status FROM user_departments WHERE id = {$record}")->fetchColumn());
+eq('…and nothing blocks any more', [], perm_expiry_blockers($pdo));
+perm_expiry_switch_on($pdo, $saCtx);
+ok('Enforce end dates switches them on', perm_expiry_enforced($pdo));
+eq('…kept in history', 1, perm_admin_history($pdo, 'config.expiry'));

@@ -33,6 +33,15 @@ $real = perm_real_current();
 $canManage = $real['breakglass'] || perm_ctx_can($real, 'roles', 'manage');
 $canRoll = $real['breakglass'] || perm_ctx_can($real, 'departments', 'manage');
 $viewing = perm_view_as() !== null;
+// End dates switch on only when that ends nobody's access (migration 20261202090000).
+$expiry = ['enforced' => perm_expiry_enforced($pdo)];
+$expiryBlockers = $expiry['enforced'] ? [] : perm_expiry_blockers($pdo);
+$seatsPast = count(array_filter($expiryBlockers, static fn ($b) => $b['kind'] === 'seat'));
+$rolesPast = count($expiryBlockers) - $seatsPast;
+$expiryTitle = implode(' and ', array_filter([
+    $seatsPast ? $seatsPast . ($seatsPast === 1 ? ' seat' : ' seats') : '',
+    $rolesPast ? $rolesPast . ($rolesPast === 1 ? ' role' : ' roles') : '',
+])) . ' past their end date';
 $levelInfo = [
     'none' => 'No access to this module.',
     'view' => 'See it: open the pages and read the records.',
@@ -82,6 +91,23 @@ $scopeOptions = ['own' => 'Own records', 'dept' => 'Their departments', 'church'
         'info' => 'Changing roles and permissions is for Super Admins.']) ?>
 <?php elseif ($viewing): ?>
     <?= ui_banner('warning', ['text' => 'Stop viewing as someone to make changes.']) ?>
+<?php endif; ?>
+<?php if (!$expiry['enforced'] && $expiryBlockers !== []): ?>
+    <?= ui_banner('warning', [
+        'title' => $expiryTitle,
+        'text' => 'Renew or end them, then switch end dates on.',
+        'info' => 'End dates are off until then, so nobody loses access by surprise. The Seats tab lists them.',
+        'actions' => ui_button('Review them', ['variant' => 'secondary', 'size' => 'sm', 'attrs' => ['data-action' => 'roles.expiry.review']]),
+    ]) ?>
+<?php elseif (!$expiry['enforced']): ?>
+    <?= ui_banner('info', [
+        'title' => 'End dates are off',
+        'text' => 'Switch them on so seats end with the ministry year.',
+        'info' => 'Nothing is past its end date, so switching on ends nobody\'s access today. Holders are told 14 days before a seat ends.',
+        'actions' => $canManage && !$viewing
+            ? ui_button('Enforce end dates', ['variant' => 'primary', 'size' => 'sm', 'attrs' => ['data-action' => 'roles.expiry.on']])
+            : '',
+    ]) ?>
 <?php endif; ?>
 
     <?= ui_tabs($tabs, 'matrix') ?>

@@ -674,7 +674,64 @@
         call('seat_renew', { record_id: btn.getAttribute('data-record') }).then(function (res) {
             HOD.toast(res.message, 'success');
             if (state.person) openPerson(state.person.user.id);
+            if (state.seats) loadSeats();
         }).catch(failed).finally(function () { HOD.busy(btn, false); });
+    });
+
+    /* ------------------------------------------------- end dates (switch) */
+
+    HOD.actions.on('roles.expiry.review', function () {
+        var list = document.querySelector('[data-ui-tabs]');
+        if (list && HOD.tabs) HOD.tabs.select(list, 'seats');
+        document.dispatchEvent(new CustomEvent('ui:tab', { detail: { tab: 'seats' } }));
+    });
+
+    HOD.actions.on('roles.expiry.on', function (btn) {
+        HOD.confirm({
+            title: 'Enforce end dates?',
+            message: 'Seats then end with their ministry year unless renewed. Holders are told 14 days before.',
+            confirmLabel: 'Enforce end dates'
+        }).then(function (yes) {
+            if (!yes) return;
+            HOD.busy(btn, true);
+            call('expiry_on').then(function (res) {
+                HOD.toast(res.message, 'success');
+                window.location.reload();
+            }).catch(failed).finally(function () { HOD.busy(btn, false); });
+        });
+    });
+
+    HOD.actions.on('roles.seat.end', function (btn) {
+        HOD.confirm({
+            title: 'End this seat?',
+            message: 'They come off the roster and are told. Add them back in Departments any time.',
+            confirmLabel: 'End seat', tone: 'danger'
+        }).then(function (yes) {
+            if (!yes) return;
+            call('seat_end', { record_id: btn.getAttribute('data-record') }).then(function (res) {
+                HOD.toast(res.message, 'success');
+                loadSeats();
+            }).catch(failed);
+        });
+    });
+
+    HOD.actions.on('roles.past.renew', function (btn) {
+        HOD.busy(btn, true);
+        call('user_role_renew', { user_id: btn.getAttribute('data-user'), role_id: btn.getAttribute('data-role') }).then(function (res) {
+            HOD.toast(res.message, 'success');
+            loadSeats();
+        }).catch(failed).finally(function () { HOD.busy(btn, false); });
+    });
+
+    HOD.actions.on('roles.past.remove', function (btn) {
+        HOD.confirm({ title: 'Remove this role?', message: 'They lose it now and are told.', confirmLabel: 'Remove role', tone: 'danger' })
+            .then(function (yes) {
+                if (!yes) return;
+                call('user_role_remove', { user_id: btn.getAttribute('data-user'), role_id: btn.getAttribute('data-role') }).then(function (res) {
+                    HOD.toast(res.message, 'success');
+                    loadSeats();
+                }).catch(failed);
+            });
     });
 
     /* --------------------------------------------------------------- seats */
@@ -712,6 +769,44 @@
             }
             ban.appendChild(bb);
             wrap.appendChild(ban);
+        }
+
+        // End dates off: what is past its end, and the switch (refused while any remain).
+        if (!s.expiry_enforced) {
+            var past = card(s.blockers.length ? 'Past their end date' : 'End dates are off',
+                boot.canManage ? button('Enforce end dates', {
+                    variant: 'primary', size: 'sm', data: { action: 'roles.expiry.on' }
+                }) : null);
+            if (boot.canManage && s.blockers.length) {
+                var sw = past.card.querySelector('[data-action="roles.expiry.on"]');
+                sw.disabled = true;
+                sw.setAttribute('aria-describedby', 'roles-expiry-why');
+            }
+            var pl = el('div', 'ui-list');
+            if (!s.blockers.length) {
+                pl.appendChild(el('p', 'ui-list__item ui-meta', 'Nothing is past its end date. Switching on ends nobody\'s access.'));
+            } else {
+                pl.appendChild(el('p', 'ui-list__item ui-meta', 'Renew or end each one; then switch end dates on.')).id = 'roles-expiry-why';
+            }
+            s.blockers.forEach(function (b) {
+                var row = el('div', 'ui-list__item');
+                var main = el('div', 'ui-list__main');
+                main.appendChild(el('p', 'ui-list__title', b.name));
+                main.appendChild(el('p', 'ui-list__meta', b.what + ' · ended ' + dateText(b.ends_on)));
+                row.appendChild(main);
+                var end = el('div', 'ui-list__end');
+                if (b.kind === 'seat') {
+                    end.appendChild(button('Renew', { variant: 'ghost', size: 'sm', icon: 'refresh-cw', data: { action: 'roles.seat.renew', record: b.id } }));
+                    end.appendChild(button('End seat', { variant: 'danger-ghost', size: 'sm', icon: 'x', data: { action: 'roles.seat.end', record: b.id } }));
+                } else if (boot.canManage) {
+                    end.appendChild(button('Renew', { variant: 'ghost', size: 'sm', icon: 'refresh-cw', data: { action: 'roles.past.renew', user: b.user_id, role: b.id } }));
+                    end.appendChild(button('Remove', { variant: 'danger-ghost', size: 'sm', icon: 'x', data: { action: 'roles.past.remove', user: b.user_id, role: b.id } }));
+                }
+                row.appendChild(end);
+                pl.appendChild(row);
+            });
+            past.body.appendChild(pl);
+            wrap.appendChild(past.card);
         }
 
         // Seat types.

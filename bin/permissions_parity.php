@@ -16,7 +16,7 @@
 //   --detail=<category>  list one category in full, person by person
 //                        (closed-hole, lost-role, combined, break-glass, lead,
 //                        academy, dead-links, links-added, unexpected-gain,
-//                        unexpected-loss)
+//                        unexpected-loss, expiry = everyone in the End dates section)
 //   --no-names           counts only (for working on a copy of the data)
 //
 // Development against a local copy (never production): set PERM_DB_DSN,
@@ -33,6 +33,7 @@ $aliases = [
     'break-glass' => 'break-glass', 'lead' => 'lead decision', 'academy' => 'academy roster',
     'dead-links' => 'dead link removed', 'links-added' => 'link added',
     'unexpected-gain' => 'UNEXPECTED gain', 'unexpected-loss' => 'UNEXPECTED loss',
+    'expiry' => 'expiry',
 ];
 $detail = null;
 if (isset($opts['detail'])) {
@@ -64,5 +65,31 @@ if (!perm_ready($pdo)) {
 }
 
 $run = perm_parity_run($pdo);
-echo perm_parity_render($pdo, $run, !isset($opts['no-names']), $detail);
+if ($detail !== 'expiry') {
+    echo perm_parity_render($pdo, $run, !isset($opts['no-names']), $detail);
+}
+
+// End dates (permissions PR 3): who would lose access if they were enforced
+// today — or, with them on, who already has. Informational: the exit code is
+// the parity verdict above.
+require_once __DIR__ . '/../includes/permissions/expiry.php';
+$impact = perm_expiry_impact($pdo);
+$seats = count(array_filter($impact['blockers'], static fn ($b) => $b['kind'] === 'seat'));
+$roles = count($impact['blockers']) - $seats;
+echo "\nEnd dates: " . ($impact['enforced'] ? 'ON' : 'OFF') . ' — '
+    . ($impact['blockers'] === []
+        ? "nothing live is past its end date" . ($impact['enforced'] ? '.' : ', so switching them on ends nobody\'s access.') . "\n"
+        : ($impact['enforced'] ? 'these are past their end date and no longer count' : 'switching them on today would end these at once')
+            . ": {$seats} seat(s), {$roles} role(s), " . count($impact['people']) . " people.\n");
+if ($impact['people'] !== [] && !isset($opts['no-names'])) {
+    $limit = $detail === 'expiry' ? PHP_INT_MAX : 10;
+    foreach (array_slice($impact['people'], 0, $limit, true) as $p) {
+        echo '  ' . $p['name'] . ' — ' . implode('; ', $p['items'])
+            . ($p['loses'] !== [] ? ' · loses: ' . implode(', ', array_slice($p['loses'], 0, 6)) . (count($p['loses']) > 6 ? ', …' : '') : '')
+            . "\n";
+    }
+    if (count($impact['people']) > $limit) {
+        echo '  … and ' . (count($impact['people']) - $limit) . " more (--detail=expiry lists everyone)\n";
+    }
+}
 exit(perm_parity_exit_code($run));
