@@ -45,13 +45,13 @@ for marker, description in (
 ):
     require(marker in manager, f"modal manager is missing {description}")
 
-# Events must keep all current overlays discoverable by the shared manager.
-event_modal_ids = re.findall(
-    r'<div\s+id="([^"]*[Mm]odal[^"]*)"\s+class="([^"]*\bfixed\b[^"]*)"',
-    events,
-)
-require(len(event_modal_ids) >= 7,
-        f"expected at least 7 Events dialog overlays, found {len(event_modal_ids)}")
+# Events moved to the components' native <dialog> (docs/UI.md): every dialog
+# comes from ui_dialog_start(), and no hand-made fixed overlay is left.
+event_modal_ids = re.findall(r"ui_dialog_start\('([^']+)'", events)
+require(len(event_modal_ids) >= 8,
+        f"expected at least 8 Events dialogs from ui_dialog_start(), found {len(event_modal_ids)}")
+require(not re.search(r'<div\s[^>]*\bclass="[^"]*\bfixed\b', events),
+        "Events must not hand-build fixed overlays; use ui_dialog_start()")
 
 # Every authenticated fixed overlay named as a modal must remain discoverable.
 fixed_modal_count = 0
