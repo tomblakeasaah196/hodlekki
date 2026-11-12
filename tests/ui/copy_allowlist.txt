@@ -3,7 +3,3 @@
 # only shrink: fix a line and delete it here. A new or edited string must meet the
 # rule, so it never lands on this list. Format: path | kind | text
 
-parent_portal.php | paragraph | Here's what your little ones have been up to in Junior Church. Browse their attendance, lessons, and take-home resources below.
-parent_portal.php | paragraph | See what your child has been learning, their attendance, and take-home resources from Junior Church.
-parent_portal.php | paragraph | We couldn't find any children linked to your profile. Please contact the Junior Church team.
-testimonies.php | paragraph | "They triumphed over him by the blood of the Lamb and by the word of their testimony." <span class="text-xs font-bold tracking-widest text-hodRed mt-3 block uppercase">— Revelation 12:11</span>

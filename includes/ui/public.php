@@ -99,6 +99,7 @@ function ui_public_close(): void
     'module' => 'public',
     'offline' => false,
     'public' => true,
+    'vendor' => ui_vendor_map(),
 ]) ?>
 </body>
 </html>
