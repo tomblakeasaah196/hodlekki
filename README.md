@@ -24,8 +24,10 @@ The internal ERP is organised as one directory per module under
 
 **Attendance & events**
 - `events` — Sunday services, meetings, and one-off events.
-- `checkin_qr`, `checkin_monitor`, `event_qr` — QR-code check-in flow and
-  live attendance dashboard.
+- `checkin_qr`, `checkin_monitor`, `event_qr` — door QR posters (one standing
+  QR opens today's service), the live check-in monitor, and event posters.
+  `checkin.php` is the public check-in page: at a service (Registration link
+  off) newcomers are counted as guests and never registered.
 - `event_report` — post-event PDF & Excel reports (dompdf, PhpSpreadsheet).
 
 **Public front door & follow-up**
@@ -83,7 +85,8 @@ The internal ERP is organised as one directory per module under
   auto-suppressed after 3 carrier-confirmed failures in a row. Deep links:
   `/modules/sms_studio/index.php?phone=0803…`, `?msg=<id>`,
   `?campaign=<ids>`.
-- `contact_extractor` — bulk import of contacts from pasted text.
+- `contact_extractor` — every phone number on file, deduplicated, in
+  copy-ready batches for BulkSMS.
 
 **Installable app (PWA) & push notifications**
 - The site installs to a phone's home screen as **HOD Lekki**: Android

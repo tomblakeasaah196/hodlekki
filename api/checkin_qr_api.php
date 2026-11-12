@@ -4,7 +4,10 @@
  * CHECK-IN QR API — backend for the QR generator
  * File: /api/checkin_qr_api.php
  * ----------------------------------------------------------------------------
- * Lists events (id + title) and returns the check-in URL token for one event.
+ * Lists events (with their category, date and whether they take
+ * registrations) and returns the check-in URL token for one event. The
+ * standing service QR (/checkin?service=today) needs no token. Also the
+ * check-in KPIs for the Check-in Monitor.
  * ============================================================================
  */
 require_once '../includes/db.php';
@@ -34,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 try {
     switch ($action) {
         case 'list_events':
-            $rows = $pdo->query("SELECT id, title, registration_token FROM events ORDER BY event_date DESC LIMIT 100")->fetchAll(PDO::FETCH_ASSOC);
+            $rows = $pdo->query("SELECT id, title, event_category, event_date, requires_registration, is_closed FROM events ORDER BY event_date DESC LIMIT 100")->fetchAll(PDO::FETCH_ASSOC);
             echo json_encode(['status'=>'success','data'=>$rows]);
             break;
 
@@ -58,7 +61,7 @@ try {
          * ================================================================ */
         case 'checkin_stats':
             $id = (int)($_POST['event_id'] ?? 0);
-            $ev = $pdo->prepare("SELECT id, title, event_date, end_date FROM events WHERE id = ?");
+            $ev = $pdo->prepare("SELECT id, title, event_category, event_date, end_date, requires_registration FROM events WHERE id = ?");
             $ev->execute([$id]);
             $event = $ev->fetch(PDO::FETCH_ASSOC);
             if (!$event) { echo json_encode(['status'=>'error','message'=>'Event not found.']); exit; }
@@ -85,7 +88,8 @@ try {
 
             echo json_encode([
                 'status'=>'success',
-                'event'=>['id'=>$event['id'],'title'=>$event['title']],
+                'event'=>['id'=>$event['id'],'title'=>$event['title'],'category'=>$event['event_category'],
+                          'checkin_only'=>(int) $event['requires_registration'] !== 1],
                 'kpis'=>[
                     'total'=>$total,
                     'today'=>$today,

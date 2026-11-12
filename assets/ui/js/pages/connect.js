@@ -406,11 +406,29 @@
         }
     }
 
+    // A guest who just checked in at a service (checkin.js) arrives with their
+    // name and phone kept on this device: fill them in and open the card.
+    // Kept in sessionStorage for 30 minutes, used once, never in the address.
+    function prefillFromCheckin() {
+        var saved = null;
+        try {
+            saved = JSON.parse(sessionStorage.getItem('hod.connect.prefill') || 'null');
+            sessionStorage.removeItem('hod.connect.prefill');
+        } catch (e) { return; }
+        if (!saved || typeof saved !== 'object' || Date.now() - Number(saved.at || 0) > 30 * 60 * 1000) return;
+        ['first_name', 'last_name', 'phone'].forEach(function (name) {
+            var el = form.elements[name];
+            if (el && !el.value && typeof saved[name] === 'string') el.value = saved[name].slice(0, 50);
+        });
+        HOD.actions.run('connect.start');
+    }
+
     function init() {
         form.elements.dob.setAttribute('max', todayISO());
         initAddress();
         goTo(1);
         initMotion();
+        prefillFromCheckin();
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
