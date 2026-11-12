@@ -87,6 +87,38 @@ $e = throws(fn () => Uapi::parse('{"result":{"status":0,"errors":["You have reac
 check("a uapi refusal carries cPanel's words", $e instanceof UapiException && str_contains($e->getMessage(), 'maximum allowed'));
 check('garbage is a clear failure', throws(fn () => Uapi::parse('Segmentation fault', 'add_pop')) instanceof UapiException);
 
+section('uapi: which command, and failures in its own words');
+$only = static fn (string ...$paths) => static fn (string $p): bool => in_array($p, $paths, true);
+check('/usr/bin/uapi first when it runs (it works under CageFS here)', Uapi::pickBinary('', Uapi::BINARIES, $only('/usr/bin/uapi', '/usr/local/cpanel/bin/uapi')) === '/usr/bin/uapi');
+check('/usr/local/cpanel/bin/uapi when it is the only one', Uapi::pickBinary('', Uapi::BINARIES, $only('/usr/local/cpanel/bin/uapi')) === '/usr/local/cpanel/bin/uapi');
+check('neither runs: the first, so the error names it', Uapi::pickBinary('', Uapi::BINARIES, $only()) === '/usr/bin/uapi');
+check('MAIL_UAPI_BINARY wins', Uapi::pickBinary(' /opt/uapi ', Uapi::BINARIES, $only('/usr/bin/uapi')) === '/opt/uapi');
+check('the shipped default is the automatic choice', \HOD\Mail\Config::get('uapi.binary') === '' && \HOD\Mail\Config::get('uapi.candidates') === Uapi::BINARIES);
+check('the argument list starts with the chosen command', Uapi::argv('Email', 'list_pops', ['domain' => 'hodlekki.org'])[0] === Uapi::binary());
+check('what uapi printed is shown, its first line only', Uapi::detail("\nFailed to execute /usr/local/cpanel/cpanel\nmore", []) === 'Failed to execute /usr/local/cpanel/cpanel');
+check('never an argument (a password) in the message', Uapi::detail('Bad value S3cret!pass for password', ['password' => 'S3cret!pass']) === 'Bad value … for password');
+
+section('The minute cron writes a line when something fails');
+$log = sys_get_temp_dir() . '/hod-mail-test-' . bin2hex(random_bytes(4)) . '/logs/hod-mail.log';
+\HOD\Mail\Config::set('log.file', $log);
+check('a clean run writes nothing', \HOD\Mail\Admin\CronLog::problems('mail_minute', []) === null && !is_file($log));
+$line = \HOD\Mail\Admin\CronLog::problems('mail_minute', ["quota: cPanel gave no readable answer\n to list_pops_with_disk", 'sync 3: timeout']);
+check('a failing run writes one dated line, folder made', is_file($log) && file_get_contents($log) === $line
+    && (bool) preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} mail_minute: quota: cPanel gave no readable answer to list_pops_with_disk; sync 3: timeout\n$/', (string) $line));
+\HOD\Mail\Admin\CronLog::problems('mail_minute', ['jobs: 1 failed']);
+check('lines are appended', substr_count((string) file_get_contents($log), "\n") === 2);
+check('the default file is ~/logs/hod-mail.log', (function () {
+    \HOD\Mail\Config::set('log.file', '');
+    $home = getenv('HOME');
+    putenv('HOME=/home/smartqaq');
+    $path = \HOD\Mail\Admin\CronLog::path();
+    $home !== false ? putenv('HOME=' . $home) : putenv('HOME');
+
+    return $path === '/home/smartqaq/logs/hod-mail.log';
+})());
+@unlink($log);
+@rmdir(dirname($log));
+@rmdir(dirname($log, 2));
 section('Automatic replies are recognised');
 $h = static fn (string $raw): array => Headers::parse($raw);
 check('Auto-Submitted: auto-replied', MessageWriter::isAutomatic($h("Auto-Submitted: auto-replied\r\n")));

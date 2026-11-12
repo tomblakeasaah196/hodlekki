@@ -129,6 +129,15 @@ check('a church mailbox may not use the 10 kept personal slots', $e instanceof M
 $e = throws(fn () => Lifecycle::requestShared($member, ['kind' => 'church', 'local_part' => 'media', 'display_name' => 'X']));
 check('a member cannot create one at all', $e instanceof MailError && $e->status === 403);
 
+section('A failing uapi shows on Health, in its own words');
+$uapi->failNext['list_pops_with_disk'] = 'cPanel gave no readable answer to list_pops_with_disk: Failed to execute /usr/local/cpanel/cpanel';
+$e = throws(fn () => Quota::refresh());
+$status = \HOD\Mail\Admin\Uapi::status();
+check('the failure is kept with its time', $e !== null && $status['ok'] === false && str_contains((string) $status['error'], 'Failed to execute') && $status['since'] !== null);
+$row = array_values(array_filter(\HOD\Mail\Admin\Health::checks(), fn ($c) => $c['label'] === 'cPanel commands'))[0] ?? null;
+check('Health says cPanel commands are failing, and why', $row && !$row['ok'] && str_starts_with($row['detail'], 'failing — ') && str_contains($row['detail'], 'Failed to execute'));
+Quota::refresh();
+check('the next good call clears it, keeping the last error for reference', \HOD\Mail\Admin\Uapi::status()['ok'] === true && str_contains((string) \HOD\Mail\Admin\Uapi::status()['last_error'], 'Failed to execute'));
 // ------------------------------------------------------------------ bring in
 section('Bringing the existing mailboxes in');
 $e = throws(fn () => Lifecycle::requestBringIn($admin, ['email' => 'system@hodlekki.org', 'kind' => 'church', 'display_name' => 'System']));
