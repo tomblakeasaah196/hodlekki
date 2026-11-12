@@ -245,7 +245,7 @@
             if (item.type === 'live') {
                 radio(form, 'live_mode', d.mode || 'in_person');
                 form.elements.venue.value = d.venue || '';
-                form.elements.link.value = d.meet_url || '';
+                form.elements.link.value = d.link || '';
                 form.elements.present_minutes.value = d.present_minutes || 30;
             } else if (item.type === 'video') {
                 form.querySelector('#trb-video-url').value = d.url || '';
@@ -433,9 +433,10 @@
     var openEnrolment = 0;
     var changed = false;
 
-    function statusBadge(p) {
+    function statusBadge(p, item) {
         if (!p) return null;
-        if (p.status === 'done') return badge('Done', 'success');
+        if (p.status === 'completed' && item.type === 'exam' && p.passed === false) return badge('Not passed', 'warning');
+        if (p.status === 'completed') return badge('Done', 'success');
         if (p.status === 'submitted') return badge('To mark', 'primary');
         if (p.status === 'returned') return badge('Returned', 'warning');
         return null;
@@ -482,7 +483,7 @@
                 name.appendChild(el('p', 'font-medium text-ink', item.title));
                 name.appendChild(el('p', 'ui-meta', item.type_label + (item.required ? '' : ' · Optional')));
                 row.appendChild(name);
-                var b = statusBadge(p);
+                var b = statusBadge(p, item);
                 if (b) row.appendChild(b);
                 body.appendChild(row);
 
@@ -519,8 +520,13 @@
                         f.appendChild(go);
                         body.appendChild(f);
                     }
+                } else if (item.type === 'exam') {
+                    // The exam records itself (PR 2's exam_progress_hook()); a tutor never ticks it.
+                    if (p && p.percent !== null && p.percent !== undefined) {
+                        body.appendChild(el('p', 'ui-meta', 'Score ' + p.percent + '%' + (p.passed ? ' · passed' : ' · not passed')));
+                    }
                 } else if (item.type !== 'assignment' && data.canEdit) {
-                    var done = p && p.status === 'done';
+                    var done = p && p.status === 'completed';
                     var tick = button(done ? 'Clear' : (item.type === 'live' ? 'Mark attended' : 'Mark done'), done ? 'ghost' : 'soft', 'trb.tick',
                         { 'data-item': item.id, 'data-done': done ? '0' : '1' });
                     var wrap = el('div');

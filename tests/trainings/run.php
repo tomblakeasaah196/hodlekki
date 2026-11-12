@@ -321,8 +321,9 @@ $live = $save(['type' => 'live', 'title' => 'Opening class', 'section_id' => $w1
 ok('a live class saves', ($live['status'] ?? '') === 'success', json_encode($live));
 $liveItem = trainings_item_get($pdo, (int) $live['id']);
 eq('…on its day and time in the week', '2026-12-09 18:30:00', $liveItem['starts_at']);
-eq('…with its link and attendance rule', ['online', 'https://meet.google.com/abc-defg-hij', 45],
-    [$liveItem['details']['mode'], $liveItem['details']['meet_url'], $liveItem['details']['present_minutes']]);
+eq('…with its pasted link and attendance rule', ['online', 'https://meet.google.com/abc-defg-hij', 45],
+    [$liveItem['details']['mode'], $liveItem['details']['link'], $liveItem['details']['present_minutes']]);
+ok('…leaving meet_url and meet_event_id to PR 3', !array_key_exists('meet_url', $liveItem['details']) && !array_key_exists('meet_event_id', $liveItem['details']));
 eq('a day outside the week is refused', 'date', $save(['type' => 'live', 'title' => 'X', 'section_id' => $w1, 'date' => '2026-12-15', 'time' => '09:00'])['field'] ?? null);
 eq('a bad time is refused', 'time', $save(['type' => 'live', 'title' => 'X', 'section_id' => $w1, 'time' => '25:00'])['field'] ?? null);
 eq('a link must be https', 'link', $save(['type' => 'live', 'title' => 'X', 'section_id' => $w1, 'live_mode' => 'online', 'link' => 'http://x.org'])['field'] ?? null);
@@ -446,7 +447,8 @@ eq('below the pass mark it goes back', [false, 'returned'], [$r['passed'] ?? nul
 eq('…and they hand it in again', 'success', act($pdo, 904, 'submit_work', ['item_id' => $essay, 'answers' => ['Grace', 'John 3:16; Eph 2:8', 'Daily']])['status']);
 eq('…keeping the first attempt in its history', 4, trainings_progress_map($pdo, $e['id'])[$essay]['data']['history'][0]['mark']);
 $r = act($pdo, 901, 'mark_work', ['enrolment_id' => $e['id'], 'item_id' => $essay, 'mark' => 8, 'comment' => 'Good.']);
-eq('at the pass mark it is done', [true, 'done'], [$r['passed'] ?? null, trainings_progress_map($pdo, $e['id'])[$essay]['status']]);
+eq('at the pass mark it is completed', [true, 'completed'], [$r['passed'] ?? null, trainings_progress_map($pdo, $e['id'])[$essay]['status']]);
+eq('the progress words are the ones PR 2 writes', ['completed'], array_values(array_unique(array_column(trainings_progress_map($pdo, $e['id']), 'status'))));
 eq('not complete while a required live class is missing (50% of 1)', 'active', trainings_enrolment_get($pdo, $e['id'])['status']);
 $r = act($pdo, 901, 'tutor_done', ['enrolment_id' => $e['id'], 'item_id' => (int) $live['id'], 'done' => 1]);
 eq('a tutor ticks the class attended: complete', [true, 'completed'], [$r['completed'] ?? null, trainings_enrolment_get($pdo, $e['id'])['status']]);
@@ -518,6 +520,74 @@ eq('…outcome in words', ['Ready to serve'], array_column(act($pdo, 901, 'to_co
 act($pdo, 901, 'confirm', ['enrolment_ids' => [trainings_enrolment_for($pdo, $mat, 904)['id']]]);
 eq('…ready to serve after it, status untouched', [true, 'Member'], [trainings_ready_to_serve($pdo, 904),
     $pdo->query('SELECT spiritual_status FROM users WHERE id = 904')->fetchColumn()]);
+
+// ---------------------------------------------------------------------------
+section('Hooks for PR 2 (exams) and PR 3 (Google Meet)');
+$ex = (int) act($pdo, 901, 'create', ['title' => 'Exam course', 'length' => 'self_paced'])['id'];
+$exSec = (int) trainings_outline($pdo, $ex)[0]['id'];
+if (!function_exists('exam_url_setup')) {
+    eq('before PR 2, the builder offers no exam', false, in_array('exam', trainings_builder_types(), true));
+    eq('…refuses to make one', 'type', act($pdo, 901, 'item_save', ['training_id' => $ex, 'type' => 'exam', 'title' => 'X', 'section_id' => $exSec])['field'] ?? null);
+    eq('…and has no exam links', [null, null], [trainings_exam_setup_url(1), trainings_exam_take_url(1)]);
+    // PR 2's two URL helpers (includes/exams/engine.php), as it names them, for the rest of this run.
+    function exam_url_setup(int $itemId): string
+    {
+        return '/modules/exams/setup?item=' . $itemId;
+    }
+    function exam_url_take(int $itemId): string
+    {
+        return '/modules/exams/take?item=' . $itemId;
+    }
+}
+ok('with PR 2, the builder offers exams', in_array('exam', trainings_builder_types(), true));
+$examItem = (int) act($pdo, 901, 'item_save', ['training_id' => $ex, 'type' => 'exam', 'title' => 'Final exam', 'section_id' => $exSec])['id'];
+$exRead = (int) act($pdo, 901, 'item_save', ['training_id' => $ex, 'type' => 'reading', 'title' => 'Notes', 'section_id' => $exSec, 'text' => 'Read.'])['id'];
+eq('exam links go through PR 2\'s helpers', [exam_url_setup($examItem), exam_url_take($examItem)],
+    [trainings_exam_setup_url($examItem), trainings_exam_take_url($examItem)]);
+$builderSrc = (string) file_get_contents($root . '/modules/academy/training.php');
+ok('the builder and the learner page never hard-code an exam path', !str_contains($builderSrc, '/modules/exams/')
+    && !str_contains((string) file_get_contents($root . '/modules/trainings/index.php'), '/modules/exams/')
+    && str_contains($builderSrc, 'trainings_exam_setup_url('));
+eq('an exam item needs no content here (PR 2 sets it up)', 'success', act($pdo, 901, 'publish', ['training_id' => $ex])['status']);
+act($pdo, 901, 'assign', ['training_id' => $ex, 'users' => [904, 902]]);
+$ee = trainings_enrolment_for($pdo, $ex, 904);
+act($pdo, 904, 'item_done', ['item_id' => $exRead, 'done' => 1]);
+eq('a tutor never ticks an exam', 'error', act($pdo, 901, 'tutor_done', ['enrolment_id' => $ee['id'], 'item_id' => $examItem, 'done' => 1])['status']);
+$pr2 = static function (int $enrolmentId, int $itemId, array $data) use ($pdo): void {
+    // exam_progress_hook() exactly as #177 writes it: no updated_at.
+    $upd = $pdo->prepare("UPDATE training_progress SET status = 'completed', completed_at = ?, data = ? WHERE enrolment_id = ? AND item_id = ?");
+    $upd->execute(['2026-12-01 10:00:00', json_encode($data), $enrolmentId, $itemId]);
+    if ($upd->rowCount() === 0) {
+        $pdo->prepare("INSERT INTO training_progress (enrolment_id, item_id, status, completed_at, data) VALUES (?, ?, 'completed', ?, ?)")
+            ->execute([$enrolmentId, $itemId, '2026-12-01 10:00:00', json_encode($data)]);
+    }
+};
+$pr2($ee['id'], $examItem, ['score' => 3, 'max' => 10, 'percent' => 30, 'passed' => false, 'attempt_id' => 1]);
+eq('PR 2\'s insert (without updated_at) is accepted', 1, trn_count($pdo, 'training_progress', 'enrolment_id = ? AND item_id = ?', [$ee['id'], $examItem]));
+eq('a failed exam does not complete the training', [false, 'active'], [trainings_recheck_enrolment($pdo, $ee['id']), trainings_enrolment_get($pdo, $ee['id'])['status']]);
+$seen = array_values(array_filter(act($pdo, 904, 'view', ['training_id' => $ex])['sections'][0]['items'], static fn ($i) => $i['id'] === $examItem))[0];
+eq('the learner sees their score, and where to look', [30, false, exam_url_take($examItem)], [$seen['progress']['percent'], $seen['progress']['passed'], $seen['details']['take_url']]);
+$pr2($ee['id'], $examItem, ['score' => 8, 'max' => 10, 'percent' => 80, 'passed' => true, 'attempt_id' => 1]);
+eq('a passed exam completes it when PR 2 calls trainings_recheck_enrolment()', [true, 'completed'],
+    [trainings_recheck_enrolment($pdo, $ee['id']), trainings_enrolment_get($pdo, $ee['id'])['status']]);
+$e2 = trainings_enrolment_for($pdo, $ex, 902);
+act($pdo, 902, 'item_done', ['item_id' => $exRead, 'done' => 1]);
+$pr2($e2['id'], $examItem, ['score' => 9, 'max' => 10, 'percent' => 90, 'passed' => true, 'attempt_id' => 2]);
+eq('…or on the learner\'s next look, if nobody called it', 'completed',
+    array_values(array_filter(act($pdo, 902, 'mine')['mine'], static fn ($m) => $m['id'] === $ex))[0]['status']);
+$lv = (int) act($pdo, 901, 'item_save', ['training_id' => $ex, 'type' => 'live', 'title' => 'Online class', 'section_id' => $exSec,
+    'live_mode' => 'online', 'link' => 'https://zoom.us/j/123'])['id'];
+$d = trainings_item_get($pdo, $lv)['details'];
+$d['meet_url'] = 'https://meet.google.com/xyz-abcd-efg';
+$d['meet_event_id'] = 'evt-1';
+$pdo->prepare('UPDATE training_items SET details = ? WHERE id = ?')->execute([json_encode($d), $lv]);   // PR 3 creates the Meet
+act($pdo, 901, 'item_save', ['training_id' => $ex, 'id' => $lv, 'title' => 'Online class (week 2)', 'section_id' => $exSec,
+    'live_mode' => 'online', 'link' => 'https://zoom.us/j/123', 'venue' => '']);
+$d = trainings_item_get($pdo, $lv)['details'];
+eq('editing the item keeps PR 3\'s Meet fields', ['https://meet.google.com/xyz-abcd-efg', 'evt-1', 'https://zoom.us/j/123'],
+    [$d['meet_url'] ?? null, $d['meet_event_id'] ?? null, $d['link'] ?? null]);
+$seen = array_values(array_filter(act($pdo, 904, 'view', ['training_id' => $ex])['sections'][0]['items'], static fn ($i) => $i['id'] === $lv))[0];
+eq('the learner joins PR 3\'s Meet before a pasted link', 'https://meet.google.com/xyz-abcd-efg', $seen['details']['link']);
 
 // ---------------------------------------------------------------------------
 section('Visitor invites: one tap confirms the email and sets a password (owner answer 13)');

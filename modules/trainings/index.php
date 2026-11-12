@@ -101,6 +101,18 @@ $isStaff = can('trainings', 'view', 'church');
                                 'attrs' => ['target' => '_blank', 'rel' => 'noopener noreferrer']]) ?></div>
 <?php endif; ?>
                             <p class="ui-meta">Your tutor records who attended.</p>
+<?php elseif ($item['type'] === 'exam'): ?>
+<?php if ($p !== null && $p['percent'] !== null): ?>
+                            <?= ui_banner($p['passed'] ? 'success' : 'warning', ['title' => 'Score: ' . (int) $p['percent'] . '%',
+                                'text' => $p['passed'] ? 'Passed.' : 'Talk to your tutor about it.']) ?>
+<?php endif; ?>
+<?php if ($d['take_url'] !== null && $en !== null && $p === null): ?>
+                            <div><?= ui_button('Start exam', ['variant' => 'primary', 'icon' => 'clipboard-list', 'href' => $d['take_url']]) ?></div>
+<?php elseif ($d['take_url'] !== null && $p !== null): ?>
+                            <div><?= ui_button('See result', ['variant' => 'secondary', 'href' => $d['take_url']]) ?></div>
+<?php elseif ($d['take_url'] === null): ?>
+                            <p class="ui-meta">Coming soon.</p>
+<?php endif; ?>
 <?php elseif ($item['type'] === 'video' || $item['type'] === 'audio'): ?>
                             <?= trainings_view_media($d['media'], $item['title']) ?>
 <?php elseif ($item['type'] === 'reading'): ?>
@@ -119,8 +131,8 @@ $isStaff = can('trainings', 'view', 'church');
                             <?= trainings_view_media($d['media'], 'Sermon: ' . $item['title']) ?>
 <?php endif; ?>
 <?php if ($p !== null && $p['mark'] !== null): ?>
-                            <?= ui_banner($p['status'] === 'done' ? 'success' : 'warning', ['title' => 'Mark: ' . (int) $p['mark'] . ' / ' . (int) $d['max_mark'],
-                                'text' => $p['status'] === 'done' ? 'Well done.' : 'Read the comment, then hand it in again.', 'info' => $p['comment'] !== '' ? $p['comment'] : null]) ?>
+                            <?= ui_banner($p['status'] === 'completed' ? 'success' : 'warning', ['title' => 'Mark: ' . (int) $p['mark'] . ' / ' . (int) $d['max_mark'],
+                                'text' => $p['status'] === 'completed' ? 'Well done.' : 'Read the comment, then hand it in again.', 'info' => $p['comment'] !== '' ? $p['comment'] : null]) ?>
 <?php if ($p['comment'] !== ''): ?>
                             <blockquote class="border-l-4 border-line pl-3 text-ink-muted"><?= nl2br(ui_e($p['comment']), false) ?></blockquote>
 <?php endif; ?>
@@ -148,7 +160,7 @@ $isStaff = can('trainings', 'view', 'church');
 <?php endif; ?>
 <?php if ($item['ready'] && $item['self'] && $en !== null && $en['status'] !== 'withdrawn'): ?>
                             <div>
-<?php if ($p !== null && $p['status'] === 'done'): ?>
+<?php if ($p !== null && $p['status'] === 'completed'): ?>
                                 <?= ui_button('Mark not done', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'x',
                                     'attrs' => ['data-action' => 'trn.done', 'data-item' => $item['id'], 'data-done' => '0']]) ?>
 <?php else: ?>

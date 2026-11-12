@@ -14,7 +14,9 @@
 --                         password, opens Trainings); token stored as sha256
 --
 -- Person columns hold users.id. JSON lives in LONGTEXT (MySQL 8 and MariaDB
--- 10.11 alike). No foreign keys, as elsewhere in the platform: the code
+-- 10.11 alike). training_progress.status is 'completed' | 'submitted' |
+-- 'returned' (shared with PR 2, docs/EXAMS.md); its updated_at may be NULL
+-- because PR 2's exam_progress_hook() does not write it. No foreign keys, as elsewhere in the platform: the code
 -- deletes children with their parent (includes/trainings/). Forward-only,
 -- safe to run twice.
 
@@ -111,7 +113,7 @@ CREATE TABLE IF NOT EXISTS training_progress (
     status VARCHAR(10) NOT NULL,
     completed_at DATETIME NULL DEFAULT NULL,
     data LONGTEXT NULL,
-    updated_at DATETIME NOT NULL,
+    updated_at DATETIME NULL DEFAULT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uq_training_progress (enrolment_id, item_id),
     KEY ix_training_progress_item (item_id, status)

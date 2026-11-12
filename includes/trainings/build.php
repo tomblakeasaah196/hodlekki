@@ -525,7 +525,7 @@ function trainings_item_save(PDO $pdo, array $t, array $in, array $files = []): 
         return ['ok' => false, 'message' => 'That item was removed. Reload the page.', 'code' => 'NOT_FOUND'];
     }
     $type = $old['type'] ?? (string) ($in['type'] ?? '');
-    if (!in_array($type, TRAININGS_BUILDER_TYPES, true) && !($old !== null && isset(TRAININGS_ITEM_TYPES[$type]))) {
+    if (!in_array($type, trainings_builder_types(), true) && !($old !== null && isset(TRAININGS_ITEM_TYPES[$type]))) {
         return ['ok' => false, 'message' => 'Choose what kind of item it is.', 'field' => 'type'];
     }
     $title = trainings_text($in['title'] ?? '', 160);
@@ -617,9 +617,10 @@ function trainings_item_details(string $type, array $in, array $old, array $file
             if ($present < 1 || $present > 720) {
                 return ['error' => 'Use 1 to 720 minutes.', 'field' => 'present_minutes'];
             }
-            // PR 3 keeps its Google fields (meet_event_id …) when the item is edited here.
+            // A pasted link lives in 'link'. meet_url / meet_event_id belong to PR 3 (the Meet it
+            // creates): never written here, and kept as they are when the item is edited.
             $d = array_merge($old, ['mode' => $mode, 'venue' => trainings_text($in['venue'] ?? '', 160),
-                'meet_url' => $mode === 'online' ? mb_substr($link, 0, 500) : '', 'present_minutes' => $present]);
+                'link' => $mode === 'online' ? mb_substr($link, 0, 500) : '', 'present_minutes' => $present]);
             return ['details' => $d, 'replaced' => $replaced];
 
         case 'video':
@@ -933,7 +934,7 @@ function trainings_item_forget_files(array $details): void
 function trainings_templates(): array
 {
     $live = static fn (string $title): array => ['type' => 'live', 'title' => $title, 'minutes' => 90,
-        'details' => ['mode' => 'in_person', 'venue' => '', 'meet_url' => '', 'present_minutes' => 30]];
+        'details' => ['mode' => 'in_person', 'venue' => '', 'present_minutes' => 30]];
     $review = ['type' => 'assignment', 'title' => 'Sermon review', 'details' => ['kind' => 'sermon_review', 'instructions' => '',
         'prompts' => ['The main points', 'The scriptures used', 'How it applies to me'], 'max_mark' => 10, 'pass_mark' => 5]];
     return [

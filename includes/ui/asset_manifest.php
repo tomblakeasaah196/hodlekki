@@ -12,7 +12,7 @@ return [
     '/assets/ui/icons.svg' => 'c9f14d34bf3d',
     '/assets/ui/js/email-editor.js' => '0ded3703e4d3',
     '/assets/ui/js/legacy.js' => 'f26c58951edf',
-    '/assets/ui/js/pages/academy-training.js' => '0c567dfc4582',
+    '/assets/ui/js/pages/academy-training.js' => '2325e0530b8a',
     '/assets/ui/js/pages/academy.js' => 'b73845e40346',
     '/assets/ui/js/pages/alerts.js' => '4bd59b451779',
     '/assets/ui/js/pages/announcements.js' => '92a1a8813041',

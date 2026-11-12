@@ -2,12 +2,16 @@
 // /includes/trainings/progress.php
 //
 // A learner's way through a training, one training_progress row per item:
-//   done       finished: watched / listened / read (the learner says so),
+//   completed  finished: watched / listened / read (the learner says so),
 //              attended (a tutor ticks it; PR 3 adds Google Meet attendance),
-//              an assignment marked at or above its pass mark, an exam passed (PR 2)
+//              an assignment marked at or above its pass mark, an exam sat
+//              (PR 2's exam_progress_hook() writes data {score, max, percent,
+//              passed, attempt_id}; only passed: true counts)
 //   submitted  an assignment handed in, waiting for a tutor
 //   returned   marked below the pass mark: the learner hands it in again
-// Completion (pass_rule): every required item done, except live classes,
+// The status words are shared with PR 2 (docs/EXAMS.md). updated_at may be
+// NULL: PR 2's hook does not write it.
+// Completion (pass_rule): every required item completed, except live classes,
 // where attending live_percent % of the required ones is enough. A completed
 // official class waits for the Academy to CONFIRM it (owner's answer 4):
 // Membership Class moves the person to Member through the status history
@@ -37,7 +41,7 @@ function trainings_progress_map(PDO $pdo, int $enrolmentId): array
 function trainings_progress_put(PDO $pdo, int $enrolmentId, int $itemId, string $status, array $data): void
 {
     $now = trainings_sql_dt();
-    $done = $status === 'done' ? $now : null;
+    $done = $status === 'completed' ? $now : null;
     $upd = $pdo->prepare('UPDATE training_progress SET status = ?, completed_at = ?, data = ?, updated_at = ? WHERE enrolment_id = ? AND item_id = ?');
     $upd->execute([$status, $done, trainings_json($data), $now, $enrolmentId, $itemId]);
     if ($upd->rowCount() === 0) {
@@ -56,6 +60,31 @@ function trainings_progress_clear(PDO $pdo, int $enrolmentId, int $itemId): void
     $pdo->prepare('DELETE FROM training_progress WHERE enrolment_id = ? AND item_id = ?')->execute([$enrolmentId, $itemId]);
 }
 
+/** Does this progress row count towards completion? (An exam only when it was passed.) */
+function trainings_progress_counts(array $item, ?array $p): bool
+{
+    if ($p === null || $p['status'] !== 'completed') {
+        return false;
+    }
+    return !array_key_exists('passed', $p['data']) || !empty($p['data']['passed']);
+}
+
+/**
+ * Check one enrolment again after something outside this module wrote its
+ * progress (PR 2's exam_progress_hook(), PR 3's attendance). Safe to call any
+ * time; returns true when this call completed the training.
+ *     if (function_exists('trainings_recheck_enrolment')) trainings_recheck_enrolment($pdo, $enrolmentId);
+ */
+function trainings_recheck_enrolment(PDO $pdo, int $enrolmentId): bool
+{
+    if (!trainings_ready($pdo)) {
+        return false;
+    }
+    $e = trainings_enrolment_get($pdo, $enrolmentId);
+    $t = $e !== null ? trainings_get($pdo, $e['training_id']) : null;
+    return $e !== null && $t !== null && trainings_check_completion($pdo, $t, $e);
+}
+
 /**
  * Counts for one enrolment: required items, done, handed in, to mark, percent,
  * and whether the pass rule is met.
@@ -72,7 +101,7 @@ function trainings_enrolment_summary(PDO $pdo, array $t, array $enrolment, ?arra
     $otherMissing = 0;
     foreach ($items as $item) {
         $p = $progress[$item['id']] ?? null;
-        $isDone = $p !== null && $p['status'] === 'done';
+        $isDone = trainings_progress_counts($item, $p);
         if ($p !== null && $p['status'] === 'submitted') {
             $toMark++;
         }
@@ -129,7 +158,7 @@ function trainings_self_done(PDO $pdo, array $t, array $enrolment, array $item, 
         return ['ok' => false, 'message' => 'Join the training again first.'];
     }
     if ($done) {
-        trainings_progress_put($pdo, $enrolment['id'], $item['id'], 'done', ['by' => 'self']);
+        trainings_progress_put($pdo, $enrolment['id'], $item['id'], 'completed', ['by' => 'self']);
         return ['ok' => true, 'completed' => trainings_check_completion($pdo, $t, $enrolment)];
     }
     $p = trainings_progress_map($pdo, $enrolment['id'])[$item['id']] ?? null;
@@ -145,8 +174,11 @@ function trainings_tutor_done(PDO $pdo, array $t, array $enrolment, array $item,
     if ($item['type'] === 'assignment') {
         return ['ok' => false, 'message' => 'Mark the work instead.'];
     }
+    if ($item['type'] === 'exam') {
+        return ['ok' => false, 'message' => 'The exam records itself.'];
+    }
     if ($done) {
-        trainings_progress_put($pdo, $enrolment['id'], $item['id'], 'done', ['by' => 'tutor', 'tutor_id' => $by]);
+        trainings_progress_put($pdo, $enrolment['id'], $item['id'], 'completed', ['by' => 'tutor', 'tutor_id' => $by]);
         return ['ok' => true, 'completed' => trainings_check_completion($pdo, $t, $enrolment)];
     }
     trainings_progress_clear($pdo, $enrolment['id'], $item['id']);
@@ -169,7 +201,7 @@ function trainings_submit(PDO $pdo, array $t, array $enrolment, array $item, arr
     if ($p !== null && $p['status'] === 'submitted') {
         return ['ok' => false, 'message' => 'Handed in. Wait for your tutor.'];
     }
-    if ($p !== null && $p['status'] === 'done') {
+    if ($p !== null && $p['status'] === 'completed') {
         return ['ok' => false, 'message' => 'Already marked.'];
     }
     $prompts = (array) ($item['details']['prompts'] ?? []);
@@ -210,7 +242,7 @@ function trainings_mark_work(PDO $pdo, array $t, array $enrolment, array $item, 
     $data['marked_by'] = $by;
     $data['marked_at'] = trainings_sql_dt();
     $passed = $mark >= $pass;
-    trainings_progress_put($pdo, $enrolment['id'], $item['id'], $passed ? 'done' : 'returned', $data);
+    trainings_progress_put($pdo, $enrolment['id'], $item['id'], $passed ? 'completed' : 'returned', $data);
     trainings_notify($pdo, [$enrolment['user_id']], $passed ? 'Work marked' : 'Work returned', (string) $item['title'],
         '/modules/trainings/?t=' . (int) $t['id']);
     return ['ok' => true, 'passed' => $passed, 'completed' => $passed && trainings_check_completion($pdo, $t, $enrolment)];
@@ -354,6 +386,10 @@ function trainings_mine(PDO $pdo, int $userId): array
             'gives_certificate' => $r['gives_certificate'], 'pass_rule' => $r['pass_rule'], 'kind' => $r['kind'], 'catalogue' => $r['catalogue'],
             'department_id' => $r['department_id']]);
         $e = trainings_enrolment_shape($r);
+        // Progress written elsewhere (an exam passed, Meet attendance) completes it on the next look.
+        if ($e['status'] === 'active' && trainings_check_completion($pdo, $t, $e)) {
+            $e = trainings_enrolment_get($pdo, $e['id']) ?? $e;
+        }
         $sum = trainings_enrolment_summary($pdo, $t, $e);
         $out[] = trainings_public_training($t) + ['enrolment_id' => $e['id'], 'status' => $e['status'], 'due_on' => $e['due_on'],
             'source' => $e['source'], 'completed_at' => $e['completed_at'], 'confirmed_at' => $e['confirmed_at'],
@@ -369,7 +405,7 @@ function trainings_next_item(PDO $pdo, array $t, array $enrolment): ?array
     $progress = trainings_progress_map($pdo, (int) $enrolment['id']);
     foreach (trainings_items_flat($pdo, (int) $t['id']) as $item) {
         $p = $progress[$item['id']] ?? null;
-        if ($p === null || $p['status'] !== 'done') {
+        if (!trainings_progress_counts($item, $p)) {
             return ['id' => $item['id'], 'title' => $item['title'], 'type' => $item['type'], 'starts_at' => $item['starts_at'],
                 'status' => $p['status'] ?? ''];
         }
@@ -384,6 +420,9 @@ function trainings_next_item(PDO $pdo, array $t, array $enrolment): ?array
  */
 function trainings_learner_view(PDO $pdo, array $t, ?array $enrolment): array
 {
+    if ($enrolment !== null && $enrolment['status'] === 'active' && trainings_check_completion($pdo, $t, $enrolment)) {
+        $enrolment = trainings_enrolment_get($pdo, (int) $enrolment['id']) ?? $enrolment;
+    }
     $progress = $enrolment !== null ? trainings_progress_map($pdo, (int) $enrolment['id']) : [];
     $sections = [];
     foreach (trainings_outline($pdo, (int) $t['id']) as $s) {
@@ -396,6 +435,9 @@ function trainings_learner_view(PDO $pdo, array $t, ?array $enrolment): array
                     'by' => (string) ($p['data']['by'] ?? ''),
                     'answers' => (array) ($p['data']['answers'] ?? []),
                     'mark' => $p['data']['mark'] ?? null, 'comment' => (string) ($p['data']['comment'] ?? ''),
+                    // An exam's result (PR 2): what the learner may see of their own attempt.
+                    'percent' => $p['data']['percent'] ?? null,
+                    'passed' => array_key_exists('passed', $p['data']) ? (bool) $p['data']['passed'] : null,
                 ],
             ];
         }
@@ -420,8 +462,11 @@ function trainings_learner_item(array $item): array
         'kind' => (string) ($m['kind'] ?? ''), 'embed' => (string) $m['embed'], 'url' => (string) ($m['url'] ?? '')]
         : (!empty($m['file']) ? ['provider' => 'file', 'file' => (string) $m['file'], 'name' => (string) ($m['name'] ?? '')] : null);
     $public = match ((string) $item['type']) {
+        // PR 3's Meet link (meet_url) wins over a link the Academy pasted (link).
         'live' => ['mode' => (string) ($d['mode'] ?? 'in_person'), 'venue' => (string) ($d['venue'] ?? ''),
-                   'link' => (string) ($d['meet_url'] ?? '')],
+                   'link' => (string) (($d['meet_url'] ?? '') !== '' ? $d['meet_url'] : ($d['link'] ?? ''))],
+        // PR 2 owns the exam; the learner goes to its page (null until PR 2 is here).
+        'exam' => ['take_url' => trainings_exam_take_url((int) $item['id'])],
         'video', 'audio' => ['media' => $media($d)],
         'reading' => ['text' => (string) ($d['text'] ?? ''), 'pdf' => (string) ($d['pdf'] ?? ''), 'pdf_name' => (string) ($d['pdf_name'] ?? '')],
         'assignment' => ['kind' => (string) ($d['kind'] ?? 'written'), 'instructions' => (string) ($d['instructions'] ?? ''),

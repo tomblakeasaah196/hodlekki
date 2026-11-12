@@ -106,6 +106,9 @@ if ($canEdit && $t['status'] !== 'published') {
                     </span>
                     <span class="ui-list__end">
                         <?= $i['needs_content'] ? ui_badge('Needs content', 'warning') : '' ?>
+<?php if ($i['type'] === 'exam' && $canEdit && ($setup = trainings_exam_setup_url($i['id'])) !== null): ?>
+                        <?= ui_button('Set up exam', ['variant' => 'soft', 'size' => 'sm', 'icon' => 'clipboard-list', 'href' => $setup]) ?>
+<?php endif; ?>
 <?php if ($canEdit): ?>
                         <?= ui_button('Edit item', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'pencil', 'icon_only' => true, 'attrs' => ['data-action' => 'trb.item', 'data-item' => $i['id']]]) ?>
                         <?= ui_button('Move up', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'chevron-up', 'icon_only' => true, 'attrs' => ['data-action' => 'trb.itemMove', 'data-item' => $i['id'], 'data-dir' => '-1']]) ?>
@@ -243,7 +246,7 @@ if ($canEdit && $t['status'] !== 'published') {
     <input type="hidden" name="id" value="0">
     <div class="ui-form-grid">
         <?= ui_field('select', ['name' => 'type', 'id' => 'trb-type', 'label' => 'Kind', 'required' => true,
-            'options' => array_intersect_key(TRAININGS_ITEM_TYPES, array_flip(TRAININGS_BUILDER_TYPES)), 'attrs' => ['data-action-change' => 'trb.itemType']]) ?>
+            'options' => array_intersect_key(TRAININGS_ITEM_TYPES, array_flip(trainings_builder_types())), 'attrs' => ['data-action-change' => 'trb.itemType']]) ?>
         <?= ui_field('text', ['name' => 'title', 'id' => 'trb-title', 'label' => 'Name', 'required' => true, 'attrs' => ['maxlength' => 160]]) ?>
         <?= ui_field('select', ['name' => 'section_id', 'id' => 'trb-section', 'label' => 'Card', 'required' => true,
             'options' => array_column(array_filter($sections, static fn ($s) => (int) $s['id'] > 0), 'title', 'id'), 'attrs' => ['data-action-change' => 'trb.itemType']]) ?>
@@ -283,6 +286,11 @@ if ($canEdit && $t['status'] !== 'published') {
         <?= ui_field('textarea', ['name' => 'text', 'id' => 'trb-text', 'label' => 'Text', 'optional' => true, 'attrs' => ['rows' => 8, 'maxlength' => 20000]]) ?>
         <?= ui_field('file', ['name' => 'pdf_file', 'id' => 'trb-pdf', 'label' => 'PDF', 'optional' => true, 'hint' => 'Up to 20 MB.', 'attrs' => ['accept' => '.pdf,application/pdf']]) ?>
         <label class="ui-check" data-trb-current="pdf" hidden><input type="checkbox" name="remove_pdf" value="1"><span>Remove the PDF<span class="ui-check__hint" data-trb-current-name></span></span></label>
+    </fieldset>
+
+    <fieldset class="ui-fieldset" data-trb-type="exam" hidden>
+        <legend class="ui-legend">Exam</legend>
+        <p class="ui-meta">Save it, then press Set up exam. <?= ui_info('Questions, the time window, the pass mark and the rules live on the exam\'s own page.', 'About exams') ?></p>
     </fieldset>
 
     <fieldset class="ui-fieldset" data-trb-type="assignment" hidden>

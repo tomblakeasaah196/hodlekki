@@ -1222,21 +1222,34 @@ pages `modules/trainings/` (learners), `modules/academy/` + `training.php`
   `training_enrolments`, `training_assignments`, `training_progress`, plus
   `training_invites`. Never rename a column; `tests/trainings/run.php` pins
   every name. Other PRs add their own tables keyed on `training_items.id`
-  and keep their own fields inside `training_items.details` (the builder
-  keeps unknown keys of a live item, and never edits an `exam` item's
-  details).
+  and keep their own fields inside `training_items.details`. A live item's
+  `meet_url` / `meet_event_id` are PR 3's: the builder stores a pasted link
+  as `link`, never writes those two, and keeps every key it does not own
+  when an item is edited (it never edits an `exam` item's details).
+- **Exams are PR 2's** (`includes/exams/`, `docs/EXAMS.md`). Trainings loads
+  `includes/exams/bootstrap.php` when it is there and links only through its
+  helpers (`trainings_exam_setup_url()` / `trainings_exam_take_url()` wrap
+  `exam_url_setup()` / `exam_url_take()`); no exam path is written here. The
+  builder offers the Exam kind only once those helpers exist.
 - **Access** is the `trainings` row (it took over the retired `academy` row,
   cells and owners copied by `20261208090200`). Staff checks use the
-  church-wide target: `can('trainings', 'edit', 'church')`; a learner's own
-  records use `perm_person($uid)`. The nav shows **Trainings** to everyone
-  (with its (i) line) and **HOD Academy** only to those who reach beyond
-  their own records (`ui_nav_can_access('academy')`).
-- **Progress** is one `training_progress` row per learner per item: `done`,
-  `submitted` (an assignment waiting for a tutor) or `returned` (marked
-  below its pass mark). Learners mark videos, audio and readings done
-  themselves; a tutor ticks live classes attended (PR 3 automates it from
-  Meet) and marks assignments. Completion (`pass_rule`): every required item
-  done, live classes at `live_percent` %. Completion is forward-only.
+  church-wide target: `can('trainings', 'edit', 'church')`; PR 2 asks
+  `can('trainings', 'manage', <department_id> or 'church')`. A learner's own
+  records use `perm_person($uid)`; a learner is anyone with a non-withdrawn
+  enrolment (`active` or `completed`) in a published training. The nav shows
+  **Trainings** to everyone (with its (i) line) and **HOD Academy** only to
+  those who reach beyond their own records (`ui_nav_can_access('academy')`).
+- **Progress** is one `training_progress` row per learner per item, in the
+  words shared with PR 2: `completed`, `submitted` (an assignment waiting
+  for a tutor) or `returned` (marked below its pass mark). An exam row
+  (PR 2's `exam_progress_hook()`, which does not write `updated_at`, so that
+  column may be NULL) counts only when `data.passed` is true. Learners mark
+  videos, audio and readings done themselves; a tutor ticks live classes
+  attended (PR 3 automates it from Meet) and marks assignments. Completion
+  (`pass_rule`): every required item completed, live classes at
+  `live_percent` %. It is forward-only, checked after every change here, by
+  `trainings_recheck_enrolment($pdo, $enrolmentId)` (for PR 2 / PR 3 to call
+  after writing progress), and on the learner's next look.
 - **Confirming official classes** is the Academy's one click (Approve):
   Membership Class moves 1st/2nd/3rd Timer, Visitor and Non-Member to
   Member through `ladder_status_of()` / `ladder_note_change()` (source

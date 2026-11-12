@@ -21,6 +21,11 @@
 // NOW(), no INSERT IGNORE, no ON DUPLICATE KEY. Times come from PHP, in Lagos.
 
 require_once dirname(__DIR__) . '/upload_guard.php';
+// Exams are PR 2's (includes/exams/, docs/EXAMS.md): loaded when they are here,
+// so every link to an exam page goes through its own URL helpers.
+if (is_file(dirname(__DIR__) . '/exams/bootstrap.php')) {
+    require_once dirname(__DIR__) . '/exams/bootstrap.php';
+}
 require_once __DIR__ . '/build.php';
 require_once __DIR__ . '/people.php';
 require_once __DIR__ . '/progress.php';
@@ -31,7 +36,7 @@ const TRAININGS_LENGTHS = ['one_day' => 'One day', 'days' => 'A few days', 'week
 const TRAININGS_STATUSES = ['draft' => 'Draft', 'published' => 'Published', 'archived' => 'Archived'];
 const TRAININGS_ITEM_TYPES = ['live' => 'Live class', 'video' => 'Video', 'audio' => 'Audio', 'reading' => 'Reading',
     'assignment' => 'Assignment', 'exam' => 'Exam'];
-// What the builder offers in this PR. 'exam' arrives with PR 2 (exams + import).
+// What the builder makes itself; 'exam' joins once PR 2's pages are here (trainings_builder_types()).
 const TRAININGS_BUILDER_TYPES = ['live', 'video', 'audio', 'reading', 'assignment'];
 const TRAININGS_OFFICIAL = ['membership' => 'Membership Class', 'maturity' => 'Maturity Class'];
 const TRAININGS_MAX_DAYS = 14;
@@ -59,6 +64,24 @@ function trainings_ready(PDO $pdo): bool
     }
     $known[$pdo] = true;
     return true;
+}
+
+/** The kinds of item the builder offers: exams only once PR 2 can set them up. */
+function trainings_builder_types(): array
+{
+    return function_exists('exam_url_setup') ? array_merge(TRAININGS_BUILDER_TYPES, ['exam']) : TRAININGS_BUILDER_TYPES;
+}
+
+/** Where a tutor sets up an exam item (PR 2's exam_url_setup()), or null before PR 2. */
+function trainings_exam_setup_url(int $itemId): ?string
+{
+    return function_exists('exam_url_setup') ? (string) exam_url_setup($itemId) : null;
+}
+
+/** Where a learner takes an exam item (PR 2's exam_url_take()), or null before PR 2. */
+function trainings_exam_take_url(int $itemId): ?string
+{
+    return function_exists('exam_url_take') ? (string) exam_url_take($itemId) : null;
 }
 
 /** Is this table there? (Optional platform tables: status history, email, security.) */

@@ -97,7 +97,8 @@ function trainings_view_item_badge(array $item): string
         return $item['ready'] ? '' : ui_badge('Coming soon', 'neutral');
     }
     return match ($p['status']) {
-        'done' => ui_badge('Done', 'success', ['dot' => true]),
+        'completed' => $item['type'] === 'exam' && isset($p['passed']) && !$p['passed']
+            ? ui_badge('Not passed', 'warning', ['dot' => true]) : ui_badge('Done', 'success', ['dot' => true]),
         'submitted' => ui_badge('Handed in', 'info', ['dot' => true]),
         'returned' => ui_badge('Try again', 'warning', ['dot' => true]),
         default => '',
