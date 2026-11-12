@@ -675,6 +675,131 @@ eq('…nothing left behind', [0, 0, 0, 0, 0], [trn_count($pdo, 'training_section
     trn_count($pdo, 'training_progress', 'item_id = ?', [$video]), trn_count($pdo, 'training_invites', 'user_id = 909')]);
 
 // ---------------------------------------------------------------------------
+section('PowerPoint decks: slides in the page, their text kept for search and the AI');
+
+/**
+ * A small .pptx on disk. $slides: slide number => list of paragraphs; $order: the slide numbers in
+ * presentation order (null: no presentation.xml, so slideN order); $mainType: the main part's type.
+ */
+function trn_pptx(string $path, array $slides, ?array $order = null, string $mainType = TRAININGS_PPTX_MAIN_TYPE, array $raw = []): string
+{
+    $zip = new ZipArchive();
+    $zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $types = '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        . '<Default Extension="xml" ContentType="application/xml"/>'
+        . '<Override PartName="/ppt/presentation.xml" ContentType="' . $mainType . '"/></Types>';
+    $zip->addFromString('[Content_Types].xml', $types);
+    $a = 'xmlns:a="' . TRAININGS_PPTX_NS_A . '" xmlns:p="' . TRAININGS_PPTX_NS_P . '"';
+    foreach ($slides as $n => $paras) {
+        $body = '';
+        foreach ($paras as $para) {
+            $runs = '';
+            foreach ((array) $para as $run) {
+                $runs .= '<a:r><a:t>' . htmlspecialchars($run, ENT_XML1) . '</a:t></a:r>';
+            }
+            $body .= '<a:p>' . $runs . '</a:p>';
+        }
+        $zip->addFromString("ppt/slides/slide{$n}.xml", $raw[$n] ?? '<?xml version="1.0"?><p:sld ' . $a . '><p:cSld><p:spTree><p:sp><p:txBody>' . $body
+            . '</p:txBody></p:sp></p:spTree></p:cSld></p:sld>');
+    }
+    if ($order !== null) {
+        $rels = '<?xml version="1.0"?><Relationships xmlns="' . TRAININGS_PPTX_NS_PKG_REL . '">';
+        $ids = '';
+        foreach ($order as $i => $n) {
+            $rels .= '<Relationship Id="rId' . (10 + $n) . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide' . $n . '.xml"/>';
+            $ids .= '<p:sldId id="' . (256 + $i) . '" r:id="rId' . (10 + $n) . '"/>';
+        }
+        $zip->addFromString('ppt/_rels/presentation.xml.rels', $rels . '</Relationships>');
+        $zip->addFromString('ppt/presentation.xml', '<?xml version="1.0"?><p:presentation xmlns:p="' . TRAININGS_PPTX_NS_P . '" xmlns:r="'
+            . TRAININGS_PPTX_NS_R . '"><p:sldIdLst>' . $ids . '</p:sldIdLst></p:presentation>');
+    }
+    $zip->close();
+    return $path;
+}
+
+ok('ZipArchive is there (CI loads the zip extension)', class_exists('ZipArchive'));
+$tmpDir = sys_get_temp_dir() . '/hod-trn-' . bin2hex(random_bytes(4));
+mkdir($tmpDir);
+$deck1 = trn_pptx($tmpDir . '/Day_1.Workers_Training.pptx', [1 => [['Welcome'], ['Why we ', 'serve']], 2 => [['The second slide']],
+    3 => [['Third']]], [3, 1, 2]);
+eq('a real deck passes the check', true, trainings_pptx_check($deck1));
+$exe = $tmpDir . '/virus.pptx';
+file_put_contents($exe, "MZ\x90\x00" . str_repeat("\x00", 200));
+$docx = trn_pptx($tmpDir . '/letter.pptx', [1 => [['x']]], [1], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml');
+$pptm = trn_pptx($tmpDir . '/macro.pptx', [1 => [['x']]], [1], 'application/vnd.ms-powerpoint.presentation.macroEnabled.main+xml');
+$zipOnly = $tmpDir . '/plain.pptx';
+$z = new ZipArchive();
+$z->open($zipOnly, ZipArchive::CREATE);
+$z->addFromString('readme.txt', 'hello');
+$z->close();
+ok('a renamed .exe, a .docx, a macro .pptm and a plain zip are refused', !trainings_pptx_check($exe) && !trainings_pptx_check($docx)
+    && !trainings_pptx_check($pptm) && !trainings_pptx_check($zipOnly));
+ok('the upload sniff uses the same check', trainings_sniff($deck1, 'pptx') && !trainings_sniff($exe, 'pptx') && !trainings_sniff($docx, 'pptx'));
+ok('…and the zip magic first', trainings_sniff_bytes("PK\x03\x04rest", 'pptx') && !trainings_sniff_bytes("MZ\x90\x00", 'pptx'));
+eq('a deck over 30 MB is refused before anything is stored', 'The file is too big. Use up to 30 MB.',
+    trainings_upload(['name' => 'big.pptx', 'tmp_name' => $deck1, 'error' => UPLOAD_ERR_OK, 'size' => 31 * 1048576], 'pptx')['error'] ?? null);
+$text = trainings_pptx_text($deck1);
+eq('the text follows the presentation\'s slide order, paragraphs on lines', [true, 3,
+    "Slide 1\nThird\n\nSlide 2\nWelcome\nWhy we serve\n\nSlide 3\nThe second slide"], [$text['ok'], $text['slides'], $text['text']]);
+$noOrder = trn_pptx($tmpDir . '/loose.pptx', [10 => [['Ten']], 2 => [['Two']], 1 => [['One']]]);
+eq('without a slide list, slideN by N (2 before 10)', "Slide 1\nOne\n\nSlide 2\nTwo\n\nSlide 3\nTen", trainings_pptx_text($noOrder)['text']);
+$evil = trn_pptx($tmpDir . '/evil.pptx', [1 => [['ok']], 2 => [['x']]], [1, 2], TRAININGS_PPTX_MAIN_TYPE,
+    [2 => '<?xml version="1.0"?><!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]><p:sld xmlns:a="' . TRAININGS_PPTX_NS_A
+        . '" xmlns:p="' . TRAININGS_PPTX_NS_P . '"><a:p><a:r><a:t>&e;</a:t></a:r></a:p></p:sld>']);
+eq('a slide with a DOCTYPE is read as empty (no entity is ever expanded)', "Slide 1\nok\n\nSlide 2", trainings_pptx_text($evil)['text']);
+$long = trn_pptx($tmpDir . '/long.pptx', array_fill(1, 30, [[str_repeat('word ', 1000)]]), range(1, 30));
+$lt = trainings_pptx_text($long);
+ok('the text is capped at about 100k characters', $lt['truncated'] && mb_strlen($lt['text']) <= TRAININGS_PPTX_MAX_CHARS);
+eq('a name from a file name', ['Day 1 Workers Training', 'Slides'], [trainings_title_from_file('Day_1.Workers_Training.pptx'), trainings_title_from_file('.pptx')]);
+
+$sl = (int) act($pdo, 901, 'create', ['title' => 'Workers\' training', 'length' => 'days', 'starts_on' => '2026-12-14', 'count' => 7])['id'];
+$slDays = array_values(array_filter(trainings_outline($pdo, $sl), static fn ($s) => (int) $s['id'] > 0));
+$sec = (int) $slDays[0]['id'];
+act($pdo, 901, 'item_save', ['training_id' => $sl, 'type' => 'live', 'title' => 'Opening', 'section_id' => $sec]);
+$deck2 = trn_pptx($tmpDir . '/Day_2_Prayer.pptx', [1 => [['Prayer']]], [1]);
+$tSl = trainings_get($pdo, $sl);
+foreach ([[$deck1, 'Day_1.Workers_Training.pptx'], [$deck2, 'Day_2_Prayer.pptx']] as $i => [$path, $name]) {
+    $r = trainings_slides_add($pdo, $tSl, $sec, ['details' => trainings_deck_details($path, '/uploads/trainings/20261201_' . str_repeat((string) ($i + 1), 16) . '.pptx', $name),
+        'title' => trainings_title_from_file($name)]);
+    ok("Add slides: {$name} becomes a reading", !empty($r['ok']));
+}
+$cardItems = array_values(array_filter(trainings_items_flat($pdo, $sl), static fn ($i) => $i['section_id'] === $sec));
+eq('…named from the files, after what the card already holds, in order', ['Opening', 'Day 1 Workers Training', 'Day 2 Prayer'], array_column($cardItems, 'title'));
+eq('…each a reading with its deck, slide count and text', ['reading', 3, true, false],
+    [$cardItems[1]['type'], $cardItems[1]['details']['slides'], str_contains($cardItems[1]['details']['slides_text'], 'Why we serve'), $cardItems[1]['needs_content']]);
+eq('Add slides refuses a card of another training', 'section_id', trainings_slides_add($pdo, $tSl, $w1, ['details' => [], 'title' => 'x'])['field'] ?? null);
+eq('the API needs a file', 'pptx_file', act($pdo, 901, 'slides_add', ['training_id' => $sl, 'section_id' => $sec])['field'] ?? null);
+eq('a member cannot add slides', 'FORBIDDEN', act($pdo, 904, 'slides_add', ['training_id' => $sl, 'section_id' => $sec])['code'] ?? null);
+act($pdo, 901, 'item_save', ['training_id' => $sl, 'id' => $cardItems[1]['id'], 'title' => 'Day 1', 'section_id' => $sec, 'text' => 'Read before class.']);
+eq('editing a reading keeps its deck and text', [true, true], [trainings_item_get($pdo, $cardItems[1]['id'])['details']['deck'] === $cardItems[1]['details']['deck'],
+    str_contains(trainings_item_get($pdo, $cardItems[1]['id'])['details']['slides_text'], 'Third')]);
+act($pdo, 901, 'item_save', ['training_id' => $sl, 'id' => $cardItems[2]['id'], 'title' => 'Day 2', 'section_id' => $sec, 'text' => '', 'remove_deck' => 1]);
+eq('Remove the slides takes the deck and its text away', [false, false, true], [isset(trainings_item_get($pdo, $cardItems[2]['id'])['details']['deck']),
+    isset(trainings_item_get($pdo, $cardItems[2]['id'])['details']['slides_text']), trainings_item_get($pdo, $cardItems[2]['id'])['needs_content']]);
+act($pdo, 901, 'item_delete', ['training_id' => $sl, 'item_id' => $cardItems[2]['id']]);
+eq('a training of slides publishes', 'success', act($pdo, 901, 'publish', ['training_id' => $sl])['status']);
+act($pdo, 901, 'assign', ['training_id' => $sl, 'users' => [904]]);
+$seen = array_values(array_filter(act($pdo, 904, 'view', ['training_id' => $sl])['sections'][0]['items'], static fn ($i) => $i['id'] === $cardItems[1]['id']))[0];
+eq('the learner gets the deck, its name and slide count', [$cardItems[1]['details']['deck'], 'Day_1.Workers_Training.pptx', 3],
+    [$seen['details']['deck'], $seen['details']['deck_name'], $seen['details']['slides']]);
+ok('…and never the slides\' text', !str_contains(json_encode(act($pdo, 904, 'view', ['training_id' => $sl])), 'Why we serve'));
+ok('the builder\'s reply never carries it either', !str_contains(json_encode(act($pdo, 901, 'builder', ['training_id' => $sl])), 'Why we serve'));
+ok('…nor the builder page\'s data', str_contains((string) file_get_contents($root . '/modules/academy/training.php'), "'details' => trainings_details_for_browser(\$i['details'])"));
+require_once $root . '/includes/trainings/view.php';
+$frame = trainings_view_deck((string) $cardItems[1]['details']['deck'], 'Day 1', 'Day_1.pptx', 3);
+ok('the deck shows in Microsoft\'s Office viewer, fetched by its absolute address', str_contains($frame,
+    'src="https://view.officeapps.live.com/op/embed.aspx?src=' . htmlspecialchars(rawurlencode('https://hodlekki.org' . $cardItems[1]['details']['deck'])) . '"'));
+ok('…with a Download button', str_contains($frame, 'Download slides') && str_contains($frame, 'download="Day_1.pptx"'));
+eq('only our own uploads are shown', '', trainings_view_deck('https://evil.example/x.pptx', 'x'));
+ok('frame-src: the Office viewer joins the embed hosts', TRAININGS_FRAME_HOSTS === ['https://www.youtube-nocookie.com', 'https://open.spotify.com', 'https://view.officeapps.live.com']);
+ok('…on the learner page and the builder only', str_contains((string) file_get_contents($root . '/modules/trainings/index.php'), "'frame-src' => TRAININGS_FRAME_HOSTS")
+    && str_contains((string) file_get_contents($root . '/modules/academy/training.php'), "'frame-src' => TRAININGS_FRAME_HOSTS")
+    && !str_contains((string) file_get_contents($root . '/modules/academy/index.php'), 'frame-src'));
+ok('the privacy notice says slides go through Microsoft\'s viewer', str_contains((string) file_get_contents($root . '/privacy.php'), 'Microsoft\'s Office viewer'));
+array_map('unlink', glob($tmpDir . '/*') ?: []);
+rmdir($tmpDir);
+
+// ---------------------------------------------------------------------------
 section('The endpoint, pages and copy');
 $api = (string) file_get_contents($root . '/api/trainings_api.php');
 ok('the API checks the session, the matrix and the CSRF token before any action', strpos($api, "empty(\$_SESSION['user_id'])") < strpos($api, 'csrf_require();')
@@ -694,7 +819,7 @@ foreach (['modules/trainings/index.php', 'modules/academy/index.php', 'modules/a
     ok("{$page} is a strict page", str_contains($src, "'mode' => 'strict'"));
     ok("{$page} asks can() for trainings", str_contains($src, "require_can('trainings'"));
 }
-ok('only the pages that play media allow the two embed hosts', str_contains((string) file_get_contents($root . '/modules/trainings/index.php'), "'frame-src' => TRAININGS_EMBED_HOSTS")
+ok('only the pages that play media allow the embed hosts', str_contains((string) file_get_contents($root . '/modules/trainings/index.php'), "'frame-src' => TRAININGS_FRAME_HOSTS")
     && !str_contains((string) file_get_contents($root . '/modules/academy/index.php'), 'frame-src'));
 $invitePage = (string) file_get_contents($root . '/auth/training_invite.php');
 ok('the invite page uses the link only on a CSRF-checked POST', str_contains($invitePage, 'ui_standalone_csrf_ok()') && str_contains($invitePage, 'trainings_invite_accept('));
