@@ -1154,6 +1154,156 @@ ct_ok("…the API runs the card's actions and the page prints the card",
     str_contains($api, 'email_profile_action(') && str_contains($page, 'email_profile_card_html('));
 
 // ===========================================================================
+ct_section('16f. The Automation tab (Embrace, Assimilation, Charis)');
+// ===========================================================================
+require_once __DIR__ . '/../../includes/campaigns/automation_tab.php';
+$t = ct_db();
+ct_at('2027-05-03 10:00');
+ct_user($t, 300, 'Kemi', 'Worker', ['email' => 'kemi@hodlc.com']);
+foreach (['embrace', 'assimilation', 'charis'] as $m) {
+    $rule = automation_tab_rule($t, $m);
+    ct_ok("{$m}: the rule exists on first look, switched OFF", $rule !== null && !$rule['is_enabled']);
+}
+$h = automation_tab_html($t, 'embrace');
+ct_ok('Embrace panel: the journey, Off, Switch on, six weekly emails and both reminders',
+    str_contains($h, 'First-timer journey') && str_contains($h, '>Off<') && str_contains($h, 'Switch on')
+    && str_contains($h, 'Week 6') && str_contains($h, 'Midweek reminder') && str_contains($h, 'Sunday reminder')
+    && substr_count($h, 'data-action="automation.preview"') === 8);
+ct_ok('…no "start fresh" choice for a journey (it simply carries on)', !str_contains($h, 'Start fresh'));
+$h = automation_tab_html($t, 'charis');
+ct_ok('Charis panel: the ladder (person, team, pastor), statuses, the weekly check, Start fresh / Include them',
+    str_contains($h, 'Absence follow-up') && str_contains($h, '>Person<') && str_contains($h, '>Team<') && str_contains($h, '>Pastor<')
+    && str_contains($h, 'name="statuses[]" value="Member" checked') && str_contains($h, 'Weekly check')
+    && str_contains($h, 'Start fresh') && str_contains($h, 'Include them'));
+ct_ok('…only the person step has an email; the others have alerts', substr_count($h, 'data-action="automation.preview"') === 1
+    && substr_count($h, 'Alert message') === 2);
+ct_ok('…no overlap warning with the default audiences', !str_contains($h, 'Two rules cover'));
+ct_eq('…and no runs yet', true, str_contains($h, 'No runs yet'));
+
+$rule = automation_tab_rule($t, 'embrace');
+$in = ['module' => 'embrace', 'version' => (string) $rule['version'], 'from_name' => 'Embrace Team', 'reply_to' => 'embrace@hodlekki.org',
+       'stop_status' => '2nd_Timer', 'weeks' => '4',
+       'steps' => ['midweek' => ['weekday' => '3', 'time' => '13:30', 'sms' => 'See you tomorrow, {{first_name}}!'],
+                   'welcome' => ['weekday' => '1', 'time' => '09:00', 'series' => [1 => ['sms' => 'Week two, {{first_name}}.']]]]];
+$r = automation_tab_action($t, 'embrace', 'save', $in, 300);
+$saved = automation_rule_get($t, 'embrace');
+ct_ok('saving the journey: who, when and the sender change', $r['status'] === 'success'
+    && $saved['config']['audience'] === ['stop_status' => '2nd_Timer', 'weeks' => 4]
+    && $saved['config']['from_name'] === 'Embrace Team' && $saved['config']['reply_to'] === 'embrace@hodlekki.org');
+ct_ok('…a step\'s day, time and SMS change', automation_step($saved, 'midweek')['when'] === ['weekday' => 3, 'time' => '13:30']
+    && automation_step($saved, 'midweek')['sms'] === 'See you tomorrow, {{first_name}}!'
+    && automation_step($saved, 'welcome')['series'][1]['sms'] === 'Week two, {{first_name}}.');
+ct_ok('…the emails themselves stay as they were', automation_step($saved, 'midweek')['email'] === automation_step($rule, 'midweek')['email']
+    && automation_step($saved, 'welcome')['series'][0] === automation_step($rule, 'welcome')['series'][0]);
+ct_ok('…and the panel comes back with it', str_contains($r['html'], 'value="13:30"') && str_contains($r['html'], 'Week two, {{first_name}}.'));
+$stale = automation_tab_action($t, 'embrace', 'save', $in, 300);
+ct_ok('saving over someone else\'s change is refused', $stale['status'] === 'error' && str_contains($stale['message'], 'Someone else changed'));
+$bad = automation_tab_action($t, 'charis', 'save', ['module' => 'charis', 'statuses' => ['Member'], 'when_weekday' => '1', 'when_time' => '9am',
+    'steps' => ['miss_note' => ['threshold' => '0']]], 300);
+ct_ok('a bad time or threshold is refused with the reason, nothing saved', $bad['status'] === 'error'
+    && str_contains($bad['message'], 'the time must look like 10:00') && automation_rule_get($t, 'charis')['config']['when']['time'] === '09:00');
+$crule = automation_tab_rule($t, 'charis');
+$ok = automation_tab_action($t, 'charis', 'save', ['module' => 'charis', 'statuses' => ['Member', 'Worker'], 'when_weekday' => '2', 'when_time' => '08:00',
+    'steps' => ['miss_note' => ['threshold' => '3'], 'pastor_alert' => ['threshold' => '10', 'alert_title' => 'Away {{streak}} Sundays: {{full_name}}', 'alert_message' => 'Please call {{full_name}}.']]], 300);
+$c = automation_rule_get($t, 'charis')['config'];
+ct_ok('saving an absence rule: statuses, the weekly check, thresholds and an alert', $ok['status'] === 'success'
+    && $c['audience']['statuses'] === ['Member', 'Worker'] && $c['when'] === ['weekday' => 2, 'time' => '08:00']
+    && automation_step(['config' => $c], 'miss_note')['threshold'] === 3
+    && automation_step(['config' => $c], 'pastor_alert')['alert'] === ['title' => 'Away {{streak}} Sundays: {{full_name}}', 'message' => 'Please call {{full_name}}.']);
+automation_tab_action($t, 'assimilation', 'save', ['module' => 'assimilation', 'statuses' => ['Visitor', 'Worker'], 'when_weekday' => '1', 'when_time' => '09:00'], 300);
+ct_eq('two absence rules covering one status are found', ['Worker'], automation_tab_overlap($t, 'charis'));
+ct_ok('…and both tabs warn about it', str_contains(automation_tab_html($t, 'charis'), 'Two rules cover Worker')
+    && str_contains(automation_tab_html($t, 'assimilation'), 'Untick them here or in Charis'));
+
+$line = automation_tab_action($t, 'charis', 'switch_preview', [], 300);
+ct_eq('"Switch on?" says who is past a step today', 'Nobody is past a step today.', $line['line'] ?? null);
+ct_eq('…in words for many', '23 people are already past a step (14 by email, 7 by SMS, 2 unreachable).',
+    automation_tab_switch_line(['people' => 23, 'emailed' => 14, 'texted' => 7, 'alerted' => 0, 'skipped' => 2]));
+$on = automation_tab_action($t, 'charis', 'enable', ['start' => 'fresh'], 300);
+$cr = automation_rule_get($t, 'charis');
+ct_ok('switching on (start fresh): on, baseline time kept, the panel shows On and Switch off',
+    $on['status'] === 'success' && $cr['is_enabled'] && $cr['baseline_at'] !== null
+    && str_contains($on['html'], '>On<') && str_contains($on['html'], 'Switch off'));
+automation_tab_action($t, 'charis', 'disable', [], 300);
+automation_tab_action($t, 'charis', 'enable', ['start' => 'include'], 300);
+ct_ok('switching off, then on with "include them": no baseline', automation_rule_get($t, 'charis')['is_enabled']
+    && automation_rule_get($t, 'charis')['baseline_at'] === null);
+automation_tab_action($t, 'charis', 'disable', [], 300);
+ct_eq('…and off again', false, automation_rule_get($t, 'charis')['is_enabled']);
+
+$viewer = email_person($t, 300);
+$er = automation_tab_rule($t, 'embrace');
+foreach (['embrace' => ['welcome', 'midweek', 'sunday'], 'charis' => ['miss_note']] as $m => $keys) {
+    foreach ($keys as $k) {
+        $out = automation_tab_render($t, automation_tab_rule($t, $m), $k, 2, $viewer);
+        ct_ok("preview {$m}/{$k}: the real render, for the viewer, untracked",
+            $out !== null && $out['ok'] && str_contains($out['html'], 'Kemi') && !str_contains($out['html'], '/email/c.php')
+            && str_contains($out['html'], '/email/unsubscribe.php?r=preview'));
+    }
+}
+$w2 = (string) automation_step($er, 'welcome')['series'][1]['email']['subject'];
+ct_eq("preview of week 2 is week 2's email", str_replace('{{first_name}}', 'Kemi', $w2), automation_tab_render($t, $er, 'welcome', 2, $viewer)['subject']);
+ct_ok('an absence preview fills the streak', str_contains(automation_tab_render($t, automation_tab_rule($t, 'charis'), 'miss_note', 1, $viewer)['html'], 'Kemi'));
+ct_eq('an alert step has no email to preview', null, automation_tab_render($t, automation_tab_rule($t, 'charis'), 'team_alert', 1, $viewer));
+
+$tt = automation_tab_action($t, 'embrace', 'test', ['step' => 'midweek'], 300);
+ct_ok('a test needs the tester\'s confirmed email', $tt['status'] === 'error' && $tt['message'] === 'Confirm your email in Profile first.');
+ct_confirm($t, 300, 'kemi.k@gmail.com', false);
+$tt = automation_tab_action($t, 'embrace', 'test', ['step' => 'welcome', 'week' => '3'], 300);
+$row = $t->query("SELECT * FROM email_outbox WHERE flow = 'automation_test' ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+ct_ok('a test goes to the tester, marked as a test, in the test lane as account mail (no unsubscribe)',
+    $tt['status'] === 'success' && $row && $row['to_email'] === 'kemi.k@gmail.com' && $row['lane'] === 'test'
+    && $row['purpose'] === 'account' && str_starts_with((string) $row['subject'], 'Test: '));
+ct_eq('…naming where it went', 'Test sent to k•••@gmail.com.', $tt['message']);
+
+$t->exec("INSERT INTO automation_runs (rule_id, occasion_key, occasion_at, status, people, emailed, texted, alerted, skipped, started_at)
+          VALUES ({$er['id']}, 'welcome:2027-05-03', '2027-05-03 10:00:00', 'done', 3, 1, 1, 0, 1, '2027-05-03 10:00:00')");
+$runId = (int) $t->lastInsertId();
+ct_user($t, 301, 'Ola', '1st_Timer');
+ct_user($t, 302, 'Uche', '1st_Timer');
+foreach ([[300, 'email', 'queued'], [301, 'sms', 'queued'], [302, 'none', 'skipped_no_contact']] as [$uid, $ch, $outcome]) {
+    $t->prepare("INSERT INTO automation_sends (rule_id, step_key, user_id, dedupe_key, run_id, channel, outcome, created_at)
+                 VALUES (?, 'welcome', ?, '1', ?, ?, ?, '2027-05-03 10:00:00')")->execute([$er['id'], $uid, $runId, $ch, $outcome]);
+}
+$h = automation_tab_html($t, 'embrace');
+ct_ok('recent runs: when, and what happened', str_contains($h, 'Mon 3 May, 10:00') && str_contains($h, '3 people: 1 emailed, 1 texted, 1 skipped'));
+$who = automation_tab_action($t, 'embrace', 'run_people', ['run' => (string) $runId], 300);
+ct_eq('…and who: named, with the step and the result', [
+    ['name' => 'Kemi Test', 'step' => 'Monday welcome', 'result' => 'Emailed'],
+    ['name' => 'Ola Test', 'step' => 'Monday welcome', 'result' => 'Texted'],
+    ['name' => 'Uche Test', 'step' => 'Monday welcome', 'result' => 'No email or phone'],
+], $who['people'] ?? null);
+
+ct_eq('SMS count: short', '3 characters · 1 text', automation_tab_sms_count('abc'));
+ct_eq('SMS count: 161 plain characters are two texts', '161 characters · 2 texts', automation_tab_sms_count(str_repeat('a', 161)));
+ct_eq('SMS count: an emoji makes it Unicode (70 a text)', '71 characters · 2 texts', automation_tab_sms_count(str_repeat('a', 70) . '🙏'));
+ct_eq('an unknown module is refused', 'error', automation_tab_action($t, 'finance', 'panel', [], 300)['status']);
+ct_eq('an unknown action is refused', 'error', automation_tab_action($t, 'embrace', 'drop_tables', [], 300)['status']);
+ct_ok('before the migration: "Not set up yet", and actions refuse',
+    str_contains(automation_tab_html(ct_db(false), 'charis'), 'Not set up yet')
+    && automation_tab_action(ct_db(false), 'charis', 'enable', [], 300)['status'] === 'error');
+
+$root = __DIR__ . '/../../';
+$api = (string) file_get_contents($root . 'api/automation_api.php');
+$prev = (string) file_get_contents($root . 'api/email_preview.php');
+ct_ok('the API needs the module\'s manage right and the CSRF token',
+    str_contains($api, "api_require_can(\$module, 'manage');") && str_contains($api, 'csrf_require();'));
+ct_ok('the preview needs the manage right and sends its own locked-down CSP',
+    str_contains($prev, "can(\$module, 'manage')") && str_contains($prev, "default-src 'none'; style-src 'unsafe-inline'")
+    && str_contains((string) file_get_contents($root . 'includes/campaigns/automation_tab.php'), 'sandbox="" referrerpolicy="no-referrer"')
+    && !preg_match('/\.srcdoc\b|srcdoc\s*=/', (string) file_get_contents($root . 'assets/ui/js/pages/automation.js')));
+$emb = (string) file_get_contents($root . 'modules/embrace/index.php');
+$asm = (string) file_get_contents($root . 'modules/assimilation/index.php');
+$chr = (string) file_get_contents($root . 'modules/charis/index.php');
+ct_ok('the tab shows only with the manage right: Embrace, Assimilation, Charis',
+    str_contains($emb, "\$embraceAutomation = can('embrace', 'manage');") && str_contains($emb, "'frame-src' => [\"'self'\"]")
+    && str_contains($asm, "['automation', 'Automation']") && str_contains($asm, '<?php if ($assim_manager): ?>')
+    && str_contains($chr, "<?php if (!empty(\$charisPageAccess['can_configure_awol'])): ?>
+<!-- AUTOMATION")
+    && str_contains($chr, "<?php if (!empty(\$charisPageAccess['can_configure_awol'])): ?>
+        <button onclick=\"switchTab('automation')\""));
+
+// ===========================================================================
 ct_section('17. Every function the module calls exists');
 // ===========================================================================
 $files = array_merge(glob(__DIR__ . '/../../includes/campaigns/*.php'), [

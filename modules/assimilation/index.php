@@ -1,5 +1,8 @@
 <?php
 // /modules/assimilation/index.php
+// automation.js: the Automation tab (managers only), a shared panel from
+// includes/campaigns/automation_tab.php.
+$ui = ['scripts' => ['/assets/ui/js/pages/automation.js']];
 require_once '../../includes/header.php';
 
 if (!isset($_SESSION['user_id'])) {
@@ -81,7 +84,7 @@ try {
     <div role="tablist" aria-label="Assimilation sections" id="assimTabs" class="flex bg-gray-100 p-1.5 rounded-2xl w-full animate-fade-in-up overflow-x-auto" style="animation-delay: 0.1s;">
         <?php
         $assim_tabs = $assim_manager
-            ? [['find', 'Find people'], ['followup', 'Follow-up'], ['team', 'Team'], ['analytics', 'Analytics'], ['howto', 'How to Use']]
+            ? [['find', 'Find people'], ['followup', 'Follow-up'], ['team', 'Team'], ['analytics', 'Analytics'], ['automation', 'Automation'], ['howto', 'How to Use']]
             : [['followup', 'Follow-up'], ['team', 'Team'], ['howto', 'How to Use']];
         foreach ($assim_tabs as $i => [$key, $label]):
             $on = $i === 0;
@@ -305,6 +308,21 @@ try {
     <?php endif; ?>
 
     <!-- ================= TAB 5 — HOW TO USE ================= -->
+    <?php if ($assim_manager): ?>
+    <!-- ================= AUTOMATION (the absence follow-up rule) ================= -->
+    <div id="view-automation" role="tabpanel" aria-labelledby="tabBtn-automation" tabindex="0" class="focus:outline-none hidden">
+        <?php
+        require_once __DIR__ . '/../../includes/campaigns/automation_tab.php';
+        try {
+            echo automation_tab_html($pdo, 'assimilation');
+        } catch (Throwable $e) {
+            error_log('[automation] Assimilation tab failed: ' . $e->getMessage());
+            echo ui_banner('danger', ['title' => 'Automation did not load', 'text' => 'Reload the page to try again.']);
+        }
+        ?>
+    </div>
+    <?php endif; ?>
+
     <div id="view-howto" role="tabpanel" aria-labelledby="tabBtn-howto" tabindex="0" class="focus:outline-none hidden animate-fade-in-up" style="animation-delay: 0.2s;">
         <div class="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-5 items-start">
             <nav aria-label="Guide sections" class="hidden lg:block sticky top-24 bg-white rounded-3xl border border-gray-100 shadow-sm p-4 space-y-1">

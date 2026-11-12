@@ -341,6 +341,37 @@ The volunteer page (`/assimilation`) is part of the app too, so a volunteer who
 only ever opens that link can install it from there and get their own call list
 assignments on their phone. Quiet hours are under the same gear icon.
 
+## 10c. Automation (the absence follow-up)
+
+Managers see an **Automation** tab. It holds one rule, *Absence follow-up*,
+which is **off** until a manager switches it on. Once on, it checks attendance
+once a week (Monday 09:00 by default, after Sunday is in) and, for the statuses
+it covers (Visitor and Non-Member by default):
+
+1. after **2** missed Sundays, emails the person "We miss you" (or texts them
+   through SMS Studio when they have no confirmed email; nothing when they have
+   neither, or unsubscribed);
+2. after **4**, tells the Assimilation team with a notification naming them;
+3. after **8**, tells their region pastor (else the Resident Pastor).
+
+Each step happens once per absence, and again if they come back and drift away
+later. Streaks come from the same attendance rules as the Charis AWOL list.
+Nobody gets two messages from the church in one day, whichever module sends.
+
+In the tab you can change the day and time of the weekly check, who it covers,
+the number of missed Sundays for each step, the SMS, the two alerts, and the
+sender name and reply address. **Preview** shows the email as it will look
+(phone or desktop) and **Send test** sends it to your own confirmed email.
+**Recent runs** lists each weekly check and, under **Who**, what happened to
+each person. The email wording itself is edited in the email editor (coming
+next); until then it is the church's default.
+
+**Switching on** first shows how many people are already past a step today.
+Choose **Start fresh** (only people who pass a step from now on hear anything:
+no flood of pastor alerts on day one) or **Include them** (they are reached at
+the next weekly check). A warning shows when Charis's rule covers the same
+statuses: untick them in one of the two tabs. Guide: `docs/EMAIL.md`.
+
 ## 11. For developers
 
 - Module: `modules/assimilation/index.php` · APIs: `api/assimilation_api.php`

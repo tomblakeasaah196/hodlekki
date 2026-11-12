@@ -24,6 +24,9 @@ if (empty($_SESSION['charis_csrf']) || !is_string($_SESSION['charis_csrf'])) {
     $_SESSION['charis_csrf'] = bin2hex(random_bytes(32));
 }
 $charisCsrf = $_SESSION['charis_csrf'];
+// automation.js: the Automation tab (the 'manage' right, as the AWOL rules), a
+// shared panel from includes/campaigns/automation_tab.php.
+$ui = ['scripts' => ['/assets/ui/js/pages/automation.js']];
 require_once '../../includes/header.php';
 ?>
 <script src="/assets/js/celebrants_export.js"></script>
@@ -42,6 +45,9 @@ require_once '../../includes/header.php';
         <button onclick="switchTab('events')"       id="tab-events"       class="tab-btn inactive-tab px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap">Event Planning</button>
         <button onclick="switchTab('finance')"      id="tab-finance"      class="tab-btn inactive-tab px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap">Finance</button>
         <button onclick="switchTab('library')"      id="tab-library"      class="tab-btn inactive-tab px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap">Library</button>
+<?php if (!empty($charisPageAccess['can_configure_awol'])): ?>
+        <button onclick="switchTab('automation')"   id="tab-automation"   class="tab-btn inactive-tab px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap">Automation</button>
+<?php endif; ?>
         <button onclick="switchTab('howto')"        id="tab-howto"        class="tab-btn inactive-tab px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap">How To Use</button>
     </div>
 </div>
@@ -442,6 +448,21 @@ require_once '../../includes/header.php';
 <!-- ════════════════════════════════════════════════════════
      VIEW 5 — HOW TO USE
 ════════════════════════════════════════════════════════ -->
+<?php if (!empty($charisPageAccess['can_configure_awol'])): ?>
+<!-- AUTOMATION: the absence follow-up rule (includes/campaigns/automation_tab.php) -->
+<div id="view-automation" class="hidden">
+<?php
+    require_once __DIR__ . '/../../includes/campaigns/automation_tab.php';
+    try {
+        echo automation_tab_html($pdo, 'charis');
+    } catch (Throwable $e) {
+        error_log('[automation] Charis tab failed: ' . $e->getMessage());
+        echo ui_banner('danger', ['title' => 'Automation did not load', 'text' => 'Reload the page to try again.']);
+    }
+?>
+</div>
+<?php endif; ?>
+
 <div id="view-howto" class="hidden space-y-6">
 
     <div class="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100/60">
@@ -711,8 +732,10 @@ function handleAjaxForm(formId, cb) {
 // TAB SWITCHING
 // ═══════════════════════════════════════════════════════════
 function switchTab(name) {
-    ['welfare','events','finance','library','howto'].forEach(t => {
-        document.getElementById('view-' + t).classList.toggle('hidden', t !== name);
+    ['welfare','events','finance','library','automation','howto'].forEach(t => {
+        const view = document.getElementById('view-' + t);
+        if (!view) return; // Automation shows only with the 'manage' right
+        view.classList.toggle('hidden', t !== name);
         const btn = document.getElementById('tab-' + t);
         btn.classList.toggle('active-tab',   t === name);
         btn.classList.toggle('inactive-tab', t !== name);
