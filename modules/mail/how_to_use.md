@@ -5,10 +5,18 @@
 - **Mail** is in the menu once you work from a mailbox: your own (`firstname.lastname@hodlekki.org`), your
   department's, or a church-wide one such as embrace@ or info@. The number next to it is how many conversations
   in your inboxes are unread.
-- Pick a mailbox at the top when you have more than one. **Check for new mail** reads the server straight away;
+- Pick a mailbox at the top when you have more than one. **Check mail** (the circling arrows) reads the server straight away;
   otherwise new mail shows within a minute.
+- Folders are on the left (on a phone, pick one above the list). Click a conversation to read it; on a shared
+  mailbox, opening it marks it read for the whole team, and it says who opened it.
+- **Search** looks through the last 12 months; `from:ada` looks at the sender only. For older mail, use
+  **Search server** or **Load older** at the bottom of the list.
+- Pictures from the internet stay hidden until you choose **Show pictures** (once) or **Always show** (that
+  sender, for you only).
+- **Archive**, **Spam**, **Trash** and **Move to…** are on top of a conversation; a message after each one offers
+  **Undo**. Press **?** for the keyboard shortcuts.
 - Out-of-office answers are marked **Automatic reply**.
-- Opening and answering conversations arrive with the next Mail update.
+- Answering conversations arrives with the next Mail update.
 - There is no password to remember or type: the church's mail is read in the app only.
 
 ## For mail admins (the Mailboxes screen)

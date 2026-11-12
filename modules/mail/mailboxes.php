@@ -63,8 +63,8 @@ $tab = $isAdmin ? 'boxes' : 'exports';
         'title' => 'Mailboxes',
         'description' => "Mailboxes on {$domain}.",
         'back' => ['href' => '/modules/mail/index.php', 'label' => 'Mail'],
-        'actions' => mail_info('Who works from each mailbox, the quota of 15, and the actions waiting for the server. The server makes each change within a minute.')
-            . ($isAdmin ? ui_button('Add mailbox', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-dialog-open' => 'mb-new']]) : ''),
+        'info' => 'Who works from each mailbox, the quota of 15, and the actions waiting for the server. The server makes each change within a minute.',
+        'actions' => ($isAdmin ? ui_button('Add mailbox', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-dialog-open' => 'mb-new']]) : ''),
     ]) ?>
 
     <?php if ($isAdmin): ?>
@@ -140,7 +140,7 @@ $tab = $isAdmin ? 'boxes' : 'exports';
         </div>
 
         <div class="ui-card">
-            <div class="ui-card__header ui-card__header--divided"><h2 class="ui-h3">Outside the ERP</h2><?= mail_info('Mailboxes made in cPanel. Bringing one in sets a new password, so phones or webmail using the old one stop. system@ and dmarc@ always stay outside.') ?></div>
+            <div class="ui-card__header ui-card__header--divided"><h2 class="ui-h3">Outside the ERP</h2><?= mail_info('Mailboxes made in cPanel. Bringing one in sets a new password, so phones, Outlook or webmail using the old one stop. Leave info@, embrace@ and tom.blake@ outside until reading and writing both work in the ERP. system@ and dmarc@ always stay outside.') ?></div>
             <div class="ui-card__body">
                 <?php if (!$notInErp): ?>
                     <p class="text-ink-muted">Nothing else on <?= ui_e($domain) ?>.</p>
@@ -242,7 +242,7 @@ $tab = $isAdmin ? 'boxes' : 'exports';
 <?= ui_dialog_start('mb-bringin', ['title' => 'Bring mailbox in', 'description' => 'This sets a new password.']) ?>
 <form class="ui-form" data-action="mb.bringin.save" novalidate>
     <input type="hidden" name="email" value="">
-    <p class="ui-hint" data-mb-bringin-email></p>
+    <p class="ui-hint"><span data-mb-bringin-email></span> <?= mail_info('Phones and Outlook lose this mailbox once its password changes. Leave info@, embrace@ and tom.blake@ outside until reading and writing both work in the ERP.') ?></p>
     <?= ui_field('select', ['name' => 'kind', 'label' => 'Kind', 'options' => ['church' => 'Church-wide', 'department' => 'A department\'s', 'personal' => 'Someone\'s personal mailbox'], 'required' => true]) ?>
     <?= ui_field('text', ['name' => 'display_name', 'label' => 'Name in the From line', 'required' => true]) ?>
     <?= ui_field('select', ['name' => 'department_id', 'label' => 'Department', 'options' => ['' => '—'] + array_column($departments, 'label', 'id'), 'optional' => true]) ?>

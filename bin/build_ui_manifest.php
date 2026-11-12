@@ -56,6 +56,7 @@ $singles = [
     '/assets/js/tab-deeplink.js',
     '/assets/js/monitor_wall.js',      // System Health's live wall (modules/monitor/wall.php)
     '/assets/css/monitor_wall.css',
+    '/assets/css/mail.css',            // the Mail reader (modules/mail/index.php)
 ];
 
 $files = [];

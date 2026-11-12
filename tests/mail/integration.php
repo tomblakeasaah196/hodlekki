@@ -9,7 +9,8 @@
 //
 // Covers: access (matrix abilities, break-glass, grants by seat / role / person, personal privacy), the quota (the
 // 16th mailbox, the kept personal slots, two admins at the last slot), the job queue and every lifecycle job, the
-// vault (no password anywhere but encrypted; a half-done rotation), sync and automatic replies, the holder who
+// vault (no password anywhere but encrypted; a half-done rotation), sync and automatic replies, reading (lists,
+// filters, search, opening marks read, folder actions and Undo, picture trust), the holder who
 // leaves, the two-approval export and its mbox, removal with a forwarder, and the nightly access diff.
 
 require __DIR__ . '/support/lib.php';
@@ -189,6 +190,44 @@ check('the badge counts unread conversations for a reader, none for a member', M
 $again = MailSync::make()->account($embrace['id'], 20.0);
 check('a second run with nothing new skips the unchanged folders', $again['added'] === 0 && $again['removed'] === 0);
 
+// ------------------------------------------------------------------ reading (PR 2)
+section('Reading: the list, a conversation, folders, pictures');
+$inboxFor = static fn (int $who, array $q = []) => \HOD\Mail\Read\Inbox::open($who, $q + ['box' => $embrace['id']]);
+$box = $inboxFor($hod);
+check('the HOD opens embrace@ at its Inbox', $box->account !== null && $box->account['id'] === $embrace['id'] && ($box->folder['role'] ?? '') === 'inbox');
+check('a member cannot open it', $inboxFor($member)->account === null);
+$list = \HOD\Mail\Read\Screen::list($box, '', 'all', 1);
+check('the list shows both conversations', $list['total'] === 2 && str_contains($list['html'], 'Thank you') && str_contains($list['html'], 'Out of office'));
+$thankId = (int) Db::value("SELECT thread_id FROM mail_messages WHERE account_id = ? AND subject = 'Thank you'", [$embrace['id']]);
+Db::exec("UPDATE mail_threads SET status = 'waiting' WHERE id = ?", [$thankId]);
+check('the Waiting filter', \HOD\Mail\Read\Screen::list($box, '', 'waiting', 1)['total'] === 1);
+check('search finds the words of a message', \HOD\Mail\Read\ThreadList::search($hod, $embrace, 'Sunday')['total'] === 1);
+check('search by sender', \HOD\Mail\Read\ThreadList::search($hod, $embrace, 'from:bola')['total'] === 1);
+$open = \HOD\Mail\Read\Screen::thread($inboxFor($hod, ['thread' => $thankId]), Store::thread($thankId));
+check('opening shows the text, escaped', str_contains($open['messages'], 'I enjoyed Sunday.'));
+check('opening marks it read for everyone, and says who', $open['changed'] && (int) Db::value('SELECT seen_by FROM mail_messages WHERE thread_id = ?', [$thankId]) === $hod);
+check('the server is told too', in_array('\\Seen', $mail->folder('embrace@hodlekki.org', 'INBOX')['messages'][1]['flags'] ?? [], true)
+    || (int) Db::value('SELECT is_seen FROM mail_messages WHERE thread_id = ?', [$thankId]) === 1);
+MailNav::forget();
+check('the badge drops by one', MailNav::unread($hod) === 1);
+check('no Reply until the composer exists', !str_contains($open['head'] . $open['messages'], 'data-compose'));
+check('the HOD may archive', str_contains($open['head'], 'data-action="archive"'));
+$pastorView = \HOD\Mail\Read\Screen::thread($inboxFor($pastor, ['thread' => $thankId]), Store::thread($thankId), null, [], false, false);
+check('a read-only reader sees no folder actions', !str_contains($pastorView['head'], 'data-action="archive"') && !str_contains($pastorView['head'], 'data-move'));
+$e = throws(fn () => \HOD\Mail\Read\Actions::run($inboxFor($pastor, ['thread' => $thankId]), Store::thread($thankId), 'archive', false));
+check('and cannot archive through the API either', $e instanceof MailError);
+$moved = \HOD\Mail\Read\Actions::run($inboxFor($hod, ['thread' => $thankId]), Store::thread($thankId), 'archive', false);
+check('archive moves it out of the Inbox, with an Undo', $moved['left'] && is_array($moved['undo']) && $moved['undo']['ids'] !== []);
+MailSync::make()->account($embrace['id'], 20.0, true);
+check('the Inbox list no longer has it', \HOD\Mail\Read\Screen::list($inboxFor($hod), '', 'all', 1)['total'] === 1);
+\HOD\Mail\Read\Actions::undo($inboxFor($hod), $moved['undo']['ids'], (int) $moved['undo']['folder']);
+MailSync::make()->account($embrace['id'], 20.0, true);
+check('Undo brings it back', \HOD\Mail\Read\Screen::list($inboxFor($hod), '', 'all', 1)['total'] === 2);
+check('nobody trusts a sender\'s pictures at first', \HOD\Mail\Read\ImageTrust::trusted($hod, ['ada@example.test']) === []);
+check('Always show is saved for that person', \HOD\Mail\Read\ImageTrust::trust($hod, 'Ada@Example.test') && \HOD\Mail\Read\ImageTrust::trusted($hod, ['ADA@example.test']) === ['ada@example.test']);
+check('and only for that person', \HOD\Mail\Read\ImageTrust::trusted($worker, ['ada@example.test']) === []);
+check('a non-address is refused', !\HOD\Mail\Read\ImageTrust::trust($hod, 'not an address'));
+check('the counts carry a change stamp the page polls', strlen($inboxFor($hod)->counts()['stamp']) === 16);
 section('A half-done password change never locks the ERP out');
 $newPw = 'Rotated-' . bin2hex(random_bytes(6));
 $mail->setPassword('embrace@hodlekki.org', $newPw);
