@@ -202,7 +202,7 @@ try {
             $embrace_leaders = perm_module_leaders($pdo, 'embrace');   // leaders of the owning departments
 
             if (!empty($embrace_leaders)) {
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New First Timer Registered', ?, '/modules/embrace/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New First Timer Registered', ?, '/modules/embrace/')");
                 $alertMessage = "{$fname} {$lname} has just been registered as a First Timer and is waiting in the queue to be assigned.";
                 foreach($embrace_leaders as $uid) {
                     $notifStmt->execute([$uid, $alertMessage]);
@@ -457,7 +457,7 @@ try {
 
                     $pastors = perm_holders($pdo, 'pastoral_notes', 'view');   // the pastors
                     if (!empty($pastors)) {
-                        $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Pastoral Attention Required', ?, '/modules/pastoral/index.php')");
+                        $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Pastoral Attention Required', ?, '/modules/pastoral/')");
                         foreach($pastors as $uid) {
                             $notifStmt->execute([$uid, "An Embrace follow-up report for {$fullName} has been flagged as needing urgent pastoral attention."]);
                         }
@@ -507,7 +507,7 @@ try {
                 $user = $uStmt->fetch(PDO::FETCH_ASSOC);
                 $userName = $user ? "{$user['first_name']} {$user['last_name']}" : "A first timer";
 
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Member Promoted', ?, '/modules/congregation/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Member Promoted', ?, '/modules/congregation/')");
                 $alertMessage = "{$userName} has been successfully promoted from the Embrace pipeline into the master Congregation database. Please review their profile data.";
                 
                 foreach($idi_users as $uid) {

@@ -19,7 +19,7 @@ $meta_title = 'Event Registration | HOD Lekki Centre';
 $meta_description = 'You\'re invited! Tap to view event details and register.';
 $meta_image = '';
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
-$meta_url = $scheme . ($_SERVER['HTTP_HOST'] ?? '') . ($_SERVER['REQUEST_URI'] ?? '/register.php');
+$meta_url = $scheme . ($_SERVER['HTTP_HOST'] ?? '') . ($_SERVER['REQUEST_URI'] ?? '/register');
 $page_title = 'Event Registration';
 
 if (!empty($token)) {
@@ -77,7 +77,7 @@ ui_public_open([
 echo ui_json_script('reg-config', [
     'token' => (string) $token,
     'loggedIn' => $is_logged_in,
-    'login' => '/auth/login.php?next=' . rawurlencode($_SERVER['REQUEST_URI'] ?? '/register.php'),
+    'login' => '/auth/login?next=' . rawurlencode($_SERVER['REQUEST_URI'] ?? '/register'),
 ]);
 ?>
 <div class="mx-auto max-w-2xl px-4 py-6 sm:py-10">

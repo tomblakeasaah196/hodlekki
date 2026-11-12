@@ -56,7 +56,7 @@ $campaign = $id > 0 ? campaign_get($pdo, $id) : null;
 if ($id > 0 && ($campaign === null || !campaign_may('view', $campaign, $me))) {
     echo '<div class="ui-page ui-page--narrow">' . ui_empty(['icon' => 'mail', 'title' => 'Campaign not found',
         'text' => 'It was deleted, or it is not open to you.',
-        'actions' => ui_button('All campaigns', ['variant' => 'primary', 'href' => '/modules/campaigns/index.php'])]) . '</div>';
+        'actions' => ui_button('All campaigns', ['variant' => 'primary', 'href' => '/modules/campaigns/'])]) . '</div>';
     require_once '../../includes/footer.php';
     exit;
 }
@@ -93,7 +93,7 @@ if ($campaign !== null) {
     <?= ui_page_header([
         'title' => 'Email campaign',
         'info' => 'Write the email, choose who gets it, send a test to yourself, then send it now or set a time. People email cannot reach can get a text instead.',
-        'back' => ['href' => '/modules/campaigns/index.php', 'label' => 'Campaigns'],
+        'back' => ['href' => '/modules/campaigns/', 'label' => 'Campaigns'],
     ]) ?>
 
     <div class="mb-4 flex flex-wrap items-center gap-2">
@@ -257,7 +257,7 @@ if ($canManage) {
                 <tbody>
                 <?php foreach ($rows as $r): ?>
                     <tr>
-                        <td><a class="ui-link font-medium" href="/modules/campaigns/index.php?id=<?= (int) $r['id'] ?>"><?= ui_e($r['name']) ?></a>
+                        <td><a class="ui-link font-medium" href="/modules/campaigns/?id=<?= (int) $r['id'] ?>"><?= ui_e($r['name']) ?></a>
                             <span class="block ui-meta"><?= ui_e($r['subject']) ?></span></td>
                         <td><?= ui_e($r['department_id'] ? ($deptNames[$r['department_id']] ?? 'Department') : 'Whole church') ?></td>
                         <td><?= $statusBadge((string) $r['status']) ?></td>

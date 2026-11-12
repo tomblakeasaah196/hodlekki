@@ -150,7 +150,7 @@
         Object.keys(c.boxes || {}).forEach(function (id) { setCount($('[data-box-count="' + id + '"]'), c.boxes[id]); });
         // The badge on Mail in the shell's navigation (drawn only while there is something unread)
         var n = Number(c.nav) || 0;
-        $$('a[href^="/modules/mail/index.php"] .ui-count').forEach(function (badge) {
+        $$('a[href^="/modules/mail/"] .ui-count').forEach(function (badge) {
             badge.textContent = n > 99 ? '99+' : String(n);
             badge.hidden = !(n > 0);
         });

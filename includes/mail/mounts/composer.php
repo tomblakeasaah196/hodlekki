@@ -105,7 +105,7 @@ $tool = static fn (string $cmd, string $icon, string $label, string $extra = '')
                                 <option value="<?= ui_e($k) ?>"><?= ui_e($label) ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <a class="mc-link" href="/modules/mail/signature.php">My signature</a>
+                        <a class="mc-link" href="/modules/mail/signature">My signature</a>
                     </div>
                     <div class="mc-sig-preview" data-mc-sig-preview></div>
                 </section>

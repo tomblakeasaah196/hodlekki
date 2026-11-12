@@ -43,13 +43,13 @@ eq('at most 10 errors a beacon', 10, count($many['events']));
 $db = monitor_test_db();
 monitor_store_all($db, $r['events']);
 $row = $db->query("SELECT * FROM monitor_error_groups WHERE kind = 'js' AND exception_class = 'TypeError'")->fetch();
-eq('a browser error is stored with its page', '/modules/events/index.php', $row['route'] ?? null);
+eq('a browser error is stored with its page', '/modules/events/', $row['route'] ?? null);
 eq('…as a browser error', 'browser', $row['source'] ?? null);
 
 // ---- Speed
 $s = $beacon(['rum' => ['lcp' => 2100.4, 'inp' => 180, 'cls' => 42, 'ttfb' => 650, 'fcp' => 1200, 'conn' => '4g', 'nav' => 'navigate']]);
 $rumRow = monitor_rum_row($s['rum']['rum'], $s['rum']['page'], $s['rum']['device'], $s['rum']['at']);
-eq('a speed report becomes a row', ['/modules/events/index.php', 'phone', 2100, 180, 42, '4g'], [$rumRow['page'], $rumRow['device'], $rumRow['lcp'], $rumRow['inp'], $rumRow['cls'], $rumRow['conn']]);
+eq('a speed report becomes a row', ['/modules/events/', 'phone', 2100, 180, 42, '4g'], [$rumRow['page'], $rumRow['device'], $rumRow['lcp'], $rumRow['inp'], $rumRow['cls'], $rumRow['conn']]);
 $bad = monitor_rum_row(['lcp' => -5, 'inp' => 999999, 'conn' => 'wired<script>'], '/x', 'phone', $now);
 ok('impossible values are dropped, and a report with nothing usable is refused', $bad === null);
 eq('a page under /e/ is grouped by route', '/e/:event/checkin', monitor_rum_row(['lcp' => 1000], '/e/chara-2026/checkin', 'phone', $now)['page']);
@@ -58,7 +58,7 @@ for ($i = 1; $i <= 40; $i++) {
     monitor_rum_store($db, [monitor_rum_row(['lcp' => $i * 100, 'inp' => 100, 'cls' => 10, 'ttfb' => 500], '/index.php', $i % 2 ? 'phone' : 'desktop', $now - 3600)]);
 }
 monitor_rum_rollup($db, $now);
-$daily = $db->query("SELECT * FROM monitor_rum_daily WHERE page = '/index.php' AND device = 'phone' AND metric = 'lcp'")->fetch();
+$daily = $db->query("SELECT * FROM monitor_rum_daily WHERE page = '/' AND device = 'phone' AND metric = 'lcp'")->fetch();
 // Phones got 100, 300 … 3900 ms: 13 good (≤ 2.5 s), 7 needing work, none poor.
 eq('the daily roll-up keeps the 75th percentile and the ratings', [20, 2900, 13, 7, 0],
     [(int) $daily['n'], (int) $daily['p75'], (int) $daily['good'], (int) $daily['ni'], (int) $daily['poor']]);

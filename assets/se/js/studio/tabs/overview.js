@@ -112,7 +112,7 @@ export function OverviewTab() {
             const data = await studio(action, { id: event.id, ...payload });
             if (data.deleted) {
                 toast('Draft deleted.', 'success');
-                window.location.href = '/modules/special_events/index.php';
+                window.location.href = '/modules/special_events/';
                 return;
             }
             applyEvent(data.event);

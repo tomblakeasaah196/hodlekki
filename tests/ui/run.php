@@ -76,8 +76,10 @@ foreach ($registry as $item) {
     if (!isset($icons[$item['icon']])) {
         $badIcon[] = $item['key'] . ':' . $item['icon'];
     }
-    $path = parse_url($item['href'], PHP_URL_PATH);
-    if (empty($item['when_exists']) && !is_file($root . $path)) {
+    // Clean addresses: /modules/x/ is modules/x/index.php, /auth/login is auth/login.php.
+    $path = (string) parse_url($item['href'], PHP_URL_PATH);
+    $file = str_ends_with($path, '/') ? $path . 'index.php' : (pathinfo($path, PATHINFO_EXTENSION) === '' ? $path . '.php' : $path);
+    if (empty($item['when_exists']) && !is_file($root . $file)) {
         $badHref[] = $item['href'];
     }
 }
@@ -85,7 +87,7 @@ ok('every entry is in a known section', $badSection === [], implode(', ', $badSe
 ok('every entry\'s icon is in the sprite', $badIcon === [], implode(', ', $badIcon));
 ok('every entry links to a file that exists', $badHref === [], implode(', ', $badHref));
 $searchIndex = ui_nav_search_index([]);
-ok('the search index ends with sign-out', end($searchIndex)['url'] === '/auth/logout.php');
+ok('the search index ends with sign-out', end($searchIndex)['url'] === '/auth/logout');
 
 /* ---------------------------------------------------------------------- */
 suite('2. the navigation asks the permission matrix');
@@ -189,7 +191,7 @@ ok('CSP reports never go to error_log (the monitor imports every error_log line)
 ok('CSP reports are limited per IP and in total', strpos($reportSource, "csp_report_take('ip_'") !== false && strpos($reportSource, "csp_report_take('all'") !== false);
 ok('CSP report URLs lose their query string and fragment', strpos($reportSource, "preg_replace('/[?#].*\$/s', ''") !== false);
 ok('the monitor\'s public endpoints are exempt from CSRF',
-    csrf_is_exempt('/monitor_confirm.php') && csrf_is_exempt('/api/monitor_intake.php') && csrf_is_exempt('/api/monitor_probe.php'));
+    csrf_is_exempt('/monitor_confirm') && csrf_is_exempt('/monitor_confirm.php') && csrf_is_exempt('/api/monitor_intake.php') && csrf_is_exempt('/api/monitor_probe.php'));
 $csrfSource = (string) file_get_contents($root . '/includes/csrf.php');
 ok('a missing token is logged at most once per endpoint per hour site-wide',
     strpos($csrfSource, "'/hod_csrf_' . date('YmdH')") !== false && strpos($csrfSource, "@fopen(\$marker, 'x')") !== false);
@@ -267,11 +269,11 @@ if (!extension_loaded('pdo_sqlite')) {
 
     ok('no PHP notice or warning while rendering', $notices === [], implode(' | ', array_slice($notices, 0, 3)));
     ok('the page is titled after the module', strpos($html, '<title>Embrace (First Timers) · HOD Lekki</title>') !== false);
-    ok('the Embrace link is current', (bool) preg_match('#href="/modules/embrace/index.php" aria-current="page"#', $html));
+    ok('the Embrace link is current', (bool) preg_match('#href="/modules/embrace/" aria-current="page"#', $html));
     // Lead decision 2: an HOD seat carries what the retired global HOD role
     // gave (Congregation among it), so the link now shows; Finance does not.
-    ok('an HOD seat sees Congregation (decision 2)', strpos($html, '/modules/congregation/index.php') !== false);
-    ok('an HOD seat does not see Finance', strpos($html, '/modules/finance/index.php') === false);
+    ok('an HOD seat sees Congregation (decision 2)', strpos($html, 'href="/modules/congregation/"') !== false);
+    ok('an HOD seat does not see Finance', strpos($html, '/modules/finance/') === false);
     ok('the CSRF token is in the page', strpos($html, '<meta name="csrf-token" content="' . $_SESSION['_csrf'] . '">') !== false);
     ok('the phone bottom bar is there', strpos($html, 'class="ui-bottombar"') !== false);
     ok('legacy mode still loads jQuery for inline page scripts', strpos($html, '/assets/ui/vendor/jquery-3.7.1.min.js') !== false);
@@ -371,7 +373,7 @@ foreach (array_merge(glob($root . '/*.php') ?: [], glob($root . '/auth/*.php') ?
 }
 ok('every root and /auth/ entry point sends the baseline security headers', $noHeaders === [], implode(', ', $noHeaders));
 ok('the old /modules/dashboard/ URL redirects to the dashboard',
-    strpos((string) file_get_contents($root . '/modules/dashboard/index.php'), "header('Location: /index.php'") !== false);
+    strpos((string) file_get_contents($root . '/modules/dashboard/index.php'), "header('Location: /'") !== false);
 
 $allowedCdn = array_values(array_filter(array_map('trim', file($root . '/tests/ui/tailwind_cdn_allowlist.txt') ?: []),
     static fn ($l) => $l !== '' && $l[0] !== '#'));
@@ -534,6 +536,214 @@ foreach ([
 }
 ok('Connect keeps its favicon and theme colour',
     str_contains($connectHtml, 'rel="icon"') && str_contains($connectHtml, 'name="theme-color"'));
+/* ---------------------------------------------------------------------- */
+suite('12. clean addresses: no page address ends in .php (bin/clean_urls.sh)');
+// The owner (Nov 2026): hodlekki.org/testimonies, never /testimonies.php. The
+// server serves /x from x.php and 301s the old .php address (GET and HEAD
+// only); the app's own links are clean so nobody pays for the redirect.
+$cleanSh = str_replace("\r\n", "\n", (string) file_get_contents($root . '/bin/clean_urls.sh'));
+$deploySh = str_replace("\r\n", "\n", (string) file_get_contents($root . '/bin/deploy.sh'));
+$block = preg_match("/<<'RULES'\n(.*?)\nRULES\n/s", $cleanSh, $m) ? $m[1] : '';
+ok('the script carries one marked rule block',
+    str_starts_with($block, '# hod-clean-urls-begin') && str_ends_with($block, '# hod-clean-urls-end'));
+
+// The block, parsed the way mod_rewrite reads it: each rule with its conditions.
+$cleanRules = [];
+$conds = [];
+foreach (explode("\n", $block) as $line) {
+    $line = trim($line);
+    if (preg_match('/^RewriteCond\s+(\S+)\s+(\S+)(?:\s+\[([^\]]*)\])?$/', $line, $c)) {
+        $conds[] = ['test' => $c[1], 'pattern' => $c[2], 'flags' => $c[3] ?? ''];
+    } elseif (preg_match('/^RewriteRule\s+(\S+)\s+(\S+)(?:\s+\[([^\]]*)\])?$/', $line, $r)) {
+        $cleanRules[] = ['pattern' => $r[1], 'subst' => $r[2], 'flags' => $r[3] ?? '', 'conds' => $conds];
+        $conds = [];
+    }
+}
+$condOf = static function (array $rule, string $test): array {
+    return array_values(array_filter($rule['conds'], static fn ($c) => $c['test'] === $test));
+};
+ok('three rules: two redirects, then the internal rewrite', count($cleanRules) === 3
+    && $cleanRules[0]['flags'] === 'R=301,L,NE' && $cleanRules[1]['flags'] === 'R=301,L,NE'
+    && $cleanRules[2]['flags'] === 'L' && $cleanRules[2]['subst'] === '$1.php');
+ok('both redirects are GET and HEAD only, so a POST never loses its body',
+    count($cleanRules) === 3 && $condOf($cleanRules[0], '%{REQUEST_METHOD}')[0]['pattern'] === '^(GET|HEAD)$'
+    && $condOf($cleanRules[1], '%{REQUEST_METHOD}')[0]['pattern'] === '^(GET|HEAD)$');
+ok('both redirects read THE_REQUEST, so the internal rewrite can never loop back',
+    count($cleanRules) === 3 && count($condOf($cleanRules[0], '%{THE_REQUEST}')) === 1
+    && count($condOf($cleanRules[1], '%{THE_REQUEST}')) === 1 && $condOf($cleanRules[2], '%{THE_REQUEST}') === []);
+ok('the rewrite needs the .php file to exist and the address not to be a file or folder',
+    count($cleanRules) === 3
+    && array_column($condOf($cleanRules[2], '%{REQUEST_FILENAME}'), 'pattern') === ['!-f', '!-d']
+    && array_column($condOf($cleanRules[2], '%{REQUEST_FILENAME}.php'), 'pattern') === ['-f']);
+$mustSkip = ['api', 'webhook', 'email', 'includes', 'cron', 'db', 'bin', 'assets', 'uploads', '\.well-known'];
+foreach ($cleanRules as $i => $rule) {
+    $skips = [];
+    foreach ($condOf($rule, '%{REQUEST_URI}') as $c) {
+        if (preg_match('#^!\^/\(\?:([^)]*)\)/$#', $c['pattern'], $s)) {
+            $skips = explode('|', $s[1]);
+        }
+    }
+    ok('rule ' . ($i + 1) . ' never touches ' . implode(', ', array_map('stripslashes', $mustSkip)),
+        array_diff($mustSkip, $skips) === [], implode(', ', array_diff($mustSkip, $skips)));
+}
+ok('the manifest keeps its address', count($cleanRules) === 3
+    && in_array('!^/manifest\.php$', array_column($condOf($cleanRules[1], '%{REQUEST_URI}'), 'pattern'), true));
+$lockAt = strpos($deploySh, 'bash "$REPO/bin/edge_lock.sh" "$DEPLOYPATH"');
+$cleanAt = strpos($deploySh, 'bash "$REPO/bin/clean_urls.sh" "$DEPLOYPATH"');
+ok('every deploy writes the rules, after the origin lock', $lockAt !== false && $cleanAt !== false && $lockAt < $cleanAt);
+
+// The rules, run against real requests. A small model of mod_rewrite in a
+// per-directory .htaccess: the rule's pattern sees the path without its
+// leading slash, %N comes from the last matching condition, a rewrite with
+// [L] goes round again, and a redirect keeps the query string.
+$cleanServe = static function (string $method, string $target) use ($cleanRules, $root): array {
+    [$path, $query] = array_pad(explode('?', $target, 2), 2, null);
+    $theRequest = "{$method} {$target} HTTP/1.1";
+    $uri = rawurldecode($path);
+    for ($round = 0; $round < 5; $round++) {
+        $rewritten = false;
+        foreach ($cleanRules as $rule) {
+            $file = $root . $uri;
+            $vars = ['%{REQUEST_METHOD}' => $method, '%{REQUEST_URI}' => $uri, '%{THE_REQUEST}' => $theRequest,
+                     '%{REQUEST_FILENAME}' => $file, '%{REQUEST_FILENAME}.php' => $file . '.php'];
+            if (!preg_match('#' . str_replace('#', '\#', $rule['pattern']) . '#', ltrim($uri, '/'), $rm)) {
+                continue;
+            }
+            $last = [];
+            foreach ($rule['conds'] as $c) {
+                $neg = str_starts_with($c['pattern'], '!');
+                $pat = $neg ? substr($c['pattern'], 1) : $c['pattern'];
+                if ($pat === '-f' || $pat === '-d') {
+                    $hit = $pat === '-f' ? is_file($vars[$c['test']]) : is_dir($vars[$c['test']]);
+                } else {
+                    $hit = (bool) preg_match('#' . str_replace('#', '\#', $pat) . '#' . (str_contains($c['flags'], 'NC') ? 'i' : ''),
+                        $vars[$c['test']], $cm);
+                    if ($hit && !$neg) {
+                        $last = $cm;
+                    }
+                }
+                if ($hit === $neg) {
+                    continue 2;
+                }
+            }
+            $to = preg_replace_callback('/([$%])(\d)/', static fn ($x) => (string) (($x[1] === '$' ? $rm : $last)[(int) $x[2]] ?? ''), $rule['subst']);
+            if (str_contains($rule['flags'], 'R=301')) {
+                return ['301', $to . ($query !== null ? '?' . $query : '')];
+            }
+            $uri = '/' . ltrim($to, '/');
+            $rewritten = true;
+            break;
+        }
+        if (!$rewritten) {
+            return ['serve', $uri];
+        }
+    }
+    return ['loop', $uri];
+};
+$cleanCases = [
+    // An old address moves, its query string with it.
+    ['GET', '/testimonies.php', ['301', '/testimonies']],
+    ['GET', '/register.php?event=12', ['301', '/register?event=12']],
+    ['HEAD', '/sermons.php?sermon=grace', ['301', '/sermons?sermon=grace']],
+    ['GET', '/index.php?source=pwa', ['301', '/?source=pwa']],
+    ['GET', '/modules/mail/index.php', ['301', '/modules/mail/']],
+    ['GET', '/modules/events/index.php?event=3', ['301', '/modules/events/?event=3']],
+    ['GET', '/modules/departments/renew.php?ids=4', ['301', '/modules/departments/renew?ids=4']],
+    ['GET', '/auth/login.php?next=%2Fmodules%2Fmail%2F', ['301', '/auth/login?next=%2Fmodules%2Fmail%2F']],
+    ['GET', '/connect.php', ['301', '/connect']],
+    // A clean address is served by its file, with no second redirect.
+    ['GET', '/testimonies', ['serve', '/testimonies.php']],
+    ['GET', '/register?event=12', ['serve', '/register.php']],
+    ['GET', '/auth/login', ['serve', '/auth/login.php']],
+    ['GET', '/modules/departments/renew', ['serve', '/modules/departments/renew.php']],
+    ['GET', '/modules/mail/', ['serve', '/modules/mail/']],
+    ['GET', '/', ['serve', '/']],
+    // A form posting to its own page keeps working, under either address.
+    ['POST', '/auth/login', ['serve', '/auth/login.php']],
+    ['POST', '/auth/login.php', ['serve', '/auth/login.php']],
+    // Never redirected or rewritten.
+    ['GET', '/api/events_api.php?action=list', ['serve', '/api/events_api.php']],
+    ['POST', '/api/events_api.php', ['serve', '/api/events_api.php']],
+    ['GET', '/api/events_api', ['serve', '/api/events_api']],
+    ['POST', '/webhook/deploy.php', ['serve', '/webhook/deploy.php']],
+    ['GET', '/email/unsubscribe.php?t=abc', ['serve', '/email/unsubscribe.php']],
+    ['POST', '/email/unsubscribe.php?t=abc', ['serve', '/email/unsubscribe.php']],
+    ['GET', '/manifest.php', ['serve', '/manifest.php']],
+    ['GET', '/sw.js', ['serve', '/sw.js']],
+    ['GET', '/assets/ui/app.css', ['serve', '/assets/ui/app.css']],
+    ['GET', '/uploads/x.php', ['serve', '/uploads/x.php']],
+    ['GET', '/cron/monitor.php', ['serve', '/cron/monitor.php']],
+    ['GET', '/.well-known/acme-challenge/abc', ['serve', '/.well-known/acme-challenge/abc']],
+    ['GET', '/e/chara-night/checkin', ['serve', '/e/chara-night/checkin']],
+    ['GET', '/testimonies.php/extra', ['serve', '/testimonies.php/extra']],
+    ['GET', '/no-such-page', ['serve', '/no-such-page']],
+    // Doubled slashes never become a link to another site.
+    ['GET', '//evil.example/x.php', ['301', '/evil.example/x']],
+];
+foreach ($cleanCases as [$method, $target, $want]) {
+    $got = $cleanServe($method, $target);
+    ok("{$method} {$target} -> " . implode(' ', $want), $got === $want, implode(' ', $got));
+}
+
+// The script itself: the block lands right after the origin lock, a second
+// run changes nothing, the rules' backslashes survive, and "off" removes it.
+// (Needs bash: CI has it; on Windows set HOD_BASH to Git Bash's bash.exe.)
+$bash = (string) (getenv('HOD_BASH') ?: (PHP_OS_FAMILY === 'Windows' ? '' : 'bash'));
+if ($bash === '') {
+    echo "  skip the script run (no bash; set HOD_BASH)\n";
+} else {
+    $dir = sys_get_temp_dir() . '/hod_clean_urls_' . bin2hex(random_bytes(4));
+    mkdir($dir);
+    $run = static function (string $mode) use ($bash, $root, $dir): string {
+        exec(escapeshellarg($bash) . ' ' . escapeshellarg($root . '/bin/clean_urls.sh') . ' ' . escapeshellarg($dir) . ' ' . $mode . ' 2>&1', $out, $code);
+        return $code === 0 ? str_replace("\r\n", "\n", (string) file_get_contents($dir . '/.htaccess')) : 'exit ' . $code . ': ' . implode(' ', $out);
+    };
+    $lock = "# hod-edge-lock-begin\nRewriteEngine On\nRewriteRule ^ - [F]\n# hod-edge-lock-end\n";
+    file_put_contents($dir . '/.htaccess', $lock . "AddHandler application/x-httpd-ea-php83 .php\n");
+    $once = $run('on');
+    ok('the block lands right after the origin lock, the server\'s own lines kept',
+        $once === $lock . $block . "\nAddHandler application/x-httpd-ea-php83 .php\n", substr($once, 0, 200));
+    ok('a second run changes nothing', $run('on') === $once);
+    ok('the rules reach the file byte for byte (backslashes intact)', str_contains($once, '\s/+([^\s?]+)\.php[\s?]'));
+    ok('"off" removes the block and nothing else', $run('off') === $lock . "AddHandler application/x-httpd-ea-php83 .php\n");
+    file_put_contents($dir . '/.htaccess', "AddHandler x .php\n");
+    ok('with no lock the block goes first', $run('on') === $block . "\nAddHandler x .php\n");
+    @unlink($dir . '/.htaccess');
+    @rmdir($dir);
+}
+
+// The app's own links are clean. A page address (a root page, a module page,
+// a sign-in page) written with .php anywhere in the code is a link that pays
+// for a redirect. Requires and file paths are not links.
+$navLinks = array_merge(array_column(ui_nav_registry(), 'href'), array_column(ui_nav_search_index([]), 'url'));
+$navPhp = array_values(array_filter($navLinks, static fn ($h) => str_contains((string) parse_url((string) $h, PHP_URL_PATH), '.php')));
+ok('the navigation and its search index carry no .php address', $navPhp === [], implode(', ', $navPhp));
+$pages = array_map(static fn ($f) => basename($f, '.php'), glob($root . '/*.php') ?: []);
+$pages = array_values(array_diff($pages, ['manifest']));
+$pageRe = '#(?<=[\'"`=(]|\.org)/(?:modules/[a-z_]+/[a-z_]+|auth/[a-z_]+|(?:' . implode('|', array_map('preg_quote', $pages)) . '))\.php\b#';
+$notLinks = '/\b(?:require|include)(?:_once)?\b|__DIR__|__FILE__|PHP_SELF|SCRIPT_NAME|SCRIPT_FILENAME|file_get_contents|is_file|file_exists|_root\(|_dir\(|_DIR\b|clean-urls: old name/';
+$skipDirs = ['.git', '.github', '.claude', 'vendor', 'node_modules', 'tests', 'docs', 'uploads'];
+$oldLinks = [];
+$it = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(
+    new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+    static function (SplFileInfo $f) use ($root, $skipDirs): bool {
+        $rel = str_replace('\\', '/', substr($f->getPathname(), strlen($root) + 1));
+        return $f->isDir() ? !in_array($rel, $skipDirs, true) && !str_starts_with($rel, 'includes/hymnal/corpus') && !str_starts_with($rel, 'includes/bible/')
+            : (bool) preg_match('/\.(php|js|mjs|html)$/', $rel);
+    }
+));
+foreach ($it as $f) {
+    $rel = str_replace('\\', '/', substr($f->getPathname(), strlen($root) + 1));
+    foreach (file($f->getPathname()) ?: [] as $n => $line) {
+        $t = ltrim($line);
+        if ($t === '' || str_starts_with($t, '//') || str_starts_with($t, '*') || str_starts_with($t, '#') || str_starts_with($t, '/*')
+            || preg_match($notLinks, $line) || !preg_match($pageRe, $line)) {
+            continue;
+        }
+        $oldLinks[] = $rel . ':' . ($n + 1);
+    }
+}
+ok('no page link in the code ends in .php', $oldLinks === [], implode(', ', array_slice($oldLinks, 0, 15)));
 
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed === 0 ? 0 : 1);

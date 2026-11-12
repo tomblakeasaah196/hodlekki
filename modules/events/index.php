@@ -100,11 +100,11 @@ function ev_view_switch(string $kind): string
                 <?= ui_button('More tools', ['variant' => 'secondary', 'icon' => 'ellipsis', 'icon_only' => true, 'attrs' => ['data-menu-trigger' => true, 'aria-controls' => 'ev-more-menu', 'aria-haspopup' => 'menu', 'aria-expanded' => 'false']]) ?>
                 <div class="ui-menu" id="ev-more-menu" role="menu" hidden>
                     <p class="ui-menu__label">Tools</p>
-                    <a class="ui-menu__item" role="menuitem" href="/modules/event_qr/index.php"><?= ui_icon('qr-code') ?><span>QR poster</span></a>
-                    <a class="ui-menu__item" role="menuitem" href="/modules/event_report/index.php"><?= ui_icon('file-text') ?><span>Event report</span></a>
+                    <a class="ui-menu__item" role="menuitem" href="/modules/event_qr/"><?= ui_icon('qr-code') ?><span>QR poster</span></a>
+                    <a class="ui-menu__item" role="menuitem" href="/modules/event_report/"><?= ui_icon('file-text') ?><span>Event report</span></a>
                     <div class="ui-menu__sep"></div>
-                    <a class="ui-menu__item" role="menuitem" href="/modules/checkin_qr/index.php"><?= ui_icon('qr-code') ?><span>Check-in QR</span></a>
-                    <a class="ui-menu__item" role="menuitem" href="/modules/checkin_monitor/index.php"><?= ui_icon('activity') ?><span>Check-in monitor</span></a>
+                    <a class="ui-menu__item" role="menuitem" href="/modules/checkin_qr/"><?= ui_icon('qr-code') ?><span>Check-in QR</span></a>
+                    <a class="ui-menu__item" role="menuitem" href="/modules/checkin_monitor/"><?= ui_icon('activity') ?><span>Check-in monitor</span></a>
                 </div>
             </div>
         </div>

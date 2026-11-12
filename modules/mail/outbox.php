@@ -20,7 +20,7 @@ use HOD\Mail\Read\Format;
 use HOD\Mail\Store;
 
 $uid = (int) ($_SESSION['user_id'] ?? 0);
-$back = ['href' => '/modules/mail/index.php', 'label' => 'Mail'];
+$back = ['href' => '/modules/mail/', 'label' => 'Mail'];
 if (!mail_ready() || !mail_compose_ready()) {
     echo '<div class="ui-page">' . ui_page_header(['title' => 'Outbox', 'back' => $back])
         . ui_empty(['icon' => 'mail', 'title' => 'Not ready yet', 'text' => 'Try again after the next update.']) . '</div>';
@@ -41,7 +41,7 @@ $row = static function (array $r, string $group): string {
     $more = count($p['to'] ?? []) + count($p['cc'] ?? []) + count($p['bcc'] ?? []) - 1;
     $to = $first ? ($first['name'] ?: $first['email']) . ($more > 0 ? " +{$more}" : '') : 'No recipient yet';
     $when = $group === 'scheduled' ? 'Goes ' . Format::full($r['send_at']) : Format::when($r['updated_at'], true);
-    $open = '/modules/mail/index.php?box=' . (int) $r['account_id'] . '&compose=' . rawurlencode($r['id']);
+    $open = '/modules/mail/?box=' . (int) $r['account_id'] . '&compose=' . rawurlencode($r['id']);
     $actions = ui_button('Open', ['variant' => 'secondary', 'size' => 'sm', 'href' => $open]);
     if ($group === 'scheduled') {
         $actions .= ui_button('Cancel send', ['variant' => 'ghost', 'size' => 'sm', 'attrs' => ['data-action' => 'outbox.cancel', 'data-id' => $r['id']]]);
@@ -62,7 +62,7 @@ $total = count($lists['scheduled']) + count($lists['failed']) + count($lists['dr
         'description' => 'Scheduled, not sent, and drafts.',
         'info' => 'Only your own messages. Open one to change it or send it again; a scheduled message goes back to a draft when opened.',
         'back' => $back,
-        'actions' => ui_button('My signature', ['variant' => 'ghost', 'icon' => 'pencil', 'href' => '/modules/mail/signature.php']),
+        'actions' => ui_button('My signature', ['variant' => 'ghost', 'icon' => 'pencil', 'href' => '/modules/mail/signature']),
     ]) ?>
 
     <?php if ($total === 0): ?>

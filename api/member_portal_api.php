@@ -157,7 +157,7 @@ try {
                 $uName = $uStmt->fetch(PDO::FETCH_ASSOC);
                 $memberName = $uName ? "{$uName['first_name']} {$uName['last_name']}" : "A member";
 
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Member Contribution', ?, '/modules/finance/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Member Contribution', ?, '/modules/finance/')");
                 $alertMsg = "{$memberName} has submitted a {$type} contribution of ₦{$formatted_amount} pending reconciliation.";
                 
                 foreach($admins as $admin_id) {
@@ -194,7 +194,7 @@ try {
                 $uName = $uStmt->fetch(PDO::FETCH_ASSOC);
                 $memberName = $uName ? "{$uName['first_name']} {$uName['last_name']}" : "A member";
 
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Prayer Request', ?, '/modules/zoe/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Prayer Request', ?, '/modules/zoe/')");
                 $alertMsg = "{$memberName} has submitted a new prayer request. Please keep them in your prayers.";
                 
                 foreach($zoe_leaders as $leader_id) {

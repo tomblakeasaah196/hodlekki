@@ -37,10 +37,10 @@ final class DailySummary
                 }
                 $prefs = Prefs::general((int) $uid);
                 if ($prefs['summary']) {
-                    MailNotices::send([(int) $uid], 'Mail today', $line, '/modules/mail/index.php');
+                    MailNotices::send([(int) $uid], 'Mail today', $line, '/modules/mail/');
                     $bells++;
                 }
-                PersonalAlerts::send((int) $uid, 'summary', 'Your mail today', $line, '/modules/mail/index.php');
+                PersonalAlerts::send((int) $uid, 'summary', 'Your mail today', $line, '/modules/mail/');
             } catch (Throwable $e) {
                 error_log('Mail: daily summary for user ' . $uid . ' failed: ' . $e->getMessage());
             }

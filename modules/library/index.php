@@ -49,10 +49,10 @@ $head = '    <meta name="description" content="' . ui_e($ogDesc) . '">' . "\n"
     . '    <meta property="og:type" content="website">' . "\n"
     . '    <meta name="twitter:card" content="summary_large_image">' . "\n";
 
-$loginUrl = '/auth/login.php?next=' . rawurlencode('/modules/library/index.php' . ($book_id ? '?book_id=' . $book_id : ''));
+$loginUrl = '/auth/login?next=' . rawurlencode('/modules/library/' . ($book_id ? '?book_id=' . $book_id : ''));
 $actions = $isLoggedIn
     ? ui_button('My library', ['variant' => 'secondary', 'size' => 'sm', 'icon' => 'book-open', 'attrs' => ['data-action' => 'library.mine', 'aria-expanded' => 'false', 'aria-controls' => 'library-mine']])
-      . ui_button('My portal', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'house', 'icon_only' => true, 'href' => '/modules/member_portal/index.php'])
+      . ui_button('My portal', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'house', 'icon_only' => true, 'href' => '/modules/member_portal/'])
     : ui_button('Sign in', ['variant' => 'primary', 'size' => 'sm', 'href' => $loginUrl]);
 
 $page = [

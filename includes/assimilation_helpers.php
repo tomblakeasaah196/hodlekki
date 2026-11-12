@@ -46,7 +46,7 @@ const ASSIM_AGE_BANDS = [
 const ASSIM_WINDOW_UNITS     = ['days', 'weeks', 'months'];
 const ASSIM_OVERDUE_DAYS     = 7;
 const ASSIM_DEFAULT_RULE     = ['max_services' => 3, 'window_value' => 2, 'window_unit' => 'months', 'ever_attended' => 1];
-const ASSIM_MODULE_LINK      = '/modules/assimilation/index.php';
+const ASSIM_MODULE_LINK      = '/modules/assimilation/';
 const ASSIM_DEFAULT_GUIDE_FILE = __DIR__ . '/assimilation_volunteer_guide.md';
 
 // ==========================================================================

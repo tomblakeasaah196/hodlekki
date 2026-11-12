@@ -189,7 +189,7 @@ function buildStampData(
 }
 
 /** Insert a system notification */
-function notify(PDO $pdo, int $user_id, string $title, string $message, string $link = '/modules/requisition/index.php'): void {
+function notify(PDO $pdo, int $user_id, string $title, string $message, string $link = '/modules/requisition/'): void {
     $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, ?, ?, ?)")
         ->execute([$user_id, $title, $message, $link]);
 }

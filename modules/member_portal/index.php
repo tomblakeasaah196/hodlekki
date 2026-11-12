@@ -138,7 +138,7 @@ $portalGivingTypes = ['Tithe' => 'Tithe', 'Offering' => 'Offering', 'First_Fruit
                     <p class="text-sm text-ink-muted">Has God done something amazing? Share it to encourage the brethren.</p>
                     <div class="mt-4 grid grid-cols-2 gap-2">
                         <?= ui_button('Testify', ['variant' => 'soft', 'attrs' => ['data-dialog-open' => 'portal-testimony']]) ?>
-                        <?= ui_button('Read the wall', ['variant' => 'ghost', 'icon_end' => 'external-link', 'href' => '/testimonies.php', 'attrs' => ['target' => '_blank', 'rel' => 'noopener']]) ?>
+                        <?= ui_button('Read the wall', ['variant' => 'ghost', 'icon_end' => 'external-link', 'href' => '/testimonies', 'attrs' => ['target' => '_blank', 'rel' => 'noopener']]) ?>
                     </div>
                 </div>
             </section>
@@ -146,8 +146,8 @@ $portalGivingTypes = ['Tithe' => 'Tithe', 'Offering' => 'Offering', 'First_Fruit
             <section class="ui-card" aria-labelledby="portal-more-title">
                 <h2 class="sr-only" id="portal-more-title">More for you</h2>
                 <ul class="ui-list">
-                    <li><a class="ui-list__item" href="/modules/library/index.php"><span class="ui-list__icon"><?= ui_icon('book-open') ?></span><span class="ui-list__main"><span class="ui-list__title">Charis Library</span><span class="ui-list__meta">E-books, prints and study resources</span></span><span class="ui-list__end"><?= ui_icon('chevron-right') ?></span></a></li>
-                    <li><a class="ui-list__item" href="/modules/profile/index.php"><span class="ui-list__icon"><?= ui_icon('circle-user-round') ?></span><span class="ui-list__main"><span class="ui-list__title">My profile</span><span class="ui-list__meta">Your details, photo and password</span></span><span class="ui-list__end"><?= ui_icon('chevron-right') ?></span></a></li>
+                    <li><a class="ui-list__item" href="/modules/library/"><span class="ui-list__icon"><?= ui_icon('book-open') ?></span><span class="ui-list__main"><span class="ui-list__title">Charis Library</span><span class="ui-list__meta">E-books, prints and study resources</span></span><span class="ui-list__end"><?= ui_icon('chevron-right') ?></span></a></li>
+                    <li><a class="ui-list__item" href="/modules/profile/"><span class="ui-list__icon"><?= ui_icon('circle-user-round') ?></span><span class="ui-list__main"><span class="ui-list__title">My profile</span><span class="ui-list__meta">Your details, photo and password</span></span><span class="ui-list__end"><?= ui_icon('chevron-right') ?></span></a></li>
                 </ul>
             </section>
 

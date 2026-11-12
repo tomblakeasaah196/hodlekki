@@ -307,7 +307,7 @@ try {
         case 'wall': {
             $key = monitor_wall_key($pdo);
             monitor_wall_publish($pdo, false);
-            monitor_api_reply(['status' => 'success', 'data' => ['snapshot' => '/live/monitor/' . $key . '.json', 'tv_link' => site_url('/modules/monitor/wall.php#k=' . $key)]]);
+            monitor_api_reply(['status' => 'success', 'data' => ['snapshot' => '/live/monitor/' . $key . '.json', 'tv_link' => site_url('/modules/monitor/wall#k=' . $key)]]);
         }
 
         case 'wall_rotate': {
@@ -315,7 +315,7 @@ try {
             security_log($pdo, 'monitor.wall_rotate', null, 'Live wall link replaced');
             monitor_wall_publish($pdo, true);
             monitor_api_reply(['status' => 'success', 'message' => 'New wall link made. Screens using the old one stop updating.',
-                               'data' => ['snapshot' => '/live/monitor/' . $key . '.json', 'tv_link' => site_url('/modules/monitor/wall.php#k=' . $key)]]);
+                               'data' => ['snapshot' => '/live/monitor/' . $key . '.json', 'tv_link' => site_url('/modules/monitor/wall#k=' . $key)]]);
         }
 
         case 'test_alert': {

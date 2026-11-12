@@ -722,7 +722,7 @@ function perm_user_name(?array $u): string
 }
 
 /** Tell people something (active accounts only). Returns how many were told. */
-function perm_notify(PDO $pdo, array $userIds, string $title, string $message, string $link = '/modules/profile/index.php'): int
+function perm_notify(PDO $pdo, array $userIds, string $title, string $message, string $link = '/modules/profile/'): int
 {
     $ids = array_keys(perm_active_accounts($pdo, $userIds));
     if ($ids === []) {
@@ -793,7 +793,7 @@ function perm_user_role_add(PDO $pdo, array $ctx, int $uid, int $roleId, ?string
     // The old screen's two blocks (owner, 2026): a complete profile, and a Worker or Pastor.
     $first = (string) ($user['first_name'] ?? '');
     $last = (string) ($user['last_name'] ?? '');
-    $link = '/modules/congregation/index.php?edit=' . $uid;
+    $link = '/modules/congregation/?edit=' . $uid;
     if (stripos($first . ' ' . $last, 'unknown') !== false
         || (trim((string) ($user['phone'] ?? '')) === '' && trim((string) ($user['email'] ?? '')) === '')) {
         throw new PermAdminError('Complete their name and contact details first.', 'profile', $link);

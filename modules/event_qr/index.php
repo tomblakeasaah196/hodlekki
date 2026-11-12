@@ -81,7 +81,7 @@ $event_id = (int)($_GET['event_id'] ?? 0);
   <!-- Top bar -->
   <div class="bg-white/5 border border-white/10 rounded-3xl p-4 md:p-5 flex flex-col md:flex-row gap-4 md:items-center justify-between">
     <div class="flex items-center gap-4">
-      <a href="/modules/events/index.php" class="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-3.5 py-2.5 rounded-xl text-sm font-bold transition-colors">
+      <a href="/modules/events/" class="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-3.5 py-2.5 rounded-xl text-sm font-bold transition-colors">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Events
       </a>
       <div>

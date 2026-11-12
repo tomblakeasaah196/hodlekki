@@ -82,7 +82,7 @@
         HOD.api('/api/auth_api.php', { data: data, quiet: true }).then(function (res) {
             showAlert('success', null, res.message || 'Welcome back.');
             setLabel(btn, 'Success!');
-            var destination = res.redirect || '/index.php';
+            var destination = res.redirect || '/';
             if (res.returning && window.location.hash && destination.indexOf('#') === -1) {
                 destination += window.location.hash;
             }

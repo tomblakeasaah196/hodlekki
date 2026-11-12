@@ -36,6 +36,12 @@ Karaoke, Games, Live, Crew, Assets), **People** (Attendees, Turnout, Messages),
 **Afterwards** (Insights, Hand-off) and **Settings**. On a phone they are in
 the **Section** list at the top.
 
+**Addresses.** The Studio is at **hodlekki.org/modules/special_events/**, with
+no `.php` on the end (Nov 2026). An old link that ends in `index.php` still
+works: it moves to the clean address. Public pages keep their **/e/your-link**
+address, and an event page that asks a guest to sign in sends them to
+**/auth/login**, then back.
+
 ---
 
 ## 2. Making an event

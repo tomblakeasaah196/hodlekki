@@ -81,7 +81,7 @@ try {
             // Build the registration URL to encode into the QR (if a token exists)
             $registration_url = '';
             if (!empty($e['registration_token'])) {
-                $registration_url = rtrim(qr_base_url(), '/') . '/register.php?token=' . urlencode($e['registration_token']);
+                $registration_url = rtrim(qr_base_url(), '/') . '/register?token=' . urlencode($e['registration_token']);
             }
 
             // Human-friendly date

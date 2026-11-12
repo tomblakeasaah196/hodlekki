@@ -33,7 +33,7 @@ if (!isset($_SESSION['user_id']) && !empty($_COOKIE[AUTH_REMEMBER_COOKIE])) {
 
 // Already signed in: straight on. The browser re-attaches any #fragment.
 if (isset($_SESSION['user_id'])) {
-    header('Location: ' . ($next ?? '/index.php'));
+    header('Location: ' . ($next ?? '/'));
     exit;
 }
 
@@ -108,8 +108,8 @@ $quote = ['“Let all that you do be done in love.”', '1 Corinthians 16:14'];
                         <?= ui_field('password', ['name' => 'password', 'id' => 'password', 'label' => 'Password', 'required' => true,
                             'autocomplete' => 'current-password', 'placeholder' => '••••••••']) ?>
                         <div class="mt-2 flex flex-wrap justify-between gap-2 text-sm">
-                            <a class="ui-link font-medium text-hodRed" href="/auth/setup_password.php">First time? Set your password</a>
-                            <a class="ui-link text-ink-muted" href="/auth/forgot_password.php">Forgot your password?</a>
+                            <a class="ui-link font-medium text-hodRed" href="/auth/setup_password">First time? Set your password</a>
+                            <a class="ui-link text-ink-muted" href="/auth/forgot_password">Forgot your password?</a>
                         </div>
                     </div>
                     <label class="ui-check">

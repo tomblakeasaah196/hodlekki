@@ -36,9 +36,9 @@ const AUTOMATION_SMS_MAX = 459;        // three SMS pages
 const AUTOMATION_DEPARTED = ['Relocated', 'Attends_Another_Church', 'Attends Another Church'];
 const AUTOMATION_MODULE_LABELS = ['embrace' => 'Embrace', 'assimilation' => 'Assimilation', 'charis' => 'Charis'];
 const AUTOMATION_MODULE_LINKS = [
-    'embrace'      => '/modules/embrace/index.php',
-    'assimilation' => '/modules/assimilation/index.php',
-    'charis'       => '/modules/charis/index.php',
+    'embrace'      => '/modules/embrace/',
+    'assimilation' => '/modules/assimilation/',
+    'charis'       => '/modules/charis/',
 ];
 const AUTOMATION_DELIVERED = ['queued', 'alerted'];
 
@@ -936,7 +936,7 @@ function automation_alert(PDO $pdo, array $rule, array $step, array $cand, array
     $vars = email_merge_vars($cand['user'], (array) ($cand['vars'] ?? []));
     $title = campaigns_cut(email_merge($step['alert']['title'], $vars), 120);
     $message = email_merge($step['alert']['message'], $vars);
-    $link = AUTOMATION_MODULE_LINKS[$rule['module']] ?? '/index.php';
+    $link = AUTOMATION_MODULE_LINKS[$rule['module']] ?? '/';
     $stmt = $pdo->prepare('INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, ?, ?, ?)');
     foreach (array_unique($recipientIds) as $id) {
         $stmt->execute([(int) $id, $title, $message, $link]);

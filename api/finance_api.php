@@ -144,7 +144,7 @@ try {
                 $uName = $uStmt->fetch(PDO::FETCH_ASSOC);
                 $loggerName = $uName ? "{$uName['first_name']} {$uName['last_name']}" : "A finance admin";
 
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Financial Transaction', ?, '/modules/finance/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Financial Transaction', ?, '/modules/finance/')");
                 $alertMessage = "A new {$type} of ₦{$formatted_amount} was just logged by {$loggerName}.";
 
                 foreach($admins as $admin_id) {
@@ -192,7 +192,7 @@ try {
                     $uName = $uStmt->fetch(PDO::FETCH_ASSOC);
                     $loggerName = $uName ? "{$uName['first_name']} {$uName['last_name']}" : "A finance admin";
 
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'SECURITY: Transaction Reversed', ?, '/modules/finance/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'SECURITY: Transaction Reversed', ?, '/modules/finance/')");
                     $alertMessage = "A previously logged {$tx['transaction_type']} of ₦{$formatted_amount} was just reversed and deleted from the ledger by {$loggerName}.";
 
                     foreach($admins as $admin_id) {

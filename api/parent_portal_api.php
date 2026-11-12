@@ -164,7 +164,7 @@ try {
                 $child = $cStmt->fetch(PDO::FETCH_ASSOC);
                 $childName = $child ? "{$child['child_first_name']} {$child['child_last_name']}" : "A child";
 
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Child Profile Updated', ?, '/modules/junior_church/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Child Profile Updated', ?, '/modules/junior_church/')");
                 $alertMsg = "A parent has updated the profile picture for {$childName} via the Parent Portal.";
 
                 foreach ($jc_leaders as $leader_id) {

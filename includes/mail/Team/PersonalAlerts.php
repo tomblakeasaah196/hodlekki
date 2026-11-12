@@ -95,7 +95,7 @@ final class PersonalAlerts
         if (str_starts_with($link, 'https://')) {
             $blocks[] = ['type' => 'button', 'label' => 'Open in the app', 'href' => $link];
         }
-        $settings = self::absolute('/modules/mail/settings.php');
+        $settings = self::absolute('/modules/mail/settings');
         $blocks[] = email_doc_paragraphs('You chose these alerts. Change them on My mail settings: ' . $settings);
         $blocks[] = ['type' => 'footer'];
 

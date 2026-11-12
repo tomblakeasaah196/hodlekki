@@ -50,7 +50,7 @@ echo ui_json_script('sms-config', [
         'title' => 'SMS Studio',
         'description' => 'Compose, send and track every SMS.',
         'info' => 'Every time shown is Lagos time (WAT). Texts go through BulkSMS Nigeria; delivery reports arrive by webhook or by polling.',
-        'back' => ['href' => '/modules/events/index.php', 'label' => 'Events'],
+        'back' => ['href' => '/modules/events/', 'label' => 'Events'],
     ]) ?>
 
     <div class="mb-4 flex flex-wrap items-center gap-2" data-sms-health aria-live="polite">

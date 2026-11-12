@@ -509,7 +509,7 @@ try {
             $directors = perm_holders($pdo, 'charis', 'manage');   // Charis leadership
             
             if (!empty($directors)) {
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Expense Request', ?, '/modules/finance/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Expense Request', ?, '/modules/finance/')");
                 $formatted_amount = number_format($amount, 2);
                 foreach($directors as $dir_id) {
                     $notifStmt->execute([$dir_id, "A new expense request of ₦{$formatted_amount} for '{$item_name}' requires your approval."]);
@@ -806,7 +806,7 @@ try {
                 $admins = perm_holders($pdo, 'charis', 'manage');   // Charis leadership
                 
                 if (!empty($admins)) {
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Library Extension Request', 'A member has requested a due date extension for a library book.', '/modules/charis/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Library Extension Request', 'A member has requested a due date extension for a library book.', '/modules/charis/')");
                     foreach($admins as $admin_id) {
                         $notifStmt->execute([$admin_id]);
                     }
@@ -840,7 +840,7 @@ try {
             $stmt->execute([$new_due_date, $borrow_id]);
 
             // NOTIFICATION TRIGGER: Alert the member who requested it
-            $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Book Extension Approved', ?, '/modules/member_portal/index.php')")
+            $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Book Extension Approved', ?, '/modules/member_portal/')")
                 ->execute([$borrowData['user_id'], "Your library book extension has been approved. Your new due date is {$nice_date}."]);
 
             echo json_encode(['status' => 'success', 'message' => 'Extension approved to ' . $new_due_date]);
@@ -969,7 +969,7 @@ try {
             $stmt->execute([$target, $type, $assignmentYear, $worker]);
 
             $cleanType = str_replace('_', ' ', $type);
-            $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Celebration Task', ?, '/modules/charis/index.php')")
+            $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Celebration Task', ?, '/modules/charis/')")
                 ->execute([$worker, "You have been assigned to coordinate a {$cleanType} celebration. Please check your Charis dashboard."]);
 
             echo json_encode(['status' => 'success', 'message' => 'Celebration assigned successfully!']);
@@ -1016,7 +1016,7 @@ try {
             ");
             $stmt->execute([$followup, $target, $worker]);
 
-            $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Welfare Assignment', 'You have been assigned a new welfare/follow-up case. Please review the details on your dashboard.', '/modules/charis/index.php')")
+            $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Welfare Assignment', 'You have been assigned a new welfare/follow-up case. Please review the details on your dashboard.', '/modules/charis/')")
                 ->execute([$worker]);
 
             echo json_encode(['status' => 'success', 'message' => 'Welfare case successfully delegated.']);
@@ -1278,7 +1278,7 @@ try {
             }
 
             if ($assignmentStatus === 'Requested') {
-                $notifyStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Welfare Case Request', 'A Charis worker requested a welfare case. Review it in the Welfare master list.', '/modules/charis/index.php')");
+                $notifyStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Welfare Case Request', 'A Charis worker requested a welfare case. Review it in the Welfare master list.', '/modules/charis/')");
                 foreach (perm_holders($pdo, 'charis', 'manage') as $managerId) {
                     if ((int) $managerId !== $user_id) $notifyStmt->execute([$managerId]);
                 }
@@ -1316,7 +1316,7 @@ try {
                 exit(json_encode(['status' => 'error', 'message' => 'The request changed. Refresh and try again.']));
             }
 
-            $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Welfare Request Approved', 'Your request to handle a welfare case has been approved by the HOD. You may now proceed with the follow-up.', '/modules/charis/index.php')")
+            $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Welfare Request Approved', 'Your request to handle a welfare case has been approved by the HOD. You may now proceed with the follow-up.', '/modules/charis/')")
                 ->execute([$assignedWorker]);
 
             echo json_encode(['status' => 'success', 'message' => 'Case officially assigned.']);
@@ -1681,7 +1681,7 @@ try {
                 $evtRow->execute([$event_id]);
                 $evt = $evtRow->fetch();
                 $lbl = $evt ? $evt['title'] . ' on ' . date('d M Y', strtotime($evt['event_date'])) : 'an upcoming event';
-                $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Event Task Assigned', ?, '/modules/charis/index.php')")
+                $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Event Task Assigned', ?, '/modules/charis/')")
                     ->execute([$worker_id, "You've been assigned the task \"{$title}\" for {$lbl}. Open Event Planning to review."]);
             }
             echo json_encode(['status' => 'success', 'message' => 'Task added and member notified.']);

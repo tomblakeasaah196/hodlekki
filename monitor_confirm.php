@@ -58,7 +58,7 @@ ui_standalone_open($mode === 'stop' ? 'Stop system alerts' : 'Confirm system ale
             'About these alerts') ?>
     </div>
     <p class="text-ink-muted"><?= $mode === 'stop' ? 'This address stops getting the alerts and the morning summary.' : 'This address gets the alerts and a morning summary.' ?></p>
-    <form method="post" action="/monitor_confirm.php">
+    <form method="post" action="/monitor_confirm">
         <input type="hidden" name="<?= $mode === 'stop' ? 'stop' : 't' ?>" value="<?= ui_e($mode === 'stop' ? $stop : $token) ?>">
         <?= ui_button($mode === 'stop' ? 'Stop the alerts' : 'Confirm this address', ['variant' => $mode === 'stop' ? 'secondary' : 'primary', 'type' => 'submit', 'block' => true]) ?>
     </form>

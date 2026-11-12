@@ -27,7 +27,7 @@ $og_desc = 'Going after the one. Call the people who have drifted, and walk them
 $head = '';
 foreach ([
     'og:type' => 'website', 'og:title' => $og_title, 'og:description' => $og_desc,
-    'og:image' => 'https://' . $host . '/assets/images/logo_hod.png', 'og:url' => 'https://' . $host . '/assimilation.php',
+    'og:image' => 'https://' . $host . '/assets/images/logo_hod.png', 'og:url' => 'https://' . $host . '/assimilation',
 ] as $prop => $value) {
     $head .= '    <meta property="' . ui_e($prop) . '" content="' . ui_e($value) . '">' . "\n";
 }

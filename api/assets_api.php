@@ -146,7 +146,7 @@ try {
                 $leaders = perm_department_leaders($pdo, (int) $department_id);
 
                 if (!empty($leaders)) {
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Asset Inventory Update', ?, '/modules/assets/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Asset Inventory Update', ?, '/modules/assets/')");
                     $alertMsg = "The asset '{$name}' has been {$action_type} your department's inventory.";
                     foreach ($leaders as $leader_id) {
                         if ($leader_id != $user_id) { // Don't notify the person who is making the change
@@ -202,7 +202,7 @@ try {
 
                 // NOTIFICATION TRIGGER 1: Alert the user if the asset was assigned to them by an admin
                 if ($log_action === 'Check-Out' && $assigned_user_id != $user_id) {
-                    $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Asset Checked Out', ?, '/modules/assets/index.php')")
+                    $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Asset Checked Out', ?, '/modules/assets/')")
                         ->execute([$assigned_user_id, "The asset '{$assetName}' has been checked out to you and is now your responsibility."]);
                 }
 
@@ -211,7 +211,7 @@ try {
                     $leaders = perm_department_leaders($pdo, (int) $managing_dept);
 
                     if (!empty($leaders)) {
-                        $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Asset Status Alert', ?, '/modules/assets/index.php')");
+                        $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Asset Status Alert', ?, '/modules/assets/')");
                         foreach ($leaders as $leader_id) {
                             $notifStmt->execute([$leader_id, "Attention: The asset '{$assetName}' has been flagged as {$log_action}."]);
                         }

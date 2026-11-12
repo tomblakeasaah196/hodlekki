@@ -2,7 +2,7 @@
 
 **Who can open it:** Super Admin and the Resident Pastor.
 **Where:** sidebar → *Security & Stewardship* → **Security Centre**
-(`/modules/security/index.php`) — or search "Security" in the Ctrl/Cmd+K
+(`/modules/security/`) — or search "Security" in the Ctrl/Cmd+K
 palette (each tab — Accounts, Sessions, Sign-ins, Audit trail — is
 searchable there too).
 
@@ -22,7 +22,7 @@ emails for everyone. While you *view as* someone the screen is read-only.
 | **Reset password** | You type the new password. Password is re-hashed, every session is killed, and (by default) they must choose their own at next sign-in. |
 | **Sign out everywhere** | Kills every live session for that member. They can sign straight back in — this is not a block. |
 | **Clear lockout** | Removes an automatic lock caused by 5 failed sign-ins. |
-| **Force change** | They land on `/auth/change_password.php` and cannot reach any other page until they set a new password. |
+| **Force change** | They land on `/auth/change_password` and cannot reach any other page until they set a new password. |
 | **Restore roles** | Un-freezes roles frozen by a Revoke. **Super Admin only.** They must sign out and back in to pick the roles up. |
 
 A reason is **required** for Suspend and Revoke. It is written to the audit
@@ -147,7 +147,7 @@ an email first, filter the roster by **No sign-in email**.
   device keeps **one** row in *Live Sessions* however often its PHP session
   expires, so revoking that row really is revoking the device. Unused for 30
   days, it lapses. Members should untick the box on shared or office computers.
-- **`/auth/setup_password.php` is first-time only.** It used to let anyone who
+- **`/auth/setup_password` is first-time only.** It used to let anyone who
   knew a member's first name and phone number reset their password from the
   open internet. It now refuses any account that already has a password, is
   rate-limited to 10 failures per IP per 15 minutes, and logs every blocked

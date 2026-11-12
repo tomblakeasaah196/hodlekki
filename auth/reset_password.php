@@ -21,8 +21,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $token !== '') {
         : ['ok' => false, 'code' => 'STALE'];
 }
 $peek = $token !== '' ? email_reset_peek($pdo, $token) : ['state' => 'invalid', 'first_name' => ''];
-$signIn = ui_button('Sign in', ['variant' => 'primary', 'href' => '/auth/login.php', 'block' => true]);
-$again = ui_button('Send new link', ['variant' => 'primary', 'href' => '/auth/forgot_password.php', 'block' => true]);
+$signIn = ui_button('Sign in', ['variant' => 'primary', 'href' => '/auth/login', 'block' => true]);
+$again = ui_button('Send new link', ['variant' => 'primary', 'href' => '/auth/forgot_password', 'block' => true]);
 
 $formError = null;
 $formInfo = null;
@@ -50,7 +50,7 @@ if ($result !== null && !empty($result['ok'])): ?>
     <?php if ($formError !== null): ?>
         <?= ui_banner('danger', ['title' => 'Please check this', 'text' => $formError, 'info' => $formInfo]) ?>
     <?php endif; ?>
-    <form method="post" action="/auth/reset_password.php" class="ui-form" data-ui-validate novalidate>
+    <form method="post" action="/auth/reset_password" class="ui-form" data-ui-validate novalidate>
         <?= ui_csrf_field() ?>
         <input type="hidden" name="t" value="<?= ui_e($token) ?>">
         <?= ui_field('password', ['name' => 'password', 'label' => 'New password', 'required' => true,

@@ -31,7 +31,7 @@ use Throwable;
  */
 final class OutboxSender
 {
-    public const OUTBOX_URL = '/modules/mail/outbox.php';
+    public const OUTBOX_URL = '/modules/mail/outbox';
 
     public static function make(): self
     {

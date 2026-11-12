@@ -27,7 +27,7 @@ if ($action === 'view_as_stop') {
         perm_view_as_stop($pdo);
     }
     if ($isForm) {
-        header('Location: /modules/roles/index.php', true, 303);
+        header('Location: /modules/roles/', true, 303);
         exit;
     }
     header('Content-Type: application/json');

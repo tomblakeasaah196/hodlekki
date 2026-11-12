@@ -165,7 +165,7 @@ try {
                     $usr = $uStmt->fetch(PDO::FETCH_ASSOC);
                     $uName = $usr ? "{$usr['first_name']} {$usr['last_name']}" : "A member";
 
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Book Reservation', ?, '/modules/charis/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Book Reservation', ?, '/modules/charis/')");
                     $alertMsg = "{$uName} has reserved '{$book['title']}' and is scheduled to pick it up on {$formatted_pickup}.";
                     
                     foreach($charis_admins as $admin_id) {
@@ -222,7 +222,7 @@ try {
 
             if (!empty($borrowers)) {
                 // PATCHED: Added the link_url so it directs them to their profile/library tab
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Book Request Nudge', 'Another member is eagerly waiting to read a book you currently have checked out. If you are finished, please return it to the Charis desk soon!', '/modules/profile/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Book Request Nudge', 'Another member is eagerly waiting to read a book you currently have checked out. If you are finished, please return it to the Charis desk soon!', '/modules/profile/')");
                 foreach ($borrowers as $b_id) {
                     $notifStmt->execute([$b_id]);
                 }
@@ -273,7 +273,7 @@ try {
                     $bStmt->execute([$borrow_id]);
                     $bTitle = $bStmt->fetchColumn() ?: 'a book';
                     
-                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Library Extension Request', ?, '/modules/charis/index.php')");
+                    $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Library Extension Request', ?, '/modules/charis/')");
                     foreach($admins as $admin_id) {
                         $notifStmt->execute([$admin_id, "A member has requested a due date extension for '{$bTitle}'."]);
                     }

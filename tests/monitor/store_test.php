@@ -20,7 +20,7 @@ $g = monitor_group($db, $a['group_id']);
 eq('two occurrences counted', 2, (int) $g['occurrences']);
 eq('status starts as new', 'new', $g['status']);
 eq('the file is stored relative to the site', 'modules/events/index.php', $g['file']);
-eq('the route is the screen, not the query', '/modules/events/index.php', $g['route']);
+eq('the route is the screen, not the query', '/modules/events/', $g['route']);   // clean address (Nov 2026)
 has('the trace is kept, without arguments', (string) $g['trace'], 'modules/events/index.php:120 render_row()');
 
 $events = $db->query('SELECT * FROM monitor_error_events WHERE group_id = ' . (int) $a['group_id'])->fetchAll();

@@ -39,7 +39,7 @@ Renaming a campaign changes its link, so share the new one. A campaign with capt
 
 Click **Share** on a campaign card. You get:
 
-- the **public link** (`/reach.php?c=…`) — no login needed;
+- the **public link** (`/reach?c=…`) — no login needed;
 - a ready-made **WhatsApp message** with the description, scripture and link — tap **Send on WhatsApp**. The preview shows the flyer (or the default image);
 - a **QR code** you can print or show on a phone at the meeting point.
 

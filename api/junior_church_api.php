@@ -201,7 +201,7 @@ try {
             }
 
             // Tell the guardian(s)
-            $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Junior Church Update', ?, '/modules/member_portal/index.php')");
+            $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Junior Church Update', ?, '/modules/member_portal/')");
             $notifStmt->execute([$parent_id, $notif_msg]);
             if ($parent2_id && $parent2_id !== $parent_id) $notifStmt->execute([$parent2_id, $notif_msg]);
 
@@ -259,7 +259,7 @@ try {
                 // Tell the teacher
                 $nice_date = date('l, M jS', strtotime($service_date));
                 $notifMsg = "You have been scheduled to teach the Junior Church class on {$nice_date}. Topic: {$topic}.";
-                $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Teaching Assignment', ?, '/modules/junior_church/index.php')")
+                $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Teaching Assignment', ?, '/modules/junior_church/')")
                     ->execute([$teacher_id, $notifMsg]);
 
                 $pdo->commit();
@@ -302,7 +302,7 @@ try {
             // Tell the teachers
             $teachers = perm_module_team($pdo, 'junior_church');
             if (!empty($teachers)) {
-                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Curriculum Uploaded', ?, '/modules/junior_church/index.php')");
+                $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Curriculum Uploaded', ?, '/modules/junior_church/')");
                 $alertMsg = "A new master curriculum resource titled '{$title}' has been uploaded to the digital vault.";
                 foreach ($teachers as $uid) {
                     if ((int) $uid !== $user_id) {

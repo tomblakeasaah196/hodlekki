@@ -178,14 +178,14 @@ function ui_shell_open(PDO $pdo, array $page): void
 
     <div class="ui-sidebar__footer">
         <div class="ui-usercard">
-            <a class="ui-usercard__link" href="/modules/profile/index.php" data-tooltip="My profile" data-tooltip-side="right">
+            <a class="ui-usercard__link" href="/modules/profile/" data-tooltip="My profile" data-tooltip-side="right">
                 <?= ui_avatar($fullName !== '' ? $fullName : $firstName, $photo, 'sm') ?>
                 <span class="ui-usercard__text">
                     <span class="ui-usercard__name"><?= ui_e($fullName !== '' ? $fullName : $firstName) ?></span>
                     <span class="ui-usercard__role"><?= ui_e($role) ?></span>
                 </span>
             </a>
-            <a class="ui-sidebar__iconbtn" href="/auth/logout.php" aria-label="Sign out" data-tooltip="Sign out">
+            <a class="ui-sidebar__iconbtn" href="/auth/logout" aria-label="Sign out" data-tooltip="Sign out">
                 <?= ui_icon('log-out') ?>
             </a>
         </div>
@@ -315,12 +315,12 @@ function ui_shell_close(): void
     </div>
     <div class="ui-dialog__body">
         <div class="ui-stack ui-stack--sm">
-            <a class="ui-menu__item" href="/modules/profile/index.php"><?= ui_icon('circle-user-round') ?><span>My profile</span></a>
-            <a class="ui-menu__item" href="/modules/member_portal/index.php"><?= ui_icon('house') ?><span>My portal</span></a>
+            <a class="ui-menu__item" href="/modules/profile/"><?= ui_icon('circle-user-round') ?><span>My profile</span></a>
+            <a class="ui-menu__item" href="/modules/member_portal/"><?= ui_icon('house') ?><span>My portal</span></a>
             <button type="button" class="ui-menu__item" data-hod-alerts><?= ui_icon('bell-ring') ?><span>Alerts on this device</span></button>
             <button type="button" class="ui-menu__item" data-hod-install data-ui-install hidden><?= ui_icon('smartphone') ?><span>Install the app</span></button>
             <hr class="ui-menu__sep">
-            <a class="ui-menu__item ui-menu__item--danger" href="/auth/logout.php"><?= ui_icon('log-out') ?><span>Sign out</span></a>
+            <a class="ui-menu__item ui-menu__item--danger" href="/auth/logout"><?= ui_icon('log-out') ?><span>Sign out</span></a>
         </div>
     </div>
 </dialog>

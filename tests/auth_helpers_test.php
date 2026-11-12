@@ -158,6 +158,11 @@ foreach ([
     '/modules/special_events/index.php?event=12#tab=attendees',
     '/modules/charis/index.php',
     '/modules/library/index.php?q=John%20Doe',
+    // Clean URLs (Nov 2026): the same pages without .php, and root pages.
+    '/modules/events/?event=3',
+    '/modules/charis/',
+    '/testimonies',
+    '/sermons?sermon=grace-2026-11-08',
     '/e/chara/host',
     '/reach.php',
 ] as $good) {
@@ -166,6 +171,10 @@ foreach ([
 foreach ([
     'the dashboard (the role decides)'   => '/index.php',
     'the PWA start url'                  => '/index.php?source=pwa',
+    'the dashboard, clean'               => '/',
+    'the clean PWA start url'            => '/?source=pwa',
+    'the sign-in folder'                 => '/auth',
+    'a clean sign-in page'               => '/auth/login',
     'the bare root'                      => '/',
     'nothing'                            => '',
     'another host'                       => '//evil.example/x',
@@ -188,14 +197,14 @@ foreach ([
     same("refuses {$what}", null, auth_safe_next($bad));
 }
 same('refuses a non-string', null, auth_safe_next(['/modules/x/']));
-same('login URL carries the page', '/auth/login.php?next=%2Fmodules%2Fevents%2Findex.php%3Fevent%3D3',
+same('login URL carries the page', '/auth/login?next=%2Fmodules%2Fevents%2Findex.php%3Fevent%3D3',
     auth_login_url('/modules/events/index.php?event=3'));
-same('login URL for something unsafe is the plain login page', '/auth/login.php', auth_login_url('//evil.example'));
+same('login URL for something unsafe is the plain login page', '/auth/login', auth_login_url('//evil.example'));
 $_SERVER['REQUEST_METHOD'] = 'GET';
 $_SERVER['REQUEST_URI'] = '/modules/special_events/index.php?event=12';
-same('a GET is remembered', '/auth/login.php?next=%2Fmodules%2Fspecial_events%2Findex.php%3Fevent%3D12', auth_login_url_for_request());
+same('a GET is remembered', '/auth/login?next=%2Fmodules%2Fspecial_events%2Findex.php%3Fevent%3D12', auth_login_url_for_request());
 $_SERVER['REQUEST_METHOD'] = 'POST';
-same('a POST is never replayed', '/auth/login.php', auth_login_url_for_request());
+same('a POST is never replayed', '/auth/login', auth_login_url_for_request());
 $_SERVER['REQUEST_METHOD'] = 'GET';
 
 // ---------------------------------------------------------------------------

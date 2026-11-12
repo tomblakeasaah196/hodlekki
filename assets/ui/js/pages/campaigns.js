@@ -48,7 +48,7 @@
             department_id: dept,
             audience: dept ? { kind: 'departments', ids: [dept] } : { kind: 'church' }
         }, { quiet: true }).then(function (res) {
-            window.location.href = '/modules/campaigns/index.php?id=' + res.campaign.id;
+            window.location.href = '/modules/campaigns/?id=' + res.campaign.id;
         }).catch(function (err) {
             HOD.form.setErrors(form, { name: err.message });
         }).finally(function () { HOD.busy(button, false); });
@@ -389,7 +389,7 @@
     function copy(button) {
         HOD.busy(button, true);
         call('copy', { id: state.c.id }).then(function (res) {
-            window.location.href = '/modules/campaigns/index.php?id=' + res.id;
+            window.location.href = '/modules/campaigns/?id=' + res.id;
         }).catch(function () { HOD.busy(button, false); });
     }
 
@@ -398,7 +398,7 @@
             if (!yes) return;
             HOD.busy(button, true);
             call('delete', { id: state.c.id }).then(function () {
-                window.location.href = '/modules/campaigns/index.php';
+                window.location.href = '/modules/campaigns/';
             }).catch(function () { HOD.busy(button, false); });
         });
     }

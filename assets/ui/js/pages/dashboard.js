@@ -189,7 +189,7 @@
         var holder = document.querySelector('[data-dash-qr]');
         import(HOD.config.vendor.qrcode).then(function (mod) {
             var qr = mod.qrcode(0, 'M');
-            qr.addData(cfg.connectUrl || (window.location.origin + '/connect.php'));
+            qr.addData(cfg.connectUrl || (window.location.origin + '/connect'));
             qr.make();
             holder.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
             var svg = holder.querySelector('svg');

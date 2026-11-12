@@ -32,7 +32,7 @@ if (!isset($_SESSION['user_id'])) {
 // /auth/change_password.php deliberately does NOT include this file, so there
 // is no redirect loop.
 if (!empty($_SESSION['must_change_password'])) {
-    header("Location: /auth/change_password.php");
+    header("Location: /auth/change_password");
     exit;
 }
 
@@ -46,7 +46,7 @@ require_once __DIR__ . '/campaigns/identity.php';
 $emailPrompt = email_prompt_state_cached($pdo, (int) $_SESSION['user_id']);
 if ($emailPrompt === 'required') {
     $emailPromptNext = auth_safe_next((string) ($_SERVER['REQUEST_URI'] ?? ''));
-    header('Location: /auth/add_email.php' . ($emailPromptNext !== null ? '?next=' . rawurlencode($emailPromptNext) : ''));
+    header('Location: /auth/add_email' . ($emailPromptNext !== null ? '?next=' . rawurlencode($emailPromptNext) : ''));
     exit;
 }
 

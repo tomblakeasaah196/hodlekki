@@ -182,10 +182,25 @@ if (!function_exists('monitor_clean_url')) {
             }
             $prev = $was;
         }
+        // Clean addresses (Nov 2026): /x.php and /x are the same page, and so
+        // are /dir/index.php and /dir/. The route takes the clean form so old
+        // and new addresses group together; endpoints keep their .php.
+        $routeSlash = false;
+        if ($route && !in_array($segments[0] ?? '', ['api', 'webhook', 'email', 'includes', 'cron', 'db', 'bin', 'assets', 'uploads'], true)) {
+            $last = $route[count($route) - 1];
+            if ($last === 'index.php') {
+                array_pop($route);
+                $routeSlash = true;
+            } elseif (str_ends_with($last, '.php')) {
+                $route[count($route) - 1] = substr($last, 0, -4);
+            }
+        }
         $p = '/' . implode('/', $path);
         $r = '/' . implode('/', $route);
         if (str_ends_with($rawPath, '/') && $p !== '/') {
             $p .= '/';
+        }
+        if ((str_ends_with($rawPath, '/') || $routeSlash) && $r !== '/') {
             $r .= '/';
         }
         if (!empty($parts['query'])) {

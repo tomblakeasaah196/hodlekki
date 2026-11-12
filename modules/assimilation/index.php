@@ -65,7 +65,7 @@ echo ui_json_script('assim-config', [
     'overdueDays' => (int) $assim_overdue_days,
 ]);
 
-$headerActions = ui_button('Volunteer page', ['variant' => 'secondary', 'icon' => 'external-link', 'href' => '/assimilation.php',
+$headerActions = ui_button('Volunteer page', ['variant' => 'secondary', 'icon' => 'external-link', 'href' => '/assimilation',
         'attrs' => ['target' => '_blank', 'rel' => 'noopener']])
     . ($assim_manager ? ui_button('Settings', ['variant' => 'ghost', 'icon' => 'settings', 'icon_only' => true, 'attrs' => ['data-action' => 'assim.settings']]) : '');
 ?>

@@ -154,7 +154,7 @@ try {
             $result = push_send_to_user($pdo, $user_id, [
                 'title'   => 'HOD Lekki',
                 'body'    => 'Alerts are working on this device. You will not miss anything important.',
-                'url'     => '/index.php',
+                'url'     => '/',
                 'tag'     => 'hod-test',
                 'urgency' => 'high',
             ]);

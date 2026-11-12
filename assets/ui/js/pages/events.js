@@ -324,7 +324,7 @@
     function setLink(token) {
         var box = $('#ev-link-box');
         if (token) {
-            $('#ev-link').value = window.location.origin + '/register.php?token=' + encodeURIComponent(token);
+            $('#ev-link').value = window.location.origin + '/register?token=' + encodeURIComponent(token);
             box.hidden = false;
         } else {
             $('#ev-link').value = '';
