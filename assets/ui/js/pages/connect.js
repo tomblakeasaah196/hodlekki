@@ -1,5 +1,6 @@
 // /assets/ui/js/pages/connect.js
-// The Connect card (connect.php): three steps, checked here exactly as
+// The welcome page (connect.php): its calm motion (bottom of this file), and
+// the Connect card: three steps, checked here exactly as
 // api/embrace_public_api.php checks them, step 1 also on the server
 // (check_existing_user), then the card is posted as new FormData(form) so the
 // form guard's form_ts, the honeypot and Turnstile's cf-turnstile-response go
@@ -11,6 +12,17 @@
     var HOD = window.HOD;
     var API = '/api/embrace_public_api.php';
     var cfg = HOD.data('connect-config') || {};
+
+    // Not the app (owner, 12 Nov 2026): the app belongs to hodlekki.org, so this
+    // page never offers to install it. A browser that still decides to offer
+    // is told no, and nothing is shown. On connect.hodlekki.org a service
+    // worker the old Connect page registered there is retired.
+    window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); });
+    if (cfg.retireWorker && navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        navigator.serviceWorker.getRegistrations().then(function (list) {
+            list.forEach(function (r) { r.unregister(); });
+        }).catch(function () { /* nothing registered, or not allowed */ });
+    }
     var SYSTEM_DOMAIN = cfg.systemDomain || '@hodlc.com';
     var NAME_PATTERN = /^\p{L}[\p{L}\p{M} .'’-]*$/u;
     var EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -51,6 +63,7 @@
     function plainAddress() {
         $('connect-address').innerHTML = '<input class="ui-input" type="text" id="connect-address-text" maxlength="255" placeholder="Your street, estate or area" autocomplete="street-address">';
     }
+    var addressLoading = false;
     function initAddress() {
         var box = $('connect-address');
         box.addEventListener('input', function (e) {
@@ -59,6 +72,21 @@
         });
         // Enter picks a suggestion; it must not submit or advance the wizard.
         box.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); });
+        // The address search loads only when the card comes near, so the welcome
+        // photo has the connection to itself first.
+        var card = $('connect-wizard');
+        if (!('IntersectionObserver' in window) || !card) { loadAddressSearch(); return; }
+        var near = new IntersectionObserver(function (entries) {
+            if (!entries.some(function (e) { return e.isIntersecting; })) return;
+            near.disconnect();
+            loadAddressSearch();
+        }, { rootMargin: '600px 0px' });
+        near.observe(card);
+    }
+    function loadAddressSearch() {
+        if (addressLoading) return;
+        addressLoading = true;
+        var box = $('connect-address');
         HOD.lib('geoapify').then(function () {
             if (!window.autocomplete) throw new Error('Geoapify did not load');
             var widget = new window.autocomplete.GeocoderAutocomplete(box, cfg.geoapifyKey, {
@@ -195,9 +223,20 @@
 
     /* ----- Steps ---------------------------------------------------------- */
 
-    function goTo(s) {
+    function goTo(s, animate) {
+        var back = s < step;
         step = s;
-        Array.prototype.forEach.call(form.querySelectorAll('[data-step]'), function (el) { el.hidden = Number(el.getAttribute('data-step')) !== s; });
+        Array.prototype.forEach.call(form.querySelectorAll('[data-step]'), function (el) {
+            var on = Number(el.getAttribute('data-step')) === s;
+            el.hidden = !on;
+            el.classList.remove('cx-step-in', 'cx-step-in--back');
+            // The new step slides in from the side it comes from (CSS: html.cx-motion only).
+            if (on && animate) {
+                void el.offsetWidth;
+                el.classList.add('cx-step-in');
+                if (back) el.classList.add('cx-step-in--back');
+            }
+        });
         $('connect-wizard-title').textContent = TITLES[s - 1];
         $('connect-step-label').textContent = 'Step ' + s + ' of ' + TOTAL;
         Array.prototype.forEach.call(document.querySelectorAll('[data-dot]'), function (d) {
@@ -205,6 +244,7 @@
             d.classList.toggle('bg-hodRed', on);
             d.classList.toggle('bg-line-strong', !on);
         });
+        if (s === 2) loadAddressSearch();
         $('connect-prev').hidden = s === 1;
         $('connect-next').hidden = s === TOTAL;
         $('connect-submit').hidden = s !== TOTAL;
@@ -228,7 +268,7 @@
             quiet: true, signal: t.signal
         }).then(function () {
             clearErrors();
-            goTo(2);
+            goTo(2, true);
         }).catch(showFailure).then(function () { t.done(); busy = false; HOD.busy(btn, false); });
     }
 
@@ -238,26 +278,23 @@
         if (problem) { showError(problem.message, problem.name); return; }
         if (step === 1) { checkIdentity(); return; }
         clearErrors();
-        goTo(Math.min(TOTAL, step + 1));
+        goTo(Math.min(TOTAL, step + 1), true);
     }
 
+    // "I'm new here": glide down to the card and put the cursor in it.
     HOD.actions.on('connect.start', function () {
-        $('connect-landing').hidden = true;
-        $('connect-wizard').hidden = false;
-        window.scrollTo(0, 0);
-        setTimeout(function () { form.elements.first_name.focus(); }, 50);
-    });
-    HOD.actions.on('connect.cancel', function () {
-        clearErrors();
-        goTo(1);
-        $('connect-wizard').hidden = true;
-        $('connect-landing').hidden = false;
+        $('connect-wizard').classList.add('is-in');
+        $('connect').scrollIntoView({ behavior: calm() ? 'smooth' : 'auto', block: 'start' });
+        setTimeout(function () {
+            var first = form.elements.first_name;
+            try { first.focus({ preventScroll: true }); } catch (e) { first.focus(); }
+        }, calm() ? 600 : 0);
     });
     HOD.actions.on('connect.next', next);
     HOD.actions.on('connect.back', function () {
         if (busy) return;
         clearErrors();
-        goTo(Math.max(1, step - 1));
+        goTo(Math.max(1, step - 1), true);
     });
     HOD.actions.on('connect.dismiss', dismissError);
 
@@ -284,11 +321,90 @@
         HOD.busy(btn, true);
         var t = withTimeout(30000);
         HOD.api(API, { data: new FormData(form), quiet: true, signal: t.signal }).then(function () {
+            var done = $('connect-success');
             $('connect-wizard').hidden = true;
-            $('connect-success').hidden = false;
-            window.scrollTo(0, 0);
+            done.hidden = false;
+            done.scrollIntoView({ behavior: calm() ? 'smooth' : 'auto', block: 'center' });
+            try { done.focus({ preventScroll: true }); } catch (e) { done.focus(); }
         }).catch(showFailure).then(function () { t.done(); busy = false; HOD.busy(btn, false); });
     });
+
+    /* ----- The page's motion ---------------------------------------------- */
+    // Calm and graceful, and only when the reader has not asked for reduced
+    // motion: the photo drifts and moves a little slower than the page, the
+    // sections rise in as they come into view, and the I SEE & ACT letters
+    // light up one after another, the ampersand last. Without this (no
+    // IntersectionObserver, or reduced motion) everything is simply shown.
+
+    var motionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+    function calm() { return !(motionQuery && motionQuery.matches); }
+
+    function initMotion() {
+        if (!calm() || !('IntersectionObserver' in window)) return;
+        document.documentElement.classList.add('cx-motion');
+
+        var reveal = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+                if (!e.isIntersecting) return;
+                e.target.classList.add('is-in');
+                reveal.unobserve(e.target);
+            });
+        }, { rootMargin: '0px 0px -12% 0px', threshold: 0.12 });
+        Array.prototype.forEach.call(document.querySelectorAll('[data-reveal]'), function (el) { reveal.observe(el); });
+
+        // The values light up in the order they are reached, one at a time
+        // (a row arriving with others waits its turn); the & lands once every
+        // value has lit.
+        var rows = Array.prototype.slice.call(document.querySelectorAll('[data-cx-acro]'));
+        var amp = document.querySelector('[data-cx-amp]');
+        var queue = [];
+        var timer = null;
+        var lit = 0;
+        function drain() {
+            var row = queue.shift();
+            if (!row) { timer = null; return; }
+            row.classList.add('is-lit');
+            lit++;
+            if (lit === rows.length && amp) setTimeout(function () { amp.classList.add('is-lit'); }, 420);
+            timer = setTimeout(drain, 220);
+        }
+        var acro = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+                if (!e.isIntersecting) return;
+                acro.unobserve(e.target);
+                queue.push(e.target);
+            });
+            queue.sort(function (a, b) { return rows.indexOf(a) - rows.indexOf(b); });
+            if (!timer) drain();
+        }, { rootMargin: '0px 0px -18% 0px', threshold: 0.6 });
+        rows.forEach(function (row) { acro.observe(row); });
+
+        // Parallax: the photo moves at about four fifths of the page's speed,
+        // only while the welcome is on screen.
+        var media = document.querySelector('[data-cx-parallax]');
+        var hero = media && media.parentElement;
+        var ticking = false;
+        function place() {
+            ticking = false;
+            if (hero.getBoundingClientRect().bottom <= 0) return;
+            media.style.setProperty('--cx-parallax', Math.round(Math.max(0, window.scrollY) * 0.2) + 'px');
+        }
+        if (media && hero) {
+            window.addEventListener('scroll', function () {
+                if (!ticking) { ticking = true; window.requestAnimationFrame(place); }
+            }, { passive: true });
+            place();
+        }
+
+        // Asking for reduced motion part-way through stops it all at once.
+        if (motionQuery && motionQuery.addEventListener) {
+            motionQuery.addEventListener('change', function () {
+                if (calm()) return;
+                document.documentElement.classList.remove('cx-motion');
+                if (media) media.style.removeProperty('--cx-parallax');
+            });
+        }
+    }
 
     // A guest who just checked in at a service (checkin.js) arrives with their
     // name and phone kept on this device: fill them in and open the card.
@@ -311,6 +427,7 @@
         form.elements.dob.setAttribute('max', todayISO());
         initAddress();
         goTo(1);
+        initMotion();
         prefillFromCheckin();
     }
 

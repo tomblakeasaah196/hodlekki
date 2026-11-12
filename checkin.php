@@ -27,6 +27,8 @@ $service = ($_GET['service'] ?? '') === 'today';
 ui_public_open([
     'title' => 'Check in',
     'mode' => 'strict',
+    // Guests at the door, not the members' app: no install banner or prompt.
+    'app' => false,
     'home' => site_url('/'),
     'scripts' => ['/assets/ui/js/pages/checkin.js'],
 ]);

@@ -3,3 +3,7 @@
 # only shrink: fix a line and delete it here. A new or edited string must meet the
 # rule, so it never lands on this list. Format: path | kind | text
 
+# owner 12 Nov 2026: Connect tells the full story (the welcome, the vision and the mission in full).
+connect.php | paragraph | Household of David is a global ministry led by <strong>Pastor Sola Osunmakinde</strong>. Our Resident Pastor is <strong>Pastor Ebele Uzo-Peters</strong>. Whether you’re just passing through or looking for a family, you belong here.
+connect.php | paragraph | To bring people into an experience of God’s unconditional love that transforms them into men and women passionate about influencing their world through the principles of the Kingdom.
+connect.php | paragraph | To raise a people after God’s heart in every nation of the earth.
