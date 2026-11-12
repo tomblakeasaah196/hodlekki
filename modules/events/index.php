@@ -173,7 +173,7 @@ function ev_view_switch(string $kind): string
                         <div class="ui-field">
                             <label class="ui-label" for="ev-banner">Banner image<span class="ui-label__opt">(optional)</span></label>
                             <input class="ui-input" type="file" name="banner_image" id="ev-banner" accept="image/png,image/jpeg,image/webp" data-action-change="ev.banner">
-                            <img class="mt-2 max-h-48 w-full rounded-ui border border-line object-cover" id="ev-banner-preview" src="data:," alt="Banner preview" hidden>
+                            <img class="mt-2 max-h-48 w-full rounded-ui border border-line object-cover" id="ev-banner-preview" alt="Banner preview" hidden>
                         </div>
 
                         <div class="ui-field">
@@ -241,7 +241,7 @@ function ev_view_switch(string $kind): string
                         <?= ui_info('How the public registration page will look. Nothing here is saved.', 'About the preview') ?>
                     </div>
                     <article class="ui-card overflow-hidden" aria-label="Registration page preview">
-                        <img class="max-h-56 w-full object-cover" id="pv-banner" src="data:," alt="" hidden>
+                        <img class="max-h-56 w-full object-cover" id="pv-banner" alt="" hidden>
                         <div class="ui-card__body space-y-3">
                             <span class="ui-badge ui-badge--brand" id="pv-category">Event</span>
                             <p class="font-display text-xl font-bold text-ink" id="pv-title">Your event title</p>

@@ -29,7 +29,7 @@ return [
     '/assets/ui/js/pages/embrace.js' => '8320d766e6e4',
     '/assets/ui/js/pages/events-analytics.js' => 'e5bb75529357',
     '/assets/ui/js/pages/events-attendance.js' => 'b1cb6445762c',
-    '/assets/ui/js/pages/events.js' => 'b010bf17d683',
+    '/assets/ui/js/pages/events.js' => '51dae170c282',
     '/assets/ui/js/pages/finance.js' => '6bbb26309031',
     '/assets/ui/js/pages/idi-mobilization.js' => 'd5fd7e1c5bc4',
     '/assets/ui/js/pages/idi.js' => '6e14ed9ed252',

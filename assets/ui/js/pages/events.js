@@ -309,11 +309,16 @@
         $('#ev-date-label').textContent = on ? 'Start date and time' : 'Date and time';
     }
 
+    /** An image gets a src only when there is one to show; otherwise none at all, and it hides. */
+    function setSrc(img, src) {
+        if (src) img.src = src; else img.removeAttribute('src');
+        img.hidden = !src;
+    }
+
     function setBanner(src) {
         var img = $('#ev-banner-preview');
         src = safeImg(src);
-        img.hidden = !src;
-        img.src = src || 'data:,';
+        setSrc(img, src);
     }
 
     function setLink(token) {
@@ -696,8 +701,7 @@
 
         var bannerImg = $('#ev-banner-preview');
         var pv = $('#pv-banner');
-        pv.hidden = bannerImg.hidden;
-        pv.src = bannerImg.hidden ? 'data:,' : bannerImg.src;
+        setSrc(pv, bannerImg.hidden ? '' : bannerImg.getAttribute('src'));
 
         var ministers = state.ministers.filter(function (m) { return m.name || m.imageUrl; });
         $('#pv-ministers').hidden = !ministers.length;
