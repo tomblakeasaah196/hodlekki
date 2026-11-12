@@ -4,8 +4,9 @@
  * CONTACT BATCH EXTRACTOR — Backend API
  * File: /api/contact_extractor_api.php
  * ----------------------------------------------------------------------------
- * Gathers every phone number from three tables (users, event_registrations,
- * idi_mobilization), normalizes them to international 234XXXXXXXXXX, and
+ * Gathers every phone number from four tables (users, event_registrations,
+ * idi_mobilization, and the guests checked in at services in checkins, who
+ * are never registered), normalizes them to international 234XXXXXXXXXX, and
  * DEDUPLICATES so no number ever appears twice. Returns the unique list for
  * the frontend to split into copy-ready batches.
  *
@@ -60,7 +61,7 @@ try {
          * ================================================================ */
         case 'fetch_contacts':
             $unique = [];   // dedup keyed on normalized phone
-            $sourceBreakdown = ['users'=>0, 'registrations'=>0, 'mobilization'=>0];
+            $sourceBreakdown = ['users'=>0, 'registrations'=>0, 'mobilization'=>0, 'guests'=>0];
 
             // ---- 1) users ----
             $st = $pdo->query(
@@ -99,6 +100,19 @@ try {
                 if ($n === null) continue;
                 $unique[$n] = true;
                 $sourceBreakdown['mobilization']++;
+            }
+
+            // ---- 4) guests checked in at a service (no registration, no profile) ----
+            $st = $pdo->query(
+                "SELECT phone FROM checkins
+                 WHERE user_id IS NULL AND registration_id IS NULL
+                   AND phone IS NOT NULL AND TRIM(phone) <> ''"
+            );
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $g) {
+                $n = ce_normalize_phone($g['phone']);
+                if ($n === null) continue;
+                $unique[$n] = true;
+                $sourceBreakdown['guests']++;
             }
 
             $contacts = array_keys($unique);

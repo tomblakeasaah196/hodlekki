@@ -2430,6 +2430,75 @@
         .ui-public .ui-brand__sub { display: none; }
     }
 
+    /* ---------- Check-in at the door (checkin.php) ---------- */
+    .ci-head { padding: 20px var(--ui-card-pad) 0; text-align: center; }
+    .ci-head__day { margin-bottom: 4px; font-size: var(--ui-text-sm); font-weight: 600; color: var(--ui-brand-red); }
+    .ci-head__title {
+        margin: 0;
+        font-family: var(--ui-font-display);
+        font-weight: 700;
+        font-size: clamp(1.5rem, 1.2rem + 1.5vw, 1.875rem);
+        line-height: 1.15;
+        letter-spacing: -.02em;
+        color: var(--ui-text);
+    }
+    .ci-head__meta { margin-top: 4px; font-size: var(--ui-text-sm); color: var(--ui-text-muted); }
+    /* A step's heading takes focus for screen readers when the step changes; no ring for that. */
+    [data-ci-step] h1:focus, [data-ci-step] h2:focus { outline: none; }
+
+    /* The countdown to the next service. */
+    .ci-countdown { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .ci-countdown__unit {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        padding: 14px 4px 10px;
+        border-radius: var(--ui-radius-lg);
+        background: #0A0E17;
+        color: #FFFFFF;
+    }
+    .ci-countdown__num { font-family: var(--ui-font-display); font-weight: 700; font-size: clamp(1.75rem, 1.2rem + 2.5vw, 2.5rem); line-height: 1; }
+    .ci-countdown__label { font-size: 12px; color: rgba(255, 255, 255, .7); }
+
+    /* The blessing to keep (also saved as a picture). */
+    .ci-blessing {
+        position: relative;
+        margin: 0;
+        padding: 24px 22px 22px;
+        overflow: hidden;
+        border-radius: var(--ui-radius-xl);
+        background:
+            radial-gradient(22rem 14rem at 100% 0%, rgba(209, 25, 32, .28), transparent 70%),
+            radial-gradient(20rem 14rem at 0% 100%, rgba(74, 107, 176, .3), transparent 70%),
+            #0A0E17;
+        color: #FFFFFF;
+    }
+    .ci-blessing__kicker { margin: 0; font-size: 13px; font-weight: 600; color: #E8A3A6; }
+    .ci-blessing__dear { margin: 6px 0 12px; font-family: var(--ui-font-display); font-size: 1.25rem; font-weight: 700; }
+    .ci-blessing__verse {
+        margin: 0 0 18px;
+        padding-left: 14px;
+        border-left: 3px solid #D11920;
+    }
+    .ci-blessing__verse p { margin: 0; font-size: 1.0625rem; line-height: 1.6; font-style: italic; color: rgba(255, 255, 255, .92); }
+    .ci-blessing__verse cite { display: block; margin-top: 8px; font-size: 13px; font-style: normal; font-weight: 600; color: rgba(255, 255, 255, .7); }
+    .ci-blessing__prayer { margin: 6px 0 18px; font-size: 15px; line-height: 1.6; color: rgba(255, 255, 255, .86); }
+    .ci-blessing__sign { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: rgba(255, 255, 255, .7); }
+    .ci-blessing__sign strong { font-family: var(--ui-font-display); font-size: 1rem; color: #FFFFFF; }
+
+    /* The Connect card offer for a guest. */
+    .ci-welcome {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border: 1px solid var(--ui-border);
+        border-radius: var(--ui-radius-lg);
+        background:
+            radial-gradient(18rem 10rem at 100% 0%, rgba(209, 25, 32, .08), transparent 70%),
+            var(--ui-surface-sunken);
+    }
+
     /* A dialog that fills the screen (a document reader). */
     .ui-dialog.ui-dialog--full {
         width: 100vw;

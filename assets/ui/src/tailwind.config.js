@@ -38,6 +38,7 @@ module.exports = {
             '../../../idi_mobilization.php',
             '../../../connect.php',
             '../../../register.php',
+            '../../../checkin.php',
             // Every staff screen, including the Bible and the Hymnary, which
             // sit inside the shell even though their design is their own.
             '../../../modules/**/*.php',

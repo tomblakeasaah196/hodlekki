@@ -4,12 +4,21 @@
  * ATTENDANCE CHECK-IN — Backend API
  * File: /api/checkin_api.php
  * ----------------------------------------------------------------------------
- * Public-facing check-in flow. Given an event token and a phone number, it:
- *   - looks the person up (users OR event_registrations),
- *   - confirms/edits their name,
+ * Public-facing check-in flow. Given an event (its token, or service=today
+ * for the standing service QR) and a phone number, it:
+ *   - looks the person up (members in users; on an event that takes
+ *     registrations, also its event_registrations),
+ *   - confirms/edits their name (only the person just looked up),
  *   - marks them present,
- *   - or lets a walk-in register on the spot (auto-marked present).
+ *   - for a newcomer: on an event that takes registrations, registers them on
+ *     the spot (auto-marked present); on a check-in-only event (its
+ *     Registration link is off: Sunday and Thursday services), checks them in
+ *     as a guest with NO registration (guest_present), and hands back their
+ *     name and phone so the page can prefill the Connect card.
  * Also serves the rotating blessing scripture.
+ * The standing service QR (/checkin?service=today) opens today's Sunday or
+ * Midweek service; with none today, get_event returns the next one so the
+ * page can count down to it.
  * ============================================================================
  */
 
@@ -42,13 +51,12 @@ function ci_normalize_phone($phone) {
     return preg_match('/^234[789][01]\d{8}$/', $p) ? $p : null;
 }
 
-/* ---- Resolve an event by its registration token ---- */
-function ci_find_event_by_token(PDO $pdo, $token) {
-    $st = $pdo->prepare("SELECT id, title, event_category, event_date, end_date,
-                                description, location, banner_image_url, registration_token
-                         FROM events WHERE registration_token = ? LIMIT 1");
-    $st->execute([$token]);
-    $e = $st->fetch(PDO::FETCH_ASSOC);
+const CI_EVENT_COLUMNS = 'id, title, event_category, event_date, end_date, location, banner_image_url, requires_registration, is_closed';
+/** The services the standing QR opens. */
+const CI_SERVICE_CATEGORIES = ['Sunday_Service', 'Midweek_Service'];
+
+/** Adds the display date and time. */
+function ci_decorate_event($e) {
     if (!$e) return null;
     if (!empty($e['event_date'])) {
         $ts = strtotime($e['event_date']);
@@ -56,6 +64,85 @@ function ci_find_event_by_token(PDO $pdo, $token) {
         $e['nice_time'] = date('g:i A', $ts);
     }
     return $e;
+}
+
+/* ---- Resolve an event by its token ---- */
+function ci_find_event_by_token(PDO $pdo, $token) {
+    if ($token === '') return null;
+    $st = $pdo->prepare("SELECT " . CI_EVENT_COLUMNS . " FROM events WHERE registration_token = ? LIMIT 1");
+    $st->execute([$token]);
+    return ci_decorate_event($st->fetch(PDO::FETCH_ASSOC) ?: null);
+}
+
+/**
+ * Today's service for the standing QR: a Sunday or Midweek service dated today
+ * (the server's day) and not closed. With two today, the latest that has
+ * started or starts within two hours; otherwise the first.
+ */
+function ci_service_today(PDO $pdo) {
+    $in = implode(',', array_fill(0, count(CI_SERVICE_CATEGORIES), '?'));
+    $st = $pdo->prepare("SELECT " . CI_EVENT_COLUMNS . " FROM events
+                         WHERE event_category IN ($in) AND COALESCE(is_closed, 0) = 0
+                           AND event_date >= ? AND event_date < ?
+                         ORDER BY event_date ASC");
+    $st->execute(array_merge(CI_SERVICE_CATEGORIES, [date('Y-m-d 00:00:00'), date('Y-m-d 00:00:00', strtotime('+1 day'))]));
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    if (!$rows) return null;
+    $pick = $rows[0];
+    foreach ($rows as $r) {
+        if (strtotime($r['event_date']) <= time() + 7200) $pick = $r;
+    }
+    return ci_decorate_event($pick);
+}
+
+/** The next service after now, for the countdown when none is on today. */
+function ci_next_service(PDO $pdo) {
+    $in = implode(',', array_fill(0, count(CI_SERVICE_CATEGORIES), '?'));
+    $st = $pdo->prepare("SELECT id, title, event_category, event_date, location FROM events
+                         WHERE event_category IN ($in) AND COALESCE(is_closed, 0) = 0 AND event_date > ?
+                         ORDER BY event_date ASC LIMIT 1");
+    $st->execute(array_merge(CI_SERVICE_CATEGORIES, [date('Y-m-d H:i:s')]));
+    $n = ci_decorate_event($st->fetch(PDO::FETCH_ASSOC) ?: null);
+    if (!$n) return null;
+    // Seconds from now, worked out here so a phone with a wrong clock or time
+    // zone still counts down correctly.
+    $n['starts_in'] = max(0, strtotime($n['event_date']) - time());
+    return ['title' => $n['title'], 'category' => $n['event_category'], 'nice_date' => $n['nice_date'],
+            'nice_time' => $n['nice_time'], 'location' => $n['location'], 'starts_in' => $n['starts_in']];
+}
+
+/** The event this request is about: today's service, or the one the token names. */
+function ci_is_service_link() {
+    return ($_POST['service'] ?? $_GET['service'] ?? '') === 'today';
+}
+function ci_resolve_event(PDO $pdo) {
+    if (ci_is_service_link()) return ci_service_today($pdo);
+    return ci_find_event_by_token($pdo, trim((string) ($_POST['token'] ?? $_GET['token'] ?? '')));
+}
+
+/** A check-in-only event (Registration link off): nobody is ever registered. */
+function ci_checkin_only($event) {
+    return (int) ($event['requires_registration'] ?? 0) !== 1;
+}
+
+/**
+ * The person the last lookup found, kept in the session so a name edit or a
+ * check-in can only be for them (it used to accept any id).
+ */
+function ci_remember_person($event, $person, $phone) {
+    $_SESSION['checkin_person'] = ['event' => (int) $event['id'], 'source' => $person['source'], 'id' => (int) $person['id'],
+                                   'phone' => $phone, 'at' => time()];
+}
+function ci_is_remembered($event, $source, $id) {
+    $p = $_SESSION['checkin_person'] ?? null;
+    return is_array($p) && $p['event'] === (int) $event['id'] && $p['source'] === $source && $p['id'] === (int) $id
+        && time() - (int) $p['at'] < 1800;
+}
+
+/** "Ada Obi Okafor" -> ['Ada', 'Obi Okafor']. */
+function ci_split_name($name) {
+    $parts = preg_split('/\s+/', trim($name), 2);
+    return [$parts[0] ?? '', $parts[1] ?? ''];
 }
 
 /**
@@ -118,8 +205,18 @@ function ci_find_user_by_phone(PDO $pdo, $phone) {
  * Returns one of [2, 3].
  */
 function ci_idi_staff_id() {
-    $staff = [2, 3];
-    return $staff[array_rand($staff)];
+    global $pdo;
+    static $staff = null;
+    // Only the ones that still exist: a removed account must not stop check-in
+    // (checked_in_by is a foreign key to users).
+    if ($staff === null) {
+        try {
+            $staff = array_map('intval', $pdo->query("SELECT id FROM users WHERE id IN (2, 3)")->fetchAll(PDO::FETCH_COLUMN));
+        } catch (Throwable $e) {
+            $staff = [];
+        }
+    }
+    return $staff ? $staff[array_rand($staff)] : null;
 }
 
 /**
@@ -472,12 +569,21 @@ try {
          * GET EVENT + SCRIPTURE — page loads with the event token
          * ================================================================ */
         case 'get_event':
-            $token = trim($_POST['token'] ?? $_GET['token'] ?? '');
-            $event = ci_find_event_by_token($pdo, $token);
-            if (!$event) { echo json_encode(['status'=>'error','message'=>'Event not found. Please scan a valid QR code.']); exit; }
+            $event = ci_resolve_event($pdo);
+            if (!$event) {
+                if (ci_is_service_link()) {
+                    // No service today: the page counts down to the next one.
+                    echo json_encode(['status'=>'success','event'=>null,'next'=>ci_next_service($pdo)]);
+                    exit;
+                }
+                echo json_encode(['status'=>'error','message'=>'Event not found. Please scan a valid QR code.']);
+                exit;
+            }
             // attach day info so the page can show Day 1 / Day 2
-            $dayInfo = ci_current_day($event);
-            $event['day_info'] = $dayInfo;
+            $event['day_info'] = ci_current_day($event);
+            $event['mode'] = ci_checkin_only($event) ? 'checkin' : 'registration';
+            // Outside the event's days: not open yet, or closed.
+            $event['not_yet'] = date('Y-m-d') < date('Y-m-d', strtotime($event['event_date']));
             echo json_encode(['status'=>'success','event'=>$event]);
             break;
 
@@ -485,8 +591,7 @@ try {
          * LOOKUP — is this phone registered? (returns person + match)
          * ================================================================ */
         case 'lookup':
-            $token = trim($_POST['token'] ?? '');
-            $event = ci_find_event_by_token($pdo, $token);
+            $event = ci_resolve_event($pdo);
             if (!$event) { echo json_encode(['status'=>'error','message'=>'Event not found.']); exit; }
             $phone = ci_normalize_phone($_POST['phone'] ?? '');
             if ($phone === null) { echo json_encode(['status'=>'error','message'=>'That phone number looks invalid. Please re-check it.']); exit; }
@@ -503,24 +608,28 @@ try {
             }
             $result['already_checked_in'] = $already;
 
-            // 1) Member (users table)
-            $st = $pdo->prepare("SELECT id, first_name, last_name, phone FROM users WHERE phone = ? LIMIT 1");
-            $st->execute([$phone]);
-            $user = $st->fetch(PDO::FETCH_ASSOC);
+            $result['mode'] = ci_checkin_only($event) ? 'checkin' : 'registration';
 
-            // 2) Guest registration (event_registrations by guest_phone)
-            // Match on the exact stored value OR any format of the same number
-            // (090..., 23490..., +23490...) by stripping to the core 10 digits.
+            // 1) Member (users table), whichever way the number is stored
+            // (234..., 0..., +234...); it used to match only 234...
+            $user = ci_find_user_by_phone($pdo, $phone);
+
+            // 2) Guest registration (event_registrations by guest_phone), only
+            // on an event that takes registrations. Match on the exact stored
+            // value OR any format of the same number (090..., 23490...,
+            // +23490...) by stripping to the core 10 digits.
             $guest = null;
-            $coreDigits = substr(preg_replace('/[^0-9]/', '', $phone), -10); // e.g. 9020868023
-            $gst = $pdo->prepare("SELECT r.id, r.guest_name, r.guest_phone, r.user_id, r.matched_user_id
-                                  FROM event_registrations r
-                                  WHERE r.event_id = ?
-                                    AND REPLACE(REPLACE(REPLACE(r.guest_phone,' ',''),'-',''),'+','')
-                                         LIKE ?
-                                  LIMIT 1");
-            $gst->execute([$event['id'], '%'.$coreDigits]);
-            $guest = $gst->fetch(PDO::FETCH_ASSOC);
+            if (!ci_checkin_only($event)) {
+                $coreDigits = substr(preg_replace('/[^0-9]/', '', $phone), -10); // e.g. 9020868023
+                $gst = $pdo->prepare("SELECT r.id, r.guest_name, r.guest_phone, r.user_id, r.matched_user_id
+                                      FROM event_registrations r
+                                      WHERE r.event_id = ?
+                                        AND REPLACE(REPLACE(REPLACE(r.guest_phone,' ',''),'-',''),'+','')
+                                             LIKE ?
+                                      LIMIT 1");
+                $gst->execute([$event['id'], '%'.$coreDigits]);
+                $guest = $gst->fetch(PDO::FETCH_ASSOC);
+            }
 
             if ($user || $guest) {
                 $result['found'] = true;
@@ -540,6 +649,7 @@ try {
                         'phone'=>$guest['guest_phone'],
                     ];
                 }
+                ci_remember_person($event, $result['person'], $phone);
             }
             echo json_encode($result);
             break;
@@ -548,13 +658,17 @@ try {
          * EDIT NAME — correct a misspelled name (updates source of truth)
          * ================================================================ */
         case 'edit_name':
-            $token = trim($_POST['token'] ?? '');
-            $event = ci_find_event_by_token($pdo, $token);
+            $event = ci_resolve_event($pdo);
             if (!$event) { echo json_encode(['status'=>'error','message'=>'Event not found.']); exit; }
             $newName = trim($_POST['name'] ?? '');
             if ($newName === '') { echo json_encode(['status'=>'error','message'=>'Name cannot be empty.']); exit; }
             $source = $_POST['source'] ?? '';
             $id = (int)($_POST['id'] ?? 0);
+            if (mb_strlen($newName) > 100) { echo json_encode(['status'=>'error','message'=>'That name is too long.']); exit; }
+            if (!ci_is_remembered($event, $source, $id)) {
+                echo json_encode(['status'=>'error','message'=>'Please look up the phone number again, then edit the name.']);
+                exit;
+            }
 
             $oldName = '';
             if ($source === 'user') {
@@ -595,8 +709,7 @@ try {
          * MARK PRESENT — confirm + check in an existing registered person
          * ================================================================ */
         case 'mark_present':
-            $token = trim($_POST['token'] ?? '');
-            $event = ci_find_event_by_token($pdo, $token);
+            $event = ci_resolve_event($pdo);
             if (!$event) { echo json_encode(['status'=>'error','message'=>'Event not found.']); exit; }
             $phone = ci_normalize_phone($_POST['phone'] ?? '');
             if ($phone === null) { echo json_encode(['status'=>'error','message'=>'Invalid phone.']); exit; }
@@ -605,6 +718,14 @@ try {
             $id = (int)($_POST['id'] ?? 0);
             $isVolunteer = ($_POST['is_volunteer'] ?? '') === '1';
             $edited = (int)($_POST['name_edited'] ?? 0);
+            if (!ci_is_remembered($event, $source, $id)) {
+                echo json_encode(['status'=>'error','message'=>'Please look up the phone number again.']);
+                exit;
+            }
+            if ($source === 'registration' && ci_checkin_only($event)) {
+                echo json_encode(['status'=>'error','message'=>'This event does not take registrations.']);
+                exit;
+            }
 
             // Determine the day + check-in date (multi-day support) — lenient, never blocks
             $dayInfo = ci_current_day($event);
@@ -636,6 +757,8 @@ try {
             // IDI staff credited (randomly one of the two IDI members) per your choice
             $checkedBy = ci_idi_staff_id();
 
+            // One check-in, all or nothing (it used to stop half-written).
+            $pdo->beginTransaction();
             $pdo->prepare("INSERT INTO checkins
                 (event_id, checkin_date, user_id, registration_id, full_name, phone, is_member, is_walkin, name_edited, source, checked_in_by, blessing_idx, blessing_text, blessing_ref, blessing_prayer)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
@@ -656,6 +779,7 @@ try {
             ci_write_attendance($pdo, $event['id'], $memberUserId, $checkedBy, $checkinDate);
             // A Sunday check-in can move a 1st/2nd/3rd Timer up the ladder.
             if ($memberUserId) ladder_advance_user($pdo, (int) $memberUserId);
+            $pdo->commit();
 
             echo json_encode([
                 'status'=>'success',
@@ -671,14 +795,18 @@ try {
          * REGISTER + MARK PRESENT — walk-in registers on the spot
          * ================================================================ */
         case 'register_and_present':
-            $token = trim($_POST['token'] ?? '');
-            $event = ci_find_event_by_token($pdo, $token);
+            $event = ci_resolve_event($pdo);
             if (!$event) { echo json_encode(['status'=>'error','message'=>'Event not found.']); exit; }
             $phone = ci_normalize_phone($_POST['phone'] ?? '');
             if ($phone === null) { echo json_encode(['status'=>'error','message'=>'Invalid phone number.']); exit; }
             $name = trim($_POST['name'] ?? '');
             if ($name === '') { echo json_encode(['status'=>'error','message'=>'Please enter your full name.']); exit; }
             $isVolunteer = ($_POST['is_volunteer'] ?? '') === '1';
+            // A service (Registration link off) never registers anyone: guests check in with guest_present.
+            if (ci_checkin_only($event)) {
+                echo json_encode(['status'=>'error','message'=>'This event does not take registrations. Check in with your name instead.']);
+                exit;
+            }
 
             // Determine the day + check-in date (multi-day support) — lenient, never blocks
             $dayInfo = ci_current_day($event);
@@ -705,6 +833,8 @@ try {
                 ? json_encode(['invitation_source' => $invitationSource])
                 : null;
 
+            // One check-in, all or nothing (it used to stop half-written).
+            $pdo->beginTransaction();
             $pdo->prepare("INSERT INTO event_registrations (event_id, guest_name, guest_phone, match_status, custom_responses)
                            VALUES (?,?,?, 'none', ?)")
                 ->execute([$event['id'], $name, $phone, $customResponses]);
@@ -738,6 +868,7 @@ try {
             // If the walk-in turns out to be a member, ALSO write to attendance
             ci_write_attendance($pdo, $event['id'], $memberUserId, $checkedBy, $checkinDate);
             if ($memberUserId) ladder_advance_user($pdo, (int) $memberUserId);
+            $pdo->commit();
 
             echo json_encode([
                 'status'=>'success',
@@ -750,12 +881,81 @@ try {
             break;
 
         /* ================================================================
+         * GUEST PRESENT — a newcomer at a check-in-only event (a service):
+         * counted as a guest, with NO registration and no profile. The page
+         * then offers the Connect card, prefilled with what they gave here.
+         * ================================================================ */
+        case 'guest_present':
+            $event = ci_resolve_event($pdo);
+            if (!$event) { echo json_encode(['status'=>'error','message'=>'Event not found.']); exit; }
+            if (!ci_checkin_only($event)) {
+                echo json_encode(['status'=>'error','message'=>'This event takes registrations. Please register to check in.']);
+                exit;
+            }
+            $phone = ci_normalize_phone($_POST['phone'] ?? '');
+            if ($phone === null) { echo json_encode(['status'=>'error','message'=>'That phone number looks invalid. Please re-check it.','field'=>'phone']); exit; }
+            $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? '')));
+            if ($name === '') { echo json_encode(['status'=>'error','message'=>'Please enter your name.','field'=>'name']); exit; }
+            if (mb_strlen($name) > 100) { echo json_encode(['status'=>'error','message'=>'That name is too long.','field'=>'name']); exit; }
+            $isVolunteer = ($_POST['is_volunteer'] ?? '') === '1';
+
+            $dayInfo = ci_current_day($event);
+            if (!$dayInfo['in_window']) {
+                echo json_encode(['status'=>'error','message'=>'Check-in for this service has closed.']);
+                exit;
+            }
+            $checkinDate = $dayInfo['checkin_date'];
+            $dayLabel = $dayInfo['day_label'];
+
+            $dup = $pdo->prepare("SELECT id FROM checkins WHERE event_id = ? AND phone = ? AND checkin_date = ?");
+            $dup->execute([$event['id'], $phone, $checkinDate]);
+            if ($dup->fetch()) { echo json_encode(['status'=>'success','message'=>'You are already checked in for '.($dayLabel?:'today').'.','already'=>true]); exit; }
+
+            $blessings = ci_blessings();
+            $blessingIdx = rand(0, count($blessings)-1);
+            $bless = $blessings[$blessingIdx];
+            [$first, $last] = ci_split_name($name);
+            $blessPrayer = str_replace('{name}', $first, $bless['prayer']);
+
+            // A number we did not find may still be a member's in another
+            // format: then it is their attendance, not a guest's.
+            $memberUser = ci_find_user_by_phone($pdo, $phone);
+            $memberUserId = $memberUser ? (int) $memberUser['id'] : null;
+            $checkedBy = ci_idi_staff_id();
+
+            // One check-in, all or nothing (it used to stop half-written).
+            $pdo->beginTransaction();
+            $pdo->prepare("INSERT INTO checkins
+                (event_id, checkin_date, user_id, registration_id, full_name, phone, is_member, is_walkin, name_edited, source, checked_in_by, blessing_idx, blessing_text, blessing_ref, blessing_prayer)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                ->execute([
+                    $event['id'], $checkinDate, $memberUserId, null, $name, $phone,
+                    $memberUserId ? 1 : 0, $memberUserId ? 0 : 1, 0, $isVolunteer ? 'volunteer' : 'self', $checkedBy,
+                    $blessingIdx, $bless['text'], $bless['ref'], $blessPrayer
+                ]);
+            ci_write_attendance($pdo, $event['id'], $memberUserId, $checkedBy, $checkinDate);
+            if ($memberUserId) ladder_advance_user($pdo, (int) $memberUserId);
+            $pdo->commit();
+
+            echo json_encode([
+                'status'=>'success',
+                'message'=>'Welcome, '.$first.'! You are checked in'.($dayLabel?' for '.$dayLabel:'').'.',
+                'blessing'=>$bless,
+                'first_name'=>$first,
+                'day_label'=>$dayLabel,
+                'already'=>false,
+                'guest'=>!$memberUserId,
+                // For the Connect card on this device (sessionStorage, never the URL).
+                'prefill'=>$memberUserId ? null : ['first_name'=>$first, 'last_name'=>$last, 'phone'=>'0'.substr($phone, 3)],
+            ]);
+            break;
+
+        /* ================================================================
          * GET MY BLESSING — retrieve a person's stored blessing by phone
          * (Day-2: re-entering a number returns their saved message)
          * ================================================================ */
         case 'get_my_blessing':
-            $token = trim($_POST['token'] ?? '');
-            $event = ci_find_event_by_token($pdo, $token);
+            $event = ci_resolve_event($pdo);
             if (!$event) { echo json_encode(['status'=>'error','message'=>'Event not found.']); exit; }
             $phone = ci_normalize_phone($_POST['phone'] ?? '');
             if ($phone === null) { echo json_encode(['status'=>'error','message'=>'Invalid phone number.']); exit; }
@@ -790,6 +990,7 @@ try {
             break;
     }
 } catch (PDOException $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
     error_log("Checkin API Error: " . $e->getMessage());
     echo json_encode(['status'=>'error','message'=>'A system error occurred.']);
 }
