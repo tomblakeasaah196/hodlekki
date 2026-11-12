@@ -213,7 +213,7 @@ $tab = $isAdmin ? 'boxes' : 'exports';
         <section class="ui-card" data-mb-ai>
             <div class="ui-card__header ui-card__header--divided">
                 <h2 class="ui-h3">AI in Mail</h2>
-                <?= mail_info('Summaries and draft replies with Gemini, on press; AI never sends. It stays off until the owner confirms the Gemini project is on a paid plan. Then switch it on per mailbox. Never on personal or pastoral mailboxes. People also need "AI summaries and draft replies in Mail" in Roles & permissions.') ?>
+                <?= mail_info('Summaries and draft replies with Gemini, on press; AI never sends. It stays off until the owner confirms the Gemini project is on a paid plan. Then switch it on per mailbox: any mailbox, personal and pastoral ones too. People also need "AI summaries and draft replies in Mail" in Roles & permissions.') ?>
             </div>
             <div class="ui-card__body ui-stack">
                 <?php $aiPlan = HOD\Mail\Ai\Ai::plan(); ?>
@@ -227,7 +227,7 @@ $tab = $isAdmin ? 'boxes' : 'exports';
                     </div>
                 </div>
                 <ul class="ui-list">
-                    <?php foreach ($accounts as $a): if (!HOD\Mail\Ai\Ai::allowedFor($a)) { continue; } ?>
+                    <?php foreach ($accounts as $a): ?>
                     <li class="ui-list__item"><div class="ui-list__main"><span class="ui-list__title"><?= ui_e($a['email']) ?></span></div>
                         <div class="ui-list__end">
                             <?= $a['ai_enabled'] ? ui_badge('On', 'success') : ui_badge('Off', 'neutral') ?>
@@ -255,7 +255,7 @@ $tab = $isAdmin ? 'boxes' : 'exports';
     <?= ui_field('text', ['name' => 'local_part', 'label' => 'Address', 'hint' => "Before @{$domain}, lower case.", 'required' => true, 'attrs' => ['autocapitalize' => 'off', 'spellcheck' => 'false']]) ?>
     <?= ui_field('text', ['name' => 'display_name', 'label' => 'Name in the From line', 'placeholder' => 'HOD Lekki Media Team', 'required' => true]) ?>
     <?= ui_field('select', ['name' => 'department_id', 'label' => 'Department', 'options' => ['' => 'Not a department mailbox'] + array_column($departments, 'label', 'id'), 'optional' => true]) ?>
-    <label class="ui-check"><input type="checkbox" name="is_pastoral" value="1"> Pastoral mailbox <span class="ui-check__hint">AI is never used on it.</span></label>
+    <label class="ui-check"><input type="checkbox" name="is_pastoral" value="1"> Pastoral mailbox</label>
     <div class="ui-form-actions"><?= ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]]) ?><?= ui_button('Create mailbox', ['variant' => 'primary', 'type' => 'submit']) ?></div>
 </form>
 <?= ui_dialog_end() ?>
@@ -278,7 +278,7 @@ $tab = $isAdmin ? 'boxes' : 'exports';
     <?= ui_field('text', ['name' => 'display_name', 'label' => 'Name in the From line', 'required' => true]) ?>
     <?= ui_field('select', ['name' => 'department_id', 'label' => 'Department', 'options' => ['' => '—'] + array_column($departments, 'label', 'id'), 'optional' => true]) ?>
     <?= ui_field('number', ['name' => 'user_id', 'label' => 'Holder\'s user id', 'optional' => true, 'hint' => 'Personal mailboxes only.']) ?>
-    <label class="ui-check"><input type="checkbox" name="is_pastoral" value="1"> Pastoral mailbox <span class="ui-check__hint">AI is never used on it.</span></label>
+    <label class="ui-check"><input type="checkbox" name="is_pastoral" value="1"> Pastoral mailbox</label>
     <div class="ui-form-actions"><?= ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]]) ?><?= ui_button('Bring in', ['variant' => 'primary', 'type' => 'submit']) ?></div>
 </form>
 <?= ui_dialog_end() ?>

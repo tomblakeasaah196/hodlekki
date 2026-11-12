@@ -20,6 +20,7 @@
 //   render.php      block document -> email-safe HTML and plain text
 //   tracking.php    unsubscribe, clicks, opens
 //   dsn.php         bounce and complaint reports
+//   bounces.php     the bounce reader: system@'s inbox, once a run (cron/email_bounces.php)
 //   automation.php  the engine: rules, occasions, the send ledger, channels
 //   journey.php     Embrace's first-timer journey
 //   absence.php     Assimilation / Charis absence ladders (on the AWOL engine)
@@ -44,6 +45,7 @@ require_once __DIR__ . '/doc.php';
 require_once __DIR__ . '/render.php';
 require_once __DIR__ . '/tracking.php';
 require_once __DIR__ . '/dsn.php';
+require_once __DIR__ . '/bounces.php';
 require_once __DIR__ . '/automation.php';
 require_once __DIR__ . '/journey.php';
 require_once __DIR__ . '/absence.php';

@@ -26,13 +26,21 @@ require_once __DIR__ . '/embrace_helpers.php';
 
 const DASH_SUNDAY_CATEGORY = 'Sunday_Service';
 
-/** Which cards each dashboard tier shows; the detail endpoint answers only these. */
+/**
+ * Which cards each dashboard tier shows; the detail endpoint answers only these.
+ * "First timers" is New Pipeline and Follow-ups Due in one card (owner, 12 Nov
+ * 2026): follow-ups due is the big number. The SMS wallet card (dash_sms_card())
+ * is extra, for whoever may open SMS Studio, and links there instead of a detail.
+ */
 const DASH_TIER_CARDS = [
-    'leadership' => ['workforce', 'pipeline', 'followups', 'pending_qa', 'sunday'],
+    'leadership' => ['workforce', 'first_timers', 'pending_qa', 'sunday'],
     'director'   => ['team', 'units'],
     'hod'        => ['unit_workers'],
     'member'     => ['alerts'],
 ];
+
+/** The SMS wallet card turns amber below this many naira (owner, 12 Nov 2026). */
+const DASH_SMS_LOW_NAIRA = 5000;
 
 /**
  * The dashboard tier and the departments it covers, from the permission
@@ -380,4 +388,75 @@ function dash_sunday(PDO $pdo, string $today): array
             : null,
         'history'  => $history,
     ];
+}
+
+/**
+ * The SMS wallet card's verdict from SMS Studio's queue facts and the last
+ * balance the monitor read (monitor_facts_sms(): the monitor cron refreshes the
+ * balance every 10 minutes, so the dashboard never waits on BulkSMS). Pure, for
+ * the tests. $now and the facts' times are Unix seconds.
+ *
+ * @return array{tone:string, badge:string, value:?float, display:string, note:string}
+ */
+function dash_sms_state(array $f, int $now, float $low = DASH_SMS_LOW_NAIRA): array
+{
+    $bal = is_array($f['balance'] ?? null) ? $f['balance'] : [];
+    $balance = isset($bal['balance']) && is_numeric($bal['balance']) ? (float) $bal['balance'] : null;
+    $price = isset($bal['unit_price']) && (float) $bal['unit_price'] > 0 ? (float) $bal['unit_price'] : null;
+    $queued = (int) ($f['queued'] ?? 0);
+    $oldest = isset($f['oldest_queued']) ? (int) $f['oldest_queued'] : null;
+    $stuck = $oldest !== null && $now - $oldest > 15 * 60 || (int) ($f['stuck_sending'] ?? 0) > 0;
+    $sent = (int) ($f['sent_24h'] ?? 0);
+    $failed = (int) ($f['failed_24h'] ?? 0);
+
+    $failing = $failed >= 10 && $failed > $sent;
+    $texts = $balance !== null && $price !== null ? (int) floor($balance / $price) : null;
+    $sending = $stuck ? 'Queue not moving'
+        : ($failing ? 'Many failed today'
+        : ($queued > 0 ? number_format($queued) . ' waiting' : 'Sending OK'));
+    $note = ($texts !== null ? '≈' . number_format($texts) . ' texts · ' : '') . $sending;
+
+    if ($balance === null) {
+        return ['tone' => 'warning', 'badge' => 'Check', 'value' => null, 'display' => '—',
+                'note' => 'Balance not read yet' . ($stuck ? ' · Queue not moving' : '')];
+    }
+    if ($stuck || ($price !== null && $balance < $price)) {
+        $tone = 'danger';
+        $badge = $stuck ? 'Check' : 'Empty';
+    } elseif ($balance < $low || $failing) {
+        $tone = 'warning';
+        $badge = $balance < $low ? 'Low' : 'Check';
+    } else {
+        $tone = 'success';
+        $badge = 'OK';
+    }
+
+    return ['tone' => $tone, 'badge' => $badge, 'value' => $balance,
+            'display' => '₦' . number_format($balance, 0), 'note' => $note];
+}
+
+/**
+ * The SMS wallet card for whoever may open SMS Studio, or null (no access, or
+ * SMS Studio is not set up in this database). Clicking it opens SMS Studio.
+ */
+function dash_sms_card(PDO $pdo): ?array
+{
+    if (!function_exists('can') || !can('sms_studio', 'view')) {
+        return null;
+    }
+    require_once __DIR__ . '/monitor/checks.php';
+    try {
+        $facts = monitor_facts_sms($pdo, monitor_db());
+    } catch (Throwable $e) {
+        error_log('Dashboard: SMS card facts failed: ' . $e->getMessage());
+        return null;
+    }
+    if (empty($facts['ready'])) {
+        return null;
+    }
+    $s = dash_sms_state($facts, monitor_time());
+
+    return ['key' => 'sms', 'title' => 'SMS wallet', 'value' => $s['value'], 'display' => $s['display'],
+            'note' => $s['note'], 'badge' => $s['badge'], 'tone' => $s['tone'],
+            'href' => '/modules/sms_studio/index.php'];
 }

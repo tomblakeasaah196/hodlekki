@@ -1,7 +1,13 @@
 <?php
 // /api/assets_api.php
+//
+// Asset Management (modules/assets/index.php, assets/ui/js/pages/assets.js).
+// Access: the 'assets' row of Roles & permissions. View reads the inventory
+// and the activity log, Create registers an asset, Edit changes one and logs
+// check-outs, check-ins, repairs and losses. Writes need the CSRF token.
 
 require_once '../includes/db.php';
+csrf_require();
 header('Content-Type: application/json');
 
 // 1. Strict Security Gate
@@ -15,8 +21,14 @@ $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // Clearance: the 'assets' row of the permission matrix (pastors, and the seats
 // of the departments that own Asset Management).
+$is_new_asset = $action === 'save_asset' && (int) ($_POST['asset_id'] ?? 0) === 0;
 $has_clearance = can('assets', 'view')
-    && (in_array($action, ['fetch_dashboard'], true) || can('assets', 'edit'));
+    && (in_array($action, ['fetch_dashboard'], true) || can('assets', $is_new_asset ? 'create' : 'edit'));
+
+// The fixed lists the page offers; nothing else is stored.
+$asset_categories = ['Audio', 'Video', 'Lighting', 'Instruments', 'IT', 'Furniture', 'General'];
+$asset_conditions = ['Excellent', 'Good', 'Fair', 'Poor'];
+$asset_actions = ['Check-Out' => 'In_Use', 'Check-In' => 'Available', 'Maintenance' => 'Maintenance', 'Lost' => 'Lost'];
 
 if (!$has_clearance) {
     echo json_encode(['status' => 'error', 'message' => 'Access Denied: Asset Management requires specific departmental clearance.']);
@@ -77,16 +89,38 @@ try {
         // ACTION 2: ADD OR UPDATE ASSET
         // ==========================================
         case 'save_asset':
-            $asset_id = $_POST['asset_id'] ?? '';
+            $asset_id = (int) ($_POST['asset_id'] ?? 0) ?: '';
             $name = trim($_POST['name'] ?? '');
             $category = trim($_POST['category'] ?? 'General');
             $quantity = (int)($_POST['quantity'] ?? 1);
-            $department_id = $_POST['managing_department_id'] ?? null;
-            $location = trim($_POST['storage_location'] ?? '');
+            $department_id = (int) ($_POST['managing_department_id'] ?? 0) ?: null;
+            $location = mb_substr(trim($_POST['storage_location'] ?? ''), 0, 150);
             $condition = $_POST['condition_rating'] ?? 'Good';
             
-            if (empty($name)) {
-                echo json_encode(['status' => 'error', 'message' => 'Asset name is required.']);
+            if ($name === '') {
+                echo json_encode(['status' => 'error', 'field' => 'name', 'message' => 'Asset name is required.']);
+                exit;
+            }
+            if (mb_strlen($name) > 150) {
+                echo json_encode(['status' => 'error', 'field' => 'name', 'message' => 'Keep the name to 150 characters.']);
+                exit;
+            }
+            if ($quantity < 1) {
+                echo json_encode(['status' => 'error', 'field' => 'quantity', 'message' => 'Quantity is at least 1.']);
+                exit;
+            }
+            if (!in_array($category, $asset_categories, true)) {
+                // An older asset may carry a category from before the list: keep that one.
+                $current = null;
+                if ($asset_id) {
+                    $cur = $pdo->prepare('SELECT category FROM assets WHERE id = ?');
+                    $cur->execute([$asset_id]);
+                    $current = $cur->fetchColumn();
+                }
+                $category = ($current !== null && $current !== false && $category === $current) ? $current : 'General';
+            }
+            if (!in_array($condition, $asset_conditions, true)) {
+                echo json_encode(['status' => 'error', 'field' => 'condition_rating', 'message' => 'Unknown condition.']);
                 exit;
             }
 
@@ -129,13 +163,20 @@ try {
         // ACTION 3: LOG AN ACTION (Check-Out/In, Lost, Maintenance)
         // ==========================================
         case 'log_action':
-            $asset_id = $_POST['asset_id'] ?? '';
-            $assigned_user_id = $_POST['user_id'] ?? $user_id; // Defaults to the person making the log if not explicitly assigned to someone else
+            $asset_id = (int) ($_POST['asset_id'] ?? 0);
+            // Defaults to the person making the log if not explicitly assigned to someone else
+            $assigned_user_id = (int) ($_POST['user_id'] ?? 0) ?: (int) $user_id;
             $log_action = $_POST['log_action'] ?? '';
             $notes = trim($_POST['notes'] ?? '');
 
-            if (empty($asset_id) || empty($log_action)) {
-                echo json_encode(['status' => 'error', 'message' => 'Asset and Action Type are required.']);
+            if ($asset_id <= 0 || !isset($asset_actions[$log_action])) {
+                echo json_encode(['status' => 'error', 'field' => 'log_action', 'message' => 'Asset and Action Type are required.']);
+                exit;
+            }
+            $exists = $pdo->prepare('SELECT 1 FROM assets WHERE id = ?');
+            $exists->execute([$asset_id]);
+            if (!$exists->fetchColumn()) {
+                echo json_encode(['status' => 'error', 'message' => 'That asset no longer exists.']);
                 exit;
             }
 
@@ -154,10 +195,7 @@ try {
                 $logStmt->execute([$asset_id, $assigned_user_id, $log_action, $notes]);
 
                 // 2. Morph the Root Asset Status automatically
-                $new_status = 'Available';
-                if ($log_action === 'Check-Out') $new_status = 'In_Use';
-                if ($log_action === 'Maintenance') $new_status = 'Maintenance';
-                if ($log_action === 'Lost') $new_status = 'Lost';
+                $new_status = $asset_actions[$log_action];
 
                 $updateStmt = $pdo->prepare("UPDATE assets SET current_status = ? WHERE id = ?");
                 $updateStmt->execute([$new_status, $asset_id]);

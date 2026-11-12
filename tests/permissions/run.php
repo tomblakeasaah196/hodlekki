@@ -246,6 +246,24 @@ $tDir = perm_test_person($pdo, 'TribesDirector');
 perm_test_seat($pdo, $tDir, 13, 'Director');
 ok('a Director seat holder may open Tribes (their own tribe)', perm_ctx_can($r($tDir), 'tribes', 'view'));
 ok('but has no church-wide Tribes view (the branch that used to error)', !perm_ctx_can($r($tDir), 'tribes', 'view', 'church'));
+ok('tribes_api needs the CSRF token; a new tribe needs Create church-wide',
+    str_contains($tribes, 'csrf_require();') && str_contains($tribes, "\$can_create_tribe = can('tribes', 'create', 'church');")
+    && str_contains($tribes, "if (!\$can_create_tribe)"));
+ok('day, kind and roster assignee come from fixed lists or the tribe',
+    str_contains($tribes, 'in_array($meeting_day, $tribe_days, true)') && str_contains($tribes, 'in_array($category, $tribe_categories, true)')
+    && str_contains($tribes, 'JOIN events e ON e.tribe_id = ut.tribe_id WHERE e.id = ? AND ut.user_id = ?'));
+
+section('Asset Management checks each write');
+$assetsApi = '';   // the code, comments stripped
+foreach (token_get_all((string) file_get_contents($root . '/api/assets_api.php')) as $tok) {
+    if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+        $assetsApi .= is_array($tok) ? $tok[1] : $tok;
+    }
+}
+ok('assets_api needs the CSRF token on writes', str_contains($assetsApi, 'csrf_require();'));
+ok('a new asset needs Create, every other write Edit', str_contains($assetsApi, "can('assets', \$is_new_asset ? 'create' : 'edit')"));
+ok('condition and movement come from fixed lists',
+    str_contains($assetsApi, 'in_array($condition, $asset_conditions, true)') && str_contains($assetsApi, '!isset($asset_actions[$log_action])'));
 
 // ---------------------------------------------------------------------------
 section('Appointing: only seats ranked below your own (decision 6)');
@@ -284,6 +302,32 @@ $pdo->exec("UPDATE departments SET name = 'Welfare Ministry' WHERE id = 10");
 perm_reset();
 eq('same access after renaming a role and two departments', $before,
     [$r($rp)['abilities'], $r($reachHod)['abilities'], $r($charisDir)['abilities']]);
+
+// ---------------------------------------------------------------------------
+section('Announcements and the Pastoral Desk check each write');
+$code = static function (string $file) use ($root): string {
+    $out = '';   // the code, comments stripped
+    foreach (token_get_all((string) file_get_contents($root . $file)) as $tok) {
+        if (!is_array($tok) || !in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+            $out .= is_array($tok) ? $tok[1] : $tok;
+        }
+    }
+    return $out;
+};
+$ann = $code('/api/announcements_api.php');
+ok('announcements_api needs the CSRF token on writes', str_contains($ann, 'csrf_require();'));
+ok('a new notice needs Create, deleting needs Delete',
+    str_contains($ann, "api_require_can('announcements', 'create');") && str_contains($ann, "api_require_can('announcements', 'delete');"));
+ok('a status is Approved or Archived, nothing else', str_contains($ann, "in_array(\$new_status, ['Approved', 'Archived'], true)"));
+$pas = $code('/api/pastoral_api.php');
+ok('pastoral_api needs the CSRF token and the matrix', str_contains($pas, 'csrf_require();') && str_contains($pas, "api_require_can('pastoral');"));
+ok('submitting needs Create, triage needs Edit church-wide',
+    str_contains($pas, "api_require_can('pastoral', 'create');") && str_contains($pas, "\$can_triage = can('pastoral', 'edit', 'church');"));
+ok('the box, status and priority come only from fixed lists',
+    str_contains($pas, 'if (!isset($tabs[$tab]))') && str_contains($pas, "in_array(\$new_status, \$tabs[\$tab]['statuses'], true)")
+    && str_contains($pas, 'in_array($priority, $priorities, true)'));
+ok('an anonymous entry never sends its author to anyone else',
+    str_contains($pas, "if (!empty(\$row['is_anonymous']) && !\$mine)") && str_contains($pas, "\$row['phone'] = null;"));
 
 // ---------------------------------------------------------------------------
 section('Holders and history');
@@ -368,6 +412,18 @@ ok('role, mark and assignee come from fixed lists or the team',
     str_contains($rolApi, 'in_array($role_category, $rol_categories, true)') && str_contains($rolApi, 'in_array($status, $rol_marks, true)')
     && str_contains($rolApi, "perm_module_team(\$pdo, 'river_of_life')), true)"));
 ok('the unreachable audio upload is gone', !str_contains($rolApi, 'upload_audio_key') && !str_contains($rolApi, 'move_uploaded_file'));
+
+// ---------------------------------------------------------------------------
+section('AI in Mail for every role (owner, 12 Nov 2026)');
+$aiSql = perm_test_migration('20261206090000_perm_ai_for_every_role.sql');
+ok('mail.ai migration is portable (no ON DUPLICATE / INSERT IGNORE)', !preg_match('/ON DUPLICATE|INSERT IGNORE/i', $aiSql));
+$pdo->exec($aiSql);
+$roles = (int) $pdo->query('SELECT COUNT(*) FROM roles')->fetchColumn();
+eq('every role holds mail.ai at view, church-wide', $roles,
+    (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE seat_key = '' AND module_key = 'mail.ai' AND level = 1 AND scope = 'church'")->fetchColumn());
+$pdo->exec($aiSql);
+eq('mail.ai migration re-runs as a no-op', $roles,
+    (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE module_key = 'mail.ai'")->fetchColumn());
 
 echo "\n{$GLOBALS['perm_test_passed']} passed, {$GLOBALS['perm_test_failed']} failed\n";
 exit($GLOBALS['perm_test_failed'] === 0 ? 0 : 1);

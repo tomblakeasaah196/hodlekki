@@ -13,7 +13,7 @@ use HOD\Mail\Smtp\SmtpClient;
  * The one door to the mail server: IMAP sessions and SMTP. Everything goes through MailServer::make(), so tests
  * swap in tests/mail/support/FakeMailServer.php with MailServer::use().
  *
- * The server is fixed (Config 'server': mail.hodlekki.org, IMAP 993 and SMTP 465, both TLS). Nothing here takes a
+ * The server is fixed (Config 'server': the server's own name, srv-web-ns9.newtoncorp.fr, IMAP 993 and SMTP 465, both TLS). Nothing here takes a
  * host, a port or a password from a request: there is no way for a person to point the ERP at another machine.
  *
  * Passwords come from the vault. While a password change is half done (Lifecycle stores the new one as
