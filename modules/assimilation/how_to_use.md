@@ -286,9 +286,14 @@ If the church has **no number on file** for someone, their card says so and
 the Call and WhatsApp buttons are hidden. **Log** still works, so a visit or
 a message passed on through someone else can be recorded.
 
-Tapping a card opens the logging sheet: channel chips, outcome chips, notes
-with a **microphone** and **Clean up with AI**, prayer points, and quick
-next-touch pills (Tomorrow, In 3 days, Next Sunday, In a week).
+Tapping **Log** on a card opens the logging sheet (it slides up from the
+bottom on a phone): channel chips, outcome chips, notes with a **microphone**
+and **Tidy with AI**, prayer points, and quick next-touch pills (Tomorrow,
+In 3 days, Next Sunday, In a week).
+
+The page has the same look as the rest of the app since November 2026: the
+church bar at the top, one card per step, and the (i) icons for the details.
+Nothing a volunteer does on it changed.
 
 **Only these things are shown on that page**: name as "First L.", phone, when
 they were last in church, their attendance trend, their departments, their
@@ -312,7 +317,7 @@ configured, they say so and nothing else breaks.
   the person. The volunteer reviews it and chooses to keep it; **both the raw
   and the tidied version are stored**, and the volunteer's own words remain
   the record.
-- **Suggest a gentle opening line** writes one warm opening sentence from the
+- **Suggest an opener** writes one warm opening sentence from the
   first name, how long since they were last in church, the stage of the
   follow-up and the last note. Nothing else about the person is sent.
 

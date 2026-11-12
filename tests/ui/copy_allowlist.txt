@@ -3,14 +3,7 @@
 # only shrink: fix a line and delete it here. A new or edited string must meet the
 # rule, so it never lands on this list. Format: path | kind | text
 
-assimilation.php | paragraph | Check it and try again, or ask your Assimilation leader to add you to the team.
-assimilation.php | paragraph | Enter the phone number the church has for you. Only the Assimilation team can open this page.
-assimilation.php | paragraph | Saving this closes the follow-up and tells your leaders why. Bless them before you drop.
-assimilation.php | paragraph | You are all caught up. Keep praying for the ones you have called.
 parent_portal.php | paragraph | Here's what your little ones have been up to in Junior Church. Browse their attendance, lessons, and take-home resources below.
 parent_portal.php | paragraph | See what your child has been learning, their attendance, and take-home resources from Junior Church.
 parent_portal.php | paragraph | We couldn't find any children linked to your profile. Please contact the Junior Church team.
-reach.php | paragraph | Check it and try again, or ask your Reach leader to add you to the family database.
-reach.php | paragraph | Enter the phone number you&#39;re registered with, so every soul you log is credited to you.
-reach.php | paragraph | We couldn&#39;t find this Reach campaign. Please ask your Reach leader for the current capture link.
 testimonies.php | paragraph | "They triumphed over him by the blood of the Lamb and by the word of their testimony." <span class="text-xs font-bold tracking-widest text-hodRed mt-3 block uppercase">— Revelation 12:11</span>

@@ -77,12 +77,29 @@ if [ ! -f "$REPO/.deployignore" ]; then
     exit 1
 fi
 mkdir -p "$DEPLOYPATH"
-# --no-overwrite-dir: without it, the archive's "." entry copies the repo
-# root's 700 mode onto the docroot, LiteSpeed (group nobody) can no longer
-# enter it, and the whole site returns 403/404.
+# The tree is unpacked into a staging folder in the account's home (never
+# under public_html, so nothing in it can be served), then each file is MOVED
+# into place. A move on the same disk is atomic, so a page or cron job never
+# reads a half-written file. Writing straight into the docroot let a request
+# or a cron run that overlapped the copy hit "Unclosed '('" or a missing
+# include for a second (the monitor recorded those). Library files
+# (includes/, assets/, db/) land before the pages and crons that load them.
+# Existing folders keep their modes: only missing ones are created (0755),
+# so the docroot itself is never touched (a 700 docroot is a site-wide 403).
+STAGE="${DEPLOY_STAGE:-$(cd "$REPO/../.." && pwd)/.hodlekki_deploy_stage}"
+rm -rf "$STAGE"
+mkdir -p "$STAGE"
 tar cf - --exclude-from="$REPO/.deployignore" -C "$REPO" . \
-  | ( cd "$DEPLOYPATH" && tar xpf - --no-overwrite-dir )
-echo "[deploy] tar -> $DEPLOYPATH done"
+  | ( cd "$STAGE" && tar xpf - )
+( cd "$STAGE" && find . -mindepth 1 -type d -print0 ) | while IFS= read -r -d '' d; do
+    [ -d "$DEPLOYPATH/${d#./}" ] || mkdir -m 0755 -p "$DEPLOYPATH/${d#./}"
+done
+( cd "$STAGE" && find . \( -path './includes/*' -o -path './assets/*' -o -path './db/*' \) \( -type f -o -type l \) -print0 ) \
+  | while IFS= read -r -d '' f; do mv -f "$STAGE/${f#./}" "$DEPLOYPATH/${f#./}"; done
+( cd "$STAGE" && find . \( -type f -o -type l \) -print0 ) \
+  | while IFS= read -r -d '' f; do mv -f "$STAGE/${f#./}" "$DEPLOYPATH/${f#./}"; done
+rm -rf "$STAGE"
+echo "[deploy] staged and moved into $DEPLOYPATH"
 
 # 2a. Retired files: tar never deletes, so files removed from the repo are
 #     removed from the docroot here, from the reviewed list in

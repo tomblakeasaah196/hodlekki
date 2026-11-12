@@ -31,6 +31,8 @@ module.exports = {
             '../../../verify.php',
             '../../../live_radio.php',
             '../../../monitor_confirm.php',
+            '../../../reach.php',
+            '../../../assimilation.php',
             // Every staff screen, including the Bible and the Hymnary, which
             // sit inside the shell even though their design is their own.
             '../../../modules/**/*.php',
