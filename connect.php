@@ -96,10 +96,10 @@ $values = [
     ['T', 'Teamwork', ''],
 ];
 $more = [
-    ['Parent Portal', 'baby', '/parent_portal'],
+    ['Parent Portal', 'baby', '/parent_portal.php'],
     ['Library', 'book-open', '/modules/library/'],
-    ['Testimonies', 'sparkles', '/testimonies'],
-    ['Sermons', 'music', '/sermons'],
+    ['Testimonies', 'sparkles', '/testimonies.php'],
+    ['Sermons', 'music', '/sermons.php'],
 ];
 ?>
 <div class="cx">
@@ -119,7 +119,7 @@ $more = [
             <p class="cx-intro">Household of David is a global ministry led by <strong>Pastor Sola Osunmakinde</strong>. Our Resident Pastor is <strong>Pastor Ebele Uzo-Peters</strong>. Whether you’re just passing through or looking for a family, you belong here.</p>
             <div class="cx-actions">
                 <?= ui_button('I’m new here', ['variant' => 'brand', 'size' => 'lg', 'href' => '#connect', 'attrs' => ['data-action' => 'connect.start']]) ?>
-                <?= ui_button('Already family', ['variant' => 'secondary', 'size' => 'lg', 'icon' => 'user-round', 'href' => $site('/auth/login')]) ?>
+                <?= ui_button('Already family', ['variant' => 'secondary', 'size' => 'lg', 'icon' => 'user-round', 'href' => $site('/auth/login.php')]) ?>
             </div>
         </div>
     </section>
@@ -182,8 +182,8 @@ $more = [
                             <p class="ui-banner__title">Please check this</p>
                             <p class="ui-banner__text" id="connect-error-text"></p>
                             <div class="ui-banner__actions" id="connect-error-login" hidden>
-                                <?= ui_button('Sign in', ['variant' => 'primary', 'size' => 'sm', 'href' => $site('/auth/login')]) ?>
-                                <?= ui_button('Find my email', ['variant' => 'ghost', 'size' => 'sm', 'href' => $site('/auth/setup_password')]) ?>
+                                <?= ui_button('Sign in', ['variant' => 'primary', 'size' => 'sm', 'href' => $site('/auth/login.php')]) ?>
+                                <?= ui_button('Find my email', ['variant' => 'ghost', 'size' => 'sm', 'href' => $site('/auth/setup_password.php')]) ?>
                             </div>
                         </div>
                         <?= ui_button('Dismiss', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'x', 'icon_only' => true, 'attrs' => ['data-action' => 'connect.dismiss']]) ?>
@@ -259,7 +259,7 @@ $more = [
                     <h3 class="ui-h2" id="connect-success-title">We’ve received you!</h3>
                     <p class="text-ink-muted">Welcome to the family. Our Embrace Team will reach out soon.</p>
                     <div class="flex flex-col gap-2 sm:flex-row sm:justify-center">
-                        <?= ui_button('Read testimonies', ['variant' => 'primary', 'href' => $site('/testimonies')]) ?>
+                        <?= ui_button('Read testimonies', ['variant' => 'primary', 'href' => $site('/testimonies.php')]) ?>
                         <?= ui_button('Return home', ['variant' => 'secondary', 'href' => $site('/')]) ?>
                     </div>
                 </div>
