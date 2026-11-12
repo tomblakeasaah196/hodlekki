@@ -496,9 +496,48 @@ ok('the public register page gets it through the same allowlist, older rows incl
     str_contains($registrationApi, "hod_html_allowlist((string) \$html, ['b','strong','i','em','u','br','p','ul','ol','li'])")
     && str_contains($registrationApi, "\$event['description'] = safe_rich(\$event['description'])"));
 
-
 /* ---------------------------------------------------------------------- */
-suite('11. clean addresses: no page address ends in .php (bin/clean_urls.sh)');
+suite('11. Connect is not the app (owner, 12 Nov 2026: the app belongs to hodlekki.org)');
+
+$connectSrc = (string) file_get_contents($root . '/connect.php');
+$connectJs = (string) file_get_contents($root . '/assets/ui/js/pages/connect.js');
+ok('connect.php opens the public layout without the app', str_contains($connectSrc, "'app' => false"));
+// The render below cannot prove this alone: includes/pwa_head.php prints once
+// per process, and suite 6 may already have printed it.
+$publicSrc = (string) file_get_contents($root . '/includes/ui/public.php');
+ok('the public layout prints the app (pwa_head, pwa_boot) only when app is on',
+    str_contains($publicSrc, "<?php if (\$page['app']): ?>\n<?php require dirname(__DIR__) . '/pwa_head.php'; ?>\n<?php else: ?>")
+    && str_contains($publicSrc, "<?php if (\$page['app']) { require dirname(__DIR__) . '/pwa_boot.php'; } ?>")
+    && substr_count($publicSrc, "require dirname(__DIR__) . '/pwa_head.php'") === 1
+    && substr_count($publicSrc, "require dirname(__DIR__) . '/pwa_boot.php'") === 1);
+ok('connect.js cancels any install prompt and registers no service worker',
+    str_contains($connectJs, "addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); })")
+    && !str_contains($connectJs, 'serviceWorker.register'));
+// connect.hodlekki.org serves the same file (index.php requires connect.php);
+// only there does connect.js retire a worker the old page registered.
+ok('a worker is retired only on the Connect address',
+    str_contains($connectSrc, "'retireWorker' => is_connect_host(),")
+    && str_contains($connectJs, 'if (cfg.retireWorker && navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {'));
+// Rendered in a process of its own (tests/ui/render_connect.php): the app's
+// head prints once per process, so an earlier render could hide it.
+$connectHtml = (string) shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($root . '/tests/ui/render_connect.php'));
+ok('Connect renders', str_contains($connectHtml, 'id="cx-title"') && str_contains($connectHtml, 'id="connectForm"'));
+foreach ([
+    'rel="manifest"' => 'no manifest link',
+    'apple-mobile-web-app-capable' => 'no apple-mobile-web-app-capable',
+    'mobile-web-app-capable' => 'no mobile-web-app-capable',
+    'apple-mobile-web-app-title' => 'no app title',
+    'apple-touch-startup-image' => 'no launch images',
+    'id="hodSplash"' => 'no launch splash',
+    '/assets/js/pwa.js' => 'no pwa.js (so no service worker registration and no install banner)',
+    'hodInstall' => 'no install banner or button',
+] as $needle => $label) {
+    ok("Connect: {$label}", !str_contains($connectHtml, $needle));
+}
+ok('Connect keeps its favicon and theme colour',
+    str_contains($connectHtml, 'rel="icon"') && str_contains($connectHtml, 'name="theme-color"'));
+/* ---------------------------------------------------------------------- */
+suite('12. clean addresses: no page address ends in .php (bin/clean_urls.sh)');
 // The owner (Nov 2026): hodlekki.org/testimonies, never /testimonies.php. The
 // server serves /x from x.php and 301s the old .php address (GET and HEAD
 // only); the app's own links are clean so nobody pays for the redirect.
@@ -675,8 +714,7 @@ if ($bash === '') {
 
 // The app's own links are clean. A page address (a root page, a module page,
 // a sign-in page) written with .php anywhere in the code is a link that pays
-// for a redirect. Requires and file paths are not links, and Connect is being
-// redesigned in its own PR, so its three files wait for that.
+// for a redirect. Requires and file paths are not links.
 $navLinks = array_merge(array_column(ui_nav_registry(), 'href'), array_column(ui_nav_search_index([]), 'url'));
 $navPhp = array_values(array_filter($navLinks, static fn ($h) => str_contains((string) parse_url((string) $h, PHP_URL_PATH), '.php')));
 ok('the navigation and its search index carry no .php address', $navPhp === [], implode(', ', $navPhp));
@@ -684,7 +722,6 @@ $pages = array_map(static fn ($f) => basename($f, '.php'), glob($root . '/*.php'
 $pages = array_values(array_diff($pages, ['manifest']));
 $pageRe = '#(?<=[\'"`=(]|\.org)/(?:modules/[a-z_]+/[a-z_]+|auth/[a-z_]+|(?:' . implode('|', array_map('preg_quote', $pages)) . '))\.php\b#';
 $notLinks = '/\b(?:require|include)(?:_once)?\b|__DIR__|__FILE__|PHP_SELF|SCRIPT_NAME|SCRIPT_FILENAME|file_get_contents|is_file|file_exists|_root\(|_dir\(|_DIR\b|clean-urls: old name/';
-$waitForConnect = ['connect.php', 'assets/ui/js/pages/connect.js', 'includes/ui/public.php'];
 $skipDirs = ['.git', '.github', '.claude', 'vendor', 'node_modules', 'tests', 'docs', 'uploads'];
 $oldLinks = [];
 $it = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(
@@ -697,9 +734,6 @@ $it = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(
 ));
 foreach ($it as $f) {
     $rel = str_replace('\\', '/', substr($f->getPathname(), strlen($root) + 1));
-    if (in_array($rel, $waitForConnect, true)) {
-        continue;
-    }
     foreach (file($f->getPathname()) ?: [] as $n => $line) {
         $t = ltrim($line);
         if ($t === '' || str_starts_with($t, '//') || str_starts_with($t, '*') || str_starts_with($t, '#') || str_starts_with($t, '/*')
