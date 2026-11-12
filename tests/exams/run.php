@@ -58,7 +58,7 @@ function et_db(): PDO
 {
     $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
     $sql = '';
-    foreach (['20261208090000_trainings_core.sql', '20261209090000_trainings_exams.sql'] as $file) {
+    foreach (['20261208090000_trainings_core.sql', '20261209090000_trainings_exams.sql', '20261211100000_trainings_ai.sql'] as $file) {
         $sql .= (string) file_get_contents(__DIR__ . '/../../db/migrations/' . $file) . PHP_EOL;
     }
     $sql = (string) preg_replace('/^\s*--.*$/m', '', $sql);
@@ -587,6 +587,192 @@ exam_show_answers($r, exam_get($r, 100), true, 1);
 et_eq('a tutor may also show them before the closing time', [true, 'shown'], [$state('2027-03-02 09:00')['open'], $state('2027-03-02 09:00')['when']]);
 $intro = exams_take_view($r, exam_item($r, 100), 3);
 et_eq('the learner sees when answers show before starting', ['ready', 'shown', true], [$intro['state'], $intro['review']['when'], $intro['review']['open']]);
+
+// ===========================================================================
+et_section('11. AI help (Gemini through the shared client, a fake transport)');
+// ===========================================================================
+require_once __DIR__ . '/../../includes/exams/ai_actions.php';
+$_ENV['GEMINI_API_KEY'] = 'test-key';
+$ai = et_db();
+et_at('2027-04-01 09:00');
+$GLOBALS['et_grants'] = array_merge(['trainings:edit:"church"'], $learners);
+$sent = [];
+$replies = [];
+$reply = static fn (array $data, int $status = 200, int $in = 100, int $out = 50): array => ['status' => $status, 'body' => json_encode([
+    'candidates' => [['content' => ['parts' => [['text' => json_encode($data)]]], 'finishReason' => 'STOP']],
+    'usageMetadata' => ['promptTokenCount' => $in, 'candidatesTokenCount' => $out, 'totalTokenCount' => $in + $out],
+])];
+\HOD\Mail\Ai\Gemini::fake(function (array $request) use (&$sent, &$replies): array {
+    $sent[] = $request;
+    return array_shift($replies) ?? ['status' => 500, 'body' => '{}'];
+});
+$lastSent = static function () use (&$sent): string {
+    return (string) json_encode(end($sent) ?: []);
+};
+
+// Questions from pasted notes: drafts through the one check; repeats and unusable ones left out.
+exam_question_save($ai, null, 10, ['qtype' => 'true_false', 'body' => 'Grace is a gift.', 'correct_text' => 'True', 'status' => 'approved'], 1);
+$replies[] = $reply(['questions' => [
+    ['type' => 'one', 'question' => 'What is faith?', 'options' => ['Trust in God', 'A feeling', 'A rule'], 'correct' => 'A', 'topic' => 'Faith', 'explanation' => 'Hebrews 11:1 calls faith trust.'],
+    ['type' => 'several', 'question' => 'Which are fruits of the Spirit?', 'options' => ['Love', 'Pride', 'Joy'], 'correct' => ['A', 'C']],
+    ['type' => 'true_false', 'question' => 'Grace is a gift.', 'correct' => 'True'],
+    ['type' => 'one', 'question' => 'Broken one', 'options' => ['x', 'y'], 'correct' => 'D'],
+    ['type' => 'essay', 'question' => 'Write about faith.'],
+]]);
+$notes = 'Faith is trust in God. The fruit of the Spirit is love, joy and peace. Grace is a gift we do not earn.';
+$q = exams_ai_action($ai, 'questions', ['training_id' => 10, 'source' => 'notes', 'notes' => $notes, 'count' => 5,
+    'types' => ['single', 'multiple', 'true_false'], 'marks' => 2], 1);
+et_eq('questions from notes: 2 drafts, 1 repeat, 2 left out', ['success', 2, '2 drafts added · 1 already in the bank · 2 left out (not usable).'],
+    [$q['status'], $q['added'] ?? null, $q['message'] ?? null]);
+et_eq('…saved as drafts from the AI, with the marks asked for', 2, et_count($ai, 'training_questions', "source = 'ai' AND status = 'draft' AND marks = 2 AND training_id = 10"));
+et_ok('…the request carries the notes and the rules (references, not quoted verses), and no learner', str_contains($lastSent(), 'SOURCE MATERIAL')
+    && str_contains($lastSent(), 'Faith is trust in God') && str_contains($lastSent(), 'do not quote the verse')
+    && !str_contains($lastSent(), 'Okafor') && !str_contains($lastSent(), 'Ada'));
+$log = $ai->query('SELECT user_id, task, training_id, input_tokens, output_tokens, total_tokens, ok FROM training_ai_requests ORDER BY id DESC LIMIT 1')->fetch();
+et_eq('…one usage row: who, what, tokens, never the text', [1, 'questions', 10, 100, 50, 150, 1],
+    [(int) $log['user_id'], $log['task'], (int) $log['training_id'], (int) $log['input_tokens'], (int) $log['output_tokens'], (int) $log['total_tokens'], (int) $log['ok']]);
+et_eq('…the usage table has no column for text', [], array_values(array_filter(array_column($ai->query('PRAGMA table_info(training_ai_requests)')->fetchAll(), 'name'),
+    static fn ($c) => in_array($c, ['prompt', 'text', 'answer', 'body', 'source'], true))));
+
+// A PDF goes inline, never stored; anything else is refused before a call.
+$calls = count($sent);
+et_eq('a file that is not a PDF is refused before any call', ['That file is not a PDF.', $calls],
+    [exams_ai_source_parts($ai, ['pdf' => 'hello'])['error'] ?? null, count($sent)]);
+$replies[] = $reply(['questions' => [['type' => 'true_false', 'question' => 'The PDF says yes.', 'correct' => 'True']]]);
+$r = exams_ai_questions($ai, 1, 10, ['count' => 1, 'types' => ['true_false']], ['pdf' => '%PDF-1.4 tiny']);
+et_ok('a PDF is sent inline as application/pdf', ($r['added'] ?? 0) === 1 && str_contains($lastSent(), '"mime_type":"application\/pdf"')
+    && str_contains($lastSent(), base64_encode('%PDF-1.4 tiny')));
+
+// From the training's own readings and slides (PR 1b's details.slides_text).
+$ai->exec("INSERT INTO training_items (id, training_id, position, type, title, details, created_at) VALUES
+    (102, 10, 3, 'reading', 'Deck', '{\"text\":\"\",\"slides_text\":[\"Slide one: prayer\",\"Slide two: fasting\"]}', '2027-01-01 09:00:00'),
+    (201, 20, 2, 'reading', 'Other training', '{\"text\":\"Not this one at all, it belongs elsewhere.\"}', '2027-01-01 09:00:00')");
+$ai->exec("UPDATE training_items SET details = '{\"text\":\"Notes on prayer and the Holy Spirit for new workers.\"}' WHERE id = 101");
+et_eq('the readings offered: those with text or slides, slides marked', [[101, false], [102, true]],
+    array_map(static fn ($i) => [$i['id'], $i['slides']], exams_ai_source_items($ai, 10)));
+$text = exams_ai_source_text($ai, 10, []);
+et_ok('…their text and slides go together, nothing from another training', str_contains($text, 'Slide two: fasting') && str_contains($text, 'Holy Spirit')
+    && !str_contains($text, 'belongs elsewhere'));
+et_ok('…one item can be chosen', !str_contains(exams_ai_source_text($ai, 10, [102]), 'Holy Spirit'));
+et_eq('…and too little text is refused', 'Paste more of the lesson (a few sentences at least).', exams_ai_source_parts($ai, ['notes' => 'Too short'])['error'] ?? null);
+
+// Failures are logged and said plainly.
+$replies[] = ['status' => 429, 'body' => '{}'];
+et_eq('Gemini busy: a plain message, a failed usage row', ['Gemini is busy. Try again in a minute.', 'busy'],
+    [exams_ai_call($ai, 1, 'summary', 10, 'x', 'y')['error'] ?? null, $ai->query('SELECT failure FROM training_ai_requests ORDER BY id DESC LIMIT 1')->fetchColumn()]);
+$replies[] = ['status' => 200, 'body' => json_encode(['candidates' => [['content' => ['parts' => [['text' => 'not json at all']]]]]])];
+et_eq('an answer that is not the JSON asked for', 'Gemini\'s answer could not be used. Try again.', exams_ai_call($ai, 1, 'summary', 10, 'x', 'y')['error'] ?? null);
+
+// The guards: the church's daily cap and the person's hourly limit, before any call.
+$ai->prepare("INSERT INTO training_ai_requests (user_id, task, total_tokens, ok, created_at) VALUES (5, 'questions', ?, 1, '2027-04-01 08:00:00')")
+    ->execute([exams_ai_daily_cap()]);
+$calls = count($sent);
+et_eq('the daily cap reached: refused in words, no call made', ["Today's AI allowance for the church is used up. It starts again at midnight.", $calls],
+    [exams_ai_action($ai, 'questions', ['training_id' => 10, 'source' => 'notes', 'notes' => $notes, 'types' => ['single']], 1)['message'] ?? null, count($sent)]);
+et_at('2027-04-02 00:01');
+et_eq('…it starts again the next day', null, exams_ai_blocked($ai, 1));
+for ($i = 0; $i < EXAMS_AI_HOURLY; $i++) {
+    $ai->exec("INSERT INTO training_ai_requests (user_id, task, total_tokens, ok, created_at) VALUES (1, 'summary', 1, 1, '2027-04-02 00:00:30')");
+}
+et_eq('the hourly limit per person', 'You have used AI help 30 times this hour. Try again later.', exams_ai_blocked($ai, 1));
+et_eq('…someone else is not held back', null, exams_ai_blocked($ai, 2));
+$_ENV['TRAININGS_AI_DAILY_TOKENS'] = '1000';
+et_eq('the cap can be set in .env', 1000, exams_ai_daily_cap());
+unset($_ENV['TRAININGS_AI_DAILY_TOKENS']);
+et_at('2027-04-03 09:00');
+
+// Explanations: suggested once in the approve flow, stored only when the tutor confirms.
+$d1 = (int) $ai->query("SELECT id FROM training_questions WHERE body = 'Which are fruits of the Spirit?'")->fetchColumn();
+$d2 = (int) $ai->query("SELECT id FROM training_questions WHERE body = 'What is faith?'")->fetchColumn();
+$ai->prepare("UPDATE training_questions SET explanation = NULL WHERE id = ?")->execute([$d1]);
+$replies[] = $reply(['explanations' => [['id' => $d1, 'explanation' => 'Love and joy are fruits of the Spirit; pride is not.'], ['id' => 999, 'explanation' => 'stray']]]);
+$check = exams_action($ai, 'approve_check', ['ids' => [$d1, $d2]], 1);
+$byId = array_column($check['items'], null, 'id');
+et_eq('approve_check: a suggestion for the one without an explanation, the other kept', [true, 'Love and joy are fruits of the Spirit; pride is not.', false, 'Hebrews 11:1 calls faith trust.'],
+    [$byId[$d1]['suggested'], $byId[$d1]['explanation'], $byId[$d2]['suggested'], $byId[$d2]['explanation']]);
+et_ok('…the request names the right answer, and nothing about learners', str_contains($lastSent(), 'Right answer: A, C') && !str_contains($lastSent(), 'Okafor'));
+et_eq('…nothing is stored yet', [null, 'draft'], array_values($ai->query("SELECT explanation, status FROM training_questions WHERE id = {$d1}")->fetch(PDO::FETCH_NUM)));
+$ok = exams_action($ai, 'approve', ['items' => [['id' => $d1, 'explanation' => 'Love and joy are; pride is not.'], ['id' => $d2, 'explanation' => 'Hebrews 11:1 calls faith trust.']]], 1);
+et_eq('approve: the tutor\'s version stored, both Ready', ['2 questions are ready.', 'Love and joy are; pride is not.', 2],
+    [$ok['message'], $ai->query("SELECT explanation FROM training_questions WHERE id = {$d1}")->fetchColumn(),
+     et_count($ai, 'training_questions', "status = 'approved' AND id IN ({$d1}, {$d2})")]);
+$plain = exam_question_save($ai, null, 10, ['qtype' => 'true_false', 'body' => 'Prayer matters.', 'correct_text' => 'True'], 1);
+$ai->exec("INSERT INTO training_ai_requests (user_id, task, total_tokens, ok, created_at) VALUES (5, 'explain', " . exams_ai_daily_cap() . ", 1, '2027-04-03 08:00:00')");
+$calls = count($sent);
+$blocked = exams_action($ai, 'approve_check', ['ids' => [$plain['id']]], 1);
+et_eq('with the cap reached: no call, the reason given, an empty explanation to write', [$calls, true, ''],
+    [count($sent), str_contains((string) $blocked['ai_error'], 'used up'), $blocked['items'][0]['explanation']]);
+$GLOBALS['et_grants'] = $learners;
+et_eq('learners cannot approve', 'FORBIDDEN', exams_action($ai, 'approve_check', ['ids' => [$plain['id']]], 2)['code'] ?? null);
+et_eq('…nor use AI help', 'FORBIDDEN', exams_ai_action($ai, 'status', ['training_id' => 10], 2)['code'] ?? null);
+$GLOBALS['et_grants'] = array_merge(['trainings:edit:"church"'], $learners);
+et_eq('an unknown training', 'NOT_FOUND', exams_ai_action($ai, 'status', ['training_id' => 999], 1)['code'] ?? null);
+et_at('2027-04-04 09:00');
+
+// Content proposals: nothing is created until Apply.
+$ai->exec("INSERT INTO trainings (id, title, status, length, created_at) VALUES (30, 'Workers induction', 'draft', 'self_paced', '2027-01-01 09:00:00')");
+$ai->exec("INSERT INTO training_sections (training_id, kind, title, position) VALUES (30, 'module', 'Module 1', 1)");
+$replies[] = $reply(['sections' => [
+    ['title' => 'Welcome', 'items' => [['type' => 'live', 'title' => 'Opening class', 'minutes' => 60], ['type' => 'reading', 'title' => 'Our story', 'note' => 'How the church began.'],
+                                     ['type' => 'dance', 'title' => 'Not a type']]],
+    ['title' => 'Serving', 'items' => [['type' => 'assignment', 'title' => 'Reflection', 'note' => 'Write half a page.'], ['type' => 'exam', 'title' => 'Short test']]],
+]]);
+$items0 = et_count($ai, 'training_items', 'training_id = 30');
+$o = exams_ai_action($ai, 'outline', ['training_id' => 30, 'notes' => 'An induction for new workers: our story, serving well.', 'sections' => 2], 1);
+et_eq('outline: a proposal, an unknown kind left out, nothing created', [2, 2, 2, $items0],
+    [count($o['proposal']['sections'] ?? []), count($o['proposal']['sections'][0]['items'] ?? []), count($o['proposal']['sections'][1]['items'] ?? []), et_count($ai, 'training_items', 'training_id = 30')]);
+$applied = exams_ai_action($ai, 'outline_apply', ['training_id' => 30, 'proposal' => $o['proposal']], 1);
+et_eq('Apply: the empty card reused and renamed, one card added, four items through PR 1\'s builder', ['success', ['Welcome', 'Serving'], 4, 'How the church began.'],
+    [$applied['status'], $ai->query('SELECT title FROM training_sections WHERE training_id = 30 ORDER BY position')->fetchAll(PDO::FETCH_COLUMN),
+     et_count($ai, 'training_items', 'training_id = 30'),
+     json_decode((string) $ai->query("SELECT details FROM training_items WHERE training_id = 30 AND type = 'reading'")->fetchColumn(), true)['text'] ?? null]);
+$replies[] = $reply(['summary' => 'Prayer and the Holy Spirit, in short.']);
+$sum = exams_ai_action($ai, 'summary', ['training_id' => 10, 'item_id' => 101], 1);
+et_eq('summary: a proposal from the reading', 'Prayer and the Holy Spirit, in short.', $sum['summary'] ?? null);
+$ai->exec("INSERT INTO training_sections (id, training_id, kind, title, position) VALUES (50, 10, 'module', 'Module 1', 1)");
+$ai->exec('UPDATE training_items SET section_id = 50 WHERE training_id = 10');
+$add = exams_ai_action($ai, 'summary_apply', ['training_id' => 10, 'item_id' => 101, 'text' => 'Prayer and the Holy Spirit, in short (edited).'], 1);
+et_eq('…Add as reading: an optional reading in the same card', ['success', 1],
+    [$add['status'], et_count($ai, 'training_items', "training_id = 10 AND type = 'reading' AND title = 'Summary: Notes' AND required = 0 AND section_id = 50")]);
+et_eq('sermon prompts need notes first', 'Paste a few lines about the sermon first (title, text, main points).', exams_ai_action($ai, 'prompts', ['training_id' => 10, 'notes' => 'short'], 1)['message'] ?? null);
+$replies[] = $reply(['prompts' => ['What were the main points?', '', 'Which scriptures were used?', str_repeat('x', 400)]]);
+$pr = exams_ai_action($ai, 'prompts', ['training_id' => 10, 'notes' => 'Sermon: Walking by faith, Hebrews 11. Main points: trust, obedience.'], 1);
+et_eq('…prompts cleaned as PR 1 keeps them', [3, 300], [count($pr['prompts'] ?? []), mb_strlen($pr['prompts'][2] ?? '')]);
+$ai->exec("INSERT INTO training_items (id, training_id, section_id, position, type, title, details, created_at) VALUES
+    (103, 10, 50, 9, 'assignment', 'Sermon review', '{\"kind\":\"sermon_review\",\"instructions\":\"Listen first.\",\"prompts\":[\"Old\"],\"max_mark\":10,\"pass_mark\":6}', '2027-01-01 09:00:00')");
+exams_ai_action($ai, 'prompts_apply', ['training_id' => 10, 'item_id' => 103, 'prompts' => ['Main points?', 'Scriptures?']], 1);
+$det = json_decode((string) $ai->query('SELECT details FROM training_items WHERE id = 103')->fetchColumn(), true);
+et_eq('…Use these: the prompts replaced, the rest of the assignment kept', [['Main points?', 'Scriptures?'], 'Listen first.', 6],
+    [$det['prompts'] ?? null, $det['instructions'] ?? null, $det['pass_mark'] ?? null]);
+
+// The shared client stays as Mail uses it.
+$replies[] = ['status' => 200, 'body' => json_encode(['candidates' => [['content' => ['parts' => [['text' => 'Hi']]]]], 'usageMetadata' => ['promptTokenCount' => 3, 'candidatesTokenCount' => 1, 'totalTokenCount' => 4]])];
+et_eq('Mail\'s string prompt still goes as one text part, and usage is read', ['Hi', [['text' => 'plain']], 4],
+    [\HOD\Mail\Ai\Gemini::generate('sys', 'plain'), end($sent)['body']['contents'][0]['parts'], \HOD\Mail\Ai\Gemini::$lastUsage['total'] ?? null]);
+\HOD\Mail\Ai\Gemini::fake(null);
+unset($_ENV['GEMINI_API_KEY']);
+
+$aiPage = (string) file_get_contents($root . '/modules/exams/ai.php');
+$aiJs = (string) file_get_contents($root . '/assets/ui/js/pages/exams-ai.js');
+$aiApi = (string) file_get_contents($root . '/api/exams_ai_api.php');
+$aiActs = (string) file_get_contents($root . '/includes/exams/ai_actions.php');
+et_ok('the AI endpoint checks staff access and the CSRF token', str_contains($aiApi, "api_require_can('trainings', 'edit', 'church');") && str_contains($aiApi, 'csrf_require();'));
+et_ok('the AI page is strict, with no inline handler, script or style', str_contains($aiPage, "'mode' => 'strict'")
+    && preg_match_all('/\son[a-z]+\s*=|<script(?![^>]*type="application\/json")|\sstyle\s*=/i', $aiPage) === 0);
+preg_match_all("/HOD\\.actions\\.on\\('(ai\\.[a-z-]+)'/", $aiJs, $m);
+$aiHandled = array_values(array_unique($m[1]));
+preg_match_all('/data-action(?:-change|-input)?="(ai\.[a-z-]+)"|\'data-action(?:-change|-input)?\' => \'(ai\.[a-z-]+)\'/', $aiPage . $aiJs, $m);
+$aiUsed = array_values(array_unique(array_filter(array_merge($m[1], $m[2]))));
+et_eq('every AI action on the page has a handler, and every handler is used', [[], []],
+    [array_values(array_diff($aiUsed, $aiHandled)), array_values(array_diff($aiHandled, $aiUsed))]);
+preg_match_all("/call\\('([a-z_]+)'/", $aiJs, $m);
+et_eq('every action the AI script calls exists', [], array_values(array_filter(array_unique($m[1]), static fn ($a) => !str_contains($aiActs, "case '{$a}':"))));
+// Two functions with one name in a page script: the later silently replaces the earlier (the bank's row pick once ran
+// the exam's answer code).
+foreach (['exams.js' => (string) file_get_contents($root . '/assets/ui/js/pages/exams.js'), 'exams-ai.js' => $aiJs] as $name => $src) {
+    preg_match_all('/\bfunction ([A-Za-z_$][\w$]*)\s*\(/', $src, $m);
+    et_eq("{$name}: no two functions share a name", [], array_values(array_unique(array_diff_assoc($m[1], array_unique($m[1])))));
+}
 
 exams_set_clock(false);
 echo PHP_EOL . $GLOBALS['et_passed'] . ' passed, ' . $GLOBALS['et_failed'] . ' failed' . PHP_EOL;

@@ -8,11 +8,18 @@ use Throwable;
 /**
  * Gemini's generateContent over HTTPS (ported from Courrier's PR 5). One log line on a failure, never the prompt or
  * the answer. Tests replace the network with Gemini::fake(fn (array $request): array => ['status' => 200, 'body' => …]).
+ *
+ * Shared: Mail (Summariser, Writer) and Trainings' AI help (includes/exams/ai.php) both call it. The prompt may be a
+ * string, or a list of parts — ['text' => …] or ['inline_data' => ['mime_type' => 'application/pdf', 'data' => base64]]
+ * — so a PDF can be read natively. The last call's token counts are in $lastUsage (for usage logs and cost caps).
  */
 final class Gemini
 {
     /** Why the last call gave nothing: off, refused, busy, unreachable, blocked, empty */
     public static ?string $lastFailure = null;
+
+    /** The last call's tokens: ['input' => int, 'output' => int, 'total' => int], or null when nothing came back */
+    public static ?array $lastUsage = null;
 
     /** @var callable|null */
     private static $transport = null;
@@ -22,9 +29,14 @@ final class Gemini
         self::$transport = $transport;
     }
 
-    public static function generate(string $system, string $prompt, int $maxTokens = 2048, bool $json = false, float $temperature = 0.2): ?string
+    /**
+     * @param string|list<array> $prompt the user turn: text, or parts (text and inline_data)
+     * @param int|null $timeout seconds, when longer than Mail's default is needed (reading a PDF)
+     */
+    public static function generate(string $system, string|array $prompt, int $maxTokens = 2048, bool $json = false, float $temperature = 0.2, ?int $timeout = null): ?string
     {
         self::$lastFailure = null;
+        self::$lastUsage = null;
         $key = Ai::key();
         if ($key === '') {
             self::$lastFailure = 'off';
@@ -44,9 +56,10 @@ final class Gemini
             'headers' => ['Content-Type' => 'application/json', 'x-goog-api-key' => $key],
             'body' => [
                 'system_instruction' => ['parts' => [['text' => $system]]],
-                'contents' => [['role' => 'user', 'parts' => [['text' => $prompt]]]],
+                'contents' => [['role' => 'user', 'parts' => is_array($prompt) ? array_values($prompt) : [['text' => $prompt]]]],
                 'generationConfig' => $generation,
             ],
+            'timeout' => $timeout,
         ];
         try {
             $response = self::$transport !== null ? (self::$transport)($request) : self::send($request);
@@ -57,6 +70,11 @@ final class Gemini
         }
         $status = (int) ($response['status'] ?? 0);
         $data = json_decode((string) ($response['body'] ?? ''), true);
+        if (is_array($data) && is_array($data['usageMetadata'] ?? null)) {
+            $u = $data['usageMetadata'];
+            self::$lastUsage = ['input' => (int) ($u['promptTokenCount'] ?? 0), 'output' => (int) ($u['candidatesTokenCount'] ?? 0),
+                                'total' => (int) ($u['totalTokenCount'] ?? 0)];
+        }
         if ($status < 200 || $status >= 300) {
             self::fail(match (true) {
                 in_array($status, [400, 401, 403], true) => 'refused',
@@ -120,7 +138,7 @@ final class Gemini
             CURLOPT_POSTFIELDS => $body,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => (int) Ai::config('timeout', 25),
+            CURLOPT_TIMEOUT => (int) ($request['timeout'] ?? 0) ?: (int) Ai::config('timeout', 25),
             CURLOPT_CONNECTTIMEOUT => (int) Ai::config('connect_timeout', 5),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,

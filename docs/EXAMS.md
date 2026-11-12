@@ -88,3 +88,26 @@ attempt that is still running.
 
 Save AI drafts with `exam_question_save($pdo, null, $trainingId, $q + ['status' => 'draft'], $userId, 'ai')`: the same
 checks, the same uniqueness. Write explanations into `training_questions.explanation`; nothing in marking calls the AI.
+
+## 7. AI help (PR 4b, `includes/exams/ai.php`, `modules/exams/ai.php`)
+
+Gemini through the shared client `HOD\Mail\Ai\Gemini` (Mail's; a prompt may be text or parts, so a PDF goes inline as
+`application/pdf`; the call's token counts are kept). Everything for the Academy's staff
+(`can('trainings', 'edit', 'church')`); every call through `exams_ai_call()`.
+
+| What | How |
+| ---- | --- |
+| Questions | From pasted notes, an uploaded PDF (read, sent, never stored; 10 MB), or the training's readings and slides (`details.text` and `details.slides_text`, chosen per item). Each question comes back through `exam_question_check()` and is saved as a **draft**, source `ai`; repeats are skipped by the content hash, unusable ones left out and counted. |
+| Explanations | Written once, in the approve flow: **Ready** (one question, or several picked) asks Gemini once (batches of 15) for the ones with no explanation and shows the suggestions to check and edit. `approve` stores them and marks the questions Ready; Cancel stores nothing. |
+| Outline | A proposal of cards and items for the training's length; the tutor edits or unticks, then **Apply** creates them through PR 1's `trainings_section_add()` / `trainings_item_save()` (empty cards are filled first). |
+| Summary | Of one reading (text and slides); **Add as reading** creates an optional reading "Summary: …" in the same card. |
+| Review prompts | From the tutor's notes on a sermon (never the recording); **Use these** puts them on the assignment (`details.prompts`, as PR 1 keeps them: up to 12 lines of 300 characters). |
+
+**What is sent:** only what staff chose: their notes, their PDF, the training's readings and slides, the bank's
+questions. Never a learner, a name, an attempt or an answer (AGENTS.md: the second written exception).
+
+**Guards:** a daily token cap for the whole church, `TRAININGS_AI_DAILY_TOKENS` in `.env` (default 1,500,000, about
+US$1–4 a day at Gemini 2.5 Flash prices), with a clear message when it is reached; output limits per task
+(questions 8,192 tokens, explanations 4,096, outline 4,096, summary 1,500, prompts 1,024); 30 calls per person per
+hour; 60,000 characters of source text per call. `training_ai_requests` logs every call: who, the task, the training,
+the model, the tokens, ok or why not, and never the text. The page shows today's meter.

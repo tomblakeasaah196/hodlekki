@@ -33,6 +33,7 @@ $bankOptions = [];
 foreach ($banks as $b) {
     $bankOptions[$b['id'] === null ? 'shared' : (string) $b['id']] = $b['title'];
 }
+$status = in_array($_GET['status'] ?? '', ['approved', 'draft', 'archived'], true) ? (string) $_GET['status'] : '';
 echo ui_json_script('exams-config', ['page' => 'bank', 'training_id' => $bank['id'], 'types' => EXAM_QTYPES, 'letters' => EXAM_LETTERS]);
 ?>
 <div class="ui-page ui-page--wide" data-exams="bank">
@@ -40,7 +41,8 @@ echo ui_json_script('exams-config', ['page' => 'bank', 'training_id' => $bank['i
         'title' => 'Question bank',
         'description' => 'Questions for your exams.',
         'info' => 'Three kinds of question: one answer, several answers, and true/false. Write them here, or download the Excel template, fill it in and import it: every row is checked before anything is added, and importing the same file again adds nothing twice. Only questions marked Ready can go in an exam. The explanation is shown only to people who get a question wrong, once the answers are shown.',
-        'actions' => ui_button('Template', ['variant' => 'ghost', 'icon' => 'download', 'href' => '/api/exams_api.php?action=template'])
+        'actions' => ($bank['id'] !== null ? ui_button('AI help', ['variant' => 'ghost', 'icon' => 'sparkles', 'href' => exam_url_ai((int) $bank['id'])]) : '')
+            . ui_button('Template', ['variant' => 'ghost', 'icon' => 'download', 'href' => '/api/exams_api.php?action=template'])
             . ui_button('Import', ['variant' => 'secondary', 'icon' => 'upload', 'attrs' => ['data-action' => 'ex.import-open']])
             . ui_button('Add question', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-action' => 'ex.add']]),
     ]) ?>
@@ -48,12 +50,15 @@ echo ui_json_script('exams-config', ['page' => 'bank', 'training_id' => $bank['i
     <div class="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_200px_200px]">
         <?= ui_field('search', ['name' => 'q', 'id' => 'ex-search', 'label' => 'Find', 'attrs' => ['data-action-input' => 'ex.filter']]) ?>
         <?= ui_field('select', ['name' => 'status', 'id' => 'ex-status', 'label' => 'Status',
-            'options' => ['' => 'Draft and Ready', 'approved' => 'Ready', 'draft' => 'Draft', 'archived' => 'Archived'],
+            'options' => ['' => 'Draft and Ready', 'approved' => 'Ready', 'draft' => 'Draft', 'archived' => 'Archived'], 'value' => $status,
             'attrs' => ['data-action-change' => 'ex.filter']]) ?>
         <?= ui_field('select', ['name' => 'bank', 'id' => 'ex-bank', 'label' => 'Bank', 'options' => $bankOptions,
             'value' => $bank['id'] === null ? 'shared' : (string) $bank['id'], 'attrs' => ['data-action-change' => 'ex.bank']]) ?>
     </div>
-    <p class="ui-meta mb-2" data-ex-count aria-live="polite"></p>
+    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p class="ui-meta" data-ex-count aria-live="polite"></p>
+        <?= ui_button('Mark Ready', ['variant' => 'primary', 'size' => 'sm', 'icon' => 'check', 'attrs' => ['data-action' => 'ex.ready-many', 'data-ex-ready-many' => true, 'hidden' => true]]) ?>
+    </div>
     <div data-ex-list><p class="ui-meta">Loading…</p></div>
 
     <?= ui_dialog_start('ex-q', ['title' => 'Question', 'size' => 'lg']) ?>
@@ -77,6 +82,14 @@ echo ui_json_script('exams-config', ['page' => 'bank', 'training_id' => $bank['i
     <?= ui_dialog_end(
         ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
         . ui_button('Save', ['variant' => 'primary', 'type' => 'submit', 'attrs' => ['form' => 'ex-q-form']])
+    ) ?>
+
+    <?= ui_dialog_start('ex-approve', ['title' => 'Mark Ready', 'size' => 'lg']) ?>
+        <div data-ex-approve-note></div>
+        <ol class="ui-stack" data-ex-approve-list></ol>
+    <?= ui_dialog_end(
+        ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
+        . ui_button('Mark Ready', ['variant' => 'primary', 'attrs' => ['data-action' => 'ex.approve-confirm']])
     ) ?>
 
     <?= ui_dialog_start('ex-import', ['title' => 'Import questions', 'size' => 'lg']) ?>
