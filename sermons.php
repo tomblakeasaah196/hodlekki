@@ -21,13 +21,17 @@ if (isset($_GET['sermon'])) {
             $og_title = htmlspecialchars((string)$sharedSermon['title']) . " | HOD Lekki";
             $og_desc = htmlspecialchars((string)$sharedSermon['summary']);
             
-            $cover = !empty($sharedSermon['cover_image_path']) ? $sharedSermon['cover_image_path'] : '/assets/images/hod_logo.svg';
+            // Our own upload paths only; anything else falls back to the logo.
+            $cover = (string) ($sharedSermon['cover_image_path'] ?? '');
+            $cover = preg_match('#^/(?!/)[^\s"\'<>]+$#', $cover) ? $cover : '/assets/images/hod_logo.svg';
             $og_image = site_url($cover);
             
             $og_url = site_url('/sermons?sermon=' . rawurlencode((string) $sharedSermon['slug']));
             
             // Store the script to safely inject it inside the <head> below
-            $autoOpenScript = "<script>const autoOpenSlug = '" . $sharedSermon['slug'] . "';</script>";
+            $autoOpenScript = '<script>const autoOpenSlug = '
+                . json_encode((string) $sharedSermon['slug'], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP)
+                . ';</script>';
         }
     } catch (Exception $e) {
         // If the DB query fails, fail silently. The page will load the defaults above instead of crashing.
@@ -45,8 +49,8 @@ if (isset($_GET['sermon'])) {
     <meta property="og:type" content="website">
     <meta property="og:title" content="<?= $og_title ?>">
     <meta property="og:description" content="<?= $og_desc ?>">
-    <meta property="og:image" content="<?= $og_image ?>">
-    <meta property="og:url" content="<?= $og_url ?>">
+    <meta property="og:image" content="<?= htmlspecialchars((string) $og_image, ENT_QUOTES) ?>">
+    <meta property="og:url" content="<?= htmlspecialchars((string) $og_url, ENT_QUOTES) ?>">
     <meta name="twitter:card" content="summary_large_image">
 
     <!-- Safely inject the auto-open script here -->
@@ -526,29 +530,47 @@ if (isset($_GET['sermon'])) {
             if(eventType === 'play') playTracked = true;
         }
 
+        // What comes from the database goes into the cards escaped: staff type the
+        // titles and summaries, and "<img onerror=…>" in a title must stay text.
+        function esc(v) {
+            return String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+        }
+        // A picture or audio file we may point at: our own uploads, or https.
+        function safeMediaUrl(u) {
+            u = String(u || '').trim();
+            return /^(\/(?!\/)|https:\/\/)[^\s"'<>]+$/i.test(u) ? u : '';
+        }
+        // Slugs are made of letters, digits and dashes; anything else falls back to the id.
+        function sermonKey(s) {
+            const slug = String(s.slug || '');
+            return /^[A-Za-z0-9-]+$/.test(slug) ? slug : String(parseInt(s.id, 10) || '');
+        }
+
         function loadSermons() {
             $.getJSON(API_URL, { action: 'fetch_sermons' })
             .done(function(res) {
                 if(res.status === 'success') {
                     let html = '';
                     res.sermons.forEach(s => {
-                        sermonCache[s.slug] = s;
-                        const cover = s.cover_image_path || 'https://images.unsplash.com/photo-1438232992991-995b7058bbb3?w=800&q=80';
+                        const key = sermonKey(s);
+                        if (!key) return;
+                        sermonCache[key] = s;
+                        const cover = safeMediaUrl(s.cover_image_path) || 'https://images.unsplash.com/photo-1438232992991-995b7058bbb3?w=800&q=80';
                         html += `
-                        <div onclick="openSermon('${s.slug}')" class="glass-card rounded-3xl overflow-hidden cursor-pointer group flex flex-col h-[400px]">
+                        <div onclick="openSermon('${key}')" class="glass-card rounded-3xl overflow-hidden cursor-pointer group flex flex-col h-[400px]">
                             <div class="h-48 relative overflow-hidden shrink-0">
-                                <img src="${cover}" class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700">
+                                <img src="${esc(cover)}" alt="" class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700">
                                 <div class="sermon-card-scrim"></div>
-                                <button type="button" onclick="event.stopPropagation(); openShareSheet('${s.slug}')" class="sermon-card-share" aria-label="Share this sermon" title="Share">${SHARE_ICONS.share}</button>
-                                <div class="absolute bottom-3 left-3 z-20 bg-hodRed text-white text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full">${s.service_type}</div>
+                                <button type="button" onclick="event.stopPropagation(); openShareSheet('${key}')" class="sermon-card-share" aria-label="Share this sermon" title="Share">${SHARE_ICONS.share}</button>
+                                <div class="absolute bottom-3 left-3 z-20 bg-hodRed text-white text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full">${esc(s.service_type)}</div>
                             </div>
                             <div class="p-6 flex-1 flex flex-col">
-                                <h3 class="text-xl font-heading text-white font-bold leading-tight group-hover:text-hodRed transition-colors line-clamp-2">${s.title}</h3>
-                                <p class="text-xs text-gray-400 mt-2 uppercase tracking-widest font-semibold">${s.preacher} <span class="mx-1">•</span> ${s.nice_date}</p>
-                                <p class="text-sm text-gray-400 mt-4 font-light line-clamp-3 leading-relaxed">${s.summary || 'Click to experience the full sermon.'}</p>
+                                <h3 class="text-xl font-heading text-white font-bold leading-tight group-hover:text-hodRed transition-colors line-clamp-2">${esc(s.title)}</h3>
+                                <p class="text-xs text-gray-400 mt-2 uppercase tracking-widest font-semibold">${esc(s.preacher)} <span class="mx-1">•</span> ${esc(s.nice_date)}</p>
+                                <p class="text-sm text-gray-400 mt-4 font-light line-clamp-3 leading-relaxed">${esc(s.summary || 'Click to experience the full sermon.')}</p>
                                 <div class="mt-auto pt-4 flex items-center justify-between border-t border-white/10 text-[10px] text-gray-500 font-bold uppercase tracking-wider">
-                                    <span class="flex items-center gap-1.5"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> ${s.view_count || 0}</span>
-                                    <span class="flex items-center gap-1.5"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path></svg> ${s.play_count || 0}</span>
+                                    <span class="flex items-center gap-1.5"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> ${Number(s.view_count) || 0}</span>
+                                    <span class="flex items-center gap-1.5"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path></svg> ${Number(s.play_count) || 0}</span>
                                 </div>
                             </div>
                         </div>`;
@@ -563,7 +585,7 @@ if (isset($_GET['sermon'])) {
                     let err = JSON.parse(jqXHR.responseText);
                     if(err.message) errorMsg = err.message;
                 } catch(e) {}
-                $('#loadingState').html(`<div class="bg-red-900/50 border border-red-500 text-white p-4 rounded-xl max-w-lg mx-auto">${errorMsg}</div>`);
+                $('#loadingState').html(`<div class="bg-red-900/50 border border-red-500 text-white p-4 rounded-xl max-w-lg mx-auto">${esc(errorMsg)}</div>`);
             });
         }
 
@@ -618,15 +640,16 @@ if (isset($_GET['sermon'])) {
                 $('#modalVideoContainer').addClass('hidden');
                 $('#modalDetails').addClass('-mt-20').removeClass('pt-8'); 
                 
-                $('#modalCover').attr('src', s.cover_image_path || 'https://placehold.co/800x400/111/444');
+                $('#modalCover').attr('src', safeMediaUrl(s.cover_image_path) || 'https://placehold.co/800x400/111/444');
             }
 
-            if(s.audio_file_path) {
+            const audioUrl = safeMediaUrl(s.audio_file_path);
+            if(audioUrl) {
                 $('#modalAudioContainer').removeClass('hidden');
-                $('#modalAudio').attr('src', s.audio_file_path);
+                $('#modalAudio').attr('src', audioUrl);
                 $('#btnDownload').off('click').on('click', function() {
                     const a = document.createElement('a');
-                    a.href = s.audio_file_path;
+                    a.href = audioUrl;
                     a.download = `${s.title}.mp3`;
                     document.body.appendChild(a);
                     a.click();

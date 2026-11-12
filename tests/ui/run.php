@@ -479,6 +479,13 @@ ok('the admin API cleans on save and on read, needs CSRF and asks each level',
     && str_contains($adminApi, 'in_array($status, $statuses, true)'));
 ok('the wall cleans what it sends, rows saved before the allowlist included',
     str_contains($publicApi, "\$t['content_text'] = hod_html_allowlist(\$t['content_text'] ?? '');"));
+$sermonsPage = (string) file_get_contents($root . '/sermons.php');
+ok('the public Sermons cards escape what staff typed and only link safe media',
+    str_contains($sermonsPage, '${esc(s.title)}') && str_contains($sermonsPage, '${esc(s.summary ||')
+    && str_contains($sermonsPage, '${esc(s.service_type)}') && str_contains($sermonsPage, 'const audioUrl = safeMediaUrl(s.audio_file_path);')
+    && !str_contains($sermonsPage, '>${s.title}<') && !str_contains($sermonsPage, '>${s.summary'));
+ok('the shared-sermon head escapes its OG tags and JSON-encodes the slug',
+    str_contains($sermonsPage, 'htmlspecialchars((string) $og_image, ENT_QUOTES)') && str_contains($sermonsPage, "json_encode((string) \$sharedSermon['slug']"));
 $eventsApi = (string) file_get_contents($root . '/api/events_api.php');
 $registrationApi = (string) file_get_contents($root . '/api/registration_api.php');
 ok('an event description is cleaned when it is saved (create and update)',
