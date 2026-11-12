@@ -1,0 +1,305 @@
+<?php
+// /includes/exams/access.php
+//
+// Who may do what, and the actions of api/exams_api.php (exams_action()).
+//
+//   Tutors (the question bank, exam set-up, results): Trainings, Manage, for
+//   the training's department (its department_id), else church-wide. The
+//   shared bank (questions with no training) needs Manage church-wide.
+//   Learners (taking an exam): an enrolment in the training (PR 1's
+//   training_enrolments, not withdrawn) while the training is published.
+// The engine (engine.php) and the bank (bank.php) never check access.
+
+require_once __DIR__ . '/bootstrap.php';
+
+/** A training (PR 1), or null. */
+function exams_training(PDO $pdo, int $id): ?array
+{
+    if ($id <= 0 || !exams_table_exists($pdo, 'trainings')) {
+        return null;
+    }
+    $stmt = $pdo->prepare('SELECT id, title, department_id, status FROM trainings WHERE id = ?');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return null;
+    }
+    $row['id'] = (int) $row['id'];
+    $row['department_id'] = $row['department_id'] === null ? null : (int) $row['department_id'];
+    return $row;
+}
+
+/** May the signed-in person manage this bank ($trainingId null = the shared bank)? */
+function exams_may_manage(PDO $pdo, ?int $trainingId): bool
+{
+    if ($trainingId === null) {
+        return can('trainings', 'manage', 'church');
+    }
+    $t = exams_training($pdo, $trainingId);
+    return $t !== null && can('trainings', 'manage', $t['department_id'] ?? 'church');
+}
+
+/** The banks this person may manage: the shared bank first, then their trainings. */
+function exams_banks(PDO $pdo): array
+{
+    $out = [];
+    if (can('trainings', 'manage', 'church')) {
+        $out[] = ['id' => null, 'title' => 'Shared bank'];
+    }
+    if (exams_table_exists($pdo, 'trainings')) {
+        foreach ($pdo->query("SELECT id, title, department_id FROM trainings WHERE status <> 'archived' ORDER BY title")->fetchAll(PDO::FETCH_ASSOC) as $t) {
+            if (can('trainings', 'manage', $t['department_id'] !== null ? (int) $t['department_id'] : 'church')) {
+                $out[] = ['id' => (int) $t['id'], 'title' => (string) $t['title']];
+            }
+        }
+    }
+    return $out;
+}
+
+/** May this person sit the exam? Their enrolment id, or null. */
+function exams_learner_enrolment(PDO $pdo, array $item, int $userId): ?int
+{
+    if (($item['training_status'] ?? 'published') !== 'published') {
+        return null;
+    }
+    return exam_enrolment_id($pdo, (int) $item['training_id'], $userId);
+}
+
+/** A question as the tutor's screen shows it. */
+function exams_question_row(array $q, array $inUse = []): array
+{
+    return [
+        'id' => $q['id'], 'type' => $q['qtype'], 'type_label' => EXAM_QTYPES[$q['qtype']] ?? $q['qtype'], 'text' => $q['body'],
+        'options' => $q['options'], 'correct' => $q['correct'], 'answer' => exam_answer_text($q, $q['correct']),
+        'marks' => $q['marks'], 'explanation' => (string) ($q['explanation'] ?? ''), 'topic' => (string) $q['topic'],
+        'status' => $q['status'], 'source' => $q['source'], 'in_use' => isset($inUse[$q['id']]),
+    ];
+}
+
+/** Which of these questions someone has answered. @return array<int,true> */
+function exams_in_use(PDO $pdo, array $ids): array
+{
+    $out = [];
+    foreach (array_chunk(array_values($ids), 400) as $chunk) {
+        $stmt = $pdo->prepare('SELECT DISTINCT question_id FROM training_attempt_answers WHERE question_id IN (' . implode(',', array_fill(0, count($chunk), '?')) . ')');
+        $stmt->execute($chunk);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $id) {
+            $out[(int) $id] = true;
+        }
+    }
+    return $out;
+}
+
+/** The exam's set-up screen: the settings, and the Ready questions it may use. */
+function exams_setup_view(PDO $pdo, array $item): array
+{
+    $exam = exam_get($pdo, (int) $item['id']);
+    $pool = array_merge(exam_question_list($pdo, (int) $item['training_id'], ['status' => 'approved']),
+                        exam_question_list($pdo, null, ['status' => 'approved']));
+    $now = exams_now();
+    return [
+        'item' => ['id' => $item['id'], 'title' => $item['title'], 'training_id' => $item['training_id'], 'training' => $item['training_title']],
+        'exam' => $exam,
+        'started' => $exam !== null ? exam_attempt_count($pdo, (int) $exam['id']) : 0,
+        'window' => $exam !== null ? exam_window($exam, $now) : 'not_set',
+        'pool' => array_map(static fn ($q) => exams_question_row($q) + ['shared' => $q['training_id'] === null], $pool),
+    ];
+}
+
+/** What the learner's page shows before, during and after. */
+function exams_take_view(PDO $pdo, array $item, int $userId): array
+{
+    $exam = exam_get($pdo, (int) $item['id']);
+    $now = exams_now();
+    if ($exam === null) {
+        return ['state' => 'not_set', 'item' => ['title' => $item['title'], 'training' => $item['training_title']]];
+    }
+    exam_finalize_due($pdo, $now, (int) $exam['id']);
+    $attempt = exam_attempt_get($pdo, (int) $exam['id'], $userId);
+    $view = [
+        'item' => ['title' => $item['title'], 'training' => $item['training_title']],
+        'window' => exam_window($exam, $now),
+        'opens' => $exam['window_open'], 'closes' => $exam['window_close'],
+        'minutes' => $exam['minutes'], 'questions' => count($exam['question_ids']), 'pass_percent' => $exam['pass_percent'],
+        'part_marks' => (bool) $exam['part_marks'],
+    ];
+    if ($attempt === null) {
+        return $view + ['state' => 'ready'];
+    }
+    if ($attempt['status'] === 'started') {
+        return $view + ['state' => 'started', 'paper' => exam_paper($pdo, $attempt, $now)];
+    }
+    return $view + ['state' => 'done', 'result' => exam_result_for_learner($pdo, $exam, $attempt, $now)];
+}
+
+/**
+ * One action. The caller has checked sign-in and CSRF. $files: $_FILES (the import).
+ * @return array{status:string, ...}
+ */
+function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = []): array
+{
+    $fail = static fn (string $msg, array $errors = [], ?string $code = null): array =>
+        ['status' => 'error', 'message' => $msg] + ($errors !== [] ? ['errors' => $errors] : []) + ($code ? ['code' => $code] : []);
+    $forbidden = static fn (): array => ['status' => 'error', 'code' => 'FORBIDDEN', 'message' => 'You do not have access to this.'];
+    $bank = isset($in['training_id']) && (string) $in['training_id'] !== '' ? (int) $in['training_id'] : null;
+
+    // ---- The question bank (tutors) -------------------------------------
+    switch ($do) {
+        case 'questions':
+            if (!exams_may_manage($pdo, $bank)) {
+                return $forbidden();
+            }
+            $qs = exam_question_list($pdo, $bank, ['status' => (string) ($in['status'] ?? ''), 'q' => (string) ($in['q'] ?? '')]);
+            $used = exams_in_use($pdo, array_column($qs, 'id'));
+            return ['status' => 'success', 'questions' => array_map(static fn ($q) => exams_question_row($q, $used), $qs)];
+
+        case 'question_save':
+            $id = !empty($in['id']) ? (int) $in['id'] : null;
+            if ($id !== null) {
+                $q = exam_question_get($pdo, $id);
+                if ($q === null || !exams_may_manage($pdo, $q['training_id'])) {
+                    return $forbidden();
+                }
+            } elseif (!exams_may_manage($pdo, $bank)) {
+                return $forbidden();
+            }
+            $r = exam_question_save($pdo, $id, $bank, [
+                'qtype' => (string) ($in['type'] ?? ''), 'body' => $in['text'] ?? '', 'options' => (array) ($in['options'] ?? []),
+                'correct' => array_map('intval', (array) ($in['correct'] ?? [])), 'marks' => (string) ($in['marks'] ?? ''),
+                'explanation' => $in['explanation'] ?? '', 'topic' => $in['topic'] ?? '',
+                'status' => !empty($in['ready']) ? 'approved' : 'draft',
+            ], $me);
+            if (!$r['ok']) {
+                return $fail(implode(' ', array_slice($r['errors'], 0, 3)), $r['errors']);
+            }
+            $q = exam_question_get($pdo, (int) $r['id']);
+            return ['status' => 'success', 'message' => $id === null ? 'Question added.' : 'Saved.', 'warnings' => $r['warnings'] ?? [],
+                    'question' => exams_question_row($q, exams_in_use($pdo, [$q['id']]))];
+
+        case 'question_status':
+            $q = exam_question_get($pdo, (int) ($in['id'] ?? 0));
+            if ($q === null || !exams_may_manage($pdo, $q['training_id'])) {
+                return $forbidden();
+            }
+            $to = (string) ($in['to'] ?? '');
+            if (!exam_question_set_status($pdo, (int) $q['id'], $to, $me)) {
+                return $fail('That change is not possible.');
+            }
+            return ['status' => 'success', 'message' => ['approved' => 'Ready to use.', 'draft' => 'Back to draft.', 'archived' => 'Archived.'][$to] ?? 'Saved.',
+                    'question' => exams_question_row((array) exam_question_get($pdo, (int) $q['id']))];
+
+        case 'import_check':
+            if (!exams_may_manage($pdo, $bank)) {
+                return $forbidden();
+            }
+            $f = $files['sheet'] ?? null;
+            if (!is_array($f) || ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file((string) ($f['tmp_name'] ?? ''))) {
+                return $fail('Choose the Excel file to upload.');
+            }
+            if ((int) ($f['size'] ?? 0) > 5 * 1024 * 1024) {
+                return $fail('The file is too big (5 MB at most).');
+            }
+            if (strtolower((string) pathinfo((string) ($f['name'] ?? ''), PATHINFO_EXTENSION)) !== 'xlsx') {
+                return $fail('Upload an Excel (.xlsx) file: the template, filled in.');
+            }
+            $r = exam_import_check($pdo, (string) $f['tmp_name'], (string) ($f['name'] ?? ''), $bank, $me);
+            return $r['ok'] ? ['status' => 'success', 'token' => $r['token'], 'counts' => $r['counts'],
+                               'rows' => array_map('exams_import_row_view', $r['rows'])]
+                            : $fail((string) $r['error']);
+
+        case 'import_confirm':
+            $imp = exam_import_get($pdo, (string) ($in['token'] ?? ''), $me);
+            if ($imp === null) {
+                return $fail('That check has expired. Upload the file again.');
+            }
+            if (!exams_may_manage($pdo, $imp['training_id'])) {
+                return $forbidden();
+            }
+            $r = exam_import_confirm($pdo, (string) $in['token'], $me, !empty($in['ready']));
+            return $r['ok'] ? ['status' => 'success', 'message' => $r['message'], 'imported' => $r['imported']] : $fail($r['message']);
+    }
+
+    // ---- One exam item ----------------------------------------------------
+    $item = exam_item($pdo, (int) ($in['item'] ?? 0));
+    if ($item === null) {
+        return $fail('That exam no longer exists.', [], 'NOT_FOUND');
+    }
+    $tutor = in_array($do, ['setup', 'exam_save', 'results', 'attempt', 'end_attempt'], true);
+    if ($tutor && !exams_may_manage($pdo, (int) $item['training_id'])) {
+        return $forbidden();
+    }
+    switch ($do) {
+        case 'setup':
+            return ['status' => 'success'] + exams_setup_view($pdo, $item);
+
+        case 'exam_save':
+            $r = exam_save($pdo, $item, $in, $me);
+            return $r['ok'] ? ['status' => 'success', 'message' => 'Exam saved.'] + exams_setup_view($pdo, $item)
+                            : $fail(implode(' ', array_slice($r['errors'], 0, 3)), $r['errors']);
+
+        case 'results':
+            $exam = exam_get($pdo, (int) $item['id']);
+            return $exam === null ? ['status' => 'success', 'rows' => [], 'summary' => null]
+                : ['status' => 'success'] + exam_results($pdo, $exam);
+
+        case 'attempt':
+        case 'end_attempt':
+            $a = exam_attempt_by_id($pdo, (int) ($in['attempt_id'] ?? 0));
+            if ($a === null || $a['item_id'] !== (int) $item['id']) {
+                return $fail('That attempt no longer exists.');
+            }
+            if ($do === 'end_attempt') {
+                $a = exam_submit($pdo, (int) $a['id'], 'tutor') ?? $a;
+            }
+            return ['status' => 'success', 'attempt' => $a, 'message' => $do === 'end_attempt' ? 'Handed in.' : null] + exam_attempt_detail($pdo, $a);
+    }
+
+    // ---- The learner ------------------------------------------------------
+    $enrolment = exams_learner_enrolment($pdo, $item, $me);
+    if ($enrolment === null) {
+        return $fail('This exam is for people enrolled in ' . $item['training_title'] . '.', [], 'NOT_ENROLLED');
+    }
+    $exam = exam_get($pdo, (int) $item['id']);
+    if ($exam === null && $do !== 'take') {
+        return $fail('This exam is not ready yet.');
+    }
+    switch ($do) {
+        case 'take':
+            return ['status' => 'success'] + exams_take_view($pdo, $item, $me);
+
+        case 'start':
+            $r = exam_start($pdo, $exam, $me, $enrolment);
+            return $r['ok'] ? ['status' => 'success'] + exams_take_view($pdo, $item, $me) : $fail((string) $r['error'], [], $r['code'] ?? null);
+
+        case 'answer':
+        case 'focus':
+        case 'submit':
+            $a = exam_attempt_get($pdo, (int) $exam['id'], $me);
+            if ($a === null) {
+                return $fail('Start the exam first.');
+            }
+            if ($do === 'answer') {
+                $r = exam_answer($pdo, $a, (int) ($in['n'] ?? 0), array_values((array) ($in['chosen'] ?? [])));
+                return $r['ok'] ? ['status' => 'success', 'seconds_left' => exam_seconds_left($a, exams_now())]
+                    : $fail((string) $r['error'], [], $r['code'] ?? null);
+            }
+            if ($do === 'focus') {
+                $r = exam_note_focus($pdo, $exam, $a, (string) ($in['kind'] ?? ''));
+                return ['status' => 'success', 'leaves' => $r['leaves']];
+            }
+            exam_submit($pdo, (int) $a['id'], 'learner');
+            return ['status' => 'success', 'message' => 'Handed in.'] + exams_take_view($pdo, $item, $me);
+    }
+    return $fail('Unknown action.');
+}
+
+/** An import row as the check screen shows it. */
+function exams_import_row_view(array $r): array
+{
+    $f = $r['fields'] ?? [];
+    return [
+        'row' => $r['row'], 'status' => $r['status'], 'errors' => $r['errors'] ?? [], 'warnings' => $r['warnings'] ?? [],
+        'type' => (string) ($f['type'] ?? ''), 'text' => mb_substr((string) ($f['question'] ?? ''), 0, 160),
+        'correct' => (string) ($f['correct'] ?? ''), 'marks' => (string) ($f['marks'] ?? ''),
+    ];
+}

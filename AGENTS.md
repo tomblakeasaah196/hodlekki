@@ -1045,6 +1045,27 @@ contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
   integration job; `_campaigns_` is a required migration marker). Run both
   after touching `includes/campaigns/`, `includes/mailer.php` or the crons.
 
+## Trainings: exams and the question bank (added 2026-11-12)
+
+Guide and contracts: `docs/EXAMS.md`. Code: `includes/exams/` (entry
+`bootstrap.php`), `api/exams_api.php`, `modules/exams/`. Schema:
+`db/migrations/20261209090000_trainings_exams.sql`. Tests:
+`php tests/exams/run.php` (needs pdo_sqlite and zip).
+
+- **One check for every question:** `exam_question_check()`, whoever writes
+  it (form, Excel import, AI). The content hash (`import_hash`) is UNIQUE:
+  never check-then-insert, never a second copy.
+- **One attempt** is the UNIQUE (`exam_id`, `user_id`) key. The deadline is set
+  on the server at Start; marking happens on the server, once, in
+  `exam_submit()`. Never send `correct_json` or an explanation to a learner
+  before they have handed in; after, only for the questions they got wrong,
+  once the exam has closed.
+- Marking never calls the AI (explanations are stored per question).
+- Access: tutors `can('trainings', 'manage', <training department or
+  'church'>)`; learners need an enrolment. Decided only in `exams_action()`.
+- The Excel reader (`xlsx.php`) treats every upload as hostile (size caps
+  before inflating, no DOCTYPE, no network); keep it that way.
+
 ## Roles & permissions (added 2026-11-11)
 
 One access check for the whole platform: `can(string $module, string $level = 'view', $target = null)`

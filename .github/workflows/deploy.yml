@@ -303,6 +303,22 @@ jobs:
           fi
           php tests/campaigns/run.php
 
+      - name: Trainings exams and question import tests
+        run: |
+          set -euo pipefail
+
+          # No MySQL, no network: the .xlsx writer and reader, the question
+          # checks, the Excel import (row by row, confirm, never twice) and the
+          # exam engine's rules (window, one attempt, shuffling, the server's
+          # clock, auto-submit, part marks, tab-leave notes, results), against
+          # SQLite built from the real migration (includes/exams/). It prints
+          # SKIP without pdo_sqlite or zip, so refuse to run without them.
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") && extension_loaded("zip") ? 0 : 1);'; then
+            echo "::error::pdo_sqlite or zip is missing — the exams tests would be skipped"
+            exit 1
+          fi
+          php tests/exams/run.php
+
       - name: SMS Studio helper tests
         # No database, no network: phone normalisation, GSM-7 segment counting,
         # the sender name written into every text, the wallet pre-flight
