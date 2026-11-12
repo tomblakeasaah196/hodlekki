@@ -3,12 +3,12 @@
 **Who can open it:** Super Admin and the Resident Pastor.
 **Where:** sidebar → *Security & Stewardship* → **Security Centre**
 (`/modules/security/index.php`) — or search "Security" in the Ctrl/Cmd+K
-palette (each tab — Accounts, Live Sessions, Login Activity, Audit Trail — is
+palette (each tab — Accounts, Sessions, Sign-ins, Audit trail — is
 searchable there too).
 
-Clearance is checked against the live `user_roles` table, not
-`$_SESSION['active_role']` — switching your active role on the profile screen
-does not open or close this door.
+Access comes from **Roles & permissions** (module "Security Centre"): View opens
+the screen, Edit allows changing an account, Manage allows generating sign-in
+emails for everyone. While you *view as* someone the screen is read-only.
 
 ---
 
@@ -22,7 +22,7 @@ does not open or close this door.
 | **Reset password** | You type the new password. Password is re-hashed, every session is killed, and (by default) they must choose their own at next sign-in. |
 | **Sign out everywhere** | Kills every live session for that member. They can sign straight back in — this is not a block. |
 | **Clear lockout** | Removes an automatic lock caused by 5 failed sign-ins. |
-| **Force change at next login** | They land on `/auth/change_password.php` and cannot reach any other page until they set a new password. |
+| **Force change** | They land on `/auth/change_password.php` and cannot reach any other page until they set a new password. |
 | **Restore roles** | Un-freezes roles frozen by a Revoke. **Super Admin only.** They must sign out and back in to pick the roles up. |
 
 A reason is **required** for Suspend and Revoke. It is written to the audit
@@ -58,12 +58,12 @@ These are enforced server-side in `security_guard_target()`
   lockout, "must change password", "no password set", "online now" or "has
   system roles". Problem accounts sort to the top. *Manage* opens the full
   control panel for one member.
-- **Live Sessions** — every browser signed in over the last 7 days, with the
+- **Sessions** — every browser signed in over the last 7 days, with the
   device, IP and last activity. *Sign out* kills that one device.
-- **Login Activity** — successes and failures, with the failure reason
+- **Sign-ins** — successes and failures, with the failure reason
   (`bad_password`, `account_suspended`, `account_locked`, `unknown_email`…).
   Filter to failures only when you are investigating.
-- **Audit Trail** — who did what to whom, when, and from which IP. Every
+- **Audit trail** — who did what to whom, when, and from which IP. Every
   privileged action on this page writes a row here. Nothing deletes rows.
 
 ---
@@ -72,11 +72,11 @@ These are enforced server-side in `security_guard_target()`
 
 1. **Accounts** tab → search for the member → **Manage**.
 2. Scroll to **Reset password**.
-3. Either type a password or press **Suggest strong password** (it fills both
+3. Either type a password or press **Suggest password** (it fills both
    boxes with a 14-character random password).
-4. Leave **Require them to change it at next sign-in** ticked. This is the
+4. Leave **Change it at next sign-in** ticked. This is the
    whole point: you know the temporary password, they must replace it.
-5. Press **Set new password** and confirm.
+5. Press **Set password** and confirm.
 6. **Copy the password before you close the dialog — it is never shown again.**
    Read it to the member over the phone or in person, not over WhatsApp.
 
@@ -94,13 +94,13 @@ that they cannot sign in yet). The personal email lives on their profile and
 is never touched here.
 
 1. **Accounts** tab → search for the member → **Manage**.
-2. Scroll to **Change sign-in email**. Their current sign-in email (and
+2. Scroll to **Sign-in email**. Their current sign-in email (and
    personal email, if they have one) is shown at the top of the card.
-3. Type what they want *before* the `@` — the `@hodlc.com` part is fixed, so
-   it cannot be mistyped. Type it again in the confirm box.
+3. Type what they want *before* the `@` — `@hodlc.com` is added if you leave
+   it out. Type it again in the confirm box.
 4. If the account may be compromised, or you simply want them to sign in
-   fresh with the new address, tick **Sign them out of every device now**.
-5. Press **Change sign-in email** and confirm.
+   fresh with the new address, tick **Sign them out everywhere**.
+5. Press **Save email** and confirm.
 6. **Tell the member the new address** — the old one stops working the moment
    you press the button. Their password does not change.
 
@@ -113,7 +113,7 @@ an in-app notification.
 
 If several members have no sign-in email at all, don't do them one by one:
 
-1. **Accounts** tab → **Generate missing emails** (toolbar button).
+1. **Generate emails** (top right; needs Security: Manage).
 2. Confirm. The system generates a unique `@hodlc.com` address for **every**
    account without one, exactly the way new members' addresses are generated
    (shortest name parts, e.g. `oluchi.chiamaka@hodlc.com`, with a number

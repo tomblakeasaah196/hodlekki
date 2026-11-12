@@ -3,9 +3,11 @@
 //
 // Admin Security Centre backend (modules/security/index.php).
 //
-// Clearance: Super_Admin or Resident_Pastor, checked against the live roles
-// table rather than $_SESSION['active_role'] (which a user can switch
-// themselves from the profile screen).
+// Clearance comes from Roles & permissions, module "security": reading needs
+// View (security_is_admin()), every change needs Edit, generating sign-in
+// emails for everyone needs Manage (Super Admins and the Resident Pastor on
+// day one). Changes are asked through can(), so "view as" stays read-only.
+// Every write carries the CSRF token (csrf_require()).
 //
 // Guard rails enforced by includes/security_helpers.php:
 //   - no security action against your own account from this screen
@@ -15,6 +17,7 @@
 // Every state-changing action writes a row to security_audit_log.
 
 require_once '../includes/db.php';
+csrf_require();
 header('Content-Type: application/json');
 
 // ---------------------------------------------------------------- auth gate
@@ -47,13 +50,17 @@ $action        = $_POST['action'] ?? $_GET['action'] ?? '';
 $isSuperAdmin  = security_is_super_admin($pdo, $admin_id);
 $writeActions  = [
     'set_status', 'reset_password', 'change_email', 'force_logout', 'revoke_session',
-    'unlock_account', 'set_force_change', 'restore_roles',
+    'unlock_account', 'set_force_change', 'restore_roles', 'generate_missing_emails',
 ];
 
-// State-changing actions must be POSTed.
+// State-changing actions must be POSTed, and need Security: Edit (Manage for
+// generating sign-in emails in bulk).
 if (in_array($action, $writeActions, true) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['status' => 'error', 'message' => 'This action requires a POST request.']);
     exit;
+}
+if (in_array($action, $writeActions, true)) {
+    api_require_can('security', $action === 'generate_missing_emails' ? 'manage' : 'edit');
 }
 
 /** Fetch a target user or bail out with a JSON error. */
