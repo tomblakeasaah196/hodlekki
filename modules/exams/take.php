@@ -2,14 +2,15 @@
 // /modules/exams/take.php
 // Taking an exam (Trainings PR 2): the rules, Start, the questions with a
 // countdown, Hand in, and the result. One attempt; the clock, the marking
-// and the answers live on the server (includes/exams/engine.php). Behaviour
-// in assets/ui/js/pages/exams.js. Guide: docs/EXAMS.md.
+// and the answers live on the server (includes/exams/engine.php). One
+// question per screen (a wizard): behaviour in assets/ui/js/pages/exam-take.js,
+// styles in assets/ui/src/app.css "Exam wizard". Guide: docs/EXAMS.md.
 //
 //   /modules/exams/take?item=<training_items.id>
 $ui = [
     'title' => 'Your exam',
     'mode' => 'strict',
-    'scripts' => ['/assets/ui/js/pages/exams.js'],
+    'scripts' => ['/assets/ui/js/pages/exam-take.js'],
 ];
 require_once '../../includes/header.php';
 require_once __DIR__ . '/../../includes/exams/access.php';
@@ -28,19 +29,39 @@ if (exams_learner_enrolment($pdo, $item, (int) $_SESSION['user_id']) === null) {
 }
 echo ui_json_script('exams-config', ['page' => 'take', 'item' => (int) $item['id']]);
 ?>
-<div class="ui-page ui-page--narrow" data-exams="take">
+<div class="ui-page ui-page--narrow xt" data-exam-take>
     <?= ui_page_header([
         'title' => 'Your exam',
         'description' => $item['title'] . ' · ' . $item['training_title'],
         'info' => 'You have one attempt. Once you start, the clock runs even if you close the page, and at zero your answers are handed in by themselves. Each answer is saved as you choose it. Stay on this tab: leaving it is noted for your tutor.',
     ]) ?>
 
-    <div data-ex-take aria-live="polite"><p class="ui-meta">Loading…</p></div>
+    <div data-xt-view aria-live="polite"><p class="ui-meta">Loading…</p></div>
 
-    <div class="sticky bottom-0 z-10 -mx-4 mt-4 flex items-center justify-between gap-3 border-t border-line bg-surface px-4 py-3" data-ex-bar hidden>
-        <p class="font-semibold tabular-nums" data-ex-clock role="timer" aria-live="off">--:--</p>
-        <p class="ui-meta" data-ex-saved aria-live="polite"></p>
-        <?= ui_button('Hand in', ['variant' => 'primary', 'icon' => 'send', 'attrs' => ['data-action' => 'ex.submit']]) ?>
+    <div data-xt-run hidden>
+        <div class="xt-head">
+            <div class="xt-head__row">
+                <p class="xt-count"><span data-xt-pos>Question 1</span> <span class="xt-count__of" data-xt-of></span></p>
+                <p class="xt-timer" role="timer" aria-live="off" data-xt-timer><?= ui_icon('clock') ?><span data-xt-clock>--:--</span><span class="sr-only"> left</span></p>
+            </div>
+            <div class="xt-bar" role="progressbar" aria-label="Where you are" aria-valuemin="1" aria-valuemax="1" aria-valuenow="1" data-xt-bar><span class="xt-bar__fill" data-xt-fill></span></div>
+            <div class="xt-head__foot">
+                <p class="xt-saved" data-xt-saved aria-live="polite"></p>
+                <button type="button" class="xt-maptoggle" aria-expanded="false" aria-controls="xt-map" data-action="xt.map"><?= ui_icon('list-ordered') ?><span data-xt-answered></span><?= ui_icon('chevron-down') ?></button>
+            </div>
+            <nav class="xt-map" id="xt-map" aria-label="All questions" hidden>
+                <ol class="xt-map__grid" data-xt-map></ol>
+                <p class="xt-map__key"><span class="xt-key xt-key--done">Answered</span><span class="xt-key xt-key--flag">Flagged</span><span class="xt-key">Not yet</span></p>
+            </nav>
+        </div>
+
+        <div data-xt-stage></div>
+
+        <div class="xt-foot">
+            <?= ui_button('Back', ['icon' => 'arrow-left', 'attrs' => ['data-action' => 'xt.back', 'data-xt-back' => true]]) ?>
+            <button type="button" class="ui-btn ui-btn--primary" data-action="xt.next" data-xt-next><span>Next</span><?= ui_icon('arrow-right') ?></button>
+        </div>
+        <p class="sr-only" aria-live="polite" data-xt-say></p>
     </div>
 </div>
 <?php require_once '../../includes/footer.php'; ?>
