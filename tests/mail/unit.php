@@ -176,6 +176,18 @@ check('the message frame tells Cloudflare not to rewrite it (no-transform)',
     str_contains((string) file_get_contents("$root/api/mail_view.php"), "header('Cache-Control: private, no-store, no-transform');"));
 check('the Mail page lets its own message frames load (frame-src self)',
     str_contains((string) file_get_contents("$root/modules/mail/index.php"), "'csp'     => ['frame-src' => [\"'self'\"]]"));
+$mailPage = (string) file_get_contents("$root/modules/mail/index.php");
+check('the mailbox switcher\'s addresses are kept from Cloudflare (inside an <option> its decoder cannot repair them)',
+    (bool) preg_match('~<!--email_off-->\s*<select id="mr-box-pick".*?</select>\s*<!--/email_off-->~s', $mailPage));
+// Only the Mail page frames anything, and only api/mail_view.php serves HTML into a sandbox (12 Nov 2026 audit).
+$framing = [];
+foreach (array_merge(glob("$root/modules/mail/*.php") ?: [], glob("$root/includes/mail/mounts/*.php") ?: [], glob("$root/includes/mail/Read/partials/*.php") ?: [], glob("$root/assets/ui/js/pages/mail*.js") ?: []) as $file) {
+    if (preg_match('/<iframe\b|createElement\(\s*[\'"]iframe/i', (string) file_get_contents($file))) {
+        $framing[] = str_replace("$root/", '', $file);
+    }
+}
+check('frames appear only in the reader partials, which the Mail page draws (and it allows frame-src self)',
+    $framing === ['includes/mail/Read/partials/live.php', 'includes/mail/Read/partials/message.php'], implode(', ', $framing));
 $migrations = glob("$root/db/migrations/*_mail_*.sql");
 check('the Mail migrations carry the _mail_ marker (core, reading, writing, teamwork)', array_map('basename', $migrations) === ['20261128090000_mail_core.sql', '20261201090000_mail_read.sql', '20261203090000_mail_compose.sql', '20261205090000_mail_team_alerts.sql']);
 foreach ($migrations as $migration) {

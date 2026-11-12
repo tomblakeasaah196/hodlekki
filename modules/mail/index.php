@@ -160,11 +160,15 @@ $boxName = fn (array $a) => Store::isShared($a) ? (string) $a['display_name'] : 
                 <div class="mr-pickers">
                     <?php if (count($inbox->accounts) > 1): ?>
                         <label class="sr-only" for="mr-box-pick">Mailbox</label>
+                        <?php // email_off: Cloudflare's email obfuscation would turn each address into "[email protected]", and its
+                              // decoder cannot repair text inside an <option>. The comments tell Cloudflare to leave it alone. ?>
+                        <!--email_off-->
                         <select id="mr-box-pick" class="ui-select ui-select--sm" data-box-pick>
                             <?php foreach ($inbox->accounts as $a): $n = $boxUnread[$a['id']] ?? 0; ?>
                                 <option value="<?= (int) $a['id'] ?>"<?= $a['id'] === $account['id'] ? ' selected' : '' ?>><?= ui_e($a['email'] . ($n > 0 ? " ({$n})" : '')) ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <!--/email_off-->
                     <?php endif; ?>
                     <label class="sr-only" for="mr-folder-pick">Folder</label>
                     <select id="mr-folder-pick" class="ui-select ui-select--sm" data-folder-pick>
