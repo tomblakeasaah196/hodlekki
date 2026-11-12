@@ -121,6 +121,19 @@ if ($forceChecks || $minute % 5 === 0 || $lastChecks < $now - 300) {
     }
 }
 
+// 3b. The outside probe: GitHub's hourly schedule skips many runs, so when no
+//     report has come for 70 minutes, ask GitHub to run it now (at most once in
+//     55 minutes). Needs MONITOR_PROBE_KICK_TOKEN in .env; nothing happens without it.
+try {
+    $kicked = monitor_probe_kick($pdo, $now, hod_monitor_env('MONITOR_PROBE_KICK_TOKEN'),
+        hod_monitor_env('MONITOR_PROBE_REPO') ?: 'tomblakeasaah196/hodlekki');
+    if ($kicked !== null) {
+        $done['probe'] = $kicked;
+    }
+} catch (Throwable $e) {
+    hod_monitor_report($e, ['step' => 'probe kick']);
+}
+
 // 4. Alerts.
 foreach ([
     'errors' => fn () => monitor_alert_new_errors($pdo, $pdo),

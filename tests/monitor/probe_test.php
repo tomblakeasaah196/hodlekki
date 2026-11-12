@@ -37,3 +37,30 @@ $facts = monitor_facts_outside($db);
 $states = array_column(monitor_check_outside($facts['latest'], $facts['uptime'], $now, 60, true), 'state', 'key');
 eq('a clean report makes every outside check green',
     ['probe' => 'ok', 'outside_site' => 'ok', 'outside_connect' => 'ok', 'tls' => 'ok', 'dns' => 'ok', 'origin_lock' => 'ok'], $states);
+
+// When GitHub's schedule skips the probe, the server asks GitHub for a run.
+$calls = [];
+$github = function (int $status) use (&$calls): callable {
+    return function (string $url, array $headers, string $body) use (&$calls, $status): int {
+        $calls[] = [$url, $headers, $body];
+        return $status;
+    };
+};
+$kdb = monitor_test_db();
+eq('no token in .env: nothing is asked', null, monitor_probe_kick($kdb, $now, '', 'owner/repo', $github(204)));
+eq('a malformed repository name: nothing is asked', null, monitor_probe_kick($kdb, $now, 'tok', 'owner/repo/../x', $github(204)));
+eq('no report yet: it asks at once', 'asked GitHub to run the outside probe', monitor_probe_kick($kdb, $now, 'tok', 'owner/repo', $github(204)));
+ok('…for the probe workflow, on main, with the token',
+    count($calls) === 1
+    && $calls[0][0] === 'https://api.github.com/repos/owner/repo/actions/workflows/monitor-probe.yml/dispatches'
+    && $calls[0][2] === '{"ref":"main"}' && in_array('Authorization: Bearer tok', $calls[0][1], true));
+eq('…and not again within 55 minutes', null, monitor_probe_kick($kdb, $now + 600, 'tok', 'owner/repo', $github(204)));
+monitor_state_set($kdb, 'probe_last', (string) json_encode(['at' => $now + 1000]));
+eq('a report an hour old: still on time, nothing asked', null, monitor_probe_kick($kdb, $now + 1000 + 3600, 'tok', 'owner/repo', $github(204)));
+eq('no report for 72 minutes: it asks again', 'asked GitHub to run the outside probe',
+    monitor_probe_kick($kdb, $now + 1000 + 72 * 60, 'tok', 'owner/repo', $github(204)));
+eq('two asks in all', 2, count($calls));
+$kdb2 = monitor_test_db();
+eq('GitHub refuses (an expired token): said, with the status',
+    'could not ask GitHub to run the outside probe (HTTP 401)', monitor_probe_kick($kdb2, $now, 'old', 'owner/repo', $github(401)));
+eq('…and a failed ask also waits 55 minutes', null, monitor_probe_kick($kdb2, $now + 60, 'old', 'owner/repo', $github(401)));

@@ -90,3 +90,76 @@ function monitor_probe_store(PDO $db, array $p, int $now): int
 
     return $n;
 }
+
+/* ─────────── when GitHub's schedule skips the probe, the server asks for a run ─────────── */
+
+const MONITOR_PROBE_KICK_AFTER = 70 * 60;   // no report for this long: ask GitHub to run the probe now
+const MONITOR_PROBE_KICK_EVERY = 55 * 60;   // and ask at most once in this long
+
+/**
+ * Ask GitHub to run the outside probe now when no report has come for 70
+ * minutes. GitHub's scheduler skips many hourly runs (on 12 Nov 2026 one of
+ * twelve fired), but a run started through its API (workflow_dispatch) is not
+ * skipped. The probe still runs on GitHub's machines, so it still looks at the
+ * site from outside. cron/monitor.php calls this every minute.
+ *
+ * $token: MONITOR_PROBE_KICK_TOKEN from .env, a fine-grained GitHub token for
+ * this repository only with "Actions: read and write"; nothing happens without
+ * it. $post(url, headers, body) returns the HTTP status (tests pass a fake).
+ *
+ * @return string|null what happened, for the cron's line; null when nothing was due
+ */
+function monitor_probe_kick(PDO $db, int $now, string $token, string $repo, ?callable $post = null): ?string
+{
+    if ($token === '' || !preg_match('#^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$#', $repo)) {
+        return null;
+    }
+    $last = json_decode((string) monitor_state_get($db, 'probe_last'), true);
+    if (is_array($last) && (int) ($last['at'] ?? 0) > $now - MONITOR_PROBE_KICK_AFTER) {
+        return null;
+    }
+    $kick = json_decode((string) monitor_state_get($db, 'probe_kick'), true);
+    if (is_array($kick) && (int) ($kick['at'] ?? 0) > $now - MONITOR_PROBE_KICK_EVERY) {
+        return null;
+    }
+    $post ??= 'monitor_probe_kick_post';
+    $status = (int) $post(
+        'https://api.github.com/repos/' . $repo . '/actions/workflows/monitor-probe.yml/dispatches',
+        [
+            'Accept: application/vnd.github+json',
+            'Authorization: Bearer ' . $token,
+            'X-GitHub-Api-Version: 2022-11-28',
+            'User-Agent: hodlekki-monitor',
+            'Content-Type: application/json',
+        ],
+        '{"ref":"main"}'
+    );
+    monitor_state_set($db, 'probe_kick', (string) json_encode(['at' => $now, 'status' => $status]));
+
+    return $status === 204
+        ? 'asked GitHub to run the outside probe'
+        : 'could not ask GitHub to run the outside probe (HTTP ' . $status . ')';
+}
+
+/** POST over HTTPS only; the HTTP status, or 0 when GitHub could not be reached. */
+function monitor_probe_kick_post(string $url, array $headers, string $body): int
+{
+    if (!function_exists('curl_init')) {
+        return 0;
+    }
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $body,
+        CURLOPT_HTTPHEADER     => $headers,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_PROTOCOLS      => CURLPROTO_HTTPS,
+    ]);
+    curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    return $status;
+}
