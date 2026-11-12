@@ -1,7 +1,8 @@
 # Trainings: exams and the question bank (PR 2)
 
 Plan: `TRAININGS-PLAN.md` (owner's answers 9, 10, 11 and 12c). Code: `includes/exams/` (entry `bootstrap.php`, after
-`includes/db.php`), `api/exams_api.php`, `modules/exams/`, `assets/ui/js/pages/exams.js`. Schema:
+`includes/db.php`), `api/exams_api.php`, `modules/exams/`, `assets/ui/js/pages/exams.js` (the bank, set-up and results) and
+`assets/ui/js/pages/exam-take.js` (taking an exam: one question per screen). Schema:
 `db/migrations/20261209090000_trainings_exams.sql`. Tests: `php tests/exams/run.php` (SQLite + zip, CI step "Trainings
 exams and question import tests").
 

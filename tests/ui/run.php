@@ -825,8 +825,76 @@ foreach (['assets/ui/src/app.css' => 'source', 'assets/ui/app.css' => 'build'] a
     ok("reduced motion stops the cards' entrance ({$cssKind})", str_contains($rm, '.dash-enter>.dash-kpi{animation:none!important'));
     ok("reduced motion stops the cards' lift ({$cssKind})", str_contains($rm, '.ui-card.dash-kpi{transform:none!important'));
 }
-$dashCss = (string) strstr((string) strstr((string) file_get_contents($root . '/assets/ui/src/app.css'), '/* ---------- Home dashboard'), '/* A dialog that fills the screen', true);
+$dashCss = (string) strstr((string) strstr((string) file_get_contents($root . '/assets/ui/src/app.css'), '/* ---------- Home dashboard'), '/* ---------- Exam wizard', true);
 ok('nothing on the dashboard loops', $dashCss !== '' && !str_contains($dashCss, 'infinite'));
+
+/* ---------------------------------------------------------------------- */
+suite('15. the exam wizard: its own script, one question per screen, calm motion');
+// The owner (12 Nov 2026): one question per page with a progress bar, a
+// little colour and motion. Taking an exam moved out of exams.js (the bank,
+// set-up and results) into exam-take.js; the API is unchanged.
+
+$takePage = (string) file_get_contents($root . '/modules/exams/take.php');
+$takeJs = (string) file_get_contents($root . '/assets/ui/js/pages/exam-take.js');
+$examsJs = (string) file_get_contents($root . '/assets/ui/js/pages/exams.js');
+ok('take.php loads exam-take.js, not exams.js',
+    str_contains($takePage, "'scripts' => ['/assets/ui/js/pages/exam-take.js']") && !str_contains($takePage, 'pages/exams.js'));
+$leftovers = array_values(array_filter(['Taking an exam', 'renderTake', 'focusNote', "call('take'", "call('start'", "call('answer'",
+    "call('submit'", "call('focus'", 'data-ex-take', 'data-ex-clock', "'ex.submit'", "'ex.start'", "cfg.page === 'take'"],
+    static fn (string $needle): bool => str_contains($examsJs, $needle)));
+ok('exams.js no longer has the take code', $leftovers === [], implode(', ', $leftovers));
+
+preg_match_all("/HOD\\.actions\\.on\\('(xt\\.[a-z-]+)'/", $takeJs, $m);
+$xtHandled = array_values(array_unique($m[1]));
+preg_match_all('/data-action(?:-change|-input)?="(xt\.[a-z-]+)"|\'data-action(?:-change|-input)?\' => \'(xt\.[a-z-]+)\'/', $takePage . $takeJs, $m);
+$xtUsed = array_values(array_unique(array_filter(array_merge($m[1], $m[2]))));
+ok('every wizard action in the markup has a handler, and every handler is used',
+    $xtHandled !== [] && array_diff($xtUsed, $xtHandled) === [] && array_diff($xtHandled, $xtUsed) === [],
+    implode(',', array_merge(array_diff($xtUsed, $xtHandled), array_diff($xtHandled, $xtUsed))));
+preg_match_all("/call\\('([a-z_]+)'/", $takeJs, $m);
+$xtCalls = array_values(array_unique($m[1]));
+sort($xtCalls);
+ok('the wizard calls only the learner actions the API already has (take, start, answer, focus, submit)',
+    $xtCalls === ['answer', 'focus', 'start', 'submit', 'take']
+    && array_filter($xtCalls, static fn ($a) => !str_contains((string) file_get_contents($root . '/includes/exams/access.php'), "case '{$a}':")) === [],
+    implode(',', $xtCalls));
+preg_match_all("/call\\('[a-z_]+',\\s*\\{[^}]*\\}/", $takeJs, $m);
+ok('flags stay in the browser: no request carries them', $m[0] !== [] && array_filter($m[0], static fn ($c) => stripos($c, 'flag') !== false) === []);
+ok('the wizard keeps the server\'s clock and auto hand-in at zero',
+    str_contains($takeJs, 'if (left === 0) finish(true);') && str_contains($takeJs, 'take.deadline = Date.now() + res.seconds_left * 1000;'));
+
+ok('exam-take.js asks whether reduced motion is on, and every entrance goes through that check',
+    str_contains($takeJs, "matchMedia('(prefers-reduced-motion: reduce)')")
+    && str_contains($takeJs, "if (motionOk()) page.classList.add('xt-motion');")
+    && str_contains($takeJs, 'if (!el || !cls || !motionOk()) return;')
+    && str_contains($takeJs, 'if (!motionOk() || pct === 0) {'));
+$xtCss = (string) strstr((string) strstr((string) file_get_contents($root . '/assets/ui/src/app.css'), '/* ---------- Exam wizard'), '/* A dialog that fills the screen', true);
+preg_match_all('/^\s*([^{}\n@][^{}\n]*)\{[^}]*\banimation:\s*xt-/m', $xtCss, $m);
+ok('the slide-ins only play under .xt-motion',
+    $m[1] !== [] && array_filter($m[1], static fn ($sel) => !str_starts_with(trim($sel), '.xt-motion ')) === [], implode(' | ', $m[1]));
+ok('nothing in the exam wizard loops', $xtCss !== '' && !str_contains($xtCss, 'infinite'));
+ok('Back / Next sit above the phone\'s bottom bar', (bool) preg_match('/\.xt-foot \{[^}]*bottom: var\(--ui-bottom-offset\);/', $xtCss));
+/** Each reduced-motion rule as "sorted selectors{sorted declarations}": the build's minifier reorders both. */
+$rmRules = static function (string $rm): array {
+    $out = [];
+    foreach (explode('}', $rm) as $rule) {
+        if (!str_contains($rule, '{')) continue;
+        [$sel, $decl] = explode('{', $rule, 2);
+        $sels = explode(',', $sel);
+        sort($sels);
+        $decls = array_values(array_filter(explode(';', $decl)));
+        sort($decls);
+        $out[] = implode(',', $sels) . '{' . implode(';', $decls);
+    }
+    return $out;
+};
+foreach (['assets/ui/src/app.css' => 'source', 'assets/ui/app.css' => 'build'] as $cssFile => $cssKind) {
+    $rules = $rmRules($reducedRules((string) file_get_contents($root . '/' . $cssFile)));
+    ok("reduced motion stops the wizard's slides ({$cssKind})", in_array('.xt.xt-in-back,.xt.xt-in-next,.xt.xt-rise{animation:none!important', $rules, true));
+    ok("reduced motion stops the bars and the option ticks ({$cssKind})",
+        in_array('.xt.xt-bar__fill,.xt.xt-maptoggle.ui-icon,.xt.xt-score__fill{transition:none!important', $rules, true)
+        && in_array('.xt.xt-opt,.xt.xt-opt__key.ui-icon{transform:none!important;transition:none!important', $rules, true));
+}
 
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed === 0 ? 0 : 1);
