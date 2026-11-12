@@ -1254,6 +1254,16 @@ pages `modules/trainings/` (learners), `modules/academy/` + `training.php`
   helpers (`trainings_exam_setup_url()` / `trainings_exam_take_url()` wrap
   `exam_url_setup()` / `exam_url_take()`); no exam path is written here. The
   builder offers the Exam kind only once those helpers exist.
+- **Live classes on Meet are PR 3's** (`includes/training_live/`, Google in
+  `includes/integrations/`, `docs/INTEGRATIONS.md`). Trainings loads
+  `includes/training_live/bootstrap.php` when it is there; its hooks, each
+  guarded by `function_exists()`, are `training_live_url()` (the builder's
+  Meet / Attendance button), `training_live_after_action()` (called by
+  `api/trainings_api.php`: a Meet follows its item) and
+  `training_live_daily()` (the daily run reads attendance). The learner's
+  Join class button carries `data-live-join` (logged, then it opens as
+  usual). Attendance writes `completed` with `data.by = 'meet'`; a read never
+  touches a tutor's tick (`by = 'tutor'`).
 - **Access** is the `trainings` row (it took over the retired `academy` row,
   cells and owners copied by `20261208090200`). Staff checks use the
   church-wide target: `can('trainings', 'edit', 'church')`; PR 2 asks

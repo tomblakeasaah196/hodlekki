@@ -25,6 +25,10 @@ if (!trainings_ready($pdo)) {
 try {
     $n = trainings_sync_newcomers($pdo);
     echo "trainings: {$n} newcomer(s) enrolled\n";
+    // PR 3: attendance of the live classes on Meet that ended (the Academy's Meet page can also bring it in at once)
+    if (function_exists('training_live_daily')) {
+        echo 'trainings: attendance read for ' . training_live_daily($pdo) . " class(es)\n";
+    }
 } catch (Throwable $e) {
     error_log('[trainings] daily run failed: ' . $e->getMessage());
     echo "trainings: failed, see the error log\n";

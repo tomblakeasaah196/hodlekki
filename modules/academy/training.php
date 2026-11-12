@@ -109,6 +109,10 @@ if ($canEdit && $t['status'] !== 'published') {
 <?php if ($i['type'] === 'exam' && $canEdit && ($setup = trainings_exam_setup_url($i['id'])) !== null): ?>
                         <?= ui_button('Set up exam', ['variant' => 'soft', 'size' => 'sm', 'icon' => 'clipboard-list', 'href' => $setup]) ?>
 <?php endif; ?>
+<?php if ($i['type'] === 'live' && function_exists('training_live_url')): ?>
+                        <?= ui_button(($i['details']['mode'] ?? '') === 'online' ? 'Meet' : 'Attendance', ['variant' => 'soft', 'size' => 'sm',
+                            'icon' => ($i['details']['mode'] ?? '') === 'online' ? 'video' : 'users', 'href' => training_live_url($i['id'])]) ?>
+<?php endif; ?>
 <?php if ($canEdit): ?>
                         <?= ui_button('Edit item', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'pencil', 'icon_only' => true, 'attrs' => ['data-action' => 'trb.item', 'data-item' => $i['id']]]) ?>
                         <?= ui_button('Move up', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'chevron-up', 'icon_only' => true, 'attrs' => ['data-action' => 'trb.itemMove', 'data-item' => $i['id'], 'data-dir' => '-1']]) ?>
