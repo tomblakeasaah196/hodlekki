@@ -80,17 +80,28 @@ eq('stale and a reset waiting: red wins', 'bad', $both['state']);
 has('…and still mentions the reset', $both['detail'], 'Also: 1 need(s) a new password: Info');
 ok('Mail sync alerts at once when red', in_array('mail_sync', monitor_urgent_checks(), true));
 
+// The facts on either engine: a fixture table that both accept, with explicit ids, dropped afterwards so the
+// MySQL/MariaDB run (MONITOR_TEST_MYSQL_DSN) starts clean next time. A database with a real mail_accounts is left alone.
 $mailDb = monitor_test_db();
-eq('facts: no mail_accounts table, not installed', ['ready' => false], monitor_facts_mail($mailDb));
-$mailDb->exec('CREATE TABLE mail_accounts (id INTEGER PRIMARY KEY, display_name TEXT, status TEXT, last_synced_at TEXT NULL, last_error TEXT NULL, created_at TEXT NULL)');
-$ins = $mailDb->prepare('INSERT INTO mail_accounts (display_name, status, last_synced_at, last_error, created_at) VALUES (?, ?, ?, ?, ?)');
-$ins->execute(['Embrace', 'active', monitor_fmt($now - 120), null, monitor_fmt($now - 86400)]);
-$ins->execute(['Info', 'needs_reset', null, 'refused the address or the password', monitor_fmt($now - 86400)]);
-$ins->execute(['Old', 'suspended', null, null, monitor_fmt($now - 86400)]);
-$mf = monitor_facts_mail($mailDb);
-eq('facts: active mailboxes with Lagos times read back', [['name' => 'Embrace', 'error' => null, 'synced' => $now - 120, 'since' => $now - 86400]], $mf['active']);
-eq('facts: needs_reset kept, suspended ignored', ['Info'], array_column($mf['stuck'], 'name'));
-eq('facts to verdict: amber for the reset', 'warn', monitor_check_mail($mf, $now)['state']);
+if (monitor_table_exists($mailDb, 'mail_accounts')) {
+    ok('facts: skipped, this database has its own mail_accounts', true);
+} else {
+    eq('facts: no mail_accounts table, not installed', ['ready' => false], monitor_facts_mail($mailDb));
+    $mailDb->exec('CREATE TABLE mail_accounts (id INT NOT NULL PRIMARY KEY, display_name VARCHAR(120) NOT NULL, status VARCHAR(20) NOT NULL,'
+        . ' last_synced_at DATETIME NULL, last_error VARCHAR(500) NULL, created_at DATETIME NULL)');
+    try {
+        $ins = $mailDb->prepare('INSERT INTO mail_accounts (id, display_name, status, last_synced_at, last_error, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+        $ins->execute([1, 'Embrace', 'active', monitor_fmt($now - 120), null, monitor_fmt($now - 86400)]);
+        $ins->execute([2, 'Info', 'needs_reset', null, 'refused the address or the password', monitor_fmt($now - 86400)]);
+        $ins->execute([3, 'Old', 'suspended', null, null, monitor_fmt($now - 86400)]);
+        $mf = monitor_facts_mail($mailDb);
+        eq('facts: active mailboxes with Lagos times read back', [['name' => 'Embrace', 'error' => null, 'synced' => $now - 120, 'since' => $now - 86400]], $mf['active']);
+        eq('facts: needs_reset kept, suspended ignored', ['Info'], array_column($mf['stuck'], 'name'));
+        eq('facts to verdict: amber for the reset', 'warn', monitor_check_mail($mf, $now)['state']);
+    } finally {
+        $mailDb->exec('DROP TABLE mail_accounts');
+    }
+}
 
 // ---- Server
 eq('database answering slowly: worth a look', 'warn', monitor_check_db(['query_ms' => 400, 'connect_ms' => 20])['state']);
