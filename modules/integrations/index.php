@@ -11,6 +11,9 @@ $ui = [
     'mode'    => 'strict',
     'scripts' => ['/assets/ui/js/pages/integrations.js'],
     'offline' => false,
+    // Connect posts here, then the server redirects to Google: Chrome checks form-action on
+    // that redirect too, so Google's consent page must be allowed or Connect is blocked.
+    'csp'     => ['form-action' => ['https://accounts.google.com']],
 ];
 require_once __DIR__ . '/../../includes/header.php';
 require_once __DIR__ . '/../../includes/integrations/bootstrap.php';

@@ -116,6 +116,10 @@ check('the consent link asks for exactly the four scopes', $q['scope'] === 'open
 check('…offline, with consent (so a refresh token comes), state and S256', $q['access_type'] === 'offline' && $q['prompt'] === 'consent'
     && $q['state'] === 'state-1' && $q['code_challenge'] === $challenge && $q['code_challenge_method'] === 'S256'
     && $q['redirect_uri'] === 'https://hodlekki.org/integrations/google/callback' && $q['client_id'] === 'client-123.apps.googleusercontent.com');
+// Connect is a form post that the server redirects to Google; Chrome applies form-action to that redirect, so the
+// page's strict CSP must allow Google's consent host or the button silently does nothing.
+check('the Integrations page lets Connect reach Google (form-action)', str_starts_with(Google::AUTH_URL, 'https://accounts.google.com/')
+    && (bool) preg_match("~'form-action'\s*=>\s*\[[^\]]*'https://accounts\.google\.com'~", (string) file_get_contents($root . '/modules/integrations/index.php')));
 
 $calls = [];
 $replies = [];
