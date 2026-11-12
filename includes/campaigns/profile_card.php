@@ -72,6 +72,17 @@ function email_profile_card_html(array $view, array $o = []): string
                 'info' => $confirmed === null && !isset($o['typed']) && !empty($view['suggest'])
                     ? 'The email we have on file. Change it if it is not yours.' : null,
             ])
+            // Changing a confirmed address asks for the password: password
+            // resets go to this address, so a borrowed or hijacked session must
+            // not be able to point them elsewhere.
+            . ($confirmed !== null ? ui_field('password', [
+                'name' => 'password',
+                'id' => 'profile-email-password',
+                'label' => 'Your password',
+                'required' => true,
+                'autocomplete' => 'current-password',
+                'info' => 'Password resets go to this email, so we check it is you.',
+            ]) : '')
             . '<div class="ui-form-actions sm:justify-start">'
             . ui_button('Send link', ['variant' => 'primary', 'type' => 'submit'])
             . ($confirmed !== null ? ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-action' => 'profile.email-close']]) : '')
@@ -121,6 +132,18 @@ function email_profile_action(PDO $pdo, int $userId, string $do, array $in, ?str
                     ? ['status' => 'error', 'message' => 'No link is waiting.', 'html' => $card()]
                     : ['status' => 'error', 'message' => 'Enter your email.', 'field' => 'email'];
             }
+            // Replacing a CONFIRMED address needs the password (password resets
+            // follow the address). The first address needs none, as at sign-in.
+            // A resend only re-sends to an address already accepted here.
+            $confirmed = member_confirmed_email($pdo, $userId);
+            if ($do === 'email_save' && $confirmed !== null && email_normalize($email) !== $confirmed) {
+                if (($problem = email_address_problem($email, $pdo, $userId)) !== null) {
+                    return ['status' => 'error', 'message' => $problem, 'field' => 'email'];
+                }
+                if (($why = email_profile_reauth($pdo, $userId, (string) ($in['password'] ?? ''))) !== null) {
+                    return ['status' => 'error', 'message' => $why, 'field' => 'password'];
+                }
+            }
             $r = email_capture_start($pdo, $userId, $email, 'profile', $userId, ['ip' => $ip, 'user_agent' => $userAgent]);
             if (empty($r['ok'])) {
                 return $do === 'email_save'
@@ -146,4 +169,35 @@ function email_profile_action(PDO $pdo, int $userId, string $do, array $in, ?str
             return ['status' => 'success', 'news' => $on, 'message' => $on ? 'Church news on.' : 'Church news off.'];
     }
     return ['status' => 'error', 'message' => 'Unknown action.'];
+}
+
+/**
+ * Is this the person's password? Null when it is, else the one-line error.
+ * Shares the Password card's throttle (login_attempts, context
+ * 'password_change'): a wrong password here counts there too, so a hijacked
+ * session gets no extra guesses by switching screens.
+ */
+function email_profile_reauth(PDO $pdo, int $userId, string $password): ?string
+{
+    if (function_exists('security_recent_failure_count')
+        && security_recent_failure_count($pdo, $userId, 'password_change', SECURITY_PASSWORD_CHANGE_WINDOW_MINUTES)
+            >= SECURITY_MAX_PASSWORD_CHANGE_FAILURES) {
+        return 'Too many wrong tries. Wait ' . SECURITY_PASSWORD_CHANGE_WINDOW_MINUTES . ' minutes.';
+    }
+    if ($password === '') {
+        return 'Enter your password.';
+    }
+    $stmt = $pdo->prepare('SELECT email, password_hash FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    $me = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    if (empty($me['password_hash']) || !password_verify($password, (string) $me['password_hash'])) {
+        if (function_exists('security_record_attempt')) {
+            security_record_attempt($pdo, $userId, (string) ($me['email'] ?? ''), false, 'wrong_password_email_change', 'password_change');
+        }
+        if (function_exists('security_log')) {
+            security_log($pdo, 'email_change_failed', $userId, 'Incorrect password when changing the personal email.');
+        }
+        return 'That is not your password.';
+    }
+    return null;
 }
