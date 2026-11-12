@@ -20,6 +20,7 @@ lead (screens, the sign-in prompt and sign-in by personal email are later PRs).
 | `db/migrations/20261127090000_campaigns_core.sql` | Every table (`email_*`, `automation_*`). |
 | `cron/email_worker.php` | Every minute: sends the queue under the budget. `--status`, `--dry-run`, `--prune`. |
 | `cron/automation_tick.php` | Every 5 minutes: runs due automations. `--status`, `--dry-run`, `--rule=ID`, `--at="…"`. |
+| `cron/email_bounces.php` | Every 10 minutes: the bounce reader (`includes/campaigns/bounces.php`). `--dry-run`, `--limit=N`. |
 | `includes/mailer.php` | `hod_send_mail()`: SMTP from `.env` (system@), now also with custom headers, a given Message-ID and one shared connection. |
 | `tests/campaigns/run.php` | 250+ checks on SQLite built from the real migration (CI lint job). |
 | `tests/campaigns/integration.php` | The parts SQLite cannot vouch for, on MySQL 8 and MariaDB 10.11 (CI integration job). |
@@ -35,6 +36,7 @@ lead (screens, the sign-in prompt and sign-in by personal email are later PRs).
    * * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/email_worker.php >> /home/smartqaq/logs/hod-email.log 2>&1
    */5 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/automation_tick.php >> /home/smartqaq/logs/hod-email.log 2>&1
    30 3 * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/email_worker.php --prune >> /home/smartqaq/logs/hod-email.log 2>&1
+   */10 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/email_bounces.php >> /home/smartqaq/logs/hod-email.log 2>&1
    ```
 3. **The hourly cap.** Set `email_settings.hourly_cap` to the number cPanel
    shows for hodlekki.org (default 100 until someone confirms it). If the host
@@ -300,6 +302,18 @@ brackets.
   `ref` is the unsubscribe token and their Message-ID answers the mailbox.
 - Suppressed addresses: `email_suppressions` (hard bounce, complaint, three
   soft bounces → 7 days). Release with `email_suppression_release()`.
+- **Bounces** (`cron/email_bounces.php`, every 10 minutes): logs in to system@
+  (`MAIL_USERNAME` / `MAIL_PASSWORD`, the sending account) on the mailbox
+  module's IMAP client and reads each **unread** message once.
+  `email_dsn_parse()` + `email_record_bounce()`: a report counts only when it
+  names an email we sent (our `X-HOD-Ref`, else its Message-ID), and acts only
+  on the address we sent it to. Hard bounce or complaint → suppressed (a
+  complaint also withdraws church-news consent); soft → counted; the host's
+  hourly cap → our email re-queued for the next hour. Reports (matched or not)
+  are moved to **INBOX.Bounces**; anything else is marked read and left for a
+  person; a message that fails is flagged (`\Flagged`) and skipped from then on.
+  At most 300 a run. `--dry-run` reads and changes nothing. The last run is in
+  `email_settings.bounces_last_at` / `bounces_last`.
 
 ---
 

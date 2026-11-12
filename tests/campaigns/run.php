@@ -1298,11 +1298,9 @@ $chr = (string) file_get_contents($root . 'modules/charis/index.php');
 ct_ok('the tab shows only with the manage right: Embrace, Assimilation, Charis',
     str_contains($emb, "\$embraceAutomation = can('embrace', 'manage');") && str_contains($emb, "'frame-src' => [\"'self'\"]")
     && str_contains($asm, "\$assim_manager = can('assimilation', 'manage');") && str_contains($asm, "'automation' => ['label' => 'Automation'")
-    && str_contains($asm, "<?php if (\$assim_manager): ?>
-    <section id=\"panel-automation\"") && str_contains($asm, "'frame-src' => [\"'self'\"]")
+    && str_contains($asm, "<?php if (\$assim_manager): ?>\n    <section id=\"panel-automation\"") && str_contains($asm, "'frame-src' => [\"'self'\"]")
     && str_contains($chr, "(\$charisCanConfigure ? ['automation' => ['label' => 'Automation'")
-    && str_contains($chr, "<?php if (\$charisCanConfigure): ?>
-    <section id=\"panel-automation\"") && str_contains($chr, "'frame-src' => [\"'self'\"]"));
+    && str_contains($chr, "<?php if (\$charisCanConfigure): ?>\n    <section id=\"panel-automation\"") && str_contains($chr, "'frame-src' => [\"'self'\"]"));
 ct_section('16g. The block editor: drafts, pictures, templates');
 // ===========================================================================
 require_once __DIR__ . '/../../includes/campaigns/editor.php';
@@ -1466,6 +1464,79 @@ ct_ok('a column name that is not a plain identifier is refused', $threw);
 $papi = (string) file_get_contents(__DIR__ . '/../../api/embrace_public_api.php');
 ct_ok('the Connect API builds its INSERT this way (no explicit NULL for the address)',
     str_contains($papi, '[$sql, $params] = embrace_connect_insert([') && !str_contains($papi, "\$address !== '' ? \$address : null"));
+
+// ===========================================================================
+ct_section("16j. The bounce reader (system@'s inbox)");
+// ===========================================================================
+require_once __DIR__ . '/../../includes/mail/bootstrap.php';
+require_once __DIR__ . '/../mail/support/FakeImapSession.php';
+require_once __DIR__ . '/../mail/support/FakeMailServer.php';
+$bx = ct_db();
+ct_at('2027-07-01 10:00');
+ct_user($bx, 500, 'Bola', 'Member');
+ct_user($bx, 501, 'Chi', 'Member');
+ct_confirm($bx, 500, 'bola.b@gmail.com', true);
+ct_confirm($bx, 501, 'chi.c@gmail.com', true);
+$sendTo = static fn (int $uid, string $to): array => email_send_doc($bx, ct_doc(), email_person($bx, $uid) + ['email' => $to],
+    ['lane' => 'automation', 'purpose' => 'news', 'flow' => 'bounce_test', 'to_email' => $to]);
+$o1 = $sendTo(500, 'bola.b@gmail.com');
+$o2 = $sendTo(501, 'chi.c@gmail.com');
+$bx->exec("UPDATE email_outbox SET status = 'sent', sent_at = '2027-07-01 09:00:00'");
+$refOf = static fn (int $id): string => (string) $bx->query('SELECT ref FROM email_outbox WHERE id = ' . $id)->fetchColumn();
+$dsn = static fn (string $to, string $ref, string $status, string $diag): string =>
+    "From: Mail Delivery System <MAILER-DAEMON@mx.example>\r\nTo: system@hodlekki.org\r\nSubject: Undelivered Mail\r\n"
+    . "Content-Type: multipart/report; report-type=delivery-status; boundary=\"B\"\r\n\r\n"
+    . "--B\r\nContent-Type: text/plain\r\n\r\nYour message could not be delivered.\r\n"
+    . "--B\r\nContent-Type: message/delivery-status\r\n\r\nReporting-MTA: dns; mx.example\r\n\r\n"
+    . "Final-Recipient: rfc822; {$to}\r\nAction: failed\r\nStatus: {$status}\r\nDiagnostic-Code: smtp; {$diag}\r\n"
+    . "--B\r\nContent-Type: text/rfc822-headers\r\n\r\nFrom: system@hodlekki.org\r\nTo: {$to}\r\nX-HOD-Ref: {$ref}\r\n--B--\r\n";
+$server = \HOD\Mail\Tests\FakeMailServer::install();
+$server->addMailbox('system@hodlekki.org', 'pw');
+$letter = static function (string $raw, string $subject = 'Undelivered Mail'): array {
+    $m = \HOD\Mail\Tests\FakeMailServer::message(from: 'MAILER-DAEMON@mx.example', to: 'system@hodlekki.org', subject: $subject, text: 'x');
+    $m['raw'] = $raw;
+    return $m;
+};
+$box = 'system@hodlekki.org';
+$server->deliver($box, 'INBOX', $letter($dsn('bola.b@gmail.com', $refOf((int) $o1['id']), '5.1.1', '550 5.1.1 user unknown')));
+$server->deliver($box, 'INBOX', $letter($dsn('chi.c@gmail.com', $refOf((int) $o2['id']), '5.2.2', '552 5.2.2 mailbox full')));
+$server->deliver($box, 'INBOX', $letter($dsn('victim@gmail.com', str_repeat('Z', 22), '5.1.1', '550 user unknown')));
+$server->deliver($box, 'INBOX', \HOD\Mail\Tests\FakeMailServer::message(from: 'Ada <ada@gmail.com>', to: $box, subject: 'Hello', text: 'Is this the church?'));
+$server->deliver($box, 'INBOX', $letter($dsn('bola.b@gmail.com', $refOf((int) $o1['id']), '5.1.1', '550 again')), ['\Seen']);
+$imap = $server->connect($box, 'pw');
+
+$d = email_bounces_run($bx, $imap, ['dry' => true]);
+ct_eq('dry run: the four unread messages, sorted by what they are', [4, 1, 1, 1, 1],
+    [$d['read'], $d['hard'], $d['soft'], $d['unmatched'], $d['other']]);
+ct_ok('…and nothing changes: no suppression, every message still unread, no Bounces folder',
+    !email_is_suppressed($bx, 'bola.b@gmail.com') && count(array_filter($server->folder($box, 'INBOX'), static fn ($m) => !in_array('\Seen', $m['flags'], true))) === 4
+    && !isset($server->mailboxes[$box]['folders'][EMAIL_BOUNCES_FOLDER]));
+
+$r = email_bounces_run($bx, $imap);
+ct_eq('the run: 1 hard, 1 soft, 1 unmatched (a report about an email we never sent), 1 other', [4, 1, 1, 1, 1, 0],
+    [$r['read'], $r['hard'], $r['soft'], $r['unmatched'], $r['other'], $r['failed']]);
+ct_ok('…the hard bounce suppresses the address and marks our email', email_is_suppressed($bx, 'bola.b@gmail.com')
+    && $bx->query('SELECT bounced_at FROM email_outbox WHERE id = ' . (int) $o1['id'])->fetchColumn() !== null);
+ct_ok('…a full mailbox is only counted (soft), not suppressed', !email_is_suppressed($bx, 'chi.c@gmail.com')
+    && ct_count($bx, 'email_events', "outbox_id = ? AND kind = 'bounce'", [(int) $o2['id']]) === 1);
+ct_eq('…a forged report touches nobody', false, email_is_suppressed($bx, 'victim@gmail.com'));
+ct_ok('…the three reports are filed in INBOX.Bounces; the letter from a person stays, read', $r['filed']
+    && count($server->folder($box, EMAIL_BOUNCES_FOLDER)) === 3
+    && count($server->folder($box, 'INBOX')) === 2
+    && count(array_filter($server->folder($box, 'INBOX'), static fn ($m) => in_array('\Seen', $m['flags'], true))) === 2);
+ct_eq('a second run finds nothing new', 0, email_bounces_run($bx, $imap)['read']);
+for ($i = 0; $i < 3; $i++) {
+    $server->deliver($box, 'INBOX', \HOD\Mail\Tests\FakeMailServer::message(from: 'x@y.example', to: $box, subject: 'Note ' . $i, text: 'hi'));
+}
+$lim = email_bounces_run($bx, $imap, ['limit' => 2]);
+ct_eq('a limit is honoured, the rest waits for the next run', [2, 1], [$lim['read'], $lim['left']]);
+ct_ok('the line for the log says it all', str_contains(email_bounces_line($r), 'read 4: 1 hard, 1 soft, 0 complaint(s)')
+    && str_contains(email_bounces_line($lim), '1 left for the next run'));
+$cron = (string) file_get_contents(__DIR__ . '/../../cron/email_bounces.php');
+ct_ok('the cron: CLI only, one run at a time, --dry-run, the sending account, no password printed',
+    str_contains($cron, "if (PHP_SAPI !== 'cli')") && str_contains($cron, 'campaigns_lock($pdo, EMAIL_BOUNCES_LOCK, 0)')
+    && str_contains($cron, "'--dry-run'") && str_contains($cron, "site_env('MAIL_PASSWORD')") && !preg_match('/\$say\([^)]*\$pass/', $cron));
+\HOD\Mail\MailServer::use(null);
 
 // ===========================================================================
 ct_section('17. Every function the module calls exists');

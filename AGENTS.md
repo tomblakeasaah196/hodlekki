@@ -997,7 +997,8 @@ budget, block-document emails, and one automation engine for Embrace
 contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
 `bootstrap.php`, after `includes/db.php`). Schema:
 `db/migrations/20261127090000_campaigns_core.sql`. Crons:
-`cron/email_worker.php`, `cron/automation_tick.php`.
+`cron/email_worker.php`, `cron/automation_tick.php`, `cron/email_bounces.php`
+(the bounce reader).
 
 - **A personal email is never `users.email`.** It lives in `email_addresses`,
   confirmed by a link; `users.email` is the sign-in name and is overwritten by
