@@ -13,6 +13,10 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+// Writes (every POST) must also carry the session's CSRF token
+// (includes/csrf.php), beside the module's own X-Charis-CSRF below.
+csrf_require();
+
 $user_id = (int) $_SESSION['user_id'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
