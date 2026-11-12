@@ -378,5 +378,17 @@ ok('report fits one screen', substr_count($report, "\n") <= 24, (string) substr_
 // PR 3: changing the permission data, view-as, end dates.
 require __DIR__ . '/admin_tests.php';
 
+// ---------------------------------------------------------------------------
+section('AI in Mail for every role (owner, 12 Nov 2026)');
+$aiSql = perm_test_migration('20261206090000_perm_ai_for_every_role.sql');
+ok('mail.ai migration is portable (no ON DUPLICATE / INSERT IGNORE)', !preg_match('/ON DUPLICATE|INSERT IGNORE/i', $aiSql));
+$pdo->exec($aiSql);
+$roles = (int) $pdo->query('SELECT COUNT(*) FROM roles')->fetchColumn();
+eq('every role holds mail.ai at view, church-wide', $roles,
+    (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE seat_key = '' AND module_key = 'mail.ai' AND level = 1 AND scope = 'church'")->fetchColumn());
+$pdo->exec($aiSql);
+eq('mail.ai migration re-runs as a no-op', $roles,
+    (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE module_key = 'mail.ai'")->fetchColumn());
+
 echo "\n{$GLOBALS['perm_test_passed']} passed, {$GLOBALS['perm_test_failed']} failed\n";
 exit($GLOBALS['perm_test_failed'] === 0 ? 0 : 1);

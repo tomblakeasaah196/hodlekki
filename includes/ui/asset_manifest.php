@@ -33,7 +33,7 @@ return [
     '/assets/ui/js/pages/library.js' => 'a9b1ff626085',
     '/assets/ui/js/pages/live-radio.js' => 'c11e4265c6bc',
     '/assets/ui/js/pages/login.js' => '4b1b8e5dd49a',
-    '/assets/ui/js/pages/mail-compose.js' => 'ace20095637e',
+    '/assets/ui/js/pages/mail-compose.js' => 'e9cc665fc0a3',
     '/assets/ui/js/pages/mail-mailboxes.js' => '9a9a7a14e00b',
     '/assets/ui/js/pages/mail-outbox.js' => 'd6f46c29527d',
     '/assets/ui/js/pages/mail-settings.js' => '78bc5772e40e',

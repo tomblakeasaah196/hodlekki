@@ -33,8 +33,6 @@ check('times are not scripture', Writer::references('Service at 9:30 on Sunday')
 check('a draft is escaped HTML paragraphs', Writer::html("Dear <Ada>,\n\nLine one\nLine two") === '<p>Dear &lt;Ada&gt;,</p><p>Line one<br>Line two</p>');
 
 section('Who may use AI');
-check('never personal or pastoral mailboxes', !Ai::allowedFor(['kind' => 'personal', 'is_pastoral' => 0]) && !Ai::allowedFor(['kind' => 'church', 'is_pastoral' => 1])
-    && Ai::allowedFor(['kind' => 'church', 'is_pastoral' => 0]) && Ai::allowedFor(['kind' => 'department', 'is_pastoral' => 0]));
 check('first names for "Dear …"', Ai::firstName('ada OBI') === 'Ada' && Ai::firstName('A') === '' && Ai::firstName(null) === '' && Ai::firstName('"Ngozi" <n@x.org>') === 'Ngozi');
 check('Gemini 2.5 Flash, 30 drafts and 30 summaries an hour', Ai::config('model') === 'gemini-2.5-flash' && Ai::config('limits.write') === 30 && Ai::config('limits.summary') === 30);
 
