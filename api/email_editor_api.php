@@ -2,7 +2,7 @@
 // /api/email_editor_api.php
 //
 // The block editor's actions (assets/ui/js/email-editor.js), for people who
-// manage an Automation tab (email_editor_allowed()). JSON in (the document is
+// manage an Automation tab or write campaigns (email_editor_allowed()). JSON in (the document is
 // a JSON tree, never HTML) and out; pictures as multipart (action=upload).
 //
 //   check             validate a document (errors, the cleaned document)
@@ -23,7 +23,7 @@ if (empty($_SESSION['user_id'])) {
     exit;
 }
 // Access: the manage right of Embrace, Assimilation or Charis (their
-// Automation tabs) — Roles & permissions.
+// Automation tabs), or Email Campaigns create — Roles & permissions.
 if (!email_editor_allowed()) {
     http_response_code(403);
     echo json_encode(['status' => 'error', 'code' => 'FORBIDDEN', 'message' => 'You do not have access to this. Ask the church office if you think you should.']);

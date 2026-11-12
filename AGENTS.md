@@ -992,8 +992,9 @@ The outside probe is `.github/workflows/monitor-probe.yml` (hourly; needs the
 ## Email and automation (added 2026-11-11)
 
 Personal addresses, NDPA consent, the domain's sending queue and hourly
-budget, block-document emails, and one automation engine for Embrace
-(first-timer journey), Assimilation and Charis (absence ladders). Guide and
+budget, block-document emails, one automation engine for Embrace
+(first-timer journey), Assimilation and Charis (absence ladders), and Email
+Campaigns (`modules/campaigns/`). Guide and
 contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
 `bootstrap.php`, after `includes/db.php`). Schema:
 `db/migrations/20261127090000_campaigns_core.sql`. Crons:
@@ -1020,7 +1021,15 @@ contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
   per week/streak, and a person gets one member-facing automation message a day
   across modules — all unique keys claimed before anything is queued.
 - SMS fallback only through SMS Studio's queue (`sms_campaigns` audience
-  `automation` + `sms_queue`), never `sms_log`.
+  `automation` or `email_campaign` + `sms_queue`), never `sms_log`.
+- **Campaigns** (docs/EMAIL.md §2e): every access decision is in
+  `campaign_action()` (`includes/campaigns/campaign_actions.php`); a
+  campaign's target for `can('campaigns', …)` is its department, else
+  `'church'`, and department campaigns go to that department's people only.
+  Who gets what is `campaign_reach()` (the automations' order for a whole
+  audience; the tests pin it against the per-person functions). A campaign is
+  expanded once, by `campaigns_tick()` inside `cron/email_worker.php`, in one
+  transaction (`email_campaign_people` is UNIQUE per campaign and person).
 - **Sign-in by personal email** (docs/EMAIL.md §2b): `api/auth_api.php` looks
   people up with `email_signin_lookup()` (confirmed personal email first, then
   `users.email`); `includes/header.php` sends anyone `email_prompt_state()`

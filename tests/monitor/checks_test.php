@@ -18,6 +18,14 @@ eq('a run that started 12 minutes ago and never finished: stuck', 'warn', $stuck
 has('…and says so', $stuck['detail'], 'has not finished');
 eq('the last run failed: worth a look', 'warn', monitor_check_cron('push_worker', $push, ['started_at' => $now - 60, 'finished_at' => $now - 59, 'ok' => false, 'last_error' => 'boom'], $now, null)['state']);
 
+// ---- The email jobs: watched, at their cron's own schedule
+foreach (['email_worker' => 1, 'automation_tick' => 5, 'email_bounces' => 10] as $name => $every) {
+    eq("$name is watched every $every minute(s)", $every, $jobs[$name]['every'] ?? null);
+    $head = (string) @file_get_contents(dirname(__DIR__, 2) . "/cron/$name.php");
+    has("…and its line is the one cron/$name.php documents", $head, $jobs[$name]['line'] ?? 'missing');
+}
+eq('a stopped email worker alerts at once', true, in_array('cron_email_worker', monitor_urgent_checks(), true));
+
 // ---- Daily jobs at 07:00
 $daily = $jobs['reach_lost_souls'];
 $at8 = monitor_test_clock('2026-11-11 08:00:00');

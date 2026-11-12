@@ -842,9 +842,16 @@ function automation_sms_available(PDO $pdo): bool
     return campaigns_table_exists($pdo, 'sms_campaigns') && campaigns_table_exists($pdo, 'sms_queue');
 }
 
-/** SMS Studio's own normaliser when it is loaded (it always is under cron). */
+/**
+ * SMS Studio's own phone rules. Loaded on first use: web requests (the
+ * Automation tab's preview, Campaigns) do not load SMS Studio otherwise, and
+ * without it every number would look unusable.
+ */
 function automation_sms_phone(string $raw): ?string
 {
+    if (!function_exists('sms_normalize_phone') && is_file(dirname(__DIR__) . '/sms_functions.php')) {
+        require_once dirname(__DIR__) . '/sms_functions.php';
+    }
     if (function_exists('sms_normalize_phone')) {
         $p = sms_normalize_phone($raw);
         return $p === null ? null : (string) $p;
