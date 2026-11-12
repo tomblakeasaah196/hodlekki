@@ -4,6 +4,7 @@
 // 1. Core Includes & Headers
 require_once '../includes/db.php';
 require_once __DIR__ . '/../includes/status_ladder.php';
+require_once __DIR__ . '/../includes/html_allowlist.php';
 header('Content-Type: application/json');
 
 /**
@@ -157,7 +158,9 @@ try {
             $title = trim($_POST['title'] ?? '');
             $category = $_POST['event_category'] ?? '';
             $event_date = $_POST['event_date'] ?? '';
-            $description = trim($_POST['description'] ?? '') ?: null;
+            // Rich text from the editor: only the allowlisted formatting is stored (includes/html_allowlist.php).
+            $description = hod_html_allowlist((string) ($_POST['description'] ?? ''));
+            $description = hod_html_is_blank($description) ? null : $description;
             $location = trim($_POST['location'] ?? '') ?: null;
             $youtube_url = trim($_POST['youtube_url'] ?? '') ?: null;
             $external_registration_url = trim($_POST['external_registration_url'] ?? '') ?: null;
@@ -394,7 +397,9 @@ try {
             $title = trim($_POST['title'] ?? '');
             $category = $_POST['event_category'] ?? '';
             $event_date = $_POST['event_date'] ?? '';
-            $description = trim($_POST['description'] ?? '') ?: null;
+            // Rich text from the editor: only the allowlisted formatting is stored (includes/html_allowlist.php).
+            $description = hod_html_allowlist((string) ($_POST['description'] ?? ''));
+            $description = hod_html_is_blank($description) ? null : $description;
             $location = trim($_POST['location'] ?? '') ?: null;
             $youtube_url = trim($_POST['youtube_url'] ?? '') ?: null;
             $external_registration_url = trim($_POST['external_registration_url'] ?? '') ?: null;

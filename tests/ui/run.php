@@ -486,6 +486,13 @@ ok('the public Sermons cards escape what staff typed and only link safe media',
     && !str_contains($sermonsPage, '>${s.title}<') && !str_contains($sermonsPage, '>${s.summary'));
 ok('the shared-sermon head escapes its OG tags and JSON-encodes the slug',
     str_contains($sermonsPage, 'htmlspecialchars((string) $og_image, ENT_QUOTES)') && str_contains($sermonsPage, "json_encode((string) \$sharedSermon['slug']"));
+$eventsApi = (string) file_get_contents($root . '/api/events_api.php');
+$registrationApi = (string) file_get_contents($root . '/api/registration_api.php');
+ok('an event description is cleaned when it is saved (create and update)',
+    substr_count($eventsApi, "\$description = hod_html_allowlist((string) (\$_POST['description'] ?? ''));") === 2);
+ok('the public register page gets it through the same allowlist, older rows included',
+    str_contains($registrationApi, "hod_html_allowlist((string) \$html, ['b','strong','i','em','u','br','p','ul','ol','li'])")
+    && str_contains($registrationApi, "\$event['description'] = safe_rich(\$event['description'])"));
 
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed === 0 ? 0 : 1);
