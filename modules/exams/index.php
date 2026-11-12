@@ -41,7 +41,7 @@ echo ui_json_script('exams-config', ['page' => 'bank', 'training_id' => $bank['i
         'title' => 'Question bank',
         'description' => 'Questions for your exams.',
         'info' => 'Three kinds of question: one answer, several answers, and true/false. Write them here, or download the Excel template, fill it in and import it: every row is checked before anything is added, and importing the same file again adds nothing twice. Only questions marked Ready can go in an exam. The explanation is shown only to people who get a question wrong, once the answers are shown.',
-        'actions' => ($bank['id'] !== null ? ui_button('AI help', ['variant' => 'ghost', 'icon' => 'sparkles', 'href' => '/modules/exams/ai?training=' . (int) $bank['id']]) : '')
+        'actions' => ($bank['id'] !== null ? ui_button('AI help', ['variant' => 'ghost', 'icon' => 'sparkles', 'href' => exam_url_ai((int) $bank['id'])]) : '')
             . ui_button('Template', ['variant' => 'ghost', 'icon' => 'download', 'href' => '/api/exams_api.php?action=template'])
             . ui_button('Import', ['variant' => 'secondary', 'icon' => 'upload', 'attrs' => ['data-action' => 'ex.import-open']])
             . ui_button('Add question', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-action' => 'ex.add']]),

@@ -152,7 +152,14 @@
             };
         });
         if (!sections.length) { HOD.toast('Keep at least one card.', 'warning'); return; }
-        HOD.confirm({ title: 'Apply the outline?', message: 'The cards and items are added to the training. You can change them in the builder.', confirmLabel: 'Apply' }).then(function (yes) {
+        var items = sections.reduce(function (sum, s) { return sum + s.items.length; }, 0);
+        var names = sections.map(function (s) { return s.title + ' (' + s.items.length + ')'; }).join(', ');
+        HOD.confirm({
+            title: 'Apply the outline?',
+            message: 'Creates ' + items + (items === 1 ? ' item' : ' items') + ' in ' + sections.length + (sections.length === 1 ? ' card' : ' cards') + ': ' + names +
+                '. Empty cards are used first, the rest are added at the end. You can change everything in the builder.',
+            confirmLabel: 'Apply'
+        }).then(function (yes) {
             if (!yes) return;
             HOD.busy(btn, true);
             call('outline_apply', { proposal: { sections: sections } }, { quiet: true, raw: true }).then(function (res) {

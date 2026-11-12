@@ -792,3 +792,9 @@ function exam_url_take(int $itemId): string
 {
     return '/modules/exams/take?item=' . $itemId;
 }
+
+/** AI help for a training (PR 4b; the builder's header links here). */
+function exam_url_ai(int $trainingId): string
+{
+    return '/modules/exams/ai?training=' . $trainingId;
+}
