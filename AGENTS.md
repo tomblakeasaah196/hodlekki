@@ -1289,11 +1289,26 @@ pages `modules/trainings/` (learners), `modules/academy/` + `training.php`
   `training_membership`), never lowering anyone; Maturity Class changes no
   status and is read with `trainings_ready_to_serve($pdo, $uid)`.
 - **Media:** links first. Only YouTube (played from youtube-nocookie.com) and
-  Spotify embed, through `trainings_media_parse()`; the two pages that play
-  them add exactly `TRAININGS_EMBED_HOSTS` to `frame-src`. Uploads (audio
-  MP3/M4A ≤ 50 MB, reading PDF ≤ 20 MB) go through `upload_guard.php` and are
-  sniffed (`trainings_sniff_bytes()`), stored in `/uploads/trainings/`
-  under random names, and deleted with their item.
+  Spotify embed, through `trainings_media_parse()`. Uploads (audio MP3/M4A
+  ≤ 50 MB, reading PDF ≤ 20 MB, PowerPoint .pptx ≤ 30 MB) go through
+  `upload_guard.php` and are sniffed (`trainings_sniff()`), stored in
+  `/uploads/trainings/` under random names, and deleted with their item.
+- **Slides** (owner, 12 Nov 2026: trainings arrive as .pptx). A reading can
+  hold a deck; "Add slides" in the builder makes one reading per file (named
+  from the file, in name order, one upload per request). `includes/trainings/pptx.php`
+  checks a deck is really a presentation (zip magic + `[Content_Types].xml`
+  declaring the presentationml main part; .docx, .pptm, renamed files
+  refused) and extracts the slides' text in slide order with the hardening
+  of `includes/exams/xlsx.php` (part size caps, no DOCTYPE, `LIBXML_NONET`,
+  500 slides, 100k characters) into `details.slides_text`, for search and
+  PR 4b's AI. **`slides_text` never goes to a browser:** pages and replies
+  pass details through `trainings_details_for_browser()`, and the learner
+  view lists its fields explicitly. Decks show in Microsoft's Office web
+  viewer (`trainings_view_deck()`: an iframe to `view.officeapps.live.com`
+  with the deck's absolute `site_url()`, plus a Download button), so the
+  learner page and the builder allow `TRAININGS_FRAME_HOSTS` (YouTube
+  no-cookie, Spotify, the Office viewer) in `frame-src`, and no other page
+  does; `privacy.php` says Microsoft's viewer reads the file from our site.
 - **Invites** are for people with no sign-in: one link (sha256-stored,
   once, 7 days, a newer one replaces it, 3 a day). Accepting confirms the
   email through `email_capture_start()` / `email_capture_confirm()` and sets

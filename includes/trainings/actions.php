@@ -230,7 +230,11 @@ function trainings_action(PDO $pdo, string $action, array $in, array $files, int
             if (!trainings_staff_can('view')) {
                 return trainings_forbidden();
             }
-            return trainings_ok(['training' => trainings_staff_training($pdo, $t), 'sections' => trainings_outline($pdo, $tid),
+            $outline = array_map(static function (array $s): array {
+                $s['items'] = array_map(static fn (array $i): array => ['details' => trainings_details_for_browser($i['details'])] + $i, $s['items']);
+                return $s;
+            }, trainings_outline($pdo, $tid));
+            return trainings_ok(['training' => trainings_staff_training($pdo, $t), 'sections' => $outline,
                 'can_edit' => trainings_staff_can('edit'), 'can_delete' => trainings_staff_can('delete'),
                 'can_assign' => trainings_staff_can('create'), 'can_approve' => trainings_staff_can('approve')]);
 
@@ -347,6 +351,28 @@ function trainings_action(PDO $pdo, string $action, array $in, array $files, int
                 return trainings_forbidden();
             }
             return $reply(trainings_item_save($pdo, $t, $in, $files));
+
+        case 'slides_add':
+            // "Add slides": one .pptx per request; the page sends a batch one by one, in name order.
+            if (!trainings_staff_can('edit')) {
+                return trainings_forbidden();
+            }
+            $f = $files['pptx_file'] ?? null;
+            if (!is_array($f) || ($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                return trainings_fail('Choose a PowerPoint (.pptx) file.', 'INVALID', 'pptx_file');
+            }
+            if (trainings_section_get($pdo, (int) ($in['section_id'] ?? 0)) === null) {
+                return trainings_fail('Choose the card it belongs to.', 'INVALID', 'section_id');
+            }
+            $deck = trainings_deck_from_upload($f);
+            if (!$deck['ok']) {
+                return trainings_fail((string) $deck['error'], 'INVALID', 'pptx_file');
+            }
+            $r = trainings_slides_add($pdo, $t, (int) $in['section_id'], $deck);
+            if (empty($r['ok'])) {
+                trainings_forget_file((string) $deck['details']['deck']);
+            }
+            return $reply($r);
 
         case 'item_delete':
         case 'item_move':
