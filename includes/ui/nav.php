@@ -42,7 +42,10 @@ function ui_nav_sections(): array
  * match     module folder names (or 'index.php') that mark it active
  * keywords  extra words the search should find it by
  * tabs      tab id => label, for the search's "#tab=" deep links
- * info      optional: one line about the module, shown on hover (desktop) and
+ * links     optional: pages the search finds but the menu doesn't list:
+ *           [['key', 'label', 'href', 'keywords', 'ability' => [module, level]]];
+ *           with 'ability', only for those who hold it church-wide
+ * info     optional: one line about the module, shown on hover (desktop) and
  *           behind an (i) beside the link in the phone menu
  * badge     optional: fn(PDO, array $ctx): int — a count shown on the link
  * when_exists  true: listed only once the href's file exists (a module whose
@@ -102,7 +105,10 @@ function ui_nav_registry(): array
         // The Academy's builder (TRAININGS-PLAN.md): only for those who may run trainings, see ui_nav_can_access().
         ['key' => 'academy', 'label' => 'HOD Academy', 'icon' => 'graduation-cap', 'href' => '/modules/academy/', 'section' => 'growth',
             'match' => ['academy'], 'keywords' => ['academy', 'school', 'lms', 'courses', 'trainings', 'build', 'assign', 'graduates', 'membership class', 'maturity class'],
-            'tabs' => ['trainings' => 'Trainings', 'mark' => 'To mark', 'confirm' => 'To confirm']],
+            'tabs' => ['trainings' => 'Trainings', 'mark' => 'To mark', 'confirm' => 'To confirm'],
+            // The exams question bank (docs/EXAMS.md) has no menu line; the search finds it.
+            'links' => [['key' => 'questions', 'label' => 'Question bank', 'href' => '/modules/exams/', 'ability' => ['trainings', 'edit'],
+                'keywords' => ['question bank', 'questions', 'import questions', 'exam questions', 'quiz questions', 'question template', 'exams', 'quiz']]]],
 
         ['key' => 'junior_church', 'label' => 'Junior Church', 'icon' => 'baby', 'href' => '/modules/junior_church/', 'section' => 'units',
             'match' => ['junior_church'], 'keywords' => ['kids', 'children', 'sunday school'],
@@ -353,13 +359,33 @@ function ui_nav_visible(PDO $pdo, string $currentModule): array
         if ($item['key'] === 'assimilation' && !empty($ctx['assim_manager']) && !empty($item['manager_tabs'])) {
             $item['tabs'] = $item['manager_tabs'];
         }
+        $item['links'] = array_values(array_filter((array) ($item['links'] ?? []), static fn ($l) => ui_nav_link_allowed($l, $ctx)));
         $sections[$item['section']]['items'][] = $item;
     }
 
     return array_values(array_filter($sections, static fn ($s) => $s['items'] !== []));
 }
 
-/** The Ctrl/Cmd+K index: every visible module, its tabs, and sign-out. */
+/**
+ * May this person see a search-only link ('links' in the registry)? One with
+ * an 'ability' needs it church-wide (or break-glass), as the page itself
+ * asks; one without follows its module.
+ */
+function ui_nav_link_allowed(array $link, array $ctx): bool
+{
+    if (empty($link['ability'])) {
+        return true;
+    }
+    $perm = $ctx['perm'] ?? null;
+    if (!is_array($perm) || !function_exists('perm_ctx_scope')) {
+        return false;
+    }
+    [$module, $level] = $link['ability'];
+
+    return !empty($perm['breakglass']) || !empty(perm_ctx_scope($perm, (string) $module, (string) $level)['church']);
+}
+
+/** The Ctrl/Cmd+K index: every visible module, its tabs, its search-only links, and sign-out. */
 function ui_nav_search_index(array $visibleSections): array
 {
     $index = [];
@@ -370,6 +396,17 @@ function ui_nav_search_index(array $visibleSections): array
                 'id' => $item['key'], 'type' => 'module', 'label' => $item['label'], 'url' => $item['href'],
                 'group' => $section['label'], 'icon' => $item['icon'], 'keywords' => $keywords,
             ];
+            // A page inside the module that the menu doesn't list. Typed like
+            // a tab, so it ranks just under its module and stays out of the
+            // browse list; the row says "Page".
+            foreach ((array) ($item['links'] ?? []) as $link) {
+                $index[] = [
+                    'id' => $item['key'] . ':page:' . $link['key'], 'type' => 'tab', 'sub' => 'Page',
+                    'label' => $item['label'] . ' › ' . $link['label'], 'url' => $link['href'],
+                    'group' => $section['label'], 'icon' => $item['icon'],
+                    'keywords' => array_values(array_unique(array_merge((array) ($link['keywords'] ?? []), [strtolower((string) $link['label'])]))),
+                ];
+            }
             foreach ((array) ($item['tabs'] ?? []) as $tabId => $tabLabel) {
                 $index[] = [
                     'id' => $item['key'] . ':' . $tabId, 'type' => 'tab',

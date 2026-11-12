@@ -133,6 +133,27 @@ ok('nobody resolved, nothing shows', !ui_nav_can_access('reach', ['perm' => null
 ok('an unknown key is refused', !ui_nav_can_access('nonexistent', $navCtx([], true)));
 $unmapped = array_filter($keys, static fn (string $k): bool => !isset(perm_modules()[ui_nav_module($k)]));
 ok('every registry entry has a permission module', $unmapped === [], implode(', ', $unmapped));
+
+// Search-only pages ('links'): the exams question bank has no menu line, so
+// the search finds it under the Academy, for those the page lets in.
+$academy = array_values(array_filter($registry, static fn ($i) => $i['key'] === 'academy'))[0];
+$bankLink = array_values(array_filter((array) ($academy['links'] ?? []), static fn ($l) => $l['href'] === '/modules/exams/'))[0] ?? null;
+ok('the search knows the question bank by "question bank", "questions" and "import questions"',
+    $bankLink !== null && array_diff(['question bank', 'questions', 'import questions'], $bankLink['keywords']) === []);
+$found = array_values(array_filter(ui_nav_search_index([['label' => 'Growth & Retention', 'items' => [$academy]]]), static fn ($e) => $e['url'] === '/modules/exams/'));
+ok('…shown as "HOD Academy › Question bank", a page ranked under its module and out of the browse list',
+    count($found) === 1 && $found[0]['label'] === 'HOD Academy › Question bank' && $found[0]['type'] === 'tab' && $found[0]['sub'] === 'Page'
+    && $found[0]['id'] === 'academy:page:questions');
+ok('…only with Trainings Edit church-wide, as the bank page asks (or break-glass)',
+    ui_nav_link_allowed($bankLink, $navCtx(['trainings' => ['edit' => $sc(true)]])) && ui_nav_link_allowed($bankLink, $navCtx([], true))
+    && !ui_nav_link_allowed($bankLink, $navCtx(['trainings' => ['view' => $sc(true)]]))
+    && !ui_nav_link_allowed($bankLink, $navCtx(['trainings' => ['edit' => $sc(false, [3])]])) && !ui_nav_link_allowed($bankLink, ['perm' => null]));
+ok('…a link without an ability follows its module', ui_nav_link_allowed(['key' => 'x', 'label' => 'X', 'href' => '/x/'], ['perm' => null]));
+ok('…the menu drops the links a person may not see', str_contains((string) file_get_contents($root . '/includes/ui/nav.php'),
+    "\$item['links'] = array_values(array_filter((array) (\$item['links'] ?? []), static fn (\$l) => ui_nav_link_allowed(\$l, \$ctx)));"));
+$gs = (string) file_get_contents($root . '/assets/js/global-search.js');
+ok('…the search box shows an entry\'s own "sub" and keeps tab-typed rows out of the browse list',
+    str_contains($gs, "var sub = it.sub || (it.type === 'tab' ? 'Tab' : '');") && str_contains($gs, "if (it.type === 'tab') return;"));
 /* ---------------------------------------------------------------------- */
 suite('3. every icon named in code exists');
 
@@ -726,7 +747,8 @@ if ($bash === '') {
 // The app's own links are clean. A page address (a root page, a module page,
 // a sign-in page) written with .php anywhere in the code is a link that pays
 // for a redirect. Requires and file paths are not links.
-$navLinks = array_merge(array_column(ui_nav_registry(), 'href'), array_column(ui_nav_search_index([]), 'url'));
+$navLinks = array_merge(array_column(ui_nav_registry(), 'href'), array_column(ui_nav_search_index([]), 'url'),
+    array_column(array_merge(...array_map(static fn ($i) => (array) ($i['links'] ?? []), ui_nav_registry())), 'href'));
 $navPhp = array_values(array_filter($navLinks, static fn ($h) => str_contains((string) parse_url((string) $h, PHP_URL_PATH), '.php')));
 ok('the navigation and its search index carry no .php address', $navPhp === [], implode(', ', $navPhp));
 $pages = array_map(static fn ($f) => basename($f, '.php'), glob($root . '/*.php') ?: []);

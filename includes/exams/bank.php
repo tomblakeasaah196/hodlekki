@@ -543,28 +543,66 @@ function exam_import_get(PDO $pdo, string $token, int $actor): ?array
  * Add the rows that passed. Run once: a second confirm adds nothing; a
  * question someone else added meanwhile is skipped by the UNIQUE hash.
  *
- * @return array{ok:bool, imported:int, skipped:int, message:string}
+ * Also says which questions the file stands for, so an exam can take them
+ * (exam_import_into_exam()): new_ids are the ones added now; question_ids
+ * are those plus the file's questions that were already in the bank and are
+ * Ready (found by their content hash); not_ready counts the ones already
+ * there as a draft or archived, which an exam can't take.
+ *
+ * @return array{ok:bool, imported:int, skipped:int, message:string, new_ids:list<int>, question_ids:list<int>, not_ready:int}
  */
 function exam_import_confirm(PDO $pdo, string $token, int $actor, bool $ready): array
 {
+    $none = ['imported' => 0, 'skipped' => 0, 'new_ids' => [], 'question_ids' => [], 'not_ready' => 0];
     $imp = exam_import_get($pdo, $token, $actor);
     if ($imp === null) {
-        return ['ok' => false, 'imported' => 0, 'skipped' => 0, 'message' => 'That check has expired. Upload the file again.'];
+        return ['ok' => false, 'message' => 'That check has expired. Upload the file again.'] + $none;
     }
     $claim = $pdo->prepare('UPDATE training_question_imports SET imported_at = ? WHERE id = ? AND imported_at IS NULL');
     $claim->execute([exams_sql_dt(exams_now()), (int) $imp['id']]);
     if ($claim->rowCount() !== 1) {
-        return ['ok' => false, 'imported' => 0, 'skipped' => 0, 'message' => 'This file has already been imported.'];
+        return ['ok' => false, 'message' => 'This file has already been imported.'] + $none;
     }
     $added = $skipped = 0;
+    $newIds = [];
+    $known = [];   // hashes of the file's questions that were in the bank already
     foreach ($imp['rows'] as $r) {
+        if (($r['status'] ?? '') === 'duplicate' && is_string($r['hash'] ?? null)) {
+            $known[] = $r['hash'];
+        }
         if (($r['status'] ?? '') !== 'ok' || !is_array($r['q'] ?? null)) {
             continue;
         }
         $res = exam_question_save($pdo, null, $imp['training_id'], $r['q'] + ['status' => $ready ? 'approved' : 'draft'], $actor, 'import');
-        $res['ok'] ? $added++ : $skipped++;
+        if ($res['ok']) {
+            $added++;
+            $newIds[] = (int) $res['id'];
+        } else {
+            $skipped++;
+            if (is_string($r['hash'] ?? null)) {
+                $known[] = $r['hash'];
+            }
+        }
     }
     $pdo->prepare('UPDATE training_question_imports SET imported = ? WHERE id = ?')->execute([$added, (int) $imp['id']]);
+
+    $ids = $ready ? $newIds : [];
+    $notReady = 0;
+    foreach (array_chunk(array_values(array_unique($known)), 300) as $chunk) {
+        $stmt = $pdo->prepare('SELECT id, status FROM training_questions WHERE import_hash IN (' . implode(',', array_fill(0, count($chunk), '?')) . ') ORDER BY id');
+        $stmt->execute($chunk);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $q) {
+            if (in_array((int) $q['id'], $newIds, true)) {
+                continue;   // a repeat row of a question this file just added
+            }
+            if ($q['status'] === 'approved') {
+                $ids[] = (int) $q['id'];
+            } else {
+                $notReady++;
+            }
+        }
+    }
     $msg = $added . ($added === 1 ? ' question added' : ' questions added') . ($skipped ? ', ' . $skipped . ' already there' : '') . '.';
-    return ['ok' => true, 'imported' => $added, 'skipped' => $skipped, 'message' => $msg];
+    return ['ok' => true, 'imported' => $added, 'skipped' => $skipped, 'message' => $msg,
+            'new_ids' => $newIds, 'question_ids' => array_values(array_unique($ids)), 'not_ready' => $notReady];
 }

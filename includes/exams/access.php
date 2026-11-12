@@ -271,8 +271,37 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
             if (!exams_may_manage($pdo, $imp['training_id'])) {
                 return $forbidden();
             }
-            $r = exam_import_confirm($pdo, (string) $in['token'], $me, !empty($in['ready']));
-            return $r['ok'] ? ['status' => 'success', 'message' => $r['message'], 'imported' => $r['imported']] : $fail($r['message']);
+            // From an exam's set-up page: this training's bank, always Ready,
+            // added to that exam and saved in the same step (owner, 12 Nov
+            // 2026: "add and save at once"; exam_import_into_exam()).
+            $into = null;
+            if (!empty($in['item'])) {
+                $into = exam_item($pdo, (int) $in['item']);
+                if ($into === null) {
+                    return $fail('That exam no longer exists.', [], 'NOT_FOUND');
+                }
+                if ($imp['training_id'] !== (int) $into['training_id']) {
+                    return $fail('That file was checked for another bank. Upload it again.');
+                }
+                // People have started: the tutor confirms first (the page asks), before anything is imported.
+                $exam = exam_get($pdo, (int) $into['id']);
+                $started = $exam !== null ? exam_attempt_count($pdo, (int) $exam['id']) : 0;
+                if ($started > 0 && empty($in['started_ok'])) {
+                    return ['status' => 'error', 'code' => 'CONFIRM_STARTED', 'started' => $started,
+                            'message' => exams_started_note($started)];
+                }
+            }
+            $r = exam_import_confirm($pdo, (string) $in['token'], $me, $into !== null || !empty($in['ready']));
+            if (!$r['ok']) {
+                return $fail($r['message']);
+            }
+            if ($into === null) {
+                return ['status' => 'success', 'message' => $r['message'], 'imported' => $r['imported'], 'question_ids' => $r['question_ids']];
+            }
+            $put = exam_import_into_exam($pdo, $into, $r['question_ids'], $me, is_array($in['exam'] ?? null) ? $in['exam'] : [], !empty($in['started_ok']));
+            return ['status' => 'success', 'message' => exams_import_exam_message($r, $put), 'imported' => $r['imported'],
+                    'question_ids' => $r['question_ids'], 'into' => $put['state'], 'added' => $put['added'],
+                    'unexplained' => exams_unexplained($pdo, $r['new_ids'])] + exams_setup_view($pdo, $into);
     }
 
     // ---- One exam item ----------------------------------------------------
@@ -357,6 +386,44 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
     return $fail('Unknown action.');
 }
 
+/** What the set-up page says after Import: the bank, then the exam. */
+function exams_import_exam_message(array $r, array $put): string
+{
+    $n = (int) $r['imported'];
+    $bank = $n === 0 ? 'No new questions.' : $n . ($n === 1 ? ' new question' : ' new questions') . ' in the bank.';
+    $added = (int) $put['added'];
+    $exam = [
+        'saved' => $added . ($added === 1 ? ' question' : ' questions') . ' added to this exam and saved.'
+            . ((int) ($put['started'] ?? 0) > 0 ? ' Papers already started stay as they were.' : ''),
+        'unchanged' => $r['question_ids'] === [] ? 'Nothing to add to this exam.' : 'They are all in this exam already.',
+        'confirm' => 'Not added: people have started this exam.',
+        'failed' => 'Not saved: ' . (string) (($put['errors'] ?? [''])[0]) . ' They are ticked: fix it and press Save.',
+    ][$put['state']] ?? '';
+    $notReady = (int) ($r['not_ready'] ?? 0);
+    $left = $notReady > 0 ? ' ' . $notReady . ($notReady === 1 ? ' is' : ' are') . ' in the bank but not Ready, so left out.' : '';
+    return trim($bank . ' ' . $exam . $left);
+}
+
+/** The confirm before adding questions to an exam people have started. */
+function exams_started_note(int $started): string
+{
+    return $started . ($started === 1 ? ' person has' : ' people have') . ' started. Each paper is fixed when it starts, so theirs won\'t change;'
+        . ' new starters get the new questions.';
+}
+
+/** Of these questions, the ones with no explanation yet (the set-up page offers AI suggestions for them). */
+function exams_unexplained(PDO $pdo, array $ids): array
+{
+    $ids = array_values(array_filter(array_map('intval', $ids), static fn ($i) => $i > 0));
+    if ($ids === []) {
+        return [];
+    }
+    $stmt = $pdo->prepare("SELECT id FROM training_questions WHERE (explanation IS NULL OR TRIM(explanation) = '') AND id IN ("
+        . implode(',', array_fill(0, count($ids), '?')) . ') ORDER BY id');
+    $stmt->execute($ids);
+    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
 /** An import row as the check screen shows it. */
 function exams_import_row_view(array $r): array
 {
@@ -365,5 +432,6 @@ function exams_import_row_view(array $r): array
         'row' => $r['row'], 'status' => $r['status'], 'errors' => $r['errors'] ?? [], 'warnings' => $r['warnings'] ?? [],
         'type' => (string) ($f['type'] ?? ''), 'text' => mb_substr((string) ($f['question'] ?? ''), 0, 160),
         'correct' => (string) ($f['correct'] ?? ''), 'marks' => (string) ($f['marks'] ?? ''),
+        'explained' => trim((string) ($f['explanation'] ?? '')) !== '',
     ];
 }
