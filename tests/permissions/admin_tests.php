@@ -7,6 +7,34 @@
 
 require_once __DIR__ . '/../../includes/permissions/expiry.php';
 
+/**
+ * Migration 20261202090000 on SQLite. The file builds its UPDATE with
+ * information_schema + PREPARE (MySQL/MariaDB); here the test schema has every
+ * column, so the same condition literals are read from the file and joined
+ * the way its "full schema" branch joins them.
+ */
+function perm_test_expiry_migration(PDO $pdo): void
+{
+    $sql = perm_test_migration('20261202090000_perm_expiry_on.sql');
+    $literal = static function (string $re) use ($sql): string {
+        if (!preg_match($re, $sql, $m)) {
+            throw new RuntimeException('20261202090000_perm_expiry_on.sql changed shape: ' . $re);
+        }
+        return str_replace("''", "'", $m[1]);
+    };
+    if (!preg_match('/^INSERT INTO perm_config.*?;/ms', $sql, $insert)) {
+        throw new RuntimeException('20261202090000_perm_expiry_on.sql: no INSERT');
+    }
+    $pdo->exec($insert[0]);
+    $str = "'((?:[^']|'')*)'";
+    $role = strtr($literal("/SET @role_check := {$str};/"), [
+        '{frozen}' => $literal("/SET @frozen := IF\\(.*?,\\s*{$str},\\s*'1 = 1'\\);/s"),
+        '{archived}' => $literal("/SET @archived := IF\\(.*?,\\s*{$str},\\s*'1 = 1'\\);/s"),
+        '{breakglass}' => $literal("/SET @breakglass := IF\\(.*?,\\s*{$str},\\s*'1 = 1'\\);/s"),
+    ]);
+    $pdo->exec($literal("/SET @update := {$str};/") . $literal("/SET @seat_check := {$str};/") . $role);
+}
+
 /** A fresh church with notifications and contact columns, before the PR 3 migration. */
 function perm_admin_db_raw(): PDO
 {
@@ -23,7 +51,7 @@ function perm_admin_db_raw(): PDO
 function perm_admin_db(): PDO
 {
     $pdo = perm_admin_db_raw();
-    $pdo->exec(perm_test_migration('20261202090000_perm_expiry_on.sql'));
+    perm_test_expiry_migration($pdo);
     perm_reset();
     return $pdo;
 }
@@ -64,7 +92,7 @@ function perm_admin_refused(string $label, string $code, callable $fn): void
 section('PR 3: the expiry migration switches end dates on');
 $pdo = perm_admin_db();
 ok('expiry_enforced = 1 after 20261202090000', perm_expiry_enforced($pdo));
-$pdo->exec(perm_test_migration('20261202090000_perm_expiry_on.sql'));
+perm_test_expiry_migration($pdo);
 eq('running it twice leaves one row', 1, (int) $pdo->query("SELECT COUNT(*) FROM perm_config WHERE cfg_key = 'expiry_enforced'")->fetchColumn());
 
 // ---------------------------------------------------------------------------
@@ -391,7 +419,7 @@ section('PR 3: switching end dates on never cuts anyone off');
 // The migration runs against the real date (CURRENT_DATE), so the dates here
 // are far in the past (2020) or the future (2099).
 $expiryAfter = static function (PDO $pdo): bool {
-    $pdo->exec(perm_test_migration('20261202090000_perm_expiry_on.sql'));
+    perm_test_expiry_migration($pdo);
     perm_reset();
     return perm_expiry_enforced($pdo);
 };
