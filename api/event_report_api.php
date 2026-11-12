@@ -205,9 +205,11 @@ try {
             break;
 
         case 'save_sms_log':
+            if (!can('events', 'edit')) { echo json_encode(['status'=>'error','message'=>'Only those who can edit events can log SMS.']); exit; }
             $eid = (int)($_POST['event_id'] ?? 0);
-            $label = trim($_POST['campaign_label'] ?? '');
-            $date = $_POST['sent_date'] ?? null;
+            $label = mb_substr(trim($_POST['campaign_label'] ?? ''), 0, 120);
+            $date = $_POST['sent_date'] ?? '';
+            $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) ? $date : null;
             $aud = trim($_POST['audience_label'] ?? '');
             $count = (int)($_POST['recipient_count'] ?? 0);
             $chars = (int)($_POST['characters'] ?? 0);
@@ -228,6 +230,7 @@ try {
             break;
 
         case 'delete_sms_log':
+            if (!can('events', 'delete')) { echo json_encode(['status'=>'error','message'=>'Only those who can delete events can remove a logged SMS.']); exit; }
             $id = (int)($_POST['id'] ?? 0);
             $pdo->prepare("DELETE FROM sms_campaign_log WHERE id = ?")->execute([$id]);
             echo json_encode(['status'=>'success','message'=>'SMS campaign deleted.']);

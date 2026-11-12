@@ -535,5 +535,32 @@ foreach ([
 ok('Connect keeps its favicon and theme colour',
     str_contains($connectHtml, 'rel="icon"') && str_contains($connectHtml, 'name="theme-color"'));
 
+/* ---------------------------------------------------------------------- */
+suite('12. a service never registers anyone (owner, 12 Nov 2026)');
+
+$checkinApi = (string) file_get_contents($root . '/api/checkin_api.php');
+$checkinPage = (string) file_get_contents($root . '/checkin.php');
+/** The source of one `case 'x':` in the check-in API, up to the next case. */
+$ciCase = static function (string $name) use ($checkinApi): string {
+    $start = strpos($checkinApi, "case '{$name}':");
+    if ($start === false) return '';
+    $next = strpos($checkinApi, "\n        case '", $start + 1);
+    return substr($checkinApi, $start, $next === false ? null : $next - $start);
+};
+$guest = $ciCase('guest_present');
+$register = $ciCase('register_and_present');
+ok('Registration link off means check-in only',
+    str_contains($checkinApi, "return (int) (\$event['requires_registration'] ?? 0) !== 1;"));
+ok('guest_present runs only on a check-in-only event', str_contains($guest, 'if (!ci_checkin_only($event))'));
+ok('guest_present never writes a registration', $guest !== '' && !str_contains($guest, 'event_registrations'));
+ok('guest_present counts the guest with no registration', str_contains($guest, 'INSERT INTO checkins'));
+ok('register_and_present refuses a check-in-only event',
+    str_contains($register, 'if (ci_checkin_only($event))')
+    && strpos($register, 'if (ci_checkin_only($event))') < strpos($register, 'INSERT INTO event_registrations'));
+ok('the check-in page is not the app (no install prompt at the door)', str_contains($checkinPage, "'app' => false"));
+ok('the check-in page hands Connect the name in session storage, not the URL',
+    !str_contains((string) file_get_contents($root . '/assets/ui/js/pages/checkin.js'), 'connect.php?')
+    && str_contains((string) file_get_contents($root . '/assets/ui/js/pages/connect.js'), "'hod.connect.prefill'"));
+
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed === 0 ? 0 : 1);

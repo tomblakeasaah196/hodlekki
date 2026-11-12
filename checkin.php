@@ -134,7 +134,7 @@ $sources = [
                 </div>
                 <?= ui_field('text', ['name' => 'name', 'id' => 'ci-edit-name', 'label' => 'Full name', 'required' => true, 'autocomplete' => 'name', 'attrs' => ['maxlength' => 100]]) ?>
                 <div class="grid gap-2">
-                    <?= ui_button('Save and check in', ['variant' => 'brand', 'type' => 'submit', 'block' => true, 'attrs' => ['id' => 'ci-save-name']]) ?>
+                    <?= ui_button('Check in', ['variant' => 'brand', 'type' => 'submit', 'block' => true, 'attrs' => ['id' => 'ci-save-name']]) ?>
                     <?= ui_button('Cancel', ['variant' => 'ghost', 'block' => true, 'attrs' => ['data-action' => 'ci.back-confirm']]) ?>
                 </div>
             </form>
@@ -161,7 +161,7 @@ $sources = [
                 <?= ui_field('tel', ['name' => 'phone', 'id' => 'ci-reg-phone', 'label' => 'Phone number', 'required' => true, 'autocomplete' => 'tel', 'inputmode' => 'tel', 'attrs' => ['maxlength' => 20]]) ?>
                 <?= ui_field('select', ['name' => 'source', 'id' => 'ci-reg-source', 'label' => 'How did you hear about it?', 'optional' => true, 'options' => $sources]) ?>
                 <div class="grid gap-2">
-                    <?= ui_button('Register and check in', ['variant' => 'brand', 'type' => 'submit', 'block' => true, 'attrs' => ['id' => 'ci-reg-go']]) ?>
+                    <?= ui_button('Register', ['variant' => 'brand', 'type' => 'submit', 'block' => true, 'attrs' => ['id' => 'ci-reg-go']]) ?>
                     <?= ui_button('Try another number', ['variant' => 'ghost', 'block' => true, 'attrs' => ['data-action' => 'ci.restart']]) ?>
                 </div>
             </form>
@@ -190,13 +190,13 @@ $sources = [
                 <div class="ci-welcome" id="ci-welcome" hidden>
                     <div>
                         <p class="font-display text-lg font-bold text-ink">New here?</p>
-                        <p class="text-sm text-ink-muted">Fill the welcome card so our team can say hello. Your name and number are already in.</p>
+                        <p class="text-sm text-ink-muted">Say hello. Your name is already in.</p>
                     </div>
-                    <?= ui_button('Fill the welcome card', ['variant' => 'brand', 'block' => true, 'icon_end' => 'arrow-right', 'attrs' => ['data-action' => 'ci.connect']]) ?>
+                    <?= ui_button('Welcome card', ['variant' => 'brand', 'block' => true, 'icon_end' => 'arrow-right', 'attrs' => ['data-action' => 'ci.connect']]) ?>
                 </div>
 
                 <div class="grid gap-2 border-t border-line pt-4" id="ci-helper-next" hidden>
-                    <?= ui_button('Check in the next person', ['variant' => 'primary', 'block' => true, 'icon' => 'refresh-cw', 'attrs' => ['data-action' => 'ci.restart']]) ?>
+                    <?= ui_button('Next person', ['variant' => 'primary', 'block' => true, 'icon' => 'refresh-cw', 'attrs' => ['data-action' => 'ci.restart']]) ?>
                     <?= ui_button('Stop helping', ['variant' => 'ghost', 'block' => true, 'attrs' => ['data-action' => 'ci.helper-off']]) ?>
                 </div>
             </section>
