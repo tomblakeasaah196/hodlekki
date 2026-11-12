@@ -17,7 +17,6 @@
 function se_module_setting_defaults(): array
 {
     return [
-        'envision_department_id'     => '0',   // no longer used: ownership lives in Roles & permissions
         'default_brand_primary'      => '#1D356A',
         'default_brand_secondary'    => '#D11920',
         'default_theme_preset'       => 'marquee',
@@ -38,7 +37,6 @@ function se_module_setting_defaults(): array
 
 /** Keys a manager may edit from Studio → Settings, with their input type. */
 const SE_MODULE_SETTING_EDITABLE = [
-    'envision_department_id'    => 'int',
     'default_brand_primary'     => 'hex',
     'default_brand_secondary'   => 'hex',
     'default_theme_preset'      => 'preset',
