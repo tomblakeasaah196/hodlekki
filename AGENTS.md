@@ -1445,6 +1445,53 @@ permissions `20261213090100_perm_our_sermons.sql`. Tests: `php tests/our_sermons
 - **Degrade before the migration:** `our_sermons_ready()`; pages say "Almost ready", the API answers
   `FEATURE_NOT_READY`, the poller does nothing.
 
+## Our sermons: the listening page (added 2026-11-13)
+
+Plan and the owner's answers: `OUR-SERMONS-PLAN.md` (shared notes). PR S1 owns
+`our_sermons`, Envision's manager and the list/calendar (section above); PR S2 is one sermon:
+`modules/our_sermons/sermon.php`, `assets/ui/js/pages/our-sermon.js`, CSS "Our
+sermons: the listening page" in `assets/ui/src/app.css`, and
+`api/our_sermons_listen_api.php` → `our_sermon_listen_action()` in
+`includes/our_sermons/listen.php`. Schema:
+`db/migrations/20261213100000_our_sermons_listen.sql`. Tests:
+`php tests/our_sermons/listen.php` (CI).
+
+- **A note is the member's alone.** Only `includes/our_sermons/listen.php`
+  touches `our_sermon_notes`, and every query filters on the caller's user id
+  (updates and deletes too). No Envision screen, report, export or AI reads it;
+  the tests fail if any other file mentions the table.
+- **Our own player**, never Spotify's embed (it plays 30-second previews to
+  anyone signed out of Spotify). `media-src` gets this sermon's audio hosts on
+  this page only, from S1's `our_sermons_media_hosts()`: for the Lekki feed,
+  anchor.fm and the CloudFront host its play URLs redirect to (CSP checks every
+  hop). That CDN answers `application/octet-stream`, so the `<audio>` names the
+  type on a `<source type="audio/mpeg">` (`our_sermon_audio_type()`), and
+  `preload="metadata"` only (files are 25–55 MB). Safari/iOS was not tested
+  when this shipped; if it refuses the CDN, the fallback is a same-origin range
+  proxy. Do not widen `media-src` anywhere else.
+- **Its classes are `osl-*`**, so they never meet S1's `os-*` (the list's
+  `.os-grid`, `.os-card` …).
+- **Watch** is youtube-nocookie, made only when the member opens the tab. Its
+  time and seeking go through the player's postMessage protocol (origin and
+  source checked), so no YouTube script runs and `script-src` stays `'self'`;
+  `frame-src` gets youtube-nocookie on this page only when there is a video.
+- **The Bible panel is not a dialog**, so the sermon and its controls stay
+  usable. Chapters come from `/api/bible_api.php?action=chapter` and the Bible
+  module's rules hold: licensed text is reported to FUMS on each display (the
+  page adds the FUMS host to `img-src` only when a licensed translation can be
+  read) and the copyright line is always shown.
+- **Progress** is one row per member and sermon (UNIQUE key, never
+  check-then-insert), saved every 15 s, on pause and as the page goes away
+  (keepalive, token in the body). Finishing stamps `finished_at` once and sets
+  the position back to the start.
+- **Email my notes** is `email_send_doc()` (transactional lane, purpose
+  account, flow `our_sermon_note_email`) to the confirmed personal email, else
+  `users.email` (owner: a system-made one is fine), or an address the member
+  types: at most 5 a day and one a minute, counted from `email_outbox`. A
+  member's `{{…}}` never becomes a merge field.
+- Degrade before the migration: `our_sermon_listen_ready()`, else
+  `FEATURE_NOT_READY`. SQL stays portable to SQLite.
+
 ## Common pitfalls spotted during onboarding
 
 - **A dialog must fit above the on-screen keyboard.** On Android Chrome and iOS

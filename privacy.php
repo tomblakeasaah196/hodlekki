@@ -61,6 +61,7 @@ ui_public_open([
                 <li>When staff use AI help, only the text they choose is sent to Google's Gemini service. Personal records are not sent.</li>
                 <li>Our sermon recordings, already public, go to Gemini to draft their summaries. Nothing about you goes with them.</li>
                 <li>Training slides are shown through Microsoft's Office viewer, which reads the slide file from our site.</li>
+                <li>Sermon audio plays from Spotify's servers; a sermon video plays from YouTube (no-cookie mode) only when you choose Watch.</li>
             </ul>
 
             <h2>Cookies</h2>

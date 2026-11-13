@@ -286,6 +286,22 @@ jobs:
           fi
           php tests/our_sermons/run.php
 
+      - name: Our sermons tests (the listening page)
+        run: |
+          set -euo pipefail
+
+          # No MySQL, no network: notes (private to their writer), "carry on
+          # where you stopped", scripture references in free text, the
+          # media-src hosts, "Email my notes" through the outbox with its
+          # limits, and every decision of the endpoint, against SQLite built
+          # from the real migrations. It prints SKIP and exits 0 without
+          # pdo_sqlite, so refuse to run without it.
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
+            echo "::error::pdo_sqlite is missing — the Our sermons tests would be skipped"
+            exit 1
+          fi
+          php tests/our_sermons/listen.php
+
       - name: Dashboard numbers and sign-in tests
         run: |
           set -euo pipefail

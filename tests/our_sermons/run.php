@@ -789,8 +789,9 @@ foreach (['index', 'manage', 'sermon'] as $page) {
 $sermonPage = (string) file_get_contents($root . '/modules/our_sermons/sermon.php');
 ok('the sermon page alone lets the audio\'s host into media-src', str_contains($sermonPage, "'media-src' => our_sermons_media_hosts(")
     && !str_contains((string) file_get_contents($root . '/modules/our_sermons/index.php'), 'media-src'));
-ok('the sermon page plays the feed\'s audio and offers Spotify and YouTube', str_contains($sermonPage, '<audio class="os-audio" controls')
-    && str_contains($sermonPage, "'Open in Spotify'") && str_contains($sermonPage, "'Watch on YouTube'"));
+// S2 replaced the minimal page with the listening page (tests/our_sermons/listen.php covers it).
+ok('the sermon page plays the feed\'s audio (S2\'s player) and offers Spotify', str_contains($sermonPage, '<audio preload="metadata" data-os-audio>')
+    && str_contains($sermonPage, "'Open in Spotify'") && str_contains($sermonPage, 'OUR_SERMON_YOUTUBE_ORIGIN'));
 ok('the members\' view choice is remembered (cookie hod_os_view)', str_contains((string) file_get_contents($root . '/modules/our_sermons/index.php'), "setcookie('hod_os_view'"));
 $nav = (string) file_get_contents($root . '/includes/ui/nav.php');
 ok('the menu entry is there, with its (i) line', str_contains($nav, "'key' => 'our_sermons', 'label' => 'Our sermons'") && str_contains($nav, "'info' => 'Listen to recent sermons"));
@@ -806,7 +807,7 @@ ok('S3\'s panel (its own Regenerate form) sits on the editor page, outside the e
     $panelAt !== false && $panelAt < strpos($manageSrc, '<form class="ui-card" data-action="os.save"')
     && str_contains($manageSrc, "if (function_exists('our_sermons_ai_panel')):"));
 ok('S2\'s notes and progress tables are named only in S2\'s files', !preg_match('/our_sermon_(notes|progress)\b/', implode('', array_map('file_get_contents',
-    array_merge(glob($root . '/includes/our_sermons/*.php') ?: [], glob($root . '/modules/our_sermons/manage.php') ?: [], glob($root . '/db/migrations/2026121309*') ?: [],
+    array_merge(array_filter(glob($root . '/includes/our_sermons/*.php') ?: [], static fn ($f) => basename($f) !== 'listen.php'), glob($root . '/modules/our_sermons/manage.php') ?: [], glob($root . '/db/migrations/2026121309*') ?: [],
         [$root . '/api/our_sermons_api.php', __FILE__])))));
 ok('CI runs this suite', str_contains((string) file_get_contents($root . '/.github/workflows/deploy.yml'), 'php tests/our_sermons/run.php'));
 ok('the integration job applies the migration on MySQL and MariaDB (marker)', str_contains((string) file_get_contents($root . '/tests/special_events/db_setup.php'), "'_our_sermons_'"));
