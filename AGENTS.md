@@ -1396,6 +1396,53 @@ pages `modules/trainings/` (learners), `modules/academy/` + `training.php`
   "Academy applicant" source reads `academy_applications` only when that
   table exists, so it simply stops matching.
 
+## Our sermons (added 2026-11-13)
+
+The members' sermon library, **separate** from the public Word Library (`/sermons`, the `sermons` table and
+Envision's Sermon Archive stay as they are). Plan and the owner's answers: `OUR-SERMONS-PLAN.md` (shared notes).
+Code: `includes/our_sermons/` (`bootstrap.php` is the entry point), one endpoint `api/our_sermons_api.php` →
+`our_sermons_action()` in `includes/our_sermons/actions.php`, pages `modules/our_sermons/` (`index` list +
+calendar, `sermon` one sermon, `manage` Envision's manager). Schema: `20261213090000_our_sermons_core.sql`,
+permissions `20261213090100_perm_our_sermons.sql`. Tests: `php tests/our_sermons/run.php` (CI lint job).
+
+- **The tables are a shared contract** (S2 the listening page, S3 AI): `our_sermons`, `our_sermon_feeds`,
+  `our_sermon_feed_skips`; the tests pin every column. S2 adds its own notes and progress tables keyed
+  on `our_sermons.id`; S3 writes `summary`, `key_points` / `scriptures` (JSON arrays of strings), `series`,
+  `ai_status` (`pending` | `done` | `failed` | `off`) and `ai_drafted_at`. Never rename a column.
+- **`date_preached` is the day it was preached**, parsed from the episode title by `our_sermons_parse_title()`
+  (preacher, date, service; "November 8th, 2026", "30th September 2026", "9TH APRIL, 2025", 8/11/2026 day
+  first), or typed. Never the day Spotify published it (`feed_published_at` keeps that). A title without a date
+  gets the Sunday before publishing, flagged `date_source = 'guess'` until Envision saves the draft.
+- **New episodes arrive as drafts** from the show's RSS feed: `our_sermons_feeds_run()` rides on
+  `cron/automation_tick.php` (*/5, behind `function_exists()`: no new cron line) and reads each feed at most every
+  15 minutes (claimed through `last_checked_at`, conditional GET). Deduped by the UNIQUE `feed_guid`; an episode
+  Envision deleted is remembered in `our_sermon_feed_skips` so the poller never brings it back (Paste link can).
+  At most 20 new drafts per read. A pasted episode with the same title is completed with the feed's audio
+  instead of becoming a second draft. Envision's Edit holders are told once per read (`perm_holders()`).
+  The Lekki feed (`https://anchor.fm/s/116f1a844/podcast/rss`) is seeded by `20261213090200` only while no feed
+  is set; Envision changes it on Manage sermons → Feed.
+- **S3's hooks** (`includes/our_sermons/ai.php`, loaded by the bootstrap when it is there): a new draft (feed or
+  paste) is created with `ai_status = 'pending'` and `our_sermons_ai_queue($pdo, $id)` is called when that
+  function exists, otherwise `ai_status = 'off'`; the editor shows `our_sermons_ai_panel()` (its own Regenerate
+  form, so it sits outside the editor's form).
+- **Everything from outside is hostile.** The only way out is `our_sermons_http_get()`: https only, port 443,
+  the name resolved and pinned (`CURLOPT_RESOLVE`), private and reserved addresses refused, redirects followed by
+  hand and re-checked, size caps. The RSS reader refuses any DOCTYPE / ENTITY and parses with `LIBXML_NONET`.
+  oEmbed (Spotify, YouTube; no key) thumbnails come only from the providers' image hosts.
+- **Artwork is copied** to `/uploads/sermons/artwork/` under upload_guard's random names (checked to be a
+  JPEG / PNG / WebP, shrunk to 640 px when GD is there), so pages keep `img-src 'self'`. One copy per source
+  (`artwork_source`); deleted only when no sermon shows it. The audio streams from the feed's host: only
+  `modules/our_sermons/sermon.php` adds it (and any host a tracking prefix forwards to, `our_sermons_media_hosts()`)
+  to `media-src`.
+- **Publishing tells everyone who can sign in, once**: `our_sermons_notify_everyone()` claims `notified_at` in
+  the same transaction as the `system_notifications` rows (batches of 200), so a second Publish, a re-publish
+  after Hide or two presses at once tell nobody again. The rows become pushes through the normal fan-out.
+- **Access** is the `our_sermons` row: everyone View (church-wide); the Envision department's seats and the pastor
+  roles Create (paste) / Edit (check, publish, hide) / Delete / Manage (the feeds). Decided only in
+  `our_sermons_action()`.
+- **Degrade before the migration:** `our_sermons_ready()`; pages say "Almost ready", the API answers
+  `FEATURE_NOT_READY`, the poller does nothing.
+
 ## Common pitfalls spotted during onboarding
 
 - **A dialog must fit above the on-screen keyboard.** On Android Chrome and iOS

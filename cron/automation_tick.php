@@ -94,6 +94,23 @@ if (function_exists('trainings_reminders_run')) {
     }
 }
 
+// Our sermons (includes/our_sermons/feeds.php): each RSS feed Envision pasted is read every 15 minutes on this
+// beat, and a new episode becomes a draft for Envision to check. Its own try, so a problem there never stops
+// the automation below. No new cron line (OUR-SERMONS-PLAN.md, PR S1).
+if (is_file(__DIR__ . '/../includes/our_sermons/bootstrap.php')) {
+    require_once __DIR__ . '/../includes/our_sermons/bootstrap.php';
+}
+if (function_exists('our_sermons_feeds_run')) {
+    try {
+        $os = our_sermons_feeds_run($pdo, array_filter(['now' => $at, 'dry_run' => $dry]));
+        if ($os['new'] > 0 || $os['linked'] > 0) {
+            $line('our sermons: ' . $os['new'] . ' new draft(s), ' . $os['linked'] . ' completed from the feed');
+        }
+    } catch (Throwable $e) {
+        error_log('[our_sermons] feeds: ' . $e->getMessage());
+    }
+}
+
 try {
     $r = automation_tick($pdo, array_filter([
         'dry_run' => $dry,
