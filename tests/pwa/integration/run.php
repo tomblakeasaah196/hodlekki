@@ -123,6 +123,15 @@ $pdo->exec("INSERT INTO user_departments (user_id, department_id, is_active) VAL
 $pdo->exec("INSERT INTO user_roles (user_id, role_id, is_frozen) VALUES
     (1,3,0), (2,3,NULL), (5,3,1)");
 
+// Only members with a live device are queued, so everybody starts with one
+// and the audience suites see the whole audience. The "no device" suite
+// further down takes them away again.
+$seedKey  = push_b64url_encode("\x04" . str_repeat("\x11", 64));
+$seedAuth = push_b64url_encode(str_repeat("\x22", 16));
+foreach ([1, 2, 3, 4, 5] as $uid) {
+    push_save_subscription($pdo, $uid, 'https://fcm.googleapis.com/fcm/send/seed-' . $uid, $seedKey, $seedAuth, 'seed');
+}
+
 echo "\n==========================================================\n";
 echo "  Web Push integration — " . $pdo->query('SELECT VERSION()')->fetchColumn() . "\n";
 echo "==========================================================\n";
@@ -204,12 +213,12 @@ check('a row naming a user goes to that user alone', 1,
     (int) $pdo->query("SELECT COUNT(*) FROM push_queue")->fetchColumn());
 
 /* ---------------------------------------------------------------------- */
-suite('rows already dealt with are not pushed');
+suite('a row read in the app still reaches the member\'s other devices');
 $pdo->exec("DELETE FROM push_queue");
 $pdo->exec("INSERT INTO system_notifications (user_id, title, message, is_read) VALUES (1, 'Read already', 'x', 1)");
 $read = push_fanout($pdo);
 check('a read notification is scanned', 1, $read['scanned']);
-check('but never queued', 0, $read['queued']);
+check('and still queued', 1, $read['queued']);
 
 /* ---------------------------------------------------------------------- */
 suite('member preferences are honoured at queue time');
@@ -232,6 +241,7 @@ check('clearing quiet hours restores delivery', true, push_user_allows($pdo, 1, 
 
 /* ---------------------------------------------------------------------- */
 suite('subscriptions');
+$pdo->exec("DELETE FROM push_subscriptions");   // the seeded devices, so the counts below start at 0
 $key  = push_b64url_encode("\x04" . str_repeat("\x11", 64));
 $auth = push_b64url_encode(str_repeat("\x22", 16));
 
@@ -257,11 +267,24 @@ check('a dead endpoint is retired, not deleted', true, (function (PDO $pdo) {
 check('and is no longer offered to the sender', 0, count(push_user_subscriptions($pdo, 1)));
 
 /* ---------------------------------------------------------------------- */
-suite('the queue drains without devices rather than hanging');
+suite('members with no device are not queued');
 $pdo->exec("DELETE FROM push_queue");
 $pdo->exec("INSERT INTO system_notifications (user_id, title, message) VALUES (2, 'For Tunde', 'x')");
+$none = push_fanout($pdo);
+check('the row is scanned', 1, $none['scanned']);
+check('but nothing is queued for a member with no device', 0,
+    (int) $pdo->query("SELECT COUNT(*) FROM push_queue")->fetchColumn());
+
+push_save_subscription($pdo, 1, 'https://fcm.googleapis.com/fcm/send/live-1', $key, $auth, 'phone');
+$pdo->exec("INSERT INTO system_notifications (department_id, title, message) VALUES (7, 'Department', 'x')");
 push_fanout($pdo);
-check('queued for a member with no device', 1, (int) $pdo->query("SELECT COUNT(*) FROM push_queue")->fetchColumn());
+check('a group notice queues only the members who have a device', [1],
+    array_map('intval', $pdo->query("SELECT user_id FROM push_queue")->fetchAll(PDO::FETCH_COLUMN)));
+
+suite('the queue drains without devices rather than hanging');
+// A device can be dropped between queueing and sending.
+$pdo->exec("DELETE FROM push_queue");
+$pdo->exec("INSERT INTO push_queue (user_id, title, body, url) VALUES (2, 'For Tunde', 'x', '/')");
 
 $drain = push_drain($pdo, 10, 5.0);
 check('the job was claimed', 1, $drain['claimed']);

@@ -786,15 +786,48 @@ if (!defined('PUSH_HELPERS_LOADED')) {
     }
 
     /**
+     * Members with at least one live device, as a set (user_id => true).
+     *
+     * null when the table cannot be read: then nobody is filtered out, because
+     * a slow queue is better than a silent one.
+     */
+    function push_users_with_devices(PDO $pdo): ?array
+    {
+        if (!push_table_exists($pdo, 'push_subscriptions')) {
+            return null;
+        }
+
+        try {
+            $ids = $pdo->query("SELECT DISTINCT user_id FROM push_subscriptions WHERE is_active = 1")
+                ->fetchAll(PDO::FETCH_COLUMN);
+        } catch (Throwable $e) {
+            push_log('reading who has a device failed: ' . $e->getMessage());
+            return null;
+        }
+
+        return array_fill_keys(array_map('intval', $ids), true);
+    }
+
+    /**
      * Copy every new `system_notifications` row into push_queue.
      *
      * This is the whole trick: no call site anywhere in the codebase changes,
      * and anything that writes a notification in future is covered the moment
      * it is written.
      *
+     * Only members with a live device are queued. A notice to the whole
+     * church is one row per member, and most members have no device; queueing
+     * them all made the people who DO have one wait behind hundreds of rows
+     * that could only ever be closed as "no device" (13 Nov 2026: six sermons
+     * published back to back reached phones 5 to 10 minutes late).
+     *
+     * A row is pushed even if it was already read in the app: the owner's
+     * rule is that every device a member switched on gets every alert, so an
+     * alert opened on the PC still reaches the phone.
+     *
      * @return array{scanned:int,queued:int,cursor:int}
      */
-    function push_fanout(PDO $pdo, int $limit = 400): array
+    function push_fanout(PDO $pdo, int $limit = 2000): array
     {
         $result = ['scanned' => 0, 'queued' => 0, 'cursor' => 0];
 
@@ -826,7 +859,7 @@ if (!defined('PUSH_HELPERS_LOADED')) {
 
         $columns = push_notification_columns($pdo);
         $select  = ['id', 'user_id', 'title', 'message', 'link_url'];
-        foreach (['department_id', 'role_id', 'region_id', 'is_read'] as $optional) {
+        foreach (['department_id', 'role_id', 'region_id'] as $optional) {
             if (isset($columns[$optional])) {
                 $select[] = $optional;
             }
@@ -847,18 +880,18 @@ if (!defined('PUSH_HELPERS_LOADED')) {
             return $result;
         }
 
+        $withDevice = push_users_with_devices($pdo);
+
         $highest = $cursor;
         foreach ($rows as $row) {
             $result['scanned']++;
             $highest = max($highest, (int) $row['id']);
 
-            // Already dealt with inside the app before the worker got here.
-            if (isset($row['is_read']) && (int) $row['is_read'] === 1) {
-                continue;
-            }
-
             $message = push_message_from_notification($row);
             foreach (push_notification_audience($pdo, $row) as $userId) {
+                if ($withDevice !== null && !isset($withDevice[$userId])) {
+                    continue;   // no device: the bell and the in-app toast have it
+                }
                 if (push_enqueue($pdo, $userId, $message, (int) $row['id'], 'system_notifications')) {
                     $result['queued']++;
                 }
@@ -1092,7 +1125,13 @@ if (!defined('PUSH_HELPERS_LOADED')) {
                     'Content-Type: application/octet-stream',
                     'Content-Length: ' . strlen($body),
                     'TTL: ' . PUSH_TTL_SECONDS,
-                    'Urgency: ' . ($job['urgency'] === 'high' ? 'high' : 'normal'),
+                    // Always high. With "normal", Android holds a message
+                    // while the phone is idle and hands it over in a batch
+                    // when the screen comes on, so alerts arrived hours late
+                    // or "never". Every push here shows a notification, which
+                    // is what high priority is for. The job's own urgency
+                    // still decides quiet hours and the stay-on-screen style.
+                    'Urgency: high',
                 ],
             ];
         }
