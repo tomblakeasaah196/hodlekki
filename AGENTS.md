@@ -1075,6 +1075,26 @@ Guide and contracts: `docs/EXAMS.md`. Code: `includes/exams/` (entry
 - The Excel reader (`xlsx.php`) treats every upload as hostile (size caps
   before inflating, no DOCTYPE, no network); keep it that way.
 
+## Trainings: My notes (added 2026-11-13)
+
+Owner's brief (13 Nov 2026): the learner's notes panel, as MyCity has it: one
+note per learner and training, reopened after a reload, private, downloadable
+as Word. Code: `includes/trainings/notes.php`, the `note_get` / `note_save`
+actions in `includes/trainings/actions.php`, `api/trainings_notes_doc.php`
+(the Word copy, through the dependency-free `includes/docx.php`), and the
+shared component `ui_notetaker()` + `HOD.notes` (docs/UI.md, "Notes"). Schema:
+`db/migrations/20261212090000_trainings_notes.sql`. Tests: the "My notes"
+section of `tests/trainings/run.php`.
+
+- **A note is the learner's alone.** Only `notes.php` touches
+  `training_notes`; no Academy screen, report, export or AI reads it, and the
+  Word download has no user parameter. The tests fail if any other file
+  mentions the table.
+- Taking notes follows the page (`trainings_note_can_take()`, the 'view'
+  action's rule); reading back and downloading need only that the note is
+  theirs, so it outlives the training.
+- At most `TRAININGS_NOTE_MAX` (20,000) characters, plain text.
+
 ## Roles & permissions (added 2026-11-11)
 
 One access check for the whole platform: `can(string $module, string $level = 'view', $target = null)`

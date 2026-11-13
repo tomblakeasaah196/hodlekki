@@ -1815,6 +1815,133 @@
     .ui-banner--danger { background: var(--ui-danger-soft); border-color: var(--ui-danger-border); }
     .ui-banner--danger > .ui-icon { color: var(--ui-danger); }
 
+    /* ---------- Notes (ui_notetaker(), HOD.notes) ----------
+     * A panel that floats over the page while the person keeps working: not
+     * a dialog, nothing behind it is blocked. From 640 px it floats, dragged
+     * by its bar (HOD.notes sets left/top from script); on a phone it docks
+     * full width above the bottom bar (or under the app bar, .is-top) and
+     * rides above the on-screen keyboard. Minimised, it is its bar alone. */
+
+    .ui-notes {
+        position: fixed;
+        z-index: calc(var(--ui-z-chrome) - 5);
+        left: 8px;
+        right: 8px;
+        bottom: calc(var(--ui-bottom-offset) + 8px);
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100dvh - var(--ui-bottom-offset) - var(--ui-safe-top) - 16px);
+        border: 1px solid var(--ui-border-strong);
+        border-radius: var(--ui-radius-lg);
+        background: var(--ui-surface);
+        box-shadow: var(--ui-shadow-lg);
+        overflow: hidden;
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity var(--ui-dur) var(--ui-ease-out), transform var(--ui-dur) var(--ui-ease-out);
+    }
+    .ui-notes[hidden] { display: none; }
+    .ui-notes.is-open { opacity: 1; transform: none; }
+    .ui-notes.is-top {
+        top: calc(var(--ui-safe-top) + var(--ui-appbar-h) + 8px);
+        bottom: auto;
+    }
+    html.ui-kb-open .ui-notes:not(.is-top) { bottom: calc(var(--ui-kb-inset, 0px) + 8px); }
+    html.ui-kb-open .ui-notes { max-height: calc(var(--ui-vv-h, 100dvh) - 16px); }
+
+    .ui-notes__bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 52px;
+        padding: 4px 4px 4px 12px;
+        background: var(--ui-surface-sunken);
+        border-bottom: 1px solid var(--ui-border);
+        user-select: none;
+        -webkit-user-select: none;
+    }
+    .ui-notes.is-min .ui-notes__bar { border-bottom: 0; }
+    .ui-notes__mark { display: none; color: var(--ui-primary); }
+    .ui-notes__heading { flex: 1 1 auto; min-width: 0; }
+    .ui-notes__title {
+        margin: 0;
+        color: var(--ui-heading);
+        font: 600 var(--ui-text-md)/1.25rem var(--ui-font-sans);
+    }
+    .ui-notes__subject {
+        margin: 0;
+        overflow: hidden;
+        color: var(--ui-text-muted);
+        font-size: var(--ui-text-xs);
+        line-height: 1rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .ui-notes__status {
+        flex: none;
+        color: var(--ui-text-muted);
+        font-size: var(--ui-text-xs);
+    }
+    .ui-notes__status.is-failed { color: var(--ui-danger); font-weight: 600; }
+    .ui-notes__tools { display: flex; flex: none; align-items: center; }
+    /* Phones: 44 px targets in the bar. */
+    .ui-notes__tool.ui-btn--icon { --btn-h: 44px; }
+    .ui-notes__tool[hidden] { display: none; }
+
+    .ui-notes__body {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+        padding: 8px;
+    }
+    .ui-notes.is-min .ui-notes__body { display: none; }
+    .ui-notes__text.ui-textarea {
+        flex: 1 1 auto;
+        height: clamp(7rem, 32vh, 16rem);
+        min-height: 5rem;
+        padding: 10px 12px;
+        border-color: transparent;
+        line-height: 1.5;
+        resize: none;
+    }
+    html.ui-kb-open .ui-notes__text.ui-textarea { height: clamp(5rem, calc(var(--ui-vv-h, 60vh) * .35), 12rem); }
+    .ui-notes__text.ui-textarea:hover { border-color: var(--ui-border); }
+    .ui-notes__text.ui-textarea[readonly] { background: var(--ui-surface-subtle); }
+    .ui-notes__foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 32px;
+        padding: 4px 4px 0;
+    }
+    .ui-notes__count {
+        color: var(--ui-text-subtle);
+        font-size: var(--ui-text-xs);
+        font-variant-numeric: tabular-nums;
+    }
+    .ui-notes__count.is-near { color: var(--ui-danger); }
+
+    /* From 640 px it floats: a fixed width, dragged by its bar. */
+    @media (min-width: 640px) {
+        .ui-notes {
+            left: auto;
+            right: 24px;
+            width: 380px;
+            max-width: calc(100vw - 32px);
+        }
+        .ui-notes.is-top { top: auto; bottom: calc(var(--ui-bottom-offset) + 24px); }
+        .ui-notes.is-placed { right: auto; bottom: auto; }
+        .ui-notes__bar { cursor: grab; touch-action: none; }
+        .ui-notes.is-dragging { transition: none; }
+        .ui-notes.is-dragging .ui-notes__bar { cursor: grabbing; }
+        .ui-notes__bar .ui-btn { cursor: pointer; }
+        .ui-notes__mark { display: inline-flex; }
+        .ui-notes__tool.ui-btn--icon { --btn-h: var(--ui-control-h-sm); }
+        .ui-notes__text.ui-textarea { height: 18rem; }
+    }
+
     /* ---------- Toast ---------- */
 
     .ui-toasts {
@@ -4022,6 +4149,7 @@ main.app-modal-scroll-locked { overflow: hidden !important; }
     .ui-bottombar,
     .ui-palette,
     .ui-palette__panel,
+    .ui-notes,
     .ui-switch,
     .ui-switch::before,
     .app-modal-overlay,
@@ -4043,6 +4171,7 @@ main.app-modal-scroll-locked { overflow: hidden !important; }
     .ui-toasts,
     .ui-offline-bar,
     .ui-skip,
+    .ui-notes,
     .ui-no-print { display: none !important; }
     body.ui-app { height: auto; overflow: visible; background: #FFFFFF; }
     .ui-main-col { margin: 0 !important; height: auto; }
