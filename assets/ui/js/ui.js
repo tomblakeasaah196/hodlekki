@@ -212,18 +212,28 @@
     /**
      * HOD.toast('Saved') · HOD.toast('Could not save', 'danger')
      * HOD.toast('Member archived', { tone: 'success', action: { label: 'Undo', run: fn } })
+     * HOD.toast('New sermon: Ground Zero', { icon: 'bell', detail: 'Pastor Ebele · Sun 8 Nov' })
+     *   (detail: a second, quieter line; icon: any sprite icon name)
      */
     function toast(message, opts) {
         if (typeof opts === 'string') opts = { tone: opts };
         opts = opts || {};
         var tone = opts.tone === 'error' ? 'danger' : (TOAST_ICONS[opts.tone] ? opts.tone : 'info');
         var host = toastHost();
+        var glyph = (typeof opts.icon === 'string' && /^[a-z0-9-]+$/.test(opts.icon)) ? opts.icon : TOAST_ICONS[tone];
+        var text = String(message == null ? '' : message);
 
         var node = document.createElement('div');
         node.className = 'ui-toast ' + TOAST_CLASS[tone];
         node.setAttribute('role', tone === 'danger' ? 'alert' : 'status');
-        node.innerHTML = icon(TOAST_ICONS[tone]) + '<p class="ui-toast__message"></p>';
-        node.querySelector('.ui-toast__message').textContent = String(message == null ? '' : message);
+        if (opts.detail) {
+            node.innerHTML = icon(glyph) + '<div class="ui-toast__message"><strong class="ui-toast__title"></strong><span class="ui-toast__detail"></span></div>';
+            node.querySelector('.ui-toast__title').textContent = text;
+            node.querySelector('.ui-toast__detail').textContent = String(opts.detail);
+        } else {
+            node.innerHTML = icon(glyph) + '<p class="ui-toast__message"></p>';
+            node.querySelector('.ui-toast__message').textContent = text;
+        }
 
         if (opts.action && opts.action.label) {
             var act = document.createElement('button');

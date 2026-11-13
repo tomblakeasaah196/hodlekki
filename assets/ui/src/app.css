@@ -1995,6 +1995,19 @@
         padding-top: 0;
         overflow-wrap: anywhere;
     }
+    /* A live alert: the title, then a quieter line (assets/ui/js/shell.js). */
+    .ui-toast__title { display: block; font-weight: 600; }
+    .ui-toast__detail {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        margin-top: 2px;
+        font-weight: 400;
+        font-size: var(--ui-text-sm);
+        line-height: 1.125rem;
+        opacity: .8;
+    }
     .ui-toast__action {
         flex: none;
         height: 28px;

@@ -356,6 +356,8 @@ function ui_shell_close(): void
     'offline' => $page['offline'],
     'search' => ['index' => $searchIndex, 'groups' => array_merge(['__recent__'], array_values(ui_nav_sections()), ['Actions', 'People', 'Events'])],
     'notifications' => '/api/notifications_api.php',
+    // Keys the "last alert seen" mark per member (shared PCs at church).
+    'user' => (int) ($_SESSION['user_id'] ?? 0),
     // Vendored libraries a page loads on demand with HOD.lib('name').
     'vendor' => ui_vendor_map(),
 ]) ?>

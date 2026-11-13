@@ -11,8 +11,9 @@
  *   · Android/desktop: catches beforeinstallprompt and offers a real install
  *   · iPhone/iPad: there is no install event, so it walks the member through
  *     Share -> Add to Home Screen, with an arrow pointing at the right button
- *   · asks for notification permission at a moment that makes sense, then
- *     subscribes the device to Web Push and registers it with the server
+ *   · asks every signed-in device, until alerts are on: install the app
+ *     first where it can be installed, then turn alerts on ("Not now" waits
+ *     7 days); then subscribes the device to Web Push and registers it
  *   · an alerts sheet: on/off per device, a test push, quiet hours, devices
  *   · the small things that make a multi-page PHP app feel like an app —
  *     a route progress bar, pull to refresh, safe areas, the icon badge
@@ -490,7 +491,9 @@
         event.preventDefault();
         deferredPrompt = event;
 
-        if (!QUIET && !store.snoozed('install-dismissed', 14)) {
+        // Signed-in members get the install step of askForAlerts() instead,
+        // so they never see two prompts at once.
+        if (!QUIET && !CFG.signedIn && !store.snoozed('install-dismissed', 14)) {
             setTimeout(showInstallBanner, 2600);
         }
     });
@@ -502,9 +505,8 @@
         toast('HOD Lekki is on your home screen.');
         haptic([30, 40, 30]);
 
-        // Installed is the moment push becomes worth asking about — on iOS it
-        // is the moment it becomes possible at all.
-        if (CFG.signedIn) setTimeout(maybeAskForPush, 1800);
+        // Installed: on to step 2, turning alerts on.
+        if (CFG.signedIn) setTimeout(function () { askAlertsStep(true); }, 1800);
     });
 
     function showInstallBanner() {
@@ -730,7 +732,8 @@
                 if (!result || result.status !== 'success') {
                     throw new Error((result && result.message) || 'Could not register this device.');
                 }
-                store.drop('push-dismissed');
+                store.drop('alerts-ask');
+                store.drop('push-off');
                 return result;
             });
     }
@@ -743,6 +746,8 @@
     }
 
     function disablePush() {
+        // Switched off here on purpose: never switch it back on silently.
+        store.set('push-off', '1');
         return navigator.serviceWorker.ready
             .then(function (registration) { return registration.pushManager.getSubscription(); })
             .then(function (subscription) {
@@ -778,24 +783,25 @@
      * The opt-in card
      * ------------------------------------------------------------------ */
 
-    function showPushCard() {
+    function showPushCard(stepTwo) {
         var iosNeedsInstall = env.iOS && !env.standalone;
 
         var body = iosNeedsInstall
             ? '<p>On iPhone and iPad, notifications only work once an app is on the Home Screen. ' +
               'It takes three taps &mdash; then we can let you know the moment something needs you.</p>'
-            : '<p>We will only send things that matter: assignments, approvals, first-timer follow-ups ' +
-              'and announcements from the pastors.</p>' +
+            : '<p>We will only send things that matter: assignments, approvals, first-timer follow-ups, ' +
+              'new sermons and announcements from the pastors.</p>' +
               '<ul class="hod-benefits">' +
                   '<li>' + ICON.tick + '<span>Follow-ups and tasks the moment they are assigned to you</span></li>' +
                   '<li>' + ICON.tick + '<span>Approvals waiting on you, before they go stale</span></li>' +
-                  '<li>' + ICON.tick + '<span>Service and department announcements</span></li>' +
+                  '<li>' + ICON.tick + '<span>New sermons, service and department announcements</span></li>' +
               '</ul>' +
               '<p class="hod-small">You can switch them off, or set quiet hours, at any time.</p>';
 
         var panel = sheet('hodPushCard',
             '<div class="hod-centered">' +
                 '<div class="hod-bell">' + ICON.bell + '</div>' +
+                (stepTwo ? '<p class="hod-sub">Step 2 of 2</p>' : '') +
                 '<h2>' + (CFG.firstName ? 'Don\'t miss anything, ' + escapeHtml(CFG.firstName) : 'Don\'t miss anything') + '</h2>' +
             '</div>' +
             body +
@@ -805,7 +811,7 @@
             '<button type="button" class="hod-btn hod-btn-ghost hod-mt-9" data-later>Not now</button>');
 
         panel.querySelector('[data-later]').addEventListener('click', function () {
-            store.snooze('push-dismissed');
+            store.snooze('alerts-ask');
             closeSheet();
         });
 
@@ -841,24 +847,134 @@
         return node.innerHTML;
     }
 
-    /**
-     * Ask at a moment that earns a yes: not on the first page a member ever
-     * sees, not twice in a fortnight, and never when the browser has already
-     * answered for them.
-     */
-    function maybeAskForPush() {
-        if (QUIET || !CFG.signedIn || store.snoozed('push-dismissed', 12)) return;
+    /* ------------------------------------------------------------------ *
+     * Ask until alerts are on (owner, 13 Nov 2026)
+     * ------------------------------------------------------------------
+     * Every signed-in device is asked, in two steps: install the app where
+     * this browser can, then turn alerts on. "Not now" waits 7 days, then it
+     * asks again, until this device has alerts on. A device that allowed
+     * alerts before but lost its subscription (cleared data, a key change) is
+     * put back without a question, unless the member switched them off here.
+     * ------------------------------------------------------------------ */
 
-        // iOS in a browser tab cannot subscribe at all — the install guide is
-        // the useful prompt there, and that has its own pacing.
-        if (env.iOS && !env.standalone) return;
-        if (!env.supportsPush || Notification.permission !== 'default') return;
+    var ASK_AGAIN_DAYS = 7;
 
-        var views = parseInt(store.get('views') || '0', 10);
-        if (views < 2) return;
+    function askForAlerts() {
+        if (QUIET || !CFG.signedIn || env.inAppBrowser || openSheet) return;
+        if (store.snoozed('alerts-ask', ASK_AGAIN_DAYS)) return;
+
+        // Step 1: install, where this browser can.
+        if (!env.standalone && (env.iOS || deferredPrompt)) {
+            showInstallStep();
+            return;
+        }
+        askAlertsStep(false);
+    }
+
+    /** Step 2: alerts on this device. */
+    function askAlertsStep(afterInstall) {
+        if (QUIET || !CFG.signedIn || !env.supportsPush || openSheet) return;
 
         pushState().then(function (state) {
-            if (!state.subscribed) showPushCard();
+            if (state.subscribed) return;
+            if (state.permission === 'granted' && store.get('push-off') !== '1') {
+                enablePush().catch(function () { /* the next visit asks */ });
+                return;
+            }
+            if (state.permission === 'denied') {
+                showBlockedCard();
+                return;
+            }
+            showPushCard(afterInstall);
+        });
+    }
+
+    function showInstallStep() {
+        var ios = env.iOS;
+        var panel = sheet('hodInstallStep',
+            '<div class="hod-centered">' +
+                '<div class="hod-bell"><img src="/assets/pwa/icon-192.png" alt="" width="40" height="40"></div>' +
+                '<p class="hod-sub">Step 1 of 2</p>' +
+                '<h2>Install HOD Lekki</h2>' +
+            '</div>' +
+            '<p>' + (ios
+                ? 'On iPhone and iPad, alerts only reach you through the installed app. It takes three taps.'
+                : 'Install the app, then turn on alerts, so sermons, tasks and announcements reach you straight away.') +
+            '</p>' +
+            '<button type="button" class="hod-btn hod-btn-primary" data-install-step>' +
+                (ios ? 'Show me how' : 'Install the app') +
+            '</button>' +
+            '<button type="button" class="hod-btn hod-btn-ghost hod-mt-9" data-later>Not now</button>');
+
+        panel.querySelector('[data-later]').addEventListener('click', function () {
+            store.snooze('alerts-ask');
+            closeSheet();
+        });
+
+        panel.querySelector('[data-install-step]').addEventListener('click', function () {
+            closeSheet();
+            if (ios) {
+                setTimeout(showIosGuide, 300);
+                return;
+            }
+            if (!deferredPrompt) {
+                setTimeout(function () { askAlertsStep(false); }, 400);
+                return;
+            }
+
+            haptic(18);
+            var event = deferredPrompt;
+            deferredPrompt = null;
+            event.prompt();
+            event.userChoice.then(function (choice) {
+                // Installed: 'appinstalled' moves on to step 2. Declined: alerts
+                // still work in this browser, so ask for them anyway.
+                if (choice.outcome !== 'accepted') setTimeout(function () { askAlertsStep(false); }, 600);
+            }).catch(function () {});
+        });
+    }
+
+    /** Alerts were blocked on this device: say exactly where to unblock them. */
+    function showBlockedCard() {
+        var how = env.iOS
+            ? 'Open <strong>Settings</strong>, then <strong>Notifications</strong>, then <strong>HOD Lekki</strong>, and turn on <strong>Allow Notifications</strong>.'
+            : env.android
+                ? (env.standalone
+                    ? 'Press and hold the HOD Lekki icon, tap <strong>App info</strong>, then <strong>Notifications</strong>, and allow them.'
+                    : 'Tap the icon to the left of the web address, open <strong>Permissions</strong>, and set <strong>Notifications</strong> to <strong>Allow</strong>.')
+                : 'Click the icon to the left of the web address, set <strong>Notifications</strong> to <strong>Allow</strong>, then reload this page.';
+
+        var panel = sheet('hodPushBlocked',
+            '<div class="hod-centered">' +
+                '<div class="hod-bell">' + ICON.bell + '</div>' +
+                '<h2>Alerts are blocked on this device</h2>' +
+            '</div>' +
+            '<p>' + how + '</p>' +
+            '<button type="button" class="hod-btn hod-btn-primary" data-recheck>I have allowed them</button>' +
+            '<button type="button" class="hod-btn hod-btn-ghost hod-mt-9" data-later>Not now</button>');
+
+        panel.querySelector('[data-later]').addEventListener('click', function () {
+            store.snooze('alerts-ask');
+            closeSheet();
+        });
+
+        panel.querySelector('[data-recheck]').addEventListener('click', function () {
+            if (Notification.permission === 'denied') {
+                toast('Still blocked. Allow notifications in the settings above, then try again.', 'bad');
+                return;
+            }
+            var button = this;
+            button.disabled = true;
+            enablePush()
+                .then(function () {
+                    closeSheet();
+                    haptic([25, 35, 25]);
+                    toast('Alerts are on. We will reach you here.');
+                })
+                .catch(function (error) {
+                    button.disabled = false;
+                    toast(error.message || 'Could not turn alerts on.', 'bad');
+                });
         });
     }
 
@@ -1132,7 +1248,8 @@
         }
 
         if (CFG.signedIn) {
-            setTimeout(maybeAskForPush, 7000);
+            // Late enough for Chrome's install event to have arrived.
+            setTimeout(askForAlerts, 4000);
 
             // A device whose subscription was dropped server-side (key rotated,
             // endpoint expired) still has permission granted, so it never asks
@@ -1153,15 +1270,7 @@
                     .catch(function () {});
             }
         }
-
-        // iOS gets the install nudge instead of the push card, paced slowly:
-        // once a month is plenty for something they can also reach from the
-        // notification bell whenever they want it.
-        if (!QUIET && env.iOS && !env.standalone && !env.inAppBrowser && CFG.signedIn &&
-            !store.snoozed('ios-guide-shown', 30)) {
-            var views = parseInt(store.get('views') || '0', 10);
-            if (views >= 3) setTimeout(showIosGuide, 9000);
-        }
+        // iPhone and iPad in Safari get the install step of askForAlerts().
     }
 
     if (document.readyState === 'loading') {

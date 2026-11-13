@@ -188,13 +188,37 @@ suite('quiet pages never interrupt');
 $runtime = (string) file_get_contents($repoRoot . '/assets/js/pwa.js');
 ok('quiet is read from the config', str_contains($runtime, 'CFG.quiet === true'));
 foreach ([
-    'the install banner'  => 'if (!QUIET && !store.snoozed(\'install-dismissed\'',
-    'the push opt-in'     => 'if (QUIET || !CFG.signedIn',
+    'the install banner'  => 'if (!QUIET && !CFG.signedIn && !store.snoozed(\'install-dismissed\'',
+    // The install step (iOS included) and the alerts step of askForAlerts().
+    'the install-then-alerts ask' => 'if (QUIET || !CFG.signedIn || env.inAppBrowser',
+    'the alerts step'     => 'if (QUIET || !CFG.signedIn || !env.supportsPush',
     'pull to refresh'     => 'if (QUIET || !env.standalone',
-    'the iOS nudge'       => 'if (!QUIET && env.iOS',
 ] as $what => $guard) {
     ok($what . ' is suppressed', str_contains($runtime, $guard));
 }
+
+suite('every signed-in device is asked until alerts are on');
+ok('"Not now" waits 7 days, then asks again', str_contains($runtime, 'var ASK_AGAIN_DAYS = 7;')
+    && substr_count($runtime, "store.snooze('alerts-ask')") >= 3);
+ok('install comes first where this browser can install',
+    str_contains($runtime, 'if (!env.standalone && (env.iOS || deferredPrompt))'));
+ok('a member who switched alerts off here is never switched back on silently',
+    str_contains($runtime, "store.set('push-off', '1')") && str_contains($runtime, "store.get('push-off') !== '1'"));
+ok('the old pacing is gone (12-day push card, 30-day iOS guide)',
+    !str_contains($runtime, 'maybeAskForPush') && !str_contains($runtime, "snoozed('ios-guide-shown', 30)"));
+
+suite('live alerts while the app is open (assets/ui/js/shell.js)');
+$shellJs = (string) file_get_contents($repoRoot . '/assets/ui/js/shell.js');
+ok('the bell is checked every 30 seconds in view', str_contains($shellJs, 'var POLL_MS = 30000;')
+    && str_contains($shellJs, "document.visibilityState !== 'visible'"));
+ok('a push reaching the device checks at once', str_contains($shellJs, "loadNotifications('push')"));
+ok('opening the bell marks what it lists as seen', str_contains($shellJs, "loadNotifications('panel')"));
+ok('the seen mark is kept per member', str_contains($shellJs, "'hod:alerts-seen:' + (cfg.user || 0)"));
+ok('a new alert pops up with an Open button', str_contains($shellJs, "label: 'Open'"));
+ok('the chime never plays over a sermon or video', substr_count($shellJs, "document.querySelector('audio, video')") >= 2);
+ok('no chime for a push, which has already rung', str_contains($shellJs, 'if (!fromPush) chime();'));
+ok('the shell tells the script who is signed in',
+    str_contains((string) file_get_contents($repoRoot . '/includes/ui/shell.php'), "'user' => (int) (\$_SESSION['user_id'] ?? 0)"));
 ok('a subtree can opt out of the pull gesture', str_contains($runtime, "closest('[data-no-pull]')"));
 
 suite('the Alerts Centre is gated by the permission matrix');
