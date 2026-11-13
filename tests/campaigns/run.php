@@ -107,7 +107,8 @@ ct_eq('users.email (empty) gets the confirmed address', 'ada@gmail.com', $pdo->q
 ct_at('2026-11-12 09:10');
 $g = email_capture_start($pdo, 2, 'grace.o@gmail.com', 'signin_prompt', null, ['send' => false]);
 email_capture_confirm($pdo, $g['token']);
-ct_eq("a member's sign-in name (@hodlc.com) is NOT replaced", 'grace@hodlc.com', $pdo->query('SELECT email FROM users WHERE id = 2')->fetchColumn());
+ct_eq("a member's @hodlc.com sign-in name IS replaced by the confirmed address (owner, 13 Nov 2026)", 'grace.o@gmail.com', $pdo->query('SELECT email FROM users WHERE id = 2')->fetchColumn());
+ct_eq('…and kept aside, so typing it says where they sign in now', 2, signin_retired_name_owner($pdo, 'grace@hodlc.com'));
 ct_eq('but their personal email is confirmed', 'grace.o@gmail.com', member_confirmed_email($pdo, 2));
 
 $state3 = email_address_state($pdo, 3);
@@ -990,6 +991,128 @@ ct_confirm($p, 102, 'bisi.new@gmail.com', false);
 ct_eq('a personal address on file is never "moved"', null, email_signin_lookup($p, 'bisi.home@yahoo.com')['moved_to']);
 ct_eq('an unknown identifier finds nobody', null, email_signin_lookup($p, 'nobody@gmail.com')['user']);
 ct_eq('a masked address', 'a•••@gmail.com', email_mask('ada.obi@gmail.com'));
+
+// ===========================================================================
+ct_section('16c2. Sign-in by phone; the @hodlc.com names die out (owner, 13 Nov 2026)');
+// ===========================================================================
+ct_eq('a phone number is a phone number', true, signin_is_phone('0803 123 4567'));
+ct_eq('…written with +234 too', true, signin_is_phone('+234 803 123 4567'));
+ct_eq('an email is not', false, signin_is_phone('grace@gmail.com'));
+ct_eq('nor a church sign-in name', false, signin_is_phone('grace@hodlc.com'));
+ct_eq('nor a short code', false, signin_is_phone('12345'));
+foreach (['08031234567', '+2348031234567', '2348031234567', '+234 0803 123 4567', '8031234567', '0803-123-4567', '(0803) 123 4567'] as $w) {
+    ct_eq("one key for {$w}", '2348031234567', signin_phone_key($w));
+}
+ct_eq('a foreign number keeps its digits', '447700900123', signin_phone_key('+44 7700 900123'));
+ct_eq('…and 00 is the same as +', '447700900123', signin_phone_key('0044 7700 900123'));
+ct_eq('too short is no number', null, signin_phone_key('0803123'));
+
+ct_at('2027-02-01 09:00');
+$ph = ct_db();
+$hash = static fn (string $pw): string => password_hash($pw, PASSWORD_BCRYPT, ['cost' => 4]);
+ct_user($ph, 1, 'Tayo', 'Member', ['phone' => '0803 123 4567']);
+ct_user($ph, 2, 'Funmi', 'Worker', ['phone' => '+234 803 123 4567']);       // Tayo's wife: the same number
+ct_user($ph, 3, 'Kunle', 'Member', ['phone' => '08059998888 / 08024446666']); // two numbers on one record
+ct_user($ph, 4, 'Ada', '1st_Timer', ['phone' => '08077776666']);
+ct_user($ph, 5, 'Sola', 'Member', ['phone' => '07012345678', 'email' => 'sola@hodlc.com']);
+foreach ([1 => 'Tayo-pass-1', 2 => 'Funmi-pass-1', 3 => 'Kunle-pass-1', 5 => 'Sola-pass-1'] as $id => $pw) {
+    $ph->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([$hash($pw), $id]);
+}
+$ids = static fn (array $users): array => array_map(static fn (array $u): int => (int) $u['id'], $users);
+$try = static fn (string $who, string $pw): array => signin_check_password($ph, signin_candidates($ph, $who)['users'], $pw, $who, true);
+$fails = static fn (int $id): int => (int) $ph->query("SELECT failed_login_count FROM users WHERE id = {$id}")->fetchColumn();
+
+ct_eq('both accounts on a shared number are candidates, however it is typed', [1, 2], $ids(signin_candidates($ph, '+234 (803) 123-4567')['users']));
+ct_eq('a record holding two numbers answers to either', [3], $ids(signin_candidates($ph, '0802 444 6666')['users']));
+ct_eq('…but never to part of one', [], $ids(signin_candidates($ph, '0803 123 456')['users']));
+$r = $try('0803 123 4567', 'Funmi-pass-1');
+ct_ok("the password opens the wife's account", $r['ok'] && (int) $r['user']['id'] === 2);
+$r = $try('+2348031234567', 'Tayo-pass-1');
+ct_ok("…and the husband's", $r['ok'] && (int) $r['user']['id'] === 1);
+$r = $try('07012345678', 'Sola-pass-1');
+ct_ok('a member with a @hodlc.com name signs in with their phone too', $r['ok'] && (int) $r['user']['id'] === 5);
+$r = $try('sola@hodlc.com', 'Sola-pass-1');
+ct_ok('…and still with the name', $r['ok'] && (int) $r['user']['id'] === 5);
+ct_eq('an unknown number: the one answer, nothing counted', SIGNIN_WRONG, $try('09000000000', 'x')['message']);
+$r = $try('08031234567', 'wrong');
+ct_eq('a wrong password: the same one answer', SIGNIN_WRONG, $r['message']);
+ct_eq('…counted on every account it was tried on', [1, 1], [$fails(1), $fails(2)]);
+for ($i = 0; $i < 3; $i++) {
+    $r = $try('08031234567', 'wrong');
+}
+ct_ok('two tries left: it says so', str_contains($r['message'], '1 attempt left'));
+$r = $try('08031234567', 'wrong');
+ct_ok('the fifth locks both accounts', str_contains($r['message'], 'locked for 15 minutes')
+    && (int) $ph->query('SELECT COUNT(*) FROM users WHERE id IN (1, 2) AND locked_until IS NOT NULL')->fetchColumn() === 2);
+$r = $try('08031234567', 'Funmi-pass-1');
+ct_ok('a locked account is not tried, even with its right password', !$r['ok'] && str_contains($r['message'], 'locked for another 15 minutes'));
+ct_at('2027-02-01 09:16');
+$r = $try('08031234567', 'Funmi-pass-1');
+ct_ok('after the lock, the right password opens it', $r['ok'] && (int) $r['user']['id'] === 2);
+$ph->prepare('UPDATE users SET password_hash = ?, failed_login_count = 0, locked_until = NULL WHERE id IN (1, 2)')->execute([$hash('Same-pass-1')]);
+$r = $try('08031234567', 'Same-pass-1');
+ct_ok('one number AND one password on two accounts: refused, use the email', !$r['ok'] && str_contains($r['message'], 'Sign in with your email'));
+ct_eq('…and that counts against nobody', [0, 0], [$fails(1), $fails(2)]);
+
+// The swap: a confirmed personal email takes the @hodlc.com name's place.
+ct_confirm($ph, 5, 'Sola.A@gmail.com', false);
+ct_eq('users.email takes the confirmed address', 'sola.a@gmail.com', $ph->query('SELECT email FROM users WHERE id = 5')->fetchColumn());
+ct_eq('…and so does real_email (the personal-email column)', 'sola.a@gmail.com', $ph->query('SELECT real_email FROM users WHERE id = 5')->fetchColumn());
+ct_eq('the old name is kept aside (any case)', 5, signin_retired_name_owner($ph, 'SOLA@hodlc.com'));
+$c = signin_candidates($ph, 'sola@hodlc.com');
+ct_ok('typing it finds them and says where they sign in now (after the right password, the API answers MOVED)',
+    $ids($c['users']) === [5] && $c['via'] === 'retired' && $c['moved_to'] === 's•••@gmail.com');
+$r = $try('sola.a@gmail.com', 'Sola-pass-1');
+ct_ok('the personal email signs in', $r['ok'] && (int) $r['user']['id'] === 5);
+$r = $try('0701 234 5678', 'Sola-pass-1');
+ct_ok('…and so does the phone', $r['ok'] && (int) $r['user']['id'] === 5);
+ct_eq('only @hodlc.com names are ever kept', null, signin_retired_name_owner($ph, 'sola.a@gmail.com'));
+
+ct_user($ph, 6, 'Bola', 'Member', ['email' => 'bola@yahoo.com']);
+ct_confirm($ph, 6, 'bola.new@gmail.com', false);
+ct_eq('a personal address in users.email is never replaced', 'bola@yahoo.com', $ph->query('SELECT email FROM users WHERE id = 6')->fetchColumn());
+ct_eq('…but real_email shows the confirmed one', 'bola.new@gmail.com', $ph->query('SELECT real_email FROM users WHERE id = 6')->fetchColumn());
+
+ct_user($ph, 7, 'Kemi', 'Member', ['email' => 'kemi@hodlc.com']);
+ct_user($ph, 8, 'Kemi', '1st_Timer', ['email' => 'kemi@gmail.com']);  // an old first-timer record with her address
+ct_confirm($ph, 7, 'kemi@gmail.com', false);
+ct_eq("an address that is another record's users.email: the name stays (users.email is unique)", 'kemi@hodlc.com',
+    $ph->query('SELECT email FROM users WHERE id = 7')->fetchColumn());
+ct_eq('…and is not kept aside', null, signin_retired_name_owner($ph, 'kemi@hodlc.com'));
+
+// Everyone who confirmed before this deploy: db/backfill_signin_names.php.
+ct_user($ph, 9, 'Tunde', 'Member', ['email' => 'tunde@hodlc.com']);
+ct_confirm($ph, 9, 'tunde.b@gmail.com', false);
+$ph->exec("UPDATE users SET email = 'tunde@hodlc.com', real_email = NULL WHERE id = 9");   // as it was before this deploy
+$ph->exec("DELETE FROM auth_retired_signin_names WHERE user_id = 9");
+ct_eq('dry run: counts, changes nothing', ['ready' => true, 'checked' => 2, 'moved' => 0, 'kept' => 0], signin_names_backfill($ph, false));
+ct_eq('…still the old name', 'tunde@hodlc.com', $ph->query('SELECT email FROM users WHERE id = 9')->fetchColumn());
+ct_eq('the backfill swaps Tunde and keeps Kemi (her address is taken)', ['ready' => true, 'checked' => 2, 'moved' => 1, 'kept' => 1], signin_names_backfill($ph));
+ct_eq('…users.email is now the confirmed address', 'tunde.b@gmail.com', $ph->query('SELECT email FROM users WHERE id = 9')->fetchColumn());
+ct_eq('…the old name is kept aside', 9, signin_retired_name_owner($ph, 'tunde@hodlc.com'));
+ct_eq('run again: only the one it cannot move', ['ready' => true, 'checked' => 1, 'moved' => 0, 'kept' => 1], signin_names_backfill($ph));
+$bare = ct_db(false);
+ct_eq('before the migration: nothing to do, nothing thrown', false, signin_names_backfill($bare)['ready']);
+
+// First password (auth/setup_password.php) by phone.
+ct_user($ph, 10, 'Chika', 'Member', ['phone' => '08120000001']);
+$pick = signin_setup_account($ph, '0812 000 0001');
+ct_ok("a new member's first password, by phone", $pick['code'] === 'ok' && (int) $pick['user']['id'] === 10);
+ct_user($ph, 11, 'Obi', 'Worker', ['phone' => '+2348120000001']);
+ct_eq('two fresh accounts on one number: the first name is needed', 'name_needed', signin_setup_account($ph, '08120000001')['code']);
+$pick = signin_setup_account($ph, '08120000001', ' OBI ');
+ct_ok('…which tells them apart (any case)', $pick['code'] === 'ok' && (int) $pick['user']['id'] === 11);
+ct_eq('…a name on neither finds nobody', 'none', signin_setup_account($ph, '08120000001', 'Bisi')['code']);
+ct_eq('a first timer joins the app once promoted, not before', 'none', signin_setup_account($ph, '08077776666')['code']);
+ct_eq('a number whose accounts all have passwords', 'has_password', signin_setup_account($ph, '08031234567')['code']);
+ct_eq('by email, as before', 'has_password', signin_setup_account($ph, 'sola.a@gmail.com')['code']);
+ct_eq('an unknown email', 'none', signin_setup_account($ph, 'nobody@gmail.com')['code']);
+
+// Forgot password by phone: the link goes to the confirmed email.
+$sent = email_reset_request($ph, '0701 234 5678', '5.5.5.5');
+ct_eq('a phone number may ask for a reset link', true, $sent['sent']);
+ct_eq('…which goes to the confirmed personal email', 1, ct_count($ph, 'email_outbox', "flow = 'password_reset' AND to_email = 'sola.a@gmail.com'"));
+ct_eq('a number with no confirmed email: the same answer, nothing sent', false, email_reset_request($ph, '08031234567', '5.5.5.6')['sent']);
 
 // ===========================================================================
 ct_section('16d. Forgot password');

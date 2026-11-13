@@ -2,9 +2,10 @@
 // /auth/setup_password.php
 // FIRST-TIME password setup (AGENTS.md: it only ever creates a first
 // password; api/setup_password_api.php refuses an account that has one).
-// Two views on one card: set the password, or look up the system email by
-// first name and phone. Rebuilt on the foundation (strict CSP, standalone
-// layout); script: assets/ui/js/pages/setup-password.js.
+// One card: the email or the phone number on the member's record, then the
+// new password (a number shared by two accounts also asks for the first
+// name). Rebuilt on the foundation (strict CSP, standalone layout); script:
+// assets/ui/js/pages/setup-password.js.
 //
 // Baseline security headers (nosniff, referrer, framing, permissions): this
 // page does not load includes/db.php on every request, which is where every
@@ -27,8 +28,8 @@ ui_standalone_open('First-time password', [
 $rules = implode(' · ', security_password_rules());
 ?>
     <div>
-        <h1 class="ui-h2">First-Time Password Setup</h1>
-        <p class="mt-1 text-ink-muted" id="setup-sub">For accounts that have never had a password.</p>
+        <h1 class="ui-h2">Set your password</h1>
+        <p class="mt-1 text-ink-muted">For accounts that have never had one.</p>
     </div>
 
     <?= ui_banner('info', [
@@ -41,29 +42,18 @@ $rules = implode(' · ', security_password_rules());
 
     <form class="ui-form" id="setup-form" data-action="setup.save" data-ui-validate novalidate>
         <input type="hidden" name="action" value="setup_password">
-        <?= ui_field('text', ['name' => 'email', 'id' => 'setup-email', 'label' => 'Registered Email', 'required' => true,
-            'autocomplete' => 'username', 'inputmode' => 'email', 'placeholder' => 'email@example.com',
+        <?= ui_field('text', ['name' => 'email', 'id' => 'setup-email', 'label' => 'Email or phone', 'required' => true,
+            'autocomplete' => 'username', 'placeholder' => 'you@gmail.com or 0803…',
             'attrs' => ['autocapitalize' => 'none', 'spellcheck' => 'false']]) ?>
-        <?= ui_field('password', ['name' => 'new_password', 'id' => 'setup-password', 'label' => 'New Password', 'required' => true,
+        <div id="setup-name" hidden>
+            <?= ui_field('text', ['name' => 'first_name', 'id' => 'setup-first', 'label' => 'First name',
+                'autocomplete' => 'given-name', 'info' => 'Two accounts share this number. Your first name tells them apart.']) ?>
+        </div>
+        <?= ui_field('password', ['name' => 'new_password', 'id' => 'setup-password', 'label' => 'New password', 'required' => true,
             'autocomplete' => 'new-password', 'info' => 'It needs: ' . $rules . '.']) ?>
-        <?= ui_field('password', ['name' => 'confirm_password', 'id' => 'setup-confirm', 'label' => 'Confirm Password', 'required' => true,
+        <?= ui_field('password', ['name' => 'confirm_password', 'id' => 'setup-confirm', 'label' => 'Confirm password', 'required' => true,
             'autocomplete' => 'new-password']) ?>
-        <?= ui_button('Update Credentials', ['variant' => 'primary', 'type' => 'submit', 'block' => true]) ?>
-        <div class="text-center">
-            <?= ui_button('Find my email', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'search', 'attrs' => ['data-action' => 'setup.view', 'data-view' => 'lookup']]) ?>
-        </div>
-    </form>
-
-    <form class="ui-form" id="lookup-form" data-action="setup.lookup" data-ui-validate novalidate hidden>
-        <input type="hidden" name="action" value="lookup_email">
-        <?= ui_field('text', ['name' => 'first_name', 'id' => 'lookup-first', 'label' => 'First Name', 'required' => true,
-            'autocomplete' => 'given-name', 'placeholder' => 'David']) ?>
-        <?= ui_field('tel', ['name' => 'phone', 'id' => 'lookup-phone', 'label' => 'Registered Phone', 'required' => true,
-            'autocomplete' => 'tel', 'inputmode' => 'tel', 'placeholder' => '08012345678']) ?>
-        <?= ui_button('Find My Email', ['variant' => 'primary', 'type' => 'submit', 'block' => true]) ?>
-        <div class="text-center">
-            <?= ui_button('I remember it', ['variant' => 'ghost', 'size' => 'sm', 'attrs' => ['data-action' => 'setup.view', 'data-view' => 'setup']]) ?>
-        </div>
+        <?= ui_button('Set password', ['variant' => 'primary', 'type' => 'submit', 'block' => true]) ?>
     </form>
 <?php
 ui_standalone_close();

@@ -134,50 +134,15 @@ try {
             $phone = trim($_POST['phone'] ?? '');
             $email = trim($_POST['email'] ?? '');
 
-            // Auto-generate intelligent & unique email if left blank
-            if (empty($email)) {
-                // Helper function to extract the shortest name part
-                $getShortest = function($nameStr) {
-                    $parts = preg_split('/[\s\-]+/', trim($nameStr));
-                    $shortest = '';
-                    foreach ($parts as $part) {
-                        $clean = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $part));
-                        if (empty($clean)) continue;
-                        if ($shortest === '' || strlen($clean) < strlen($shortest)) $shortest = $clean;
-                    }
-                    return $shortest;
-                };
-
-                $short_first = $getShortest($first_name);
-                $short_last = $getShortest($last_name);
-
-                $prefix = '';
-                if (!empty($short_first) && !empty($short_last)) {
-                    $prefix = $short_first . '.' . $short_last;
-                    // If combined name is still too long (e.g. > 20 chars), fallback to just first name
-                    if (strlen($prefix) > 20) $prefix = $short_first;
-                } else {
-                    $prefix = $short_first ?: $short_last;
-                }
-
-                if (!empty($prefix)) {
-                    // Check database for uniqueness and append number if necessary
-                    $base_email = $prefix . '@hodlc.com';
-                    $final_email = $base_email;
-                    $counter = 1;
-                    
-                    $checkStmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-                    while (true) {
-                        $checkStmt->execute([$final_email]);
-                        if (!$checkStmt->fetch()) break; // Email is completely unique!
-                        
-                        $final_email = $prefix . $counter . '@hodlc.com';
-                        $counter++;
-                    }
-                    $email = $final_email;
-                } else {
-                    $email = null; // Absolute fallback
-                }
+            // No @hodlc.com sign-in name for a new member (owner's decision,
+            // 13 Nov 2026): they sign in with their phone until they add and
+            // confirm their own email, which then fills users.email. A typed
+            // personal address is kept as before.
+            if ($email === '') {
+                $email = null;
+            } elseif (str_ends_with(strtolower($email), '@hodlc.com')) {
+                echo json_encode(['status' => 'error', 'message' => 'Leave the email blank: new members sign in with their phone.']);
+                exit;
             }
             $dob = !empty($_POST['dob']) ? $_POST['dob'] : null;
             $gender = $_POST['gender'] ?? null;

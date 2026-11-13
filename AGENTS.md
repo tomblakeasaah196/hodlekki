@@ -343,7 +343,10 @@ that migration has not been applied yet — the tree is rsynced to prod
   any new privileged action rather than re-checking by hand.
 - **`/auth/setup_password.php` is FIRST-TIME ONLY.** It is public, so it
   refuses any account whose `password_hash` is already set, and is
-  rate-limited per IP. Do not loosen this — before 2026-09-30 anyone who
+  rate-limited per IP. It finds the account by email or by the phone on the
+  record (`signin_setup_account()`): by phone only for people who have joined
+  (never a 1st–3rd Timer or Visitor), and two fresh accounts on one number
+  need the first name. "Find my email" is gone. Do not loosen this — before 2026-09-30 anyone who
   knew a member's first name and phone number could take over their
   account from the open internet.
 - **`/auth/change_password.php` must never include `includes/header.php`.**
@@ -1002,9 +1005,14 @@ contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
 `cron/email_worker.php`, `cron/automation_tick.php`, `cron/email_bounces.php`
 (the bounce reader).
 
-- **A personal email is never `users.email`.** It lives in `email_addresses`,
-  confirmed by a link; `users.email` is the sign-in name and is overwritten by
-  several screens. Never `@hodlekki.org` or `@hodlc.com`
+- **A personal email lives in `email_addresses`**, confirmed by a link. Once
+  confirmed, `email_sync_users_email()` also writes it to `users.real_email`
+  and puts it in `users.email` in place of a `@hodlc.com` sign-in name (or an
+  empty value); the old name is kept in `auth_retired_signin_names` so typing
+  it says where the person signs in now. A personal address already in
+  `users.email` is never replaced. **No new `@hodlc.com` names** (owner, 13 Nov
+  2026): new members sign in with their phone, and nothing generates one.
+  Never `@hodlekki.org` or `@hodlc.com` as a personal email
   (`email_address_problem()` is the only validator). One confirmed address per
   person and per address is the UNIQUE keys, never check-then-insert.
 - **Church news needs consent; account mail does not.** `email_may_send_news()`
@@ -1031,9 +1039,14 @@ contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
   audience; the tests pin it against the per-person functions). A campaign is
   expanded once, by `campaigns_tick()` inside `cron/email_worker.php`, in one
   transaction (`email_campaign_people` is UNIQUE per campaign and person).
-- **Sign-in by personal email** (docs/EMAIL.md §2b): `api/auth_api.php` looks
-  people up with `email_signin_lookup()` (confirmed personal email first, then
-  `users.email`); `includes/header.php` sends anyone `email_prompt_state()`
+- **Sign-in by personal email or phone** (docs/EMAIL.md §2b): `api/auth_api.php`
+  finds the accounts with `signin_candidates()` (an email: `email_signin_lookup()`,
+  confirmed personal email first, then `users.email`, then a retired name; a
+  phone number: every account whose record has it, `signin_phone_users()`), and
+  `signin_check_password()` decides: locked accounts are not tried, the
+  password picks among accounts sharing a number, a wrong one counts towards
+  each one's lockout, and one number with one password on two accounts is
+  refused. `includes/header.php` sends anyone `email_prompt_state()`
   calls "required" to `/auth/add_email.php`, which — like
   `change_password.php` — must never include header.php. Reset links go only
   to a confirmed personal email (`email_reset_request()` /

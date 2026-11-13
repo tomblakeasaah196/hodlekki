@@ -119,7 +119,7 @@ $more = [
             <p class="cx-intro">Household of David is a global ministry led by <strong>Pastor Sola Osunmakinde</strong>. Our Resident Pastor is <strong>Pastor Ebele Uzo-Peters</strong>. Whether you’re just passing through or looking for a family, you belong here.</p>
             <div class="cx-actions">
                 <?= ui_button('I’m new here', ['variant' => 'brand', 'size' => 'lg', 'href' => '#connect', 'attrs' => ['data-action' => 'connect.start']]) ?>
-                <?= ui_button('Already family', ['variant' => 'secondary', 'size' => 'lg', 'icon' => 'user-round', 'href' => $site('/auth/login')]) ?>
+                <?= ui_button('Already family', ['variant' => 'secondary', 'size' => 'lg', 'icon' => 'user-round', 'href' => $site('/auth/login?signin=1')]) ?>
             </div>
         </div>
     </section>
@@ -182,7 +182,7 @@ $more = [
                             <p class="ui-banner__title">Please check this</p>
                             <p class="ui-banner__text" id="connect-error-text"></p>
                             <div class="ui-banner__actions" id="connect-error-login" hidden>
-                                <?= ui_button('Sign in', ['variant' => 'primary', 'size' => 'sm', 'href' => $site('/auth/login')]) ?>
+                                <?= ui_button('Sign in', ['variant' => 'primary', 'size' => 'sm', 'href' => $site('/auth/login?signin=1')]) ?>
                                 <?= ui_button('Find my email', ['variant' => 'ghost', 'size' => 'sm', 'href' => $site('/auth/setup_password')]) ?>
                             </div>
                         </div>

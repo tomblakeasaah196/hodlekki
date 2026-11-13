@@ -1,11 +1,20 @@
 <?php
 // /auth/login.php
-// Sign-in. Rebuilt on the foundation (strict CSP, self-hosted assets, the
-// standalone layout); the behaviour is unchanged: the form posts to
-// /api/auth_api.php, which signs in by confirmed personal email or church
-// sign-in name, locks out after repeated failures, says where a moved
-// sign-in name now lives, keeps the device signed in for 30 days when asked,
-// and answers with where to go next. Script: assets/ui/js/pages/login.js.
+// Sign-in, rebuilt lean (owner's brief, 13 Nov 2026). One markup, two shapes:
+//
+//   wide screens   the church photo full-bleed, the welcome on it, and the
+//                  sign-in form on a frosted panel at the right;
+//   phones/tablets the welcome fills the screen (greeting, the services with
+//                  the next one marked, rotating scripture, "New here?" to
+//                  Connect) with a red Sign in button pinned at the bottom
+//                  that slides the same form up as a sheet. Without script
+//                  the form simply follows the welcome.
+//
+// The form posts to /api/auth_api.php as before: a personal email, a church
+// sign-in name or a phone number, the password, and "keep me signed in"
+// (30 days, explained behind the (i)). Script: assets/ui/js/pages/login.js;
+// styles: the .si block in assets/ui/src/app.css; the welcome's words:
+// includes/auth_welcome.php.
 //
 // Baseline security headers (nosniff, referrer, framing, permissions): this
 // page does not load includes/db.php on every request, which is where every
@@ -17,6 +26,7 @@ session_start();
 // Constants and pure helpers only, unless this device is remembered (below).
 require_once __DIR__ . '/../includes/security_helpers.php';
 require_once __DIR__ . '/../includes/auth_helpers.php';
+require_once __DIR__ . '/../includes/auth_welcome.php';
 
 // "Return to". Wherever the member was going when the login wall stopped them:
 // a tapped notification (header.php passes it), a Special Events console link
@@ -65,69 +75,112 @@ ui_standalone_open('Sign in', [
     'scripts' => ['/assets/ui/js/pages/login.js'],
 ]);
 
-$quote = ['“Let all that you do be done in love.”', '1 Corinthians 16:14'];
+$now = auth_welcome_now();
+$services = auth_welcome_services($now);
+$verse = AUTH_WELCOME_SCRIPTURE[0];
+$photo = '/assets/images/connect/hod-lekki-';
+$srcset = static fn (string $ext): string => "{$photo}640.{$ext} 640w, {$photo}960.{$ext} 960w, {$photo}1078.{$ext} 1078w";
+$sizes = '(min-width: 1024px) 75vw, 100vw';
+// On a phone the sheet starts open when there is something to read in it,
+// or when a link asked for the form (/auth/login?signin=1).
+$openSheet = $signOutNotice !== '' || isset($_GET['signin']);
+$credit = 'Engineered by <a href="https://jbspraxis.com" target="_blank" rel="noopener">JBS Praxis</a>';
 ?>
-<div class="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-hodBlue via-[#16294f] to-black p-4 sm:p-8">
-    <div class="ui-card w-full max-w-5xl overflow-hidden shadow-ui-lg md:grid md:min-h-[600px] md:grid-cols-[5fr_7fr]">
+<script nonce="<?= ui_e(ui_csp_nonce()) ?>">document.documentElement.classList.add('si-js');</script>
+<div class="si" data-si<?= $openSheet ? ' data-si-open' : '' ?>>
+    <div class="si-media" aria-hidden="true">
+        <picture>
+            <source type="image/avif" srcset="<?= ui_e($srcset('avif')) ?>" sizes="<?= ui_e($sizes) ?>">
+            <source type="image/webp" srcset="<?= ui_e($srcset('webp')) ?>" sizes="<?= ui_e($sizes) ?>">
+            <img src="<?= ui_e($photo) ?>1078.jpg" srcset="<?= ui_e($srcset('jpg')) ?>" sizes="<?= ui_e($sizes) ?>"
+                 width="1078" height="1007" alt="" fetchpriority="high" decoding="async">
+        </picture>
+    </div>
+    <div class="si-wash" aria-hidden="true"></div>
 
-        <aside class="relative hidden overflow-hidden bg-hodBlue p-10 text-white md:flex md:flex-col md:justify-between lg:p-12" aria-label="Welcome">
-            <picture>
-                <source media="(min-width: 768px)" srcset="/assets/images/hod_lekki.jpeg">
-                <img src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="" class="absolute inset-0 h-full w-full object-cover opacity-50" decoding="async">
-            </picture>
-            <div class="absolute inset-0 bg-gradient-to-br from-black/70 via-black/30 to-hodBlue/90" aria-hidden="true"></div>
-            <div class="relative">
-                <h2 class="font-display text-3xl font-bold tracking-tight lg:text-4xl">Welcome Home.</h2>
-                <p class="mt-3 text-white/85">Thank you for serving with excellence.</p>
-            </div>
-            <figure class="relative min-h-[140px] transition-opacity duration-700" data-login-quote>
-                <blockquote class="font-display text-lg font-medium italic leading-snug text-white/90 lg:text-xl" data-quote-text><?= ui_e($quote[0]) ?></blockquote>
-                <figcaption class="mt-4 flex items-center gap-3 text-xs font-semibold uppercase tracking-widest text-white/70">
-                    <span class="h-px w-8 bg-hodRed" aria-hidden="true"></span><span data-quote-ref><?= ui_e($quote[1]) ?></span>
-                </figcaption>
+    <section class="si-welcome" aria-labelledby="si-title" data-si-welcome>
+        <div class="si-brand" data-si-in="1">
+            <img src="/assets/pwa/icon-128.png" width="40" height="40" alt="">
+            <span>HOD Lekki</span>
+        </div>
+
+        <div class="si-welcome__body">
+            <p class="si-greet" data-si-in="1"><?= ui_e(auth_welcome_greeting($now)) ?></p>
+            <h1 class="si-title" id="si-title" data-si-in="2">Welcome Home.</h1>
+            <p class="si-church" data-si-in="3">Household of David, Lekki</p>
+
+            <figure class="si-verse" data-si-in="4" data-login-quote>
+                <blockquote class="si-verse__text" data-quote-text><?= ui_e($verse[0]) ?></blockquote>
+                <figcaption class="si-verse__ref" data-quote-ref><?= ui_e($verse[1]) ?></figcaption>
             </figure>
-        </aside>
 
-        <section class="flex flex-col justify-center p-6 sm:p-10 lg:p-16">
-            <div class="mx-auto w-full max-w-sm">
-                <img src="/assets/images/hod_logo.svg" alt="HOD Lekki Centre" class="mx-auto mb-8 h-14 object-contain md:mx-0" width="160" height="56">
+            <ul class="si-services" data-si-in="5" aria-label="Services">
+<?php foreach ($services as $s): ?>
+                <li class="si-service<?= $s['state'] !== '' ? ' is-' . $s['state'] : '' ?>">
+<?php if ($s['when'] !== ''): ?>
+                    <span class="si-service__when"><?php if ($s['state'] === 'live'): ?><span class="si-live" aria-hidden="true"></span><?php endif; ?><?= ui_e($s['when']) ?></span>
+<?php endif; ?>
+                    <span class="si-service__time"><?= ui_e($s['days'] . ', ') ?><span class="si-nowrap"><?= ui_e($s['time']) ?></span></span>
+                    <span class="si-service__name"><?= ui_e($s['name']) ?></span>
+                </li>
+<?php endforeach; ?>
+            </ul>
 
-                <h1 class="ui-h1 text-center md:text-left">Sign In to Workspace</h1>
-                <p class="mb-6 mt-1 text-center text-sm text-ink-muted md:text-left">Enter your details to access your dashboard.</p>
+            <a class="si-new" href="/connect" data-si-in="6">New here? <span>Connect with us</span></a>
+        </div>
+    </section>
+
+    <div class="si-dock">
+        <button type="button" class="si-open" data-action="si.open" aria-controls="si-panel" aria-expanded="false" data-si-in="7">Sign in</button>
+        <p class="si-credit si-credit--dock" data-si-in="7"><?= $credit ?></p>
+    </div>
+    <div class="si-scrim" data-action="si.close" aria-hidden="true"></div>
+
+    <section class="si-panel" id="si-panel" aria-labelledby="si-panel-title" tabindex="-1" data-si-panel>
+        <div class="si-panel__grip" data-si-grip aria-hidden="true"><span></span></div>
+        <?= ui_button('Close', ['variant' => 'ghost', 'icon' => 'x', 'icon_only' => true, 'class' => 'si-panel__close',
+            'attrs' => ['data-action' => 'si.close', 'data-tooltip' => null]]) ?>
+        <div class="si-panel__inner">
+            <img src="/assets/images/hod_logo.svg" alt="HOD Lekki Centre" class="si-panel__logo" width="160" height="56">
+            <h2 class="si-panel__title" id="si-panel-title">Sign in</h2>
 
 <?php if ($signOutNotice !== ''): ?>
-                <div class="mb-5"><?= ui_banner('warning', ['text' => $signOutNotice]) ?></div>
+            <div class="si-panel__notice"><?= ui_banner('warning', ['text' => $signOutNotice]) ?></div>
 <?php endif; ?>
-                <div class="mb-5" id="login-alert" aria-live="polite"></div>
+            <div id="login-alert" aria-live="polite"></div>
 
-                <form class="ui-form" id="login-form" data-action="login.submit" data-ui-validate novalidate>
-                    <?= ui_field('text', ['name' => 'email', 'id' => 'email', 'label' => 'Email', 'required' => true,
-                        'autocomplete' => 'username', 'inputmode' => 'email', 'placeholder' => 'Your personal email or church sign-in name',
-                        'attrs' => ['autocapitalize' => 'none', 'spellcheck' => 'false']]) ?>
-                    <div>
-                        <?= ui_field('password', ['name' => 'password', 'id' => 'password', 'label' => 'Password', 'required' => true,
-                            'autocomplete' => 'current-password', 'placeholder' => '••••••••']) ?>
-                        <div class="mt-2 flex flex-wrap justify-between gap-2 text-sm">
-                            <a class="ui-link font-medium text-hodRed" href="/auth/setup_password">First time? Set your password</a>
-                            <a class="ui-link text-ink-muted" href="/auth/forgot_password">Forgot your password?</a>
-                        </div>
+            <form class="ui-form si-form" id="login-form" data-action="login.submit" data-ui-validate novalidate>
+                <?= ui_field('text', ['name' => 'email', 'id' => 'email', 'label' => 'Email or phone', 'required' => true,
+                    'autocomplete' => 'username', 'info' => 'Your own email, your phone number, or your old @hodlc.com name.',
+                    'attrs' => ['autocapitalize' => 'none', 'spellcheck' => 'false', 'autocorrect' => 'off']]) ?>
+                <div class="ui-field">
+                    <div class="si-label-row">
+                        <label class="ui-label" for="password">Password<span class="ui-label__req" aria-hidden="true">*</span></label>
+                        <a class="ui-link si-forgot" href="/auth/forgot_password">Forgot?</a>
                     </div>
+                    <div class="si-secret">
+                        <input class="ui-input" type="password" id="password" name="password" required autocomplete="current-password"
+                               aria-describedby="password-error">
+                        <button type="button" class="si-secret__toggle" data-action="si.reveal" aria-controls="password"
+                                aria-pressed="false" aria-label="Show password"><?= ui_icon('eye') ?></button>
+                    </div>
+                    <p class="ui-field-error" id="password-error" aria-live="polite"></p>
+                </div>
+                <div class="si-remember">
                     <label class="ui-check">
                         <input type="checkbox" name="remember" value="1" checked>
-                        <span>Keep me signed in on this device for 30 days<span class="ui-check__hint">Untick this on a shared or office computer.</span></span>
+                        <span>Keep me signed in</span>
                     </label>
-                    <?= ui_button('Authenticate', ['variant' => 'brand', 'type' => 'submit', 'block' => true, 'size' => 'lg', 'attrs' => ['id' => 'login-submit']]) ?>
-                </form>
+                    <?= ui_info('This device stays signed in for 30 days. Untick it on a shared or office computer.', 'About keeping you signed in') ?>
+                </div>
+                <?= ui_button('Sign in', ['variant' => 'brand', 'type' => 'submit', 'block' => true, 'size' => 'lg', 'attrs' => ['id' => 'login-submit']]) ?>
+            </form>
 
-                <figure class="mt-8 border-t border-line pt-6 text-center transition-opacity duration-700 md:hidden" data-login-quote>
-                    <blockquote class="font-display italic text-ink-muted" data-quote-text><?= ui_e($quote[0]) ?></blockquote>
-                    <figcaption class="mt-2 text-xs font-semibold uppercase tracking-widest text-ink-subtle" data-quote-ref><?= ui_e($quote[1]) ?></figcaption>
-                </figure>
-
-                <p class="mt-8 text-center text-xs text-ink-subtle">&copy; <?= date('Y') ?> Household of David. All rights reserved.</p>
-            </div>
-        </section>
-    </div>
+            <p class="si-first"><a class="ui-link" href="/auth/setup_password">First sign-in? <span>Set your password</span></a></p>
+            <p class="si-credit si-credit--panel"><?= $credit ?></p>
+        </div>
+    </section>
 </div>
+<?= ui_json_script('si-scripture', AUTH_WELCOME_SCRIPTURE) ?>
 <?php
 ui_standalone_close();

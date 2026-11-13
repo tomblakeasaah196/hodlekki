@@ -59,77 +59,19 @@ try {
     switch ($action) {
 
         // ==============================================================================
-        // ACTION 1: LOOKUP SYSTEM EMAIL VIA PHONE & FIRST NAME
-        //           Only reveals accounts that have never set a password.
-        // ==============================================================================
-        case 'lookup_email':
-            $fname = trim($_POST['first_name'] ?? '');
-            $phone = trim($_POST['phone'] ?? '');
-
-            if (empty($fname) || empty($phone)) {
-                echo json_encode(['status' => 'error', 'message' => 'Please provide both your First Name and Phone Number.']);
-                exit;
-            }
-
-            // Clean the phone number of spaces, brackets, or dashes for DB matching
-            $cleanPhone = preg_replace('/[\s\-\(\)]/', '', $phone);
-
-            // Using LIKE for phone variations, and checking if the entered name matches EITHER their first or last name
-            $stmt = $pdo->prepare("
-                SELECT id, email, password_hash
-                  FROM users
-                 WHERE phone LIKE ? AND (first_name = ? OR last_name = ?)
-                 LIMIT 1
-            ");
-
-            // Note: We pass $fname twice because it checks against both columns
-            $stmt->execute(['%' . ltrim($cleanPhone, '0+') . '%', $fname, $fname]);
-            $user = $stmt->fetch();
-
-            if (!$user || empty($user['email'])) {
-                security_record_attempt($pdo, null, $fname . ' / ' . $phone, false, 'lookup_no_match', 'first_time_setup');
-                echo json_encode([
-                    'status'  => 'error',
-                    'message' => 'We could not find an account matching that name and phone number.',
-                ]);
-                exit;
-            }
-
-            // Account already has a password — this public flow must not touch it.
-            if (!empty($user['password_hash'])) {
-                security_record_attempt($pdo, (int) $user['id'], (string) $user['email'], false, 'already_has_password', 'first_time_setup');
-                security_log(
-                    $pdo,
-                    'first_time_setup_blocked',
-                    (int) $user['id'],
-                    'Public setup lookup blocked: this account already has a password.',
-                    null,
-                    'Public form'
-                );
-                echo json_encode([
-                    'status'  => 'error',
-                    'message' => 'This account already has a password. Sign in and use My Profile → Security to change it, '
-                               . 'or ask a church administrator to reset it for you.',
-                ]);
-                exit;
-            }
-
-            echo json_encode([
-                'status' => 'success',
-                'email'  => $user['email'],
-            ]);
-            break;
-
-        // ==============================================================================
-        // ACTION 2: SET THE VERY FIRST PASSWORD ON AN ACCOUNT
+        // SET THE VERY FIRST PASSWORD ON AN ACCOUNT
+        //   By email, or by the phone number on the member's record (owner's
+        //   decision, 13 Nov 2026: new members get no @hodlc.com name and sign
+        //   in with their phone). "Find my email" is gone: the phone signs in.
         // ==============================================================================
         case 'setup_password':
-            $email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
+            $typed = mb_substr(trim((string) ($_POST['email'] ?? '')), 0, 190);
+            $firstName = mb_substr(trim((string) ($_POST['first_name'] ?? '')), 0, 80);
             $new_password = $_POST['new_password'] ?? '';
             $confirm_password = $_POST['confirm_password'] ?? '';
 
             // 1. Basic empty checks
-            if (empty($email) || empty($new_password) || empty($confirm_password)) {
+            if ($typed === '' || empty($new_password) || empty($confirm_password)) {
                 echo json_encode(['status' => 'error', 'message' => 'All fields are required.']);
                 exit;
             }
@@ -140,21 +82,31 @@ try {
                 exit;
             }
 
-            // 3. Look the account up
-            $stmt = $pdo->prepare("SELECT id, first_name, last_name, email, password_hash FROM users WHERE email = :email LIMIT 1");
-            $stmt->execute(['email' => $email]);
-            $user = $stmt->fetch();
+            // 3. Look the account up (includes/campaigns/identity.php)
+            require_once '../includes/campaigns/bootstrap.php';
+            $pick = signin_setup_account($pdo, $typed, $firstName);
+            $user = $pick['user'];
 
-            if (!$user) {
-                security_record_attempt($pdo, null, $email, false, 'unknown_email', 'first_time_setup');
-                echo json_encode(['status' => 'error', 'message' => 'Email address not found in our records.']);
+            if ($pick['code'] === 'name_needed') {
+                security_record_attempt($pdo, null, $typed, false, 'shared_phone_name_needed', 'first_time_setup');
+                echo json_encode([
+                    'status'  => 'error',
+                    'code'    => 'NAME_NEEDED',
+                    'message' => 'This number is on more than one account. Add your first name.',
+                ]);
+                exit;
+            }
+
+            if ($pick['code'] === 'none') {
+                security_record_attempt($pdo, null, $typed, false, 'unknown_email', 'first_time_setup');
+                echo json_encode(['status' => 'error', 'message' => 'We could not find an account for that email or phone.']);
                 exit;
             }
 
             // 4. HARD BLOCK: accounts that already have a password must go
             //    through an authenticated change or an admin reset.
-            if (!empty($user['password_hash'])) {
-                security_record_attempt($pdo, (int) $user['id'], $email, false, 'already_has_password', 'first_time_setup');
+            if ($pick['code'] === 'has_password') {
+                security_record_attempt($pdo, (int) $user['id'], $typed, false, 'already_has_password', 'first_time_setup');
                 security_log(
                     $pdo,
                     'first_time_setup_blocked',
@@ -197,7 +149,7 @@ try {
                     ->execute(['pass' => $hashed_password, 'id' => $user['id']]);
             }
 
-            security_record_attempt($pdo, (int) $user['id'], $email, true, null, 'first_time_setup');
+            security_record_attempt($pdo, (int) $user['id'], $typed, true, null, 'first_time_setup');
             security_log(
                 $pdo,
                 'first_time_password_set',

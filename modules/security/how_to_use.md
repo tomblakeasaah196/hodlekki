@@ -86,45 +86,34 @@ Everything they were signed into is signed out immediately.
 
 ## 5. Changing a member's sign-in email, step by step
 
-Use this when a member keeps forgetting their system-generated sign-in email,
-or finds it too long — they sign in with `grace@hodlc.com`, not their personal
-Gmail/Yahoo address. It also **sets** a sign-in email for members who were
-created without one (the card reads "Set sign-in email" and shows a warning
-that they cannot sign in yet). The personal email lives on their profile and
-is never touched here.
+The church no longer gives out `@hodlc.com` sign-in names (owner's decision,
+13 Nov 2026). Members sign in with **their phone number** or **their own
+email**. When a member confirms their own email, it takes the place of their
+`@hodlc.com` name automatically; typing the old name then tells them to use
+their personal email or their phone.
+
+This card is only for a member who still has an old `@hodlc.com` name and
+wants it shorter or easier to remember. For anyone else it is greyed out and
+says how they sign in ("Signs in with their phone.").
 
 1. **Accounts** tab → search for the member → **Manage**.
-2. Scroll to **Sign-in email**. Their current sign-in email (and
-   personal email, if they have one) is shown at the top of the card.
+2. Scroll to **Sign-in email**. Their current name (and personal email, if
+   they have one) is shown at the top of the card.
 3. Type what they want *before* the `@` — `@hodlc.com` is added if you leave
    it out. Type it again in the confirm box.
 4. If the account may be compromised, or you simply want them to sign in
-   fresh with the new address, tick **Sign them out everywhere**.
+   fresh, tick **Sign them out everywhere**.
 5. Press **Save email** and confirm.
-6. **Tell the member the new address** — the old one stops working the moment
+6. **Tell the member the new name** — the old one stops working the moment
    you press the button. Their password does not change.
 
-The new address must end in `@hodlc.com` and must not already belong to
-another member. Every change is written to the audit trail
-(`login_email_changed`, showing the old and new address) and the member gets
-an in-app notification.
+The new name must end in `@hodlc.com` and must not already belong to another
+member. Every change is written to the audit trail (`login_email_changed`,
+showing the old and new name) and the member gets an in-app notification.
 
-### Filling every missing email at once
-
-If several members have no sign-in email at all, don't do them one by one:
-
-1. **Generate emails** (top right; needs Security: Manage).
-2. Confirm. The system generates a unique `@hodlc.com` address for **every**
-   account without one, exactly the way new members' addresses are generated
-   (shortest name parts, e.g. `oluchi.chiamaka@hodlc.com`, with a number
-   appended if that address is already taken).
-3. Each member generated for gets an in-app notification telling them their
-   new sign-in email. One `login_email_generated` audit row is written per
-   member.
-
-Accounts whose names contain no letters or digits (rare) are skipped and
-listed in the message — set those by hand via *Manage*. To see who is missing
-an email first, filter the roster by **No sign-in email**.
+"Generate emails" is gone: a member with no email signs in with the phone
+number on their record. To see who has neither a phone nor an email, filter
+the roster by **No sign-in email** and check their phone.
 
 ---
 
