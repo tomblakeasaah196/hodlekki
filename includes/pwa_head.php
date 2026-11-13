@@ -241,6 +241,25 @@ if (!defined('PWA_HEAD_RENDERED')) {
             };
             window.addEventListener('pageswap', quietTransition);
             window.addEventListener('pagereveal', quietTransition);
+
+            /*
+             * A transition the browser aborts before handing it to the page
+             * ("InvalidStateError: Transition was aborted because of invalid
+             * state. Page already revealed": the page showed before the old
+             * one's snapshot arrived) reaches neither event above, so nothing
+             * can catch its promises. Its rejection is marked handled here:
+             * no console line, and stopped before the error monitor's own
+             * listener (in the capture phase, which runs first at window).
+             * Only these view-transition rejections; everything else passes.
+             */
+            window.addEventListener('unhandledrejection', function (e) {
+                var r = e && e.reason;
+                if (r && (r.name === 'InvalidStateError' || r.name === 'AbortError')
+                    && /^Transition was (aborted|skipped)\b/.test(String(r.message || ''))) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                }
+            }, true);
         })();
 
         window.HOD_PWA = {

@@ -428,6 +428,14 @@ ok('pwa_head.php handles skipped page transitions on pageswap and pagereveal',
     strpos($pwaHead, "addEventListener('pageswap'") !== false
     && strpos($pwaHead, "addEventListener('pagereveal'") !== false
     && (bool) preg_match("/\\['ready', 'finished', 'updateCallbackDone'\\][\\s\\S]{0,200}\\.catch\\(/", $pwaHead));
+// A transition aborted before either event ("Page already revealed") has no
+// promise to catch: its rejection is marked handled in the capture phase,
+// which runs before the monitor's listener (registered earlier, without capture).
+$guardAt = strpos($pwaHead, "addEventListener('unhandledrejection'");
+ok('…and marks an aborted transition\'s rejection handled before the error monitor sees it',
+    $guardAt !== false && strpos($pwaHead, 'monitor_browser_tag(') < $guardAt
+    && (bool) preg_match("/addEventListener\\('unhandledrejection', function \\(e\\) \\{[\\s\\S]{0,400}"
+        . "\\/\\^Transition was \\(aborted\\|skipped\\)\\\\b\\/[\\s\\S]{0,200}e\\.preventDefault\\(\\);\\s*e\\.stopImmediatePropagation\\(\\);[\\s\\S]{0,40}\\}, true\\);/", $pwaHead));
 $vtCss = [];
 $vtJs = [];
 $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
