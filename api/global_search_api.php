@@ -50,8 +50,9 @@ try {
                         'id'    => (int) $row['id'],
                         'label' => $fullName,
                         'sub'   => trim(($row['phone'] ? $row['phone'] . ' · ' : '') . ($row['spiritual_status'] ?? '')),
-                        // Deep-link: congregation roster with the search box pre-filled
-                        'url'   => '/modules/congregation/#q=' . rawurlencode($fullName),
+                        // Deep-link: Congregation opens this person's details
+                        // (assets/ui/js/pages/congregation.js reads #person=<id>)
+                        'url'   => '/modules/congregation/#person=' . (int) $row['id'],
                     ];
                 }
             }

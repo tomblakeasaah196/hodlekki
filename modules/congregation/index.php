@@ -2,11 +2,23 @@
 // /modules/congregation/index.php
 // Congregation: the church register (everyone, filterable and exportable),
 // three health KPIs, a member's attendance history, and the member form.
+// A row (or a person picked in Ctrl+K: #person=<id>) opens their details:
+// Call, WhatsApp, SMS, Email, Edit, and who reached them lately
+// (includes/congregation_contact.php). Email is Mail's own composer, mounted
+// here only for people with a mailbox they may send from.
 // Data comes from /api/congregation_api.php.
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once '../../includes/db.php';
+require_once '../../includes/congregation_contact.php';
+$congUid = (int) ($_SESSION['user_id'] ?? 0);
+$congRights = $congUid > 0 ? cong_contact_rights($congUid) : ['email' => false, 'sms' => false, 'edit' => false];
 $ui = [
     'title' => 'Congregation',
     'mode' => 'strict',
-    'scripts' => ['/assets/ui/js/pages/congregation.js'],
+    'scripts' => array_merge($congRights['email'] ? ['/assets/ui/js/pages/mail-compose.js'] : [], ['/assets/ui/js/pages/congregation.js']),
+    'styles' => $congRights['email'] ? ['/assets/css/mail.css'] : [],
     // The address search (Geoapify) runs in the browser.
     'csp' => ['connect-src' => ['https://api.geoapify.com']],
 ];
@@ -120,6 +132,46 @@ function cong_kpi(string $key, string $label, string $hint, string $icon): strin
     <ul class="ui-list -mx-5 mt-4" data-cong-att-list aria-live="polite"></ul>
 <?= ui_dialog_end() ?>
 
+<?= ui_dialog_start('cong-person', ['title' => 'Person', 'size' => 'lg',
+    'actions' => $congRights['edit'] ? ui_button('Edit', ['variant' => 'secondary', 'size' => 'sm', 'icon' => 'pencil', 'attrs' => ['data-action' => 'cong.edit', 'data-cong-person-edit' => true, 'aria-haspopup' => 'dialog']]) : '']) ?>
+    <div class="cong-person" data-cong-person>
+        <div class="cong-person__top">
+            <span data-cong-person-avatar></span>
+            <div class="cong-person__tags" data-cong-person-tags></div>
+        </div>
+        <div class="cong-reach" role="group" aria-label="Reach out" data-cong-reach></div>
+        <dl class="ui-dl" data-cong-person-facts></dl>
+        <section aria-labelledby="cong-log-title">
+            <h3 class="cong-person__subtitle" id="cong-log-title">Recent contact <?= ui_info('Calls and WhatsApp are logged when tapped. Texts and emails show whether they went.', 'About recent contact') ?></h3>
+            <ul class="ui-list -mx-5" data-cong-person-log aria-live="polite"></ul>
+        </section>
+    </div>
+<?= ui_dialog_end(
+    '<div class="ui-dialog__footer-start">' . ui_button('Push to Charis', ['variant' => 'danger-ghost', 'attrs' => ['data-action' => 'cong.charis', 'data-cong-person-charis' => true, 'hidden' => true]]) . '</div>'
+    . ui_button('Attendance', ['variant' => 'secondary', 'icon' => 'calendar-check', 'attrs' => ['data-action' => 'cong.attendance', 'data-cong-person-att' => true, 'aria-haspopup' => 'dialog']])
+) ?>
+
+<?= ui_dialog_start('cong-sms', ['title' => 'Send SMS', 'description' => ' ', 'size' => 'sm']) ?>
+    <form class="ui-form" id="cong-sms-form" data-action="cong.sms-send" data-ui-validate novalidate>
+        <?= ui_field('textarea', ['name' => 'message', 'id' => 'cong-sms-text', 'label' => 'Message', 'required' => true,
+            'info' => 'Sent from SMS Studio with the church sender name in front. It shows in SMS History.',
+            'attrs' => ['rows' => '5', 'maxlength' => (string) CONG_CONTACT_SMS_MAX]]) ?>
+        <p class="ui-meta" data-cong-sms-count aria-live="polite">0 characters · 1 SMS</p>
+    </form>
+<?= ui_dialog_end(
+    ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
+    . ui_button('Send SMS', ['variant' => 'primary', 'icon' => 'send', 'type' => 'submit', 'attrs' => ['form' => 'cong-sms-form']])
+) ?>
+
+<?= ui_dialog_start('cong-wa', ['title' => 'WhatsApp message', 'description' => ' ', 'size' => 'sm']) ?>
+    <?= ui_field('textarea', ['name' => 'wa_message', 'id' => 'cong-wa-text', 'label' => 'Message', 'optional' => true,
+        'info' => 'WhatsApp opens on their chat with this message ready. Tap Send there.',
+        'attrs' => ['rows' => '5']]) ?>
+<?= ui_dialog_end(
+    ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
+    . ui_button('Open WhatsApp', ['variant' => 'primary', 'icon' => 'message-circle', 'href' => 'https://wa.me/', 'attrs' => ['target' => '_blank', 'rel' => 'noopener', 'data-cong-wa-open' => true]])
+) ?>
+
 <?= ui_dialog_start('cong-member', ['title' => 'Add member', 'description' => 'Create or update a record in the register.', 'size' => 'lg']) ?>
     <form class="ui-form" id="cong-member-form" data-action="cong.save" data-ui-validate novalidate>
         <input type="hidden" name="action" value="create_member">
@@ -191,6 +243,10 @@ function cong_kpi(string $key, string $label, string $hint, string $icon): strin
     . ui_button('Save', ['variant' => 'primary', 'type' => 'submit', 'attrs' => ['form' => 'cong-member-form']])
 ) ?>
 
-<?= ui_json_script('cong-config', ['geoapifyKey' => $_ENV['GEOAPIFY_API_KEY'] ?? '7a189b607e9e4c4cbedf6ada291b6bc1']) ?>
+<?= ui_json_script('cong-config', ['geoapifyKey' => $_ENV['GEOAPIFY_API_KEY'] ?? '7a189b607e9e4c4cbedf6ada291b6bc1', 'rights' => $congRights]) ?>
+<?php if ($congRights['email']): ?>
+<?php $congMailbox = \HOD\Mail\MailAccess::accounts($congUid, 'send')[0]['id'] ?? null; ?>
+<div data-mount-wrap="composer"><?= \HOD\Mail\Read\Partial::mount('composer', ['user_id' => $congUid, 'account_id' => $congMailbox, 'folder' => null, 'thread_id' => null, 'shared' => false]) ?></div>
+<?php endif; ?>
 
 <?php require_once '../../includes/footer.php'; ?>

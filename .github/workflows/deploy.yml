@@ -319,6 +319,18 @@ jobs:
           php tests/dashboard_metrics_test.php
           php tests/auth_helpers_test.php
 
+      - name: Congregation contact tests (who to write to, the contact log)
+        run: |
+          set -euo pipefail
+
+          # includes/congregation_contact.php on SQLite; it prints SKIP and
+          # exits 0 without pdo_sqlite, so refuse to run without it.
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
+            echo "::error::pdo_sqlite is missing — the congregation contact tests would be skipped"
+            exit 1
+          fi
+          php tests/congregation_contact_test.php
+
       - name: Permissions tests (can(), day-one matrix, parity)
         run: |
           set -euo pipefail

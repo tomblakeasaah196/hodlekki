@@ -4,6 +4,7 @@
 // 1. Core Includes & Headers
 require_once '../includes/db.php';
 require_once __DIR__ . '/../includes/status_ladder.php';
+require_once __DIR__ . '/../includes/congregation_contact.php';
 header('Content-Type: application/json');
 
 // 2. Security Check
@@ -238,6 +239,149 @@ try {
             break;
 
         // =====================================================================================
+        // A PERSON'S DETAILS, AND REACHING THEM (includes/congregation_contact.php)
+        // =====================================================================================
+        case 'get_person':
+            $target_id = (int) ($_POST['user_id'] ?? 0);
+            $stmt = $pdo->prepare("
+                SELECT u.id, u.first_name, u.last_name, u.email, u.real_email, u.phone, u.dob, u.gender, u.marital_status,
+                       u.spiritual_status, u.attendance_status, u.physical_address, u.new_church_name, u.wedding_anniversary,
+                       u.comments, u.picture_path, u.invitation_source, u.invited_by,
+                       (SELECT GROUP_CONCAT(d.name SEPARATOR ', ')
+                          FROM user_departments ud JOIN departments d ON ud.department_id = d.id
+                         WHERE ud.user_id = u.id AND ud.is_active = 1) AS active_departments,
+                       (SELECT t.name FROM user_tribes ut JOIN tribes t ON ut.tribe_id = t.id
+                         WHERE ut.user_id = u.id ORDER BY ut.joined_at DESC LIMIT 1) AS active_tribe
+                FROM users u WHERE u.id = ?
+            ");
+            $stmt->execute([$target_id]);
+            $person = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$person) {
+                echo json_encode(['status' => 'error', 'message' => 'This person is no longer in the register.']);
+                exit;
+            }
+            require_once __DIR__ . '/../includes/sms_functions.php';
+            $person['contact_email'] = cong_contact_email($person);
+            $person['phone_intl'] = cong_contact_intl($person['phone']);
+            $person['can_text'] = sms_normalize_phone($person['phone'] ?? '') !== null;
+            unset($person['real_email']);
+            echo json_encode([
+                'status' => 'success',
+                'data' => $person,
+                'rights' => cong_contact_rights((int) $user_id),
+                'contacts' => cong_contact_recent($pdo, $target_id),
+            ]);
+            break;
+
+        case 'log_contact':
+            // Call and WhatsApp are logged when tapped (the phone does the rest);
+            // an email once the composer has queued it (its mail_outbox row).
+            $target_id = (int) ($_POST['user_id'] ?? 0);
+            $channel = (string) ($_POST['channel'] ?? '');
+            $ref = null;
+            if (!in_array($channel, ['call', 'whatsapp', 'email'], true)) {
+                echo json_encode(['status' => 'error', 'message' => 'Choose call, WhatsApp or email.']);
+                exit;
+            }
+            $exists = $pdo->prepare("SELECT 1 FROM users WHERE id = ?");
+            $exists->execute([$target_id]);
+            if (!$exists->fetchColumn()) {
+                echo json_encode(['status' => 'error', 'message' => 'This person is no longer in the register.']);
+                exit;
+            }
+            if ($channel === 'email') {
+                $ref = (string) ($_POST['ref'] ?? '');
+                $mine = cong_contact_has_table($pdo, 'mail_outbox') ? $pdo->prepare(
+                    "SELECT 1 FROM mail_outbox WHERE id = ? AND user_id = ? AND status IN ('queued', 'sending', 'sent')"
+                ) : null;
+                if ($mine) {
+                    $mine->execute([$ref, (int) $user_id]);
+                }
+                if (!$mine || !$mine->fetchColumn()) {
+                    echo json_encode(['status' => 'error', 'message' => 'That email is not on its way.']);
+                    exit;
+                }
+            }
+            cong_contact_log($pdo, $target_id, $channel, (int) $user_id, $ref);
+            echo json_encode(['status' => 'success', 'contacts' => cong_contact_recent($pdo, $target_id)]);
+            break;
+
+        case 'send_sms':
+            // One text through SMS Studio's own sender: the same guards (spam,
+            // suppression, wallet), and it shows in SMS Studio's History.
+            require_once __DIR__ . '/../includes/sms_functions.php';
+            if (!sms_user_can_send()) {
+                echo json_encode(['status' => 'error', 'message' => 'You need SMS Studio access to send texts.']);
+                exit;
+            }
+            $target_id = (int) ($_POST['user_id'] ?? 0);
+            $text = trim(str_replace("\r\n", "\n", (string) ($_POST['message'] ?? '')));
+            if ($text === '') {
+                echo json_encode(['status' => 'error', 'message' => 'Type a message first.', 'field' => 'message']);
+                exit;
+            }
+            if (mb_strlen($text) > CONG_CONTACT_SMS_MAX) {
+                echo json_encode(['status' => 'error', 'message' => 'Keep the message under ' . CONG_CONTACT_SMS_MAX . ' characters.', 'field' => 'message']);
+                exit;
+            }
+            $stmt = $pdo->prepare("SELECT id, first_name, last_name, phone, email FROM users WHERE id = ?");
+            $stmt->execute([$target_id]);
+            $person = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$person) {
+                echo json_encode(['status' => 'error', 'message' => 'This person is no longer in the register.']);
+                exit;
+            }
+            if (sms_normalize_phone($person['phone'] ?? '') === null) {
+                echo json_encode(['status' => 'error', 'message' => 'Add a Nigerian mobile number to text them.']);
+                exit;
+            }
+            if (!sms_vault_ready()) {
+                echo json_encode(['status' => 'error', 'message' => 'SMS is not set up yet. Ask an SMS Studio admin.']);
+                exit;
+            }
+            $failedKeys = [];
+            $settings = sms_load_settings($pdo, $failedKeys);
+            if (empty($settings['api_token'])) {
+                echo json_encode(['status' => 'error', 'message' => 'SMS is not set up yet. Ask an SMS Studio admin.']);
+                exit;
+            }
+            $recipient = [
+                'source' => 'user', 'source_id' => (int) $person['id'],
+                'name' => trim($person['first_name'] . ' ' . $person['last_name']), 'phone' => $person['phone'],
+                'first_name' => $person['first_name'], 'last_name' => $person['last_name'],
+                'email' => $person['email'] ?? '', 'guest_name' => '', 'event_title' => '',
+            ];
+            $units = sms_segments(sms_sign_body(sms_render($text, $recipient), $settings))['pages'];
+            $wallet = sms_wallet_check($settings, $units);
+            if (!$wallet['ok']) {
+                echo json_encode(['status' => 'error', 'message' => $wallet['balance'] === null
+                    ? 'The SMS wallet did not answer. Try again in a moment.'
+                    : 'The SMS wallet is low. Ask an SMS Studio admin to top it up.']);
+                exit;
+            }
+            session_write_close();   // the BulkSMS call can take a few seconds
+            $r = sms_send_one($pdo, $settings, $recipient, $text, null, (int) $user_id, ['source' => 'congregation']);
+            if (in_array($r['status'], ['sent', 'unknown'], true)) {
+                cong_contact_log($pdo, $target_id, 'sms', (int) $user_id, (string) $r['log_id']);
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => $r['status'] === 'sent' ? 'Text sent.' : 'Text handed over. Check SMS History soon.',
+                    'contacts' => cong_contact_recent($pdo, $target_id),
+                ]);
+            } else {
+                // SMS Studio's own reasons are written for its History; one line here.
+                $why = (string) ($r['error'] ?? '');
+                $message = match (true) {
+                    str_contains($why, 'suppression list') => 'This number is blocked in SMS Studio.',
+                    str_contains($why, 'exact message') => 'They got this exact text today. Change the wording.',
+                    str_contains($why, 'in the past hour') => 'They got 3 texts this hour. Try again later.',
+                    default => 'The text did not go. Check SMS History, then try again.',
+                };
+                echo json_encode(['status' => 'error', 'message' => $message]);
+            }
+            break;
+
+        // =====================================================================================
         // ACTION 4: UPDATE - EDIT FULL MEMBER PROFILE
         // =====================================================================================
         case 'update_member':
@@ -314,6 +458,9 @@ try {
             $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
             $stmt->execute([$target_id]);
             ladder_forget_user($pdo, (int) $target_id);
+            if (cong_contact_ready($pdo)) {
+                $pdo->prepare("DELETE FROM congregation_contacts WHERE person_id = ?")->execute([(int) $target_id]);
+            }
 
             echo json_encode(['status' => 'success', 'message' => 'Member profile permanently deleted from the database.']);
             break;

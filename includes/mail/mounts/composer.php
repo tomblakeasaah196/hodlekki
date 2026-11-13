@@ -1,6 +1,7 @@
 <?php
 /**
- * The composer (PR 3; docs/MAIL.md §7d). Drawn once on the Mail page through HOD\Mail\Read\Partial::mount('composer'),
+ * The composer (PR 3; docs/MAIL.md §7d). Drawn once on the Mail page through HOD\Mail\Read\Partial::mount('composer')
+ * (and on Congregation, for people with a mailbox they may send from: a person's details open it with their address),
  * which also turns on every Reply, Reply all, Forward and New message button. Nothing shows until the browser event
  * mail:compose {mode, accountId, messageId?, outboxId?, to?} opens it: a modal dialog on a computer, full screen on
  * a phone. Driven by assets/ui/js/pages/mail-compose.js against api/mail_compose_api.php, which saves as the person

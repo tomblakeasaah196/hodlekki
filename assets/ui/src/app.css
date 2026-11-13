@@ -2101,6 +2101,7 @@
         color: var(--ui-text-muted);
     }
     .ui-dialog__close { margin-top: -2px; }
+    .ui-dialog__actions { display: flex; flex: none; align-items: center; gap: 4px; margin-top: -2px; }
     .ui-dialog__body {
         flex: 1 1 auto;
         min-height: 0;
@@ -4195,6 +4196,87 @@
     @media (min-width: 1024px) {
         .os-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
+
+    /* ---------- Congregation: a person's details (modules/congregation/index.php) ---------- */
+    /* A row opens them; Call, WhatsApp, SMS and Email sit as equal tiles in one
+       row (2 to 4, by what the viewer may do), then the facts, then who
+       reached them lately. */
+    .cong-name {
+        display: block;
+        max-width: 100%;
+        padding: 0;
+        border: 0;
+        background: none;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        border-radius: var(--ui-radius-sm);
+    }
+    .cong-name.ui-table__primary { font-weight: 500; }
+    .cong-name:hover { text-decoration: underline; text-underline-offset: 2px; }
+    .cong-name:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+    .cong-person__top {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+    .cong-person__tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cong-reach {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+    .cong-reach--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cong-reach--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cong-reach__btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        min-height: 68px;
+        padding: 10px 4px;
+        border: 1px solid var(--ui-border);
+        border-radius: var(--ui-radius);
+        background: var(--ui-surface);
+        color: var(--ui-text);
+        font-size: var(--ui-text-sm);
+        font-weight: 500;
+        line-height: 1.25rem;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background-color var(--ui-dur-fast) var(--ui-ease), border-color var(--ui-dur-fast) var(--ui-ease);
+    }
+    .cong-reach__btn .ui-icon { width: 22px; height: 22px; color: var(--ui-primary); }
+    .cong-reach__btn:hover { background: var(--ui-surface-hover); border-color: var(--ui-border-strong); }
+    .cong-reach__btn:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+    .cong-reach__btn:disabled { cursor: not-allowed; color: var(--ui-text-subtle); background: var(--ui-surface-sunken); }
+    .cong-reach__btn:disabled .ui-icon { color: var(--ui-text-subtle); }
+    .cong-reach__btn:disabled:hover { border-color: var(--ui-border); }
+    .cong-reach__why { font-size: var(--ui-text-xs); font-weight: 400; line-height: 1rem; }
+    .cong-person__subtitle {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin: 20px 0 4px;
+        font-size: var(--ui-text-md);
+        font-weight: 600;
+        color: var(--ui-heading);
+    }
+    .cong-log__icon {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 999px;
+        background: var(--ui-primary-soft);
+        color: var(--ui-primary);
+    }
+    .cong-log__icon .ui-icon { width: 18px; height: 18px; }
 
     /* ---------- Our sermons: the listening page (modules/our_sermons/sermon.php) ---------- */
     /* Connect's family. The sermon sits on the warm wash (artwork, title, who

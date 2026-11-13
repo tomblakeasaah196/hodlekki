@@ -1231,6 +1231,38 @@ after `includes/db.php`), ported from bureau.lpc.cm's Courrier. Tests: `php test
   every redirect checked) and at most 3 tries. It never writes the title, preacher or date preached, and the
   summary and key points name nobody and never repeat the title (asked in the prompt, then enforced by
   `our_sermons_ai_unname()`: people in the Bible may stay). Usage rows carry no text. The /privacy line about sermon recordings must stay true.
+## Congregation: a person's details and reaching them (added 2026-11-13)
+
+A row in the register (or a name in a KPI drawer, or a person picked in Ctrl+K:
+`/modules/congregation/#person=<id>`) opens their details: Call, WhatsApp,
+SMS, Email, Edit (beside the close icon, Congregation edit), Attendance, Push to
+Charis, and who reached them lately. Code: `includes/congregation_contact.php`
+(tests: `php tests/congregation_contact_test.php`, SQLite, CI lint job),
+`api/congregation_api.php` (`get_person`, `log_contact`, `send_sms`),
+`assets/ui/js/pages/congregation.js`; table `congregation_contacts`
+(migration `20261215090000`).
+
+- **Who may do what** (owner's answers, 13 Nov 2026): anyone with Congregation
+  view may Call (`tel:`) and WhatsApp; **Email** only with a mailbox they may
+  send from (`MailAccess::accounts($uid, 'send')`: Mail's own composer is
+  mounted on the page, docs/MAIL.md §7d); **SMS** only with SMS Studio access
+  (`sms_user_can_send()`). One place decides: `cong_contact_rights()`; the API
+  checks SMS again on send. No new permission row.
+- **WhatsApp is a wa.me link**, never the paid Business API: the message typed
+  in the box is put in `?text=` and WhatsApp opens on their chat; the person
+  taps Send there. Numbers go through `cong_contact_intl()` (Nigerian rules).
+- **SMS goes through SMS Studio's own sender** (`sms_send_one()`, source
+  `congregation`): the same spam guard, suppression list and wallet check, and
+  it shows in SMS Studio's History. The recipient's number is read from the
+  register on the server, never taken from the browser.
+- **The contact log keeps the fact of contact only** (who, how, when; `ref` =
+  the `sms_log` id or the `mail_outbox` id), never the message. Call and
+  WhatsApp are logged when tapped (a repeat by the same person within two
+  minutes is not); a text once it went; an email once the composer queued it.
+  The history shows the text's or email's own state and hides an email that was
+  undone. Deleting a member deletes their rows. Degrades to nothing before the
+  migration.
+
 ## Departments module (ministry years)
 
 `modules/departments/` is ministry-year aware, and its rules are worth knowing
