@@ -6,7 +6,7 @@
 -- Lekki show arrive from its RSS feed as drafts, or Envision pastes a Spotify
 -- or YouTube link; members browse by list or calendar once a sermon is
 -- published. The two tables are a shared contract: S2 (the listening page)
--- adds our_sermon_notes / our_sermon_progress keyed on our_sermons.id, S3 (AI)
+-- adds its own notes and progress tables keyed on our_sermons.id, S3 (AI)
 -- writes summary / key_points / scriptures / series / ai_status / ai_drafted_at.
 --
 --   our_sermons       one sermon. date_preached is the day it was PREACHED

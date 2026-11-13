@@ -212,7 +212,7 @@ ok('date_preached is required; feed_guid, the Spotify episode and the video are 
     str_contains($mig, 'date_preached DATE NOT NULL') && str_contains($mig, 'UNIQUE KEY uq_our_sermons_guid (feed_guid)')
     && str_contains($mig, 'UNIQUE KEY uq_our_sermons_spotify (spotify_episode_id)') && str_contains($mig, 'UNIQUE KEY uq_our_sermons_youtube (youtube_id)'));
 ok('S2\'s and S3\'s tables are theirs (no notes, progress or AI usage table here)',
-    !preg_match('/CREATE TABLE[^(]*\b(our_sermon_notes|our_sermon_progress|\w*ai_\w*)\b/i', implode('', array_map('file_get_contents',
+    !preg_match('/CREATE TABLE[^(]*\b(our_sermon_(?!feeds|feed_skips)\w+|\w*ai_\w*)\b/i', implode('', array_map('file_get_contents',
         glob($root . '/db/migrations/2026121309*') ?: []))));
 /** PHP source without its comments. */
 $code = static function (string $file): string {
@@ -257,11 +257,29 @@ $cases = [
     'By Faith | Exousia | Dr Kemi Ade | Wednesday, 7 October 2026' => ['By Faith', 'Dr. Kemi Ade', '2026-10-07', 'midweek'],
     'Mid-week Service | Pastor Ebele Uzo-Peters | 14 Oct 2026 | Kingdom Keys' => ['Kingdom Keys', 'Pastor Ebele Uzo-Peters', '2026-10-14', 'midweek'],
     'PASTOR EBELE UZO-PETERS | THE LORD IS MY SHEPHERD | 25TH OCTOBER 2026' => ['The Lord Is My Shepherd', 'Pastor Ebele Uzo-Peters', '2026-10-25', 'sunday'],
+    // The live Lekki feed, 13 Nov 2026 (anchor.fm/s/116f1a844), every title it had:
+    'Fully Decided | Pastor Ebele UZo-Peters | 1st November 2026' => ['Fully Decided', 'Pastor Ebele Uzo-Peters', '2026-11-01', 'sunday'],
+    'Understanding Divine Success | Pastor Ebele UZo-Peters | 11th October 2026'
+        => ['Understanding Divine Success', 'Pastor Ebele Uzo-Peters', '2026-10-11', 'sunday'],
+    'Empowered To Prosper | Pastor Ebele Uzo-Peters | Total Experience | 4th October 2026'
+        => ['Empowered To Prosper', 'Pastor Ebele Uzo-Peters', '2026-10-04', 'sunday'],
+    'Arise and Shine | Pastor Ebele Uzo-Peters | Total Experience | 28th September 2026'
+        => ['Arise and Shine', 'Pastor Ebele Uzo-Peters', '2026-09-28', null],
+    'The Testimony of Faith | Pastor Ebele Uzo-Peters | Total Experience | 13th September 2026'
+        => ['The Testimony of Faith', 'Pastor Ebele Uzo-Peters', '2026-09-13', 'sunday'],
+    'The Sequence of Faith | Pastor Ebele Uzo-Peters | Total Experience | 6th September 2026'
+        => ['The Sequence of Faith', 'Pastor Ebele Uzo-Peters', '2026-09-06', 'sunday'],
 ];
 foreach ($cases as $raw => [$title, $preacher, $date, $service]) {
     $p = our_sermons_parse_title($raw);
     eq('parse: ' . mb_strimwidth($raw, 0, 60, '…'), [$title, $preacher, $date, $service], [$p['title'], $p['preacher'], $p['date'], $p['service']]);
 }
+eq('"Total Experience" (a programme, not a preacher or a date) is the series guess', 'Total Experience',
+    our_sermons_parse_title('Empowered To Prosper | Pastor Ebele Uzo-Peters | Total Experience | 4th October 2026')['series']);
+eq('one preacher however the feed capitalises them', [our_sermons_parse_title('A | Pastor Ebele UZo-Peters | 1st November 2026')['preacher']],
+    array_values(array_unique([our_sermons_parse_title('A | Pastor Ebele UZo-Peters | 1st November 2026')['preacher'],
+        our_sermons_parse_title('B | PASTOR EBELE UZO-PETERS | 1st November 2026')['preacher'],
+        our_sermons_parse_title('C | Pastor Ebele Uzo-Peters | 1st November 2026')['preacher']])));
 eq('a second plain part is a series guess', 'Ground Zero', our_sermons_parse_title('The Faith Once Delivered | Ground Zero | Pastor Ebele Uzo-Peters | 8 Nov 2026')['series']);
 eq('no impossible dates (31 September)', null, our_sermons_parse_title('Hope | Pastor A Bee | 31st September 2026')['date']);
 eq('no dates out of range', null, our_sermons_find_date('Psalm 1990-2200 in 3000'));
@@ -443,6 +461,43 @@ $feedRow = $pdo->query('SELECT * FROM our_sermon_feeds')->fetch();
 eq('the feed keeps its title, size, etag and when it was read', ['Household Of David Lekki Centre', 4, '"v1"', '2026-11-13 10:00:00', null],
     [$feedRow['title'], (int) $feedRow['items_seen'], $feedRow['etag'], $feedRow['last_ok_at'], $feedRow['last_error']]);
 
+section('The live Lekki feed, replayed (UUID guids, CDATA, the anchor.fm play link, 13 Nov 2026)');
+$lekki = [
+    ['6da0b462-b3ff-4dc1-b2f1-5cb2cba86dcc', 'Ground Zero - The Faith Once Delivered | Pastor Ebele UZo-Peters | November 8th, 2026', 'Wed, 11 Nov 2026 16:15:53 GMT', '00:28:17'],
+    ['caaae769-a49a-45e2-9a8d-8e9ff509cc68', 'Fully Decided | Pastor Ebele UZo-Peters | 1st November 2026', 'Thu, 05 Nov 2026 13:58:43 GMT', '00:39:45'],
+    ['a404c4b4-b235-4707-bf6d-cee143afbe61', 'Understanding Divine Success | Pastor Ebele UZo-Peters | 11th October 2026', 'Tue, 13 Oct 2026 09:26:07 GMT', '00:27:39'],
+    ['ea560ced-e225-48b2-aec1-d4fb51ab7522', 'Empowered To Prosper | Pastor Ebele Uzo-Peters | Total Experience | 4th October 2026', 'Sat, 10 Oct 2026 10:05:23 GMT', '00:43:06'],
+    ['200375b9-1cbf-46e6-8dc4-3bec33c072b9', 'Arise and Shine | Pastor Ebele Uzo-Peters | Total Experience | 28th September 2026', 'Mon, 28 Sep 2026 21:21:01 GMT', '00:39:28'],
+    ['34efcfd0-3160-4fa5-8e81-a889f1cd0d26', 'The Testimony of Faith | Pastor Ebele Uzo-Peters | Total Experience | 13th September 2026', 'Mon, 14 Sep 2026 19:18:51 GMT', '00:35:53'],
+    ['c3da7c92-ddcd-47a7-9ecf-8671fa45a402', 'The Sequence of Faith | Pastor Ebele Uzo-Peters | Total Experience | 6th September 2026', 'Mon, 07 Sep 2026 04:01:40 GMT', '00:42:53'],
+];
+$liveUrl = 'https://anchor.fm/s/116f1a844/podcast/rss';
+$GLOBALS['os_routes'][$liveUrl] = ['body' => os_feed(array_map(static fn ($e) => ['guid' => $e[0], 'title' => $e[1], 'pub' => $e[2], 'dur' => $e[3],
+    'audio' => 'https://anchor.fm/s/116f1a844/podcast/play/' . crc32($e[0]) . '/https%3A%2F%2Fd3ctxlq1ktw2nl.cloudfront.net%2Fstaging%2F2026-11-11%2F' . $e[0] . '.mp3',
+    'image' => 'https://d3t3ozftmdmh3i.cloudfront.net/staging/podcast_uploaded_nologo/46699033/show.jpg'], $lekki)), 'headers' => ['ETag' => 'W/"29ee"']];
+$pl = os_db();
+$pl->exec(perm_test_migration('20261213090200_our_sermons_feed_seed.sql'));
+eq('the seed sets the Lekki feed once, unread', [1, $liveUrl, null], [(int) $pl->query('SELECT COUNT(*) FROM our_sermon_feeds')->fetchColumn(),
+    $pl->query('SELECT url FROM our_sermon_feeds')->fetchColumn(), $pl->query('SELECT last_checked_at FROM our_sermon_feeds')->fetchColumn()]);
+$pl->exec(perm_test_migration('20261213090200_our_sermons_feed_seed.sql'));
+eq('…runs twice as a no-op', 1, (int) $pl->query('SELECT COUNT(*) FROM our_sermon_feeds')->fetchColumn());
+$run = our_sermons_feeds_run($pl);
+$rows = $pl->query('SELECT * FROM our_sermons ORDER BY date_preached DESC')->fetchAll();
+eq('the first tick after the deploy brings all 7 in as drafts', [1, 7, 7], [$run['checked'], $run['new'], count($rows)]);
+eq('…by the day each was preached', ['2026-11-08', '2026-11-01', '2026-10-11', '2026-10-04', '2026-09-28', '2026-09-13', '2026-09-06'],
+    array_column($rows, 'date_preached'));
+eq('…one preacher, "Total Experience" as the series guess, lengths from itunes:duration',
+    [['Pastor Ebele Uzo-Peters'], [null, null, null, 'Total Experience', 'Total Experience', 'Total Experience', 'Total Experience'], 1697],
+    [array_values(array_unique(array_column($rows, 'preacher'))), array_column($rows, 'series'), (int) $rows[0]['duration_seconds']]);
+eq('…the newest is "Ground Zero", published three days after it was preached', ['Ground Zero - The Faith Once Delivered', '2026-11-11 17:15:53'],
+    [$rows[0]['title'], $rows[0]['feed_published_at']]);
+eq('…its audio plays from both hosts the redirect touches', ['https://anchor.fm', 'https://d3ctxlq1ktw2nl.cloudfront.net'],
+    our_sermons_media_hosts($rows[0]['audio_url']));
+$sp = os_db();
+$sp->exec("INSERT INTO our_sermon_feeds (url, is_active, items_seen, created_at) VALUES ('https://example.org/other.xml', 1, 0, '2026-11-13 09:00:00')");
+$sp->exec(perm_test_migration('20261213090200_our_sermons_feed_seed.sql'));
+eq('the seed never adds to a feed Envision already set', ['https://example.org/other.xml'], $sp->query('SELECT url FROM our_sermon_feeds')->fetchAll(PDO::FETCH_COLUMN));
+
 section('The poller: every 15 minutes, deduped by guid, conditional GET');
 $pdo->exec('DELETE FROM system_notifications');
 $run = our_sermons_feeds_run($pdo);
@@ -590,6 +645,9 @@ eq('…every field, the date now confirmed by hand', ['Ground Zero', 'sunday', '
 eq('…key points one per line, bullets and numbers dropped', ['Contend earnestly', 'Know what you believe', 'Stay rooted'], $s['key_points']);
 eq('…scriptures through the Bible module\'s parser', ['Jude 1:3', 'John 3:16', '2 Timothy 4:7'], $s['scriptures']);
 eq('a member cannot save', 'FORBIDDEN', act($pdo, 4, 'save', $form())['code'] ?? '');
+act($pdo, 3, 'save', $form(['preacher' => 'PASTOR EBELE UZo-Peters']));
+eq('a typed preacher is tidied like a parsed one (one preacher, one filter)', 'Pastor Ebele Uzo-Peters', our_sermons_get($pdo, $id)['preacher']);
+act($pdo, 3, 'save', $form());
 
 // ===========================================================================
 section('Publishing tells everyone who can sign in, once');
@@ -730,6 +788,17 @@ ok('the menu entry is there, with its (i) line', str_contains($nav, "'key' => 'o
 $reg = require $root . '/includes/permissions/modules.php';
 eq('the registry row: member-facing, up to Delete, plus Manage', [true, 'delete', ['manage']],
     [$reg['our_sermons']['member'] ?? false, $reg['our_sermons']['max'] ?? null, $reg['our_sermons']['extras'] ?? null]);
+$boot = (string) file_get_contents($root . '/includes/our_sermons/bootstrap.php');
+ok('S3\'s ai.php is loaded when it is there (our_sermons_ai_queue, our_sermons_ai_panel)',
+    str_contains($boot, "if (is_file(__DIR__ . '/ai.php')) {") && str_contains($boot, "require_once __DIR__ . '/ai.php';"));
+$manageSrc = (string) file_get_contents($root . '/modules/our_sermons/manage.php');
+$panelAt = strpos($manageSrc, 'our_sermons_ai_panel($pdo, $s,');
+ok('S3\'s panel (its own Regenerate form) sits on the editor page, outside the editor\'s form',
+    $panelAt !== false && $panelAt < strpos($manageSrc, '<form class="ui-card" data-action="os.save"')
+    && str_contains($manageSrc, "if (function_exists('our_sermons_ai_panel')):"));
+ok('S2\'s notes and progress tables are named only in S2\'s files', !preg_match('/our_sermon_(notes|progress)\b/', implode('', array_map('file_get_contents',
+    array_merge(glob($root . '/includes/our_sermons/*.php') ?: [], glob($root . '/modules/our_sermons/manage.php') ?: [], glob($root . '/db/migrations/2026121309*') ?: [],
+        [$root . '/api/our_sermons_api.php', __FILE__])))));
 ok('CI runs this suite', str_contains((string) file_get_contents($root . '/.github/workflows/deploy.yml'), 'php tests/our_sermons/run.php'));
 ok('the integration job applies the migration on MySQL and MariaDB (marker)', str_contains((string) file_get_contents($root . '/tests/special_events/db_setup.php'), "'_our_sermons_'"));
 

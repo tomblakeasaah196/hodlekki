@@ -355,7 +355,8 @@ function our_sermons_clean_input(PDO $pdo, int $id, array $in): array
 
     $cols = [
         'title' => $title,
-        'preacher' => our_sermons_text($in['preacher'] ?? '', OUR_SERMONS_PREACHER_MAX) ?: null,
+        // Tidied like a parsed name ("PASTOR EBELE UZo-Peters" → "Pastor Ebele Uzo-Peters"), so one preacher is one filter.
+        'preacher' => our_sermons_name_case(our_sermons_text($in['preacher'] ?? '', OUR_SERMONS_PREACHER_MAX)) ?: null,
         'date_preached' => $date,
         'date_source' => 'manual',
         'service' => $service !== '' ? $service : null,

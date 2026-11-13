@@ -88,6 +88,9 @@ $row = static function (array $s): string {
     <?= ui_banner('warning', ['title' => 'No audio yet', 'text' => 'Add a Spotify or YouTube link to publish.',
         'info' => 'Audio comes from the show\'s feed. A pasted episode gets it as soon as the feed has it.']) ?>
 <?php endif; ?>
+<?php if (function_exists('our_sermons_ai_panel')): ?>
+    <?= our_sermons_ai_panel($pdo, $s, (string) ($_SERVER['REQUEST_URI'] ?? our_sermons_manage_url($s['id']))) ?>
+<?php endif; ?>
     <form class="ui-card" data-action="os.save" data-ui-validate novalidate data-sermon="<?= (int) $s['id'] ?>"
           data-status="<?= ui_e($s['status']) ?>" data-notified="<?= $s['notified_at'] !== null ? '1' : '0' ?>">
         <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
@@ -100,8 +103,10 @@ $row = static function (array $s): string {
 <?php endif; ?>
                 <ul class="os-media__facts">
                     <li><?= ui_icon('headphones', 'ui-icon--sm') ?> <?= $s['audio_url'] ? ui_e('Audio · ' . (our_sermons_length_label($s['duration_seconds']) ?: 'length unknown')) : 'No audio yet' ?></li>
+<?php if (!function_exists('our_sermons_ai_panel')): ?>
                     <li><?= ui_icon('sparkles', 'ui-icon--sm') ?> <?= ui_e(['pending' => 'AI is drafting the summary', 'done' => 'AI drafted the summary',
                         'failed' => 'AI could not draft it', 'off' => 'Summary by hand'][$s['ai_status']] ?? 'Summary by hand') ?></li>
+<?php endif; ?>
                 </ul>
             </div>
             <div class="ui-form-grid">

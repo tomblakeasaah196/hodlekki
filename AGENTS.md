@@ -1394,7 +1394,7 @@ calendar, `sermon` one sermon, `manage` Envision's manager). Schema: `2026121309
 permissions `20261213090100_perm_our_sermons.sql`. Tests: `php tests/our_sermons/run.php` (CI lint job).
 
 - **The tables are a shared contract** (S2 the listening page, S3 AI): `our_sermons`, `our_sermon_feeds`,
-  `our_sermon_feed_skips`; the tests pin every column. S2 adds `our_sermon_notes` / `our_sermon_progress` keyed
+  `our_sermon_feed_skips`; the tests pin every column. S2 adds its own notes and progress tables keyed
   on `our_sermons.id`; S3 writes `summary`, `key_points` / `scriptures` (JSON arrays of strings), `series`,
   `ai_status` (`pending` | `done` | `failed` | `off`) and `ai_drafted_at`. Never rename a column.
 - **`date_preached` is the day it was preached**, parsed from the episode title by `our_sermons_parse_title()`
@@ -1407,8 +1407,12 @@ permissions `20261213090100_perm_our_sermons.sql`. Tests: `php tests/our_sermons
   Envision deleted is remembered in `our_sermon_feed_skips` so the poller never brings it back (Paste link can).
   At most 20 new drafts per read. A pasted episode with the same title is completed with the feed's audio
   instead of becoming a second draft. Envision's Edit holders are told once per read (`perm_holders()`).
-- **S3's hook:** a new draft (feed or paste) is created with `ai_status = 'pending'` and
-  `our_sermons_ai_queue($pdo, $id)` is called when that function exists; otherwise `ai_status = 'off'`.
+  The Lekki feed (`https://anchor.fm/s/116f1a844/podcast/rss`) is seeded by `20261213090200` only while no feed
+  is set; Envision changes it on Manage sermons → Feed.
+- **S3's hooks** (`includes/our_sermons/ai.php`, loaded by the bootstrap when it is there): a new draft (feed or
+  paste) is created with `ai_status = 'pending'` and `our_sermons_ai_queue($pdo, $id)` is called when that
+  function exists, otherwise `ai_status = 'off'`; the editor shows `our_sermons_ai_panel()` (its own Regenerate
+  form, so it sits outside the editor's form).
 - **Everything from outside is hostile.** The only way out is `our_sermons_http_get()`: https only, port 443,
   the name resolved and pinned (`CURLOPT_RESOLVE`), private and reserved addresses refused, redirects followed by
   hand and re-checked, size caps. The RSS reader refuses any DOCTYPE / ENTITY and parses with `LIBXML_NONET`.

@@ -20,7 +20,8 @@
 // Envision's seats and the pastors Create / Edit / Delete / Manage.
 //
 // Hooks for the other PRs (guarded by function_exists(), so S1 stands alone):
-//   our_sermons_ai_queue($pdo, $id)   S3: draft the summary etc. for a new draft
+//   our_sermons_ai_queue($pdo, $id)   S3 (ai.php): draft the summary etc. for a new draft
+//   our_sermons_ai_panel($pdo, $row, $back)  S3: the AI badge and Regenerate on Envision's editor
 //
 // Every query is portable (MySQL 8, MariaDB 10.11 and the SQLite tests): no
 // NOW(), no INSERT IGNORE, no ON DUPLICATE KEY. Times come from PHP, in Lagos.
@@ -31,6 +32,10 @@ require_once __DIR__ . '/fetch.php';
 require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/feeds.php';
 require_once __DIR__ . '/actions.php';
+// S3 (AI summaries) lives in its own file: our_sermons_ai_queue() and our_sermons_ai_panel(), when it is here.
+if (is_file(__DIR__ . '/ai.php')) {
+    require_once __DIR__ . '/ai.php';
+}
 
 const OUR_SERMONS_TZ = 'Africa/Lagos';
 const OUR_SERMONS_TABLES = ['our_sermons', 'our_sermon_feeds', 'our_sermon_feed_skips'];
