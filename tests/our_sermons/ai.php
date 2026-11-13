@@ -5,9 +5,8 @@
 // AI drafts a sermon's summary, key points and key scriptures from its audio.
 // No network: Gemini::fake() answers for Google (upload, file state,
 // generateContent, delete) and our_sermons_ai_fake_download() for the
-// podcast host. In-memory SQLite built from this PR's migration, with a
-// stand-in for PR S1's our_sermons table (its contract; section 13 checks the
-// columns against S1's real migration once it is in the tree).
+// podcast host. In-memory SQLite built from the real migrations: PR S1's
+// our_sermons (20261213090000) and this PR's two tables.
 //
 //     php tests/our_sermons/ai.php      (exit 0 = all good)
 
@@ -65,11 +64,15 @@ if (!function_exists('ui_badge')) {
     function ui_csrf_field(): string { return '<input type="hidden" name="_csrf" value="t">'; }
 }
 
-/** This PR's migration, translated to SQLite, and a stand-in for PR S1's our_sermons (its contract). */
+/** PR S1's our_sermons and this PR's tables, from their migrations, translated to SQLite. */
 function st_db(): PDO
 {
     $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
-    $sql = (string) preg_replace('/^\s*--.*$/m', '', (string) file_get_contents(__DIR__ . '/../../db/migrations/20261213110000_our_sermons_ai.sql'));
+    $sql = '';
+    foreach (['20261213090000_our_sermons_core.sql', '20261213110000_our_sermons_ai.sql'] as $file) {
+        $sql .= (string) file_get_contents(__DIR__ . '/../../db/migrations/' . $file) . PHP_EOL;
+    }
+    $sql = (string) preg_replace('/^\s*--.*$/m', '', $sql);
     preg_match_all('/CREATE TABLE IF NOT EXISTS (\w+) \((.*?)\)\s*ENGINE=[^;]*;/s', $sql, $tables, PREG_SET_ORDER);
     foreach ($tables as [, $name, $body]) {
         $cols = $indexes = [];
@@ -77,6 +80,10 @@ function st_db(): PDO
         foreach (preg_split('/,\s*\n/', trim($body)) as $line) {
             $line = trim($line);
             if ($autoId && preg_match('/^PRIMARY KEY \((\w+)\)$/', $line)) {
+                continue;
+            }
+            if (preg_match('/^UNIQUE KEY (\w+) \((.+)\)$/', $line, $m)) {
+                $indexes[] = "CREATE UNIQUE INDEX {$m[1]} ON {$name} ({$m[2]})";
                 continue;
             }
             if (preg_match('/^KEY (\w+) \((.+)\)$/', $line, $m)) {
@@ -97,10 +104,6 @@ function st_db(): PDO
             $pdo->exec($ix);
         }
     }
-    $pdo->exec("CREATE TABLE our_sermons (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, preacher TEXT, date_preached TEXT NOT NULL,
-        service TEXT, series TEXT, summary TEXT, key_points TEXT, scriptures TEXT, artwork_url TEXT, audio_url TEXT, duration_seconds INTEGER,
-        spotify_url TEXT, youtube_url TEXT, source TEXT, feed_guid TEXT, status TEXT NOT NULL DEFAULT 'draft', ai_status TEXT NOT NULL DEFAULT 'off',
-        ai_drafted_at TEXT, published_at TEXT, published_by INTEGER, created_at TEXT, updated_at TEXT)");
     // Members and their notes exist in the ERP; nothing of theirs may reach Google.
     $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, email TEXT)');
     $pdo->exec("INSERT INTO users VALUES (7, 'Ngozi', 'Envision', 'ngozi@hodlekki.org'), (8, 'Ada', 'Okafor', 'ada.okafor@example.test')");
@@ -231,6 +234,7 @@ st_section('1. The migration: two tables of its own, no text');
 $mig = (string) file_get_contents($root . '/db/migrations/20261213110000_our_sermons_ai.sql');
 preg_match_all('/CREATE TABLE IF NOT EXISTS (\w+)/', $mig, $m);
 st_eq('it creates the jobs table and the usage log', ['our_sermon_ai_jobs', 'our_sermon_ai_requests'], $m[1]);
+st_ok('it sorts after PR S1\'s migrations (the sermons table it serves)', strcmp('20261213110000_our_sermons_ai.sql', '20261213090200_our_sermons_feed_seed.sql') > 0);
 st_eq('every CREATE is idempotent', substr_count($mig, 'CREATE TABLE IF NOT EXISTS'), substr_count($mig, 'CREATE TABLE'));
 st_ok('no ALTER (PR S1\'s table is left alone), no DROP, no DELIMITER', !preg_match('/\b(ALTER\s+TABLE|DROP\s+|DELIMITER)\b/i', $mig));
 st_ok('no NOW() or CURRENT_TIMESTAMP defaults (times come from PHP)', !preg_match('/NOW\(\)|CURRENT_TIMESTAMP/i', (string) preg_replace('/^\s*--.*$/m', '', $mig)));
@@ -670,7 +674,7 @@ foreach (['includes/our_sermons/ai.php', 'api/our_sermons_ai_api.php', 'includes
 }
 
 // ===========================================================================
-st_section('13. PR S1\'s table has every column the AI uses');
+st_section('13. PR S1\'s table has every column the AI uses (the tests above run on it)');
 // ===========================================================================
 $s1Files = array_values(array_filter(glob($root . '/db/migrations/*our_sermons*.sql') ?: [], static fn ($f) => !str_contains($f, '_our_sermons_ai.sql')));
 $s1Sql = '';
@@ -689,6 +693,49 @@ if (preg_match('/CREATE TABLE IF NOT EXISTS our_sermons \((.*?)\)\s*ENGINE/s', $
 } else {
     echo "  skip PR S1's migration is not in the tree yet (the stand-in above follows its contract)\n";
 }
+
+// ===========================================================================
+st_section('14. End to end through PR S1: its new draft, this queue, this worker');
+// ===========================================================================
+require_once $root . '/includes/our_sermons/bootstrap.php';
+st_ok('S1\'s bootstrap loads this file', function_exists('our_sermons_create')
+    && basename((string) (new ReflectionFunction('our_sermons_ai_queue'))->getFileName()) === 'ai.php');
+$e2e = st_db();
+$GLOBALS['our_sermons_now'] = new DateTimeImmutable('2026-11-17 09:00:00', new DateTimeZone('Africa/Lagos'));
+st_at('2026-11-17 09:00');
+$made = our_sermons_create($e2e, ['title' => 'Ground Zero - The Faith Once Delivered', 'preacher' => 'Pastor Ebele Uzo-Peters', 'date_preached' => '2026-11-08',
+    'date_source' => 'title', 'source' => 'feed', 'feed_guid' => 'e2e-1', 'duration_seconds' => 2100,
+    'audio_url' => 'https://anchor.fm/s/116f1a844/podcast/play/127385985/https%3A%2F%2Fd3ctxlq1ktw2nl.cloudfront.net%2Fstaging%2F2026-11-8%2Fe2e.mp3'], null);
+st_eq('S1 creates the draft pending and calls the queue: a job row from the feed', ['pending', 0, null],
+    [st_row($e2e, $made['id'])['ai_status'], (int) (st_job($e2e, $made['id'])['attempts'] ?? -1), st_job($e2e, $made['id'])['queued_by'] ?? null]);
+$answers[] = $answer($good, 67200, 500);
+$r = our_sermons_ai_run($e2e);
+$row = st_row($e2e, $made['id']);
+st_eq('the worker drafts it: done, still a draft, S1\'s title, preacher and date untouched',
+    ['done', 'done', 'draft', 'Ground Zero - The Faith Once Delivered', 'Pastor Ebele Uzo-Peters', '2026-11-08', 'title'],
+    [$r['status'], $row['ai_status'], $row['status'], $row['title'], $row['preacher'], $row['date_preached'], $row['date_source']]);
+st_eq('…in the shapes S1 reads back (our_sermons_list)', [5, ['Jude 1:3', 'Hebrews 11:1–6', '2 Timothy 1:14']],
+    [count(our_sermons_list($row['key_points'])), our_sermons_list($row['scriptures'])]);
+// Envision opens the draft and saves it without changing anything: still the AI's, so Regenerate may redraft it.
+$form = ['title' => $row['title'], 'preacher' => $row['preacher'], 'date_preached' => $row['date_preached'], 'service' => '',
+         'series' => (string) $row['series'], 'summary' => str_replace("\n", "\r\n", (string) $row['summary']),
+         'key_points' => implode("\r\n", our_sermons_list($row['key_points'])), 'scriptures' => implode("\r\n", our_sermons_list($row['scriptures']))];
+$saved = our_sermons_save($e2e, $made['id'], $form, 7);
+$after = st_row($e2e, $made['id']);
+st_eq('a save through S1\'s editor with nothing changed keeps every field the AI\'s (same fingerprints)', [true, []],
+    [!empty($saved['ok']) || ($saved['status'] ?? '') === 'success', array_values(array_filter(OUR_SERMONS_AI_FIELDS,
+        static fn ($f) => our_sermons_ai_print($f, $after[$f]) !== (json_decode((string) st_job($e2e, $made['id'])['filled'], true)[$f] ?? null)))]);
+$form['summary'] = 'Envision rewrote the summary in the editor.';
+our_sermons_save($e2e, $made['id'], $form, 7);
+our_sermons_ai_regenerate($e2e, $made['id'], 7);
+$next = $good;
+$next['key_points'] = ['New one.', 'New two.', 'New three.'];
+$answers[] = $answer($next);
+our_sermons_ai_run($e2e);
+$row = st_row($e2e, $made['id']);
+st_eq('…an edit through S1\'s editor survives Regenerate; the untouched key points are redrafted',
+    ['Envision rewrote the summary in the editor.', ['New one.', 'New two.', 'New three.']], [$row['summary'], our_sermons_list($row['key_points'])]);
+unset($GLOBALS['our_sermons_now']);
 
 Gemini::fake(null);
 our_sermons_ai_fake_download(null);

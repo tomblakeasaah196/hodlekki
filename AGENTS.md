@@ -1427,7 +1427,9 @@ permissions `20261213090100_perm_our_sermons.sql`. Tests: `php tests/our_sermons
   form, so it sits outside the editor's form).
 - **Everything from outside is hostile.** The only way out is `our_sermons_http_get()`: https only, port 443,
   the name resolved and pinned (`CURLOPT_RESOLVE`), private and reserved addresses refused, redirects followed by
-  hand and re-checked, size caps. The RSS reader refuses any DOCTYPE / ENTITY and parses with `LIBXML_NONET`.
+  hand and re-checked, size caps. The one exception is S3's audio download, `our_sermons_ai_fetch()` in `ai.php`:
+  the same rules plus a host allow-list (`SERMONS_AI_AUDIO_HOSTS`), streamed to a temp file because an episode
+  (up to 150 MB) cannot sit in memory the way `our_sermons_http_get()` keeps a body. The RSS reader refuses any DOCTYPE / ENTITY and parses with `LIBXML_NONET`.
   oEmbed (Spotify, YouTube; no key) thumbnails come only from the providers' image hosts.
 - **Artwork is copied** to `/uploads/sermons/artwork/` under upload_guard's random names (checked to be a
   JPEG / PNG / WebP, shrunk to 640 px when GD is there), so pages keep `img-src 'self'`. One copy per source
