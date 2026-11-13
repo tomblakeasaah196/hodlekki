@@ -2,6 +2,10 @@
 // Congregation (modules/congregation/index.php): the register (filter,
 // page through, export to Excel), three KPI drawers, a member's attendance
 // history, and the add/edit member form with the address search.
+// A row, a name in a KPI drawer, or #person=<id> (Ctrl+K) opens the person's
+// details: Call (tel:), WhatsApp (wa.me with a typed message), SMS (SMS
+// Studio access), Email (Mail's composer, for people with a mailbox they may
+// send from), Edit, and who reached them lately. Each reach-out is logged.
 // Every request goes to /api/congregation_api.php with the same shapes.
 (function () {
     'use strict';
@@ -55,16 +59,18 @@
 
     function row(u) {
         var awol = u.attendance_status === 'Unknown';
+        var who = esc(person(u));
         var actions = '<div class="flex flex-wrap items-center justify-end gap-1.5 md:flex-nowrap">'
             + (awol ? '<button type="button" class="ui-btn ui-btn--danger-ghost ui-btn--sm whitespace-nowrap" data-action="cong.charis" data-id="' + esc(u.id) + '" data-name="' + esc(person(u)) + '">Push to Charis</button>' : '')
             + '<button type="button" class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm" data-action="cong.attendance" data-id="' + esc(u.id) + '" data-name="' + esc(person(u)) + '" aria-haspopup="dialog" aria-label="Attendance of ' + esc(person(u)) + '" data-tooltip="Attendance">' + HOD.icon('calendar-check') + '</button>'
             + '<button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" data-action="cong.edit" data-id="' + esc(u.id) + '" aria-haspopup="dialog">Edit</button>'
             + '</div>';
-        return '<tr>'
+        // The whole row opens the details; the name is its button for the keyboard.
+        return '<tr class="is-clickable" data-action="cong.view" data-id="' + esc(u.id) + '" data-name="' + who + '">'
             + '<td class="is-head"><div class="flex items-center gap-3">' + avatar(u)
-            + '<div class="min-w-0"><span class="ui-table__primary' + (awol ? ' text-danger' : '') + '">' + esc(person(u)) + '</span>'
+            + '<div class="min-w-0"><button type="button" class="cong-name ui-table__primary' + (awol ? ' text-danger' : '') + '" data-action="cong.view" data-id="' + esc(u.id) + '" data-name="' + who + '" aria-haspopup="dialog">' + who + '</button>'
             + '<span class="ui-table__secondary">' + esc([u.gender, u.marital_status].filter(Boolean).join(' · ') || '—') + '</span></div></div></td>'
-            + '<td data-label="Contact"><div class="min-w-0 text-right sm:text-left"><span class="block ui-num">' + (u.phone ? '<a class="ui-link" href="tel:' + esc(u.phone) + '">' + esc(u.phone) + '</a>' : '—') + '</span>'
+            + '<td data-label="Contact"><div class="min-w-0 text-right sm:text-left"><span class="block ui-num">' + esc(u.phone || '—') + '</span>'
             + '<span class="block max-w-[220px] truncate text-xs text-ink-subtle">' + esc(u.physical_address || 'No address') + '</span></div></td>'
             + '<td data-label="Status"><div class="text-right sm:text-left"><span class="block text-sm font-medium text-ink">' + esc(label(u.spiritual_status)) + '</span><span class="mt-1 inline-block">' + attendanceBadge(u.attendance_status) + '</span></div></td>'
             + '<td data-label="Groups"><div class="min-w-0 text-right sm:text-left"><span class="block text-sm text-ink">' + esc(u.active_tribe || 'No tribe') + '</span>'
@@ -171,7 +177,7 @@
                   + '<a class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm" href="https://wa.me/' + esc(waNumber(p.phone)) + '" target="_blank" rel="noopener" aria-label="WhatsApp ' + esc(person(p)) + '">' + HOD.icon('message-circle') + '</a>'
                 : '<span class="ui-meta">No phone</span>';
             return '<li class="ui-list__item px-5">' + avatar(p)
-                + '<span class="ui-list__main"><span class="ui-list__title">' + esc(person(p)) + '</span>'
+                + '<span class="ui-list__main"><button type="button" class="cong-name ui-list__title" data-action="cong.view" data-id="' + esc(p.id) + '" data-name="' + esc(person(p)) + '" aria-haspopup="dialog">' + esc(person(p)) + '</button>'
                 + '<span class="ui-list__meta">' + esc(label(p.spiritual_status) || (p.phone || '')) + '</span></span>'
                 + '<span class="ui-list__end flex gap-1">' + actions + '</span></li>';
         }).join('') : '<li class="ui-list__item px-5 text-sm text-ink-subtle">Nobody in this group yet.</li>';
@@ -301,6 +307,7 @@
             HOD.toast(res.message || 'Saved.', 'success');
             HOD.dialog.close('cong-member');
             load();
+            refreshPerson();
         }).catch(function () {}).finally(function () { HOD.busy(button, false); });
     }
 
@@ -318,6 +325,7 @@
             HOD.api(API, { action: 'delete_member', data: { user_id: btn.getAttribute('data-id') } }).then(function (res) {
                 HOD.toast(res.message || 'Deleted.', 'success');
                 HOD.dialog.close('cong-member');
+                HOD.dialog.close('cong-person');
                 load();
             }).catch(function () {}).finally(function () { HOD.busy(btn, false); });
         });
@@ -334,6 +342,7 @@
             HOD.api(API, { action: 'push_to_charis', data: { user_id: btn.getAttribute('data-id') }, quiet: true }).then(function (res) {
                 HOD.toast(res.message || 'Sent to Charis.', 'success');
                 load();
+                refreshPerson();
             }).catch(function (err) {
                 var warn = err && err.response && err.response.status === 'warning';
                 HOD.toast((err && err.message) || 'That did not work. Please try again.', warn ? 'warning' : 'danger');
@@ -341,9 +350,251 @@
         });
     }
 
+    /* ---------- a person's details ---------- */
+
+    var current = null;      // { id, person, rights, contacts } while the details are open
+    var mailFor = {};        // outbox id -> person id, for emails written from here
+    var pendingMail = null;  // the person an opening composer is for
+
+    var CHANNEL = {
+        call: { icon: 'phone', label: 'Call' },
+        whatsapp: { icon: 'message-circle', label: 'WhatsApp' },
+        sms: { icon: 'message-square-text', label: 'SMS' },
+        email: { icon: 'mail', label: 'Email' }
+    };
+    var STATE = {
+        delivered: ['Delivered', 'ui-badge--success'],
+        sent: ['Sent', 'ui-badge--success'],
+        sending: ['Sending', ''],
+        failed: ['Not sent', 'ui-badge--danger']
+    };
+
+    function when(at) { return HOD.format.date(at) + ', ' + HOD.format.time(at); }
+
+    function renderLog(contacts) {
+        var list = $('[data-cong-person-log]');
+        list.innerHTML = (contacts || []).length ? contacts.map(function (c) {
+            var ch = CHANNEL[c.channel] || { icon: 'circle-help', label: label(c.channel) };
+            var st = c.state && STATE[c.state];
+            return '<li class="ui-list__item px-5"><span class="cong-log__icon" aria-hidden="true">' + HOD.icon(ch.icon) + '</span>'
+                + '<span class="ui-list__main"><span class="ui-list__title">' + esc(ch.label) + ' · ' + esc(c.by) + '</span>'
+                + '<span class="ui-list__meta">' + esc(when(c.at)) + '</span></span>'
+                + (st ? '<span class="ui-list__end"><span class="ui-badge ' + st[1] + '">' + st[0] + '</span></span>' : '')
+                + '</li>';
+        }).join('') : '<li class="ui-list__item px-5 text-sm text-ink-subtle">No contact logged yet.</li>';
+    }
+
+    function reachTile(kind, enabled, why, href) {
+        var ch = CHANNEL[kind];
+        var inner = HOD.icon(ch.icon) + '<span>' + ch.label + '</span>';
+        if (!enabled) return '<button type="button" class="cong-reach__btn" disabled>' + inner + '<span class="cong-reach__why">' + esc(why) + '</span></button>';
+        if (href) return '<a class="cong-reach__btn" href="' + esc(href) + '" data-cong-reach="' + kind + '">' + inner + '</a>';
+        return '<button type="button" class="cong-reach__btn" data-action="cong.' + kind + '" aria-haspopup="dialog">' + inner + '</button>';
+    }
+
+    function fact(name, value, cls) {
+        return value ? '<dt>' + esc(name) + '</dt><dd' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(value) + '</dd>' : '';
+    }
+
+    function renderPerson() {
+        var p = current.person;
+        var rights = current.rights || {};
+        $('#cong-person-title').textContent = person(p) || 'Person';
+        $('[data-cong-person-avatar]').innerHTML = avatar(p, 'ui-avatar--xl');
+        $('[data-cong-person-tags]').innerHTML = '<span class="ui-badge">' + esc(label(p.spiritual_status) || 'No stage') + '</span>' + attendanceBadge(p.attendance_status);
+
+        var phone = !!p.phone_intl;
+        var tiles = [
+            reachTile('call', phone, 'No phone', phone ? 'tel:+' + p.phone_intl : null),
+            reachTile('whatsapp', phone, 'No phone')
+        ];
+        if (rights.sms) tiles.push(reachTile('sms', !!p.can_text, p.phone ? 'Not a mobile' : 'No phone'));
+        if (rights.email) tiles.push(reachTile('email', !!p.contact_email, 'No email'));
+        var reach = $('[data-cong-reach]');
+        // Full class names, so the CSS build keeps them
+        reach.className = 'cong-reach ' + ({ 2: 'cong-reach--2', 3: 'cong-reach--3' }[tiles.length] || '');
+        reach.innerHTML = tiles.join('');
+
+        var facts = fact('Phone', p.phone, 'ui-num')
+            + fact('Email', p.contact_email)
+            + fact('Address', p.physical_address)
+            + fact('Gender', p.gender)
+            + fact('Marital status', p.marital_status)
+            + fact('Birthday', p.dob ? HOD.format.date(p.dob) : '')
+            + fact('Anniversary', p.marital_status === 'Married' && p.wedding_anniversary ? HOD.format.date(p.wedding_anniversary) : '')
+            + fact('Tribe', p.active_tribe)
+            + fact('Departments', p.active_departments)
+            + fact('Invited by', inviter(p))
+            + fact('Now attends', p.attendance_status === 'Attends_Another_Church' ? p.new_church_name : '')
+            + fact('Notes', p.comments, 'whitespace-pre-line');
+        $('[data-cong-person-facts]').innerHTML = facts || '<dt>Details</dt><dd>Nothing recorded yet.</dd>';
+        renderLog(current.contacts);
+
+        var name = person(p);
+        var edit = $('[data-cong-person-edit]');
+        if (edit) edit.setAttribute('data-id', p.id);
+        var att = $('[data-cong-person-att]');
+        att.setAttribute('data-id', p.id);
+        att.setAttribute('data-name', name);
+        var charis = $('[data-cong-person-charis]');
+        charis.hidden = p.attendance_status !== 'Unknown';
+        charis.setAttribute('data-id', p.id);
+        charis.setAttribute('data-name', name);
+    }
+
+    function fetchPerson(id) {
+        return HOD.api(API, { action: 'get_person', data: { user_id: id }, quiet: true }).then(function (res) {
+            if (!current || current.id !== id) return;
+            current = { id: id, person: res.data || {}, rights: res.rights || {}, contacts: res.contacts || [] };
+            renderPerson();
+        });
+    }
+
+    function openPerson(id, opener, name) {
+        id = String(id);
+        current = { id: id };
+        $('#cong-person-title').textContent = name || 'Loading…';
+        $('[data-cong-person-avatar]').innerHTML = '<span class="ui-skeleton inline-block h-14 w-14 rounded-full"></span>';
+        $('[data-cong-person-tags]').innerHTML = '';
+        $('[data-cong-reach]').innerHTML = '';
+        $('[data-cong-person-facts]').innerHTML = '<dt><span class="ui-skeleton ui-skeleton--text w-20"></span></dt><dd><span class="ui-skeleton ui-skeleton--text w-2/3"></span></dd>';
+        $('[data-cong-person-log]').innerHTML = '';
+        $('[data-cong-person-charis]').hidden = true;
+        HOD.dialog.open('cong-person', opener);
+        fetchPerson(id).catch(function (err) {
+            if (!current || current.id !== id) return;
+            HOD.dialog.close('cong-person');
+            HOD.toast((err && err.message) || 'Their details did not load. Try again.', 'danger');
+        });
+    }
+
+    function refreshPerson() {
+        if (current && current.person) fetchPerson(current.id).catch(function () {});
+    }
+
+    function logContact(personId, channel, ref) {
+        HOD.api(API, { action: 'log_contact', data: { user_id: personId, channel: channel, ref: ref || '' }, quiet: true }).then(function (res) {
+            if (current && current.id === String(personId) && res.contacts) renderLog(res.contacts);
+        }).catch(function () {});
+    }
+
+    // ?#person=<id> (from Ctrl+K)
+    function personFromHash() {
+        var m = /^#person=(\d+)$/.exec(window.location.hash || '');
+        return m ? m[1] : null;
+    }
+    function openFromHash() {
+        var id = personFromHash();
+        if (id && !(current && current.id === id)) openPerson(id);
+    }
+
+    /* SMS */
+
+    function smsCount() {
+        var text = $('#cong-sms-text').value;
+        var unicode = /[^\x0A\x0D\x20-\x7E£€]/.test(text);
+        var n = text.length;
+        var pages = n <= (unicode ? 70 : 160) ? 1 : Math.ceil(n / (unicode ? 67 : 153));
+        $('[data-cong-sms-count]').textContent = HOD.format.number(n) + (n === 1 ? ' character' : ' characters') + ' · ' + pages + ' SMS';
+    }
+
+    function openSms(btn) {
+        var p = current && current.person;
+        if (!p) return;
+        var f = $('#cong-sms-form');
+        f.reset();
+        HOD.form.clearErrors(f);
+        $('#cong-sms-desc').textContent = 'To ' + person(p) + ' · ' + p.phone;
+        smsCount();
+        HOD.dialog.open('cong-sms', btn);
+        $('#cong-sms-text').focus();
+    }
+
+    function sendSms(f) {
+        if (!current || !current.person) return;
+        var id = current.id;
+        var btn = document.querySelector('button[form="cong-sms-form"]');
+        HOD.busy(btn, true);
+        HOD.api(API, { action: 'send_sms', data: { user_id: id, message: f.message.value }, quiet: true }).then(function (res) {
+            HOD.toast(res.message || 'Text sent.', 'success');
+            HOD.dialog.close('cong-sms');
+            if (current && current.id === id && res.contacts) renderLog(res.contacts);
+        }).catch(function (err) {
+            if (err && err.field) HOD.form.setErrors(f, { message: err.message });
+            else HOD.toast((err && err.message) || 'The text did not go. Try again.', 'danger');
+        }).finally(function () { HOD.busy(btn, false); });
+    }
+
+    /* WhatsApp: wa.me opens the app on their chat with the message typed in */
+
+    function waLink() {
+        var p = current && current.person;
+        var text = $('#cong-wa-text').value.trim();
+        $('[data-cong-wa-open]').href = 'https://wa.me/' + (p ? p.phone_intl : '') + (text ? '?text=' + encodeURIComponent(text) : '');
+    }
+
+    function openWhatsApp(btn) {
+        var p = current && current.person;
+        if (!p) return;
+        $('#cong-wa-text').value = '';
+        $('#cong-wa-desc').textContent = 'To ' + person(p) + ' · ' + p.phone;
+        waLink();
+        HOD.dialog.open('cong-wa', btn);
+        $('#cong-wa-text').focus();
+    }
+
+    /* Email: Mail's composer (includes/mail/mounts/composer.php), logged once it is on its way */
+
+    function openEmail() {
+        var p = current && current.person;
+        if (!p || !p.contact_email) return;
+        pendingMail = String(p.id);
+        document.dispatchEvent(new CustomEvent('mail:compose', { detail: { mode: 'new', to: p.contact_email } }));
+    }
+
+    function wirePerson() {
+        HOD.actions.on('cong.view', function (el) { openPerson(el.getAttribute('data-id'), el, el.getAttribute('data-name')); });
+        HOD.actions.on('cong.sms', openSms);
+        HOD.actions.on('cong.sms-send', sendSms);
+        HOD.actions.on('cong.whatsapp', openWhatsApp);
+        HOD.actions.on('cong.email', openEmail);
+
+        $('#cong-sms-text').addEventListener('input', smsCount);
+        $('#cong-wa-text').addEventListener('input', waLink);
+        // Links keep their own navigation (tel:, wa.me); the log is written alongside.
+        document.addEventListener('click', function (e) {
+            var el = e.target instanceof Element ? e.target : null;
+            if (!el || !current || !current.person) return;
+            if (el.closest('[data-cong-reach="call"]')) logContact(current.id, 'call');
+            if (el.closest('[data-cong-wa-open]')) {
+                logContact(current.id, 'whatsapp');
+                setTimeout(function () { HOD.dialog.close('cong-wa'); }, 300);
+            }
+        });
+
+        document.addEventListener('mail:compose-opened', function (e) {
+            if (pendingMail && e.detail && e.detail.outboxId) mailFor[e.detail.outboxId] = pendingMail;
+            pendingMail = null;
+        });
+        document.addEventListener('mail:sent', function (e) {
+            var id = e.detail && e.detail.outboxId;
+            if (!id || !mailFor[id]) return;
+            logContact(mailFor[id], 'email', id);
+            delete mailFor[id];
+        });
+
+        $('#cong-person').addEventListener('ui:dialog-close', function () {
+            current = null;
+            if (personFromHash()) history.replaceState(null, '', window.location.pathname + window.location.search);
+        });
+        window.addEventListener('hashchange', openFromHash);
+        openFromHash();
+    }
+
     /* ---------- wire up ---------- */
 
     function init() {
+        if (!$('[data-cong-rows]')) return;   // no access: require_can() drew its own page
         var timer = null;
         HOD.actions.on('cong.filter', function () {
             clearTimeout(timer);
@@ -365,6 +616,7 @@
         HOD.actions.on('cong.delete', remove);
         HOD.actions.on('cong.charis', pushToCharis);
         HOD.actions.on('cong.conditional', conditional);
+        wirePerson();
         HOD.actions.on('cong.photo', function (input) {
             var file = input.files[0];
             if (!file) return;

@@ -213,6 +213,11 @@ Rules:
   On shared mailboxes the conversation's timeline gets a `sent` entry (PR 4 shows it).
 - The composer raises `mail:compose-opened`, `mail:compose-closed`, `mail:sent`, `mail:composing` (PR 4's "someone
   is replying") and offers `window.HODMailComposer` (current, replaceBody, insertHtml, open) for PR 4's writing help.
+- **Also on Congregation** (13 Nov 2026): `modules/congregation/index.php` mounts the same composer (and loads
+  `mail.css` + `mail-compose.js`) only when `cong_contact_rights()` finds a mailbox the person may send from. A person's
+  details raise `mail:compose {mode: 'new', to}` with their address (`cong_contact_email()`: the confirmed personal
+  email, never a `@hodlc.com` sign-in name); on `mail:sent` the page logs the email against that person
+  (`congregation_contacts.ref` = the outbox id, checked to be the writer's own row). Nothing else about sending changes.
 ## 7e. Teamwork, alerts and AI (PR 4)
 
 | Piece | What |

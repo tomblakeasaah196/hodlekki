@@ -338,7 +338,8 @@ function ui_field(string $type, array $o): string
 /**
  * Opens a dialog (native <dialog>). Close it with ui_dialog_end(). Open it
  * from markup with data-dialog-open="<id>", from script with HOD.dialog.open(id).
- * Options: title (required), description, size (sm|md|lg|xl|drawer), class.
+ * Options: title (required), description, size (sm|md|lg|xl|drawer), class,
+ * actions (trusted HTML: buttons shown beside the close icon, e.g. Edit).
  * Ids must NOT contain "modal": modal-manager.js would treat it as a legacy one.
  */
 function ui_dialog_start(string $id, array $o): string
@@ -355,7 +356,12 @@ function ui_dialog_start(string $id, array $o): string
     if (!empty($o['description'])) {
         $html .= '<p class="ui-dialog__description" id="' . ui_e($descId) . '">' . ui_e($o['description']) . '</p>';
     }
-    $html .= '</div>' . ui_button('Close', ['variant' => 'ghost', 'icon' => 'x', 'icon_only' => true, 'class' => 'ui-dialog__close', 'attrs' => ['data-dialog-close' => true, 'data-tooltip' => null]]) . '</div>';
+    $html .= '</div>';
+    if (!empty($o['actions'])) {
+        // Buttons beside the close icon (e.g. Edit on a person's details); trusted markup
+        $html .= '<div class="ui-dialog__actions">' . $o['actions'] . '</div>';
+    }
+    $html .= ui_button('Close', ['variant' => 'ghost', 'icon' => 'x', 'icon_only' => true, 'class' => 'ui-dialog__close', 'attrs' => ['data-dialog-close' => true, 'data-tooltip' => null]]) . '</div>';
 
     return $html . '<div class="ui-dialog__body">';
 }
