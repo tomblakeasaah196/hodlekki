@@ -1205,6 +1205,18 @@ after `includes/db.php`), ported from bureau.lpc.cm's Courrier. Tests: `php test
   questions arrive as drafts, explanations are stored only when a tutor confirms them, content only on Apply.
   Marking never calls it. One shared client (`HOD\Mail\Ai\Gemini`), a daily token cap for the church
   (`training_ai_requests`), and the /privacy promise ("only the text staff choose is sent") must stay true.
+- **Our sermons' AI drafts are the third written exception** (owner's answer 8, 13 Nov 2026; OUR-SERMONS-PLAN.md):
+  `includes/our_sermons/ai.php` sends Gemini ONLY a sermon's public audio (the church's own podcast episode,
+  uploaded to Gemini's file store and deleted as soon as it has been heard) and its title. Never a member, a note,
+  a listening record or anything else from the ERP. It only fills a DRAFT (summary, key points, key scriptures, a
+  series guess for an empty series): it never publishes, leaves a sermon that is no longer a draft alone, and never
+  overwrites a field Envision edited (`our_sermon_ai_jobs.filled` fingerprints what it wrote). It runs on the
+  */5 beat of `cron/automation_tick.php`, ONE sermon per run, through the shared client, with its own daily token
+  cap (`our_sermon_ai_requests`; `SERMONS_AI_DAILY_TOKENS` in .env, default 600,000: about 8 sermons of 35
+  minutes, US$0.60 at most), a 2-hour length cap (Regenerate may force it), a 150 MB download cap, the audio
+  fetched only from the podcast's hosts (`SERMONS_AI_AUDIO_HOSTS`, default anchor.fm and *.cloudfront.net,
+  every redirect checked) and at most 3 tries. It never writes the title, preacher or date preached. Usage rows
+  carry no text. The /privacy line about sermon recordings must stay true.
 ## Departments module (ministry years)
 
 `modules/departments/` is ministry-year aware, and its rules are worth knowing
@@ -1415,7 +1427,9 @@ permissions `20261213090100_perm_our_sermons.sql`. Tests: `php tests/our_sermons
   form, so it sits outside the editor's form).
 - **Everything from outside is hostile.** The only way out is `our_sermons_http_get()`: https only, port 443,
   the name resolved and pinned (`CURLOPT_RESOLVE`), private and reserved addresses refused, redirects followed by
-  hand and re-checked, size caps. The RSS reader refuses any DOCTYPE / ENTITY and parses with `LIBXML_NONET`.
+  hand and re-checked, size caps. The one exception is S3's audio download, `our_sermons_ai_fetch()` in `ai.php`:
+  the same rules plus a host allow-list (`SERMONS_AI_AUDIO_HOSTS`), streamed to a temp file because an episode
+  (up to 150 MB) cannot sit in memory the way `our_sermons_http_get()` keeps a body. The RSS reader refuses any DOCTYPE / ENTITY and parses with `LIBXML_NONET`.
   oEmbed (Spotify, YouTube; no key) thumbnails come only from the providers' image hosts.
 - **Artwork is copied** to `/uploads/sermons/artwork/` under upload_guard's random names (checked to be a
   JPEG / PNG / WebP, shrunk to 640 px when GD is there), so pages keep `img-src 'self'`. One copy per source

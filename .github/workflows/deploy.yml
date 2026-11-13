@@ -348,6 +348,21 @@ jobs:
           fi
           php tests/exams/run.php
 
+      - name: Our sermons AI tests (fake Gemini, fake download)
+        run: |
+          set -euo pipefail
+
+          # No MySQL, no network: the AI drafts a sermon from its audio
+          # (includes/our_sermons/ai.php) through Gemini::fake() and a fake
+          # download, against SQLite built from the real migration: the draft
+          # filled, edits kept, never published, the caps, retries, clean-up.
+          # It prints SKIP without pdo_sqlite, so refuse to run without it.
+          if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
+            echo "::error::pdo_sqlite is missing — the sermons AI tests would be skipped"
+            exit 1
+          fi
+          php tests/our_sermons/ai.php
+
       - name: SMS Studio helper tests
         # No database, no network: phone normalisation, GSM-7 segment counting,
         # the sender name written into every text, the wallet pre-flight

@@ -453,7 +453,9 @@ eq('episodes sharing the show\'s artwork share one copy (downloaded once)', [1, 
 $g3 = $byGuid['ep-3'];
 eq('no date in the title: the Sunday before it was published, flagged as a guess', ['2026-11-01', 'guess', 3900],
     [$g3['date_preached'], $g3['date_source'], (int) $g3['duration_seconds']]);
-eq('no AI yet (S3): ai_status off', ['off'], array_values(array_unique(array_column($drafts, 'ai_status'))));
+// S3 (includes/our_sermons/ai.php, loaded by the bootstrap) queues every new draft; without it they are 'off'.
+eq('AI: every new draft pending with S3 there, off without it', [function_exists('our_sermons_ai_queue') ? 'pending' : 'off'],
+    array_values(array_unique(array_column($drafts, 'ai_status'))));
 $notes = $pdo->query('SELECT user_id, title, message, link_url FROM system_notifications ORDER BY user_id')->fetchAll();
 eq('Envision and the pastor are told once ("3 new sermons to check"), nobody else', [2, 3], array_map('intval', array_column($notes, 'user_id')));
 eq('…pointing at the drafts', ['3 new sermons to check', '/modules/our_sermons/manage'], [$notes[0]['title'], $notes[0]['link_url']]);
@@ -749,7 +751,8 @@ eq('…and deleting it again is fine', 'success', act($pdo, 3, 'delete', ['id' =
 // ===========================================================================
 section('S3\'s hook: a new draft is queued for the AI when S3 is there');
 // ===========================================================================
-if (!function_exists('our_sermons_ai_queue')) {
+$s3 = function_exists('our_sermons_ai_queue');   // S3's real queue, once includes/our_sermons/ai.php is merged
+if (!$s3) {
     function our_sermons_ai_queue(PDO $pdo, int $id): void
     {
         $GLOBALS['os_ai_calls'][] = $id;
@@ -760,7 +763,13 @@ $GLOBALS['os_episodes'][] = ['title' => 'After AI | Pastor Ade Bello | 29th Nove
 $GLOBALS['our_sermons_now'] = new DateTimeImmutable('2026-11-30 10:00:00', new DateTimeZone('Africa/Lagos'));
 our_sermons_feeds_run($pdo);
 $ai = $pdo->query("SELECT id, ai_status FROM our_sermons WHERE feed_guid = 'ep-6'")->fetch();
-eq('ai_status pending, and our_sermons_ai_queue($pdo, $id) called once', ['pending', [(int) $ai['id']]], [$ai['ai_status'], $GLOBALS['os_ai_calls']]);
+if ($s3) {
+    // tests/our_sermons/ai.php checks what S3's queue does; here, that the hook reaches it.
+    eq('ai_status pending, through S3\'s own our_sermons_ai_queue() (includes/our_sermons/ai.php)', ['pending', 'ai.php'],
+        [$ai['ai_status'], basename((string) (new ReflectionFunction('our_sermons_ai_queue'))->getFileName())]);
+} else {
+    eq('ai_status pending, and our_sermons_ai_queue($pdo, $id) called once', ['pending', [(int) $ai['id']]], [$ai['ai_status'], $GLOBALS['os_ai_calls']]);
+}
 
 // ===========================================================================
 section('Wiring: the cron, the API, the pages, CI');

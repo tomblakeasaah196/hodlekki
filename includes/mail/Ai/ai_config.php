@@ -6,6 +6,9 @@
 return [
     'model'           => 'gemini-2.5-flash',
     'endpoint'        => 'https://generativelanguage.googleapis.com/v1beta/models/',
+    // The Files API (Our sermons' audio): upload, check, delete
+    'upload_endpoint' => 'https://generativelanguage.googleapis.com/upload/v1beta/files',
+    'files_endpoint'  => 'https://generativelanguage.googleapis.com/v1beta/files',
     'timeout'         => 25,
     'connect_timeout' => 5,
     // Per person per hour

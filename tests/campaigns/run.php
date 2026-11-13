@@ -1784,8 +1784,9 @@ $files = array_merge(glob(__DIR__ . '/../../includes/campaigns/*.php'), [
 ]);
 // trainings_reminders_run: Trainings' reminders ride on automation_tick.php behind a function_exists() guard.
 // our_sermons_feeds_run: Our sermons' RSS poller rides on it the same way.
+// our_sermons_ai_run: Our sermons' AI drafts (PR S3) ride on it the same way, after the automation.
 $optional = ['fastcgi_finish_request', 'litespeed_finish_request', 'push_release_response', 'trainings_reminders_run',
-    'our_sermons_feeds_run'];
+    'our_sermons_feeds_run', 'our_sermons_ai_run'];
 $missing = [];
 foreach ($files as $file) {
     $tokens = token_get_all((string) file_get_contents($file));
