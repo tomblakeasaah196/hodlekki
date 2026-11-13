@@ -386,10 +386,12 @@ foreach ($swatches as [$cls, $name, $token]): ?>
                 <?= ui_button('Confirm a deletion', ['variant' => 'danger-ghost', 'attrs' => ['data-action' => 'guide.confirm']]) ?>
                 <?= ui_button('Ask why', ['attrs' => ['data-action' => 'guide.prompt']]) ?>
                 <?= ui_button('Open a drawer', ['attrs' => ['data-dialog-open' => 'guide-drawer']]) ?>
+                <?= ui_button('Take notes', ['icon' => 'notebook-pen', 'attrs' => ['data-notes-open' => 'guide-notes']]) ?>
             </div>
         </div>
     </section>
 </div>
+<?= ui_notetaker('guide-notes', ['subject' => 'Design system']) ?>
 
 <?= ui_dialog_start('guide-dialog', ['title' => 'Assign a worker', 'description' => 'They will see Chiamaka in their follow-up list straight away.']) ?>
     <div class="ui-stack ui-stack--md">

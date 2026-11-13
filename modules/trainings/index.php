@@ -2,7 +2,8 @@
 // /modules/trainings/index.php
 // Trainings: the learner's area of the HOD Academy (TRAININGS-PLAN.md).
 //   /modules/trainings/        my trainings (progress, the next thing to do) and the catalogue
-//   /modules/trainings/?t=ID   one training: its cards, the players, handing in work
+//   /modules/trainings/?t=ID   one training: its cards, the players, handing in work, and
+//                              Take notes (My notes, ui_notetaker(), floating over the training)
 // Rendered on the server (it reads well as an offline copy); actions go to
 // /api/trainings_api.php from assets/ui/js/pages/trainings.js. Access: the
 // 'trainings' row of the permission matrix, own records (everyone signed in).
@@ -48,6 +49,12 @@ $isStaff = can('trainings', 'view', 'church');
         $canJoin = $t['status'] === 'published' && $t['catalogue'] && !$enrolled && can('trainings', 'create', perm_person($me));
         $actions = $canJoin ? ui_button('Join training', ['variant' => 'primary', 'icon' => 'plus',
             'attrs' => ['data-action' => 'trn.join', 'data-training' => $t['id']]]) : '';
+        // My notes (includes/trainings/notes.php): the learner's own, floating over the training.
+        $notes = trainings_notes_ready($pdo) && trainings_note_can_take($pdo, $t, $me);
+        if ($notes) {
+            $actions .= ui_button('Take notes', ['variant' => 'secondary', 'icon' => 'notebook-pen',
+                'attrs' => ['data-notes-open' => 'trn-notes', 'aria-controls' => 'trn-notes']]);
+        }
         if ($enrolled && $e['source'] === 'self' && $e['status'] === 'active') {
             $actions .= ui_button('Leave', ['variant' => 'ghost', 'attrs' => ['data-action' => 'trn.leave', 'data-enrolment' => $e['id']]]);
         }
@@ -185,6 +192,17 @@ $isStaff = can('trainings', 'view', 'church');
         </section>
 <?php endforeach; ?>
     </div>
+<?php if ($notes): ?>
+    <?= ui_notetaker('trn-notes', [
+        'subject' => (string) $t['title'],
+        'endpoint' => '/api/trainings_api.php',
+        'load' => ['action' => 'note_get', 'training_id' => (int) $t['id']],
+        'save' => ['action' => 'note_save', 'training_id' => (int) $t['id']],
+        'download' => '/api/trainings_notes_doc.php?t=' . (int) $t['id'],
+        'remember' => 'trn-' . (int) $t['id'],
+        'max' => TRAININGS_NOTE_MAX,
+    ]) ?>
+<?php endif; ?>
 <?php endif; ?>
 <?php else:
     $mine = trainings_mine($pdo, $me);

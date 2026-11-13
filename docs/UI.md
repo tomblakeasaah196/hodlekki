@@ -191,6 +191,7 @@ echo them. Every helper escapes what it prints and drops `on*` attributes.
 | Dialog | `dialog.ui-dialog --sm/--lg/--xl/--drawer` | `ui_dialog_start($id, [...])` … `ui_dialog_end($footerHtml)` | Native `<dialog>`: focus trap, Esc, return focus. A bottom sheet on phones. Open with `data-dialog-open="id"`, close with `data-dialog-close`. A dialog holding a form never closes on a backdrop tap. Ids must not contain "modal". |
 | Menu | `button[data-menu-trigger][aria-controls=id]` + `.ui-menu#id[hidden]` › `.ui-menu__item`, `__sep`, `__label`, `--danger` | — | Keyboard arrows, Esc, outside click. |
 | Pagination | `.ui-pagination` › `__pages` | — | At the foot of a list card. |
+| Notes | `section.ui-notes[data-ui-notes]` (`is-min`, `is-top`, `is-placed`) + an opener `[data-notes-open=id]` | `ui_notetaker($id, ['subject' => …, 'endpoint' => …, 'load' => […], 'save' => […], 'download' => …, 'remember' => …, 'max' => …])` | A panel that floats over the page while the person keeps working (Trainings' My notes). Not a dialog: nothing behind it is blocked, focus is never trapped. From 640 px it is dragged by its bar (or Move notes and the arrow keys) and stays inside the window; on a phone it docks full width above the bottom bar, or under the app bar (Move to top), and rides above the keyboard. Minimise keeps the bar; Close hides it. Loads on first open, saves 0.8 s after typing pauses, on Close, before Download and as the page goes away. `remember` brings it back open, minimised and where it sat after a reload (this device). Without `endpoint` it saves nothing (the Design System's demo). |
 | Tooltip | `data-tooltip="Text"` (`data-tooltip-side="right|bottom"`) | — | Visual only, on hover-capable devices; the element still needs its own `aria-label`. |
 | Prose | `.ui-prose` | — | Rendered guides (`how_to_use.md`). |
 
@@ -210,6 +211,7 @@ echo them. Every helper escapes what it prints and drops `on*` attributes.
 | `HOD.form.validate(form)` / `.setErrors(form, {field: msg})` / `.values(form)` | Server errors land under their fields. |
 | `HOD.tabs.select(list, id)`, `HOD.combobox.refresh(select)` | After changing tabs or options from script. |
 | `HOD.format.number/naira/date/time` | `en-NG` formatting. |
+| `HOD.notes.open(id)` / `.close(id)` / `.save(id)` | The notes panel from script; `[data-notes-open=id]` needs no code. |
 | `HOD.data(id)`, `HOD.icon(name)`, `HOD.esc(text)`, `HOD.csrf()` | Boot data, icon markup, escaping, the token. |
 
 Anything put into the page with `innerHTML` goes through `HOD.esc()` — a

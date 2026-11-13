@@ -15,6 +15,7 @@
 //   HOD.form.validate/setErrors blur-first validation and server errors
 //   HOD.format.*                numbers, naira, dates
 //   HOD.icon(name)              an icon from the sprite, as markup
+//   HOD.notes.open/close(id)    the floating notes panel (ui_notetaker())
 //
 // Also, with no code on the page: the CSRF token rides on every same-origin
 // write (fetch, XMLHttpRequest — jQuery included — and POST forms); tabs
@@ -1393,6 +1394,402 @@
     }
 
     /* ------------------------------------------------------------------ *
+     * Notes — ui_notetaker(). A panel that floats over the page while the
+     * person keeps working; not a dialog, so focus is never trapped and
+     * nothing behind it is blocked. From 640 px it is dragged by its bar (or
+     * moved with the arrow keys on Move notes) and stays inside the window;
+     * on a phone it docks full width above the bottom bar, or under the app
+     * bar with Move to top. Minimise keeps its bar; Close hides it. It loads
+     * the note when first shown and saves it 0.8 s after typing pauses, on
+     * Close, before Download, and as the page goes away (a reload after
+     * Mark done included). With a 'remember' key, open / minimised / where
+     * it sat survive a reload on this device (localStorage, never the text).
+     * ------------------------------------------------------------------ */
+
+    var NOTE_PAUSE = 800;
+    var NOTE_GAP = 8;
+    var NOTE_STEP = 24;
+    var notesAll = {};
+
+    function notesWide() {
+        return !!(window.matchMedia && window.matchMedia('(min-width: 640px)').matches);
+    }
+
+    function Notes(el) {
+        var cfg = {};
+        try { cfg = JSON.parse(el.getAttribute('data-ui-notes') || '{}'); } catch (e) { cfg = {}; }
+        var q = function (sel) { return el.querySelector(sel); };
+        var self = this;
+        this.el = el;
+        this.cfg = cfg;
+        this.text = q('[data-notes-text]');
+        this.status = q('[data-notes-status]');
+        this.count = q('[data-notes-count]');
+        this.retryBtn = q('[data-notes-retry]');
+        this.moveBtn = q('[data-notes-move]');
+        this.minBtn = q('[data-notes-min]');
+        this.bar = q('[data-notes-grip]');
+        this.download = q('[data-notes-download]');
+        this.loaded = !cfg.endpoint;
+        this.loading = null;
+        this.kept = '';
+        this.failed = null;          // 'load' | 'save' | null
+        this.timer = null;
+        this.chain = Promise.resolve();
+        this.opener = null;
+        this.isOpen = false;
+        this.small = false;
+        this.top = false;
+        this.at = null;              // {x, y} once moved on a wide screen
+        this.grab = null;
+
+        this.text.addEventListener('input', function () { self.typed(); });
+        this.retryBtn.addEventListener('click', function () { self.retry(); });
+        this.minBtn.addEventListener('click', function () { self.setSmall(!self.small, true); });
+        q('[data-notes-close]').addEventListener('click', function () { return self.close(); });
+        this.moveBtn.addEventListener('click', function () {
+            if (notesWide()) return;
+            self.top = !self.top;
+            self.layout();
+            self.remember();
+        });
+        this.moveBtn.addEventListener('keydown', function (event) { self.nudge(event); });
+        this.bar.addEventListener('pointerdown', function (event) { self.dragStart(event); });
+        this.bar.addEventListener('pointermove', function (event) { self.dragMove(event); });
+        this.bar.addEventListener('pointerup', function (event) { self.dragEnd(event); });
+        this.bar.addEventListener('pointercancel', function (event) { self.dragEnd(event); });
+        if (this.download) this.download.addEventListener('click', function (event) { self.downloadNow(event); });
+        if (!cfg.endpoint) this.setStatus('');
+    }
+
+    Notes.prototype.key = function () {
+        return this.cfg.remember ? 'hod-notes:' + this.cfg.remember : '';
+    };
+
+    Notes.prototype.remember = function () {
+        var key = this.key();
+        if (!key) return;
+        try {
+            if (!this.isOpen) { window.localStorage.removeItem(key); return; }
+            window.localStorage.setItem(key, JSON.stringify({ small: this.small, top: this.top, at: this.at }));
+        } catch (e) { /* storage blocked: it simply does not reopen */ }
+    };
+
+    Notes.prototype.recall = function () {
+        var key = this.key();
+        if (!key) return null;
+        try { return JSON.parse(window.localStorage.getItem(key) || 'null'); } catch (e) { return null; }
+    };
+
+    Notes.prototype.setStatus = function (word, failed) {
+        this.status.textContent = word;
+        this.status.classList.toggle('is-failed', !!failed);
+        this.retryBtn.hidden = !failed;
+    };
+
+    Notes.prototype.dirty = function () {
+        return this.loaded && !!this.cfg.endpoint && this.text.value !== this.kept;
+    };
+
+    Notes.prototype.counter = function () {
+        var max = this.cfg.max || 0;
+        var n = this.text.value.length;
+        var near = max > 0 && n >= max * 0.9;
+        this.count.textContent = near ? HOD.format.number(n) + ' / ' + HOD.format.number(max) : '';
+        this.count.classList.toggle('is-near', near);
+    };
+
+    Notes.prototype.payload = function (base, extra) {
+        var data = {};
+        Object.keys(base || {}).forEach(function (k) { if (k !== 'action') data[k] = base[k]; });
+        Object.keys(extra || {}).forEach(function (k) { data[k] = extra[k]; });
+        return data;
+    };
+
+    Notes.prototype.load = function () {
+        var self = this;
+        if (this.loaded) return Promise.resolve();
+        if (this.loading) return this.loading;
+        this.text.readOnly = true;
+        this.text.setAttribute('aria-busy', 'true');
+        this.setStatus('Loading');
+        this.loading = HOD.api(this.cfg.endpoint, { action: (this.cfg.load || {}).action, data: this.payload(this.cfg.load), quiet: true })
+            .then(function (res) {
+                self.kept = String(res.body || '');
+                self.text.value = self.kept;
+                self.loaded = true;
+                self.failed = null;
+                self.setStatus(res.updated_at ? 'Saved' : '');
+                self.counter();
+            }, function () {
+                self.failed = 'load';
+                self.setStatus('Not loaded', true);
+            })
+            .then(function () {
+                self.loading = null;
+                self.text.readOnly = !self.loaded;
+                self.text.removeAttribute('aria-busy');
+            });
+        return this.loading;
+    };
+
+    Notes.prototype.typed = function () {
+        var self = this;
+        this.counter();
+        if (!this.cfg.endpoint) return;
+        this.setStatus('Saving');
+        clearTimeout(this.timer);
+        this.timer = setTimeout(function () { self.save(); }, NOTE_PAUSE);
+    };
+
+    /** Save what is typed, if it changed. Saves run one after another. */
+    Notes.prototype.save = function () {
+        var self = this;
+        clearTimeout(this.timer);
+        this.chain = this.chain.then(function () {
+            if (!self.dirty()) return true;
+            var body = self.text.value;
+            return HOD.api(self.cfg.endpoint, { action: (self.cfg.save || {}).action, data: self.payload(self.cfg.save, { body: body }), quiet: true })
+                .then(function () {
+                    self.kept = body;
+                    self.failed = null;
+                    if (self.text.value === body) self.setStatus('Saved');
+                    return true;
+                }, function (err) {
+                    self.failed = 'save';
+                    self.setStatus('Not saved', true);
+                    if (err && err.code === 'TOO_LONG') toast(err.message, 'warning');
+                    return false;
+                });
+        });
+        return this.chain;
+    };
+
+    /** The page is going away (a reload, a link): send what is unsaved anyway. */
+    Notes.prototype.flush = function () {
+        if (!this.dirty()) return;
+        clearTimeout(this.timer);
+        var form = new FormData();
+        form.append('action', (this.cfg.save || {}).action || '');
+        var data = this.payload(this.cfg.save, { body: this.text.value, _csrf: token() });
+        Object.keys(data).forEach(function (k) { form.append(k, data[k]); });
+        try {
+            fetch(this.cfg.endpoint, { method: 'POST', body: form, credentials: 'same-origin', keepalive: true,
+                headers: { 'X-CSRF-Token': token(), 'X-Requested-With': 'XMLHttpRequest' } });
+            this.kept = this.text.value;
+        } catch (e) { /* the browser refused: the next visit shows the last save */ }
+    };
+
+    Notes.prototype.retry = function () {
+        return this.failed === 'load' ? this.load() : this.save();
+    };
+
+    Notes.prototype.setSmall = function (small, byPerson) {
+        this.small = small;
+        this.el.classList.toggle('is-small', small);
+        this.el.classList.toggle('is-min', small);
+        var label = small ? 'Open notes' : 'Minimise';
+        this.minBtn.setAttribute('aria-label', label);
+        this.minBtn.setAttribute('data-tooltip', label);
+        this.minBtn.setAttribute('aria-expanded', small ? 'false' : 'true');
+        this.minBtn.innerHTML = icon(small ? 'chevron-up' : 'minus');
+        if (small && this.dirty()) this.save();
+        this.layout();
+        if (byPerson) {
+            this.remember();
+            if (!small) this.text.focus({ preventScroll: true });
+        }
+    };
+
+    /** The window's edges the panel stays inside: above a phone's bottom bar too. */
+    Notes.prototype.bounds = function () {
+        var bottom = window.innerHeight;
+        var barEl = document.querySelector('.ui-bottombar');
+        if (barEl) {
+            var r = barEl.getBoundingClientRect();
+            if (r.height > 0 && r.top < bottom) bottom = r.top;
+        }
+        return { right: document.documentElement.clientWidth, bottom: bottom };
+    };
+
+    Notes.prototype.within = function (p) {
+        var b = this.bounds();
+        var w = this.el.offsetWidth, h = this.el.offsetHeight;
+        return {
+            x: Math.round(Math.min(Math.max(NOTE_GAP, p.x), Math.max(NOTE_GAP, b.right - w - NOTE_GAP))),
+            y: Math.round(Math.min(Math.max(NOTE_GAP, p.y), Math.max(NOTE_GAP, b.bottom - h - NOTE_GAP)))
+        };
+    };
+
+    /** Docked on a phone, floating (where it was put) on a wider screen. */
+    Notes.prototype.layout = function () {
+        var wide = notesWide();
+        var label = wide ? 'Move notes' : (this.top ? 'Move to bottom' : 'Move to top');
+        this.el.classList.toggle('is-top', !wide && this.top);
+        this.moveBtn.setAttribute('aria-label', label);
+        this.moveBtn.setAttribute('data-tooltip', label);
+        this.moveBtn.innerHTML = icon(wide ? 'grip-vertical' : 'arrow-up-down');
+        if (wide && this.at) {
+            this.el.classList.add('is-placed');
+            this.at = this.within(this.at);
+            this.el.style.left = this.at.x + 'px';
+            this.el.style.top = this.at.y + 'px';
+        } else {
+            this.el.classList.remove('is-placed');
+            this.el.style.left = '';
+            this.el.style.top = '';
+        }
+    };
+
+    Notes.prototype.here = function () {
+        var r = this.el.getBoundingClientRect();
+        return { x: r.left, y: r.top };
+    };
+
+    Notes.prototype.dragStart = function (event) {
+        if (!notesWide() || event.button !== 0) return;
+        if (event.target instanceof Element && event.target.closest('button, a') && !event.target.closest('[data-notes-move]')) return;
+        var p = this.here();
+        this.grab = { x: event.clientX - p.x, y: event.clientY - p.y };
+        this.el.classList.add('is-dragging');
+        try { this.bar.setPointerCapture(event.pointerId); } catch (e) { /* older browsers */ }
+        event.preventDefault();
+    };
+
+    Notes.prototype.dragMove = function (event) {
+        if (!this.grab) return;
+        this.at = { x: event.clientX - this.grab.x, y: event.clientY - this.grab.y };
+        this.layout();
+    };
+
+    Notes.prototype.dragEnd = function () {
+        if (!this.grab) return;
+        this.grab = null;
+        this.el.classList.remove('is-dragging');
+        this.remember();
+    };
+
+    Notes.prototype.nudge = function (event) {
+        var by = { ArrowLeft: [-NOTE_STEP, 0], ArrowRight: [NOTE_STEP, 0], ArrowUp: [0, -NOTE_STEP], ArrowDown: [0, NOTE_STEP] }[event.key];
+        if (!by) return;
+        event.preventDefault();
+        if (!notesWide()) {
+            this.top = event.key === 'ArrowUp' ? true : event.key === 'ArrowDown' ? false : this.top;
+        } else {
+            var p = this.here();
+            this.at = { x: p.x + by[0], y: p.y + by[1] };
+        }
+        this.layout();
+        this.remember();
+    };
+
+    Notes.prototype.open = function (opts) {
+        var self = this;
+        opts = opts || {};
+        if (opts.opener) this.opener = opts.opener;
+        var already = this.isOpen;
+        this.isOpen = true;
+        this.el.hidden = false;
+        if (opts.small !== undefined) this.setSmall(!!opts.small, false);
+        else if (this.small && opts.focus) this.setSmall(false, false);
+        this.layout();
+        if (!already) {
+            requestAnimationFrame(function () { self.el.classList.add('is-open'); });
+        }
+        this.load().then(function () {
+            if (opts.focus && !self.small && self.loaded) self.text.focus({ preventScroll: true });
+        });
+        if (opts.focus && !this.small) this.text.focus({ preventScroll: true });
+        this.remember();
+    };
+
+    Notes.prototype.close = function () {
+        var self = this;
+        var hadFocus = this.el.contains(document.activeElement);
+        return this.save().then(function () {
+            self.isOpen = false;
+            self.el.classList.remove('is-open');
+            self.remember();
+            var done = function () { if (!self.isOpen) self.el.hidden = true; };
+            if (reduceMotion) done(); else setTimeout(done, 220);
+            var back = self.opener && document.contains(self.opener) ? self.opener
+                : document.querySelector('[data-notes-open="' + self.el.id + '"]');
+            if (hadFocus && back) back.focus({ preventScroll: true });
+        });
+    };
+
+    Notes.prototype.downloadNow = function (event) {
+        var self = this;
+        if (!this.cfg.endpoint) return;
+        if (this.text.value.trim() === '') {
+            event.preventDefault();
+            toast('Write a note first.', 'info');
+            return;
+        }
+        if (!this.dirty()) return;
+        event.preventDefault();
+        var href = this.download.getAttribute('href');
+        this.save().then(function (ok) {
+            if (ok) window.location.href = href;
+            else toast('Saving failed. Try again, then download.', 'danger');
+        });
+    };
+
+    function notesFor(target) {
+        var el = typeof target === 'string' ? document.getElementById(target) : target;
+        if (!el || !el.hasAttribute('data-ui-notes')) return null;
+        if (!notesAll[el.id]) notesAll[el.id] = new Notes(el);
+        return notesAll[el.id];
+    }
+
+    document.addEventListener('click', function (event) {
+        var opener = event.target instanceof Element ? event.target.closest('[data-notes-open]') : null;
+        if (!opener) return;
+        event.preventDefault();
+        if (root.classList.contains('ui-is-snapshot')) {
+            toast("This is a saved copy for reading while you're offline. Reconnect to take notes.", 'warning');
+            return;
+        }
+        var n = notesFor(opener.getAttribute('data-notes-open'));
+        if (n) n.open({ focus: true, opener: opener });
+    });
+
+    window.addEventListener('resize', debounce(function () {
+        Object.keys(notesAll).forEach(function (id) { if (notesAll[id].isOpen) notesAll[id].layout(); });
+    }, 100));
+    window.addEventListener('pagehide', function () {
+        Object.keys(notesAll).forEach(function (id) { notesAll[id].flush(); });
+    });
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState !== 'hidden') return;
+        Object.keys(notesAll).forEach(function (id) { if (notesAll[id].dirty()) notesAll[id].save(); });
+    });
+    window.addEventListener('online', function () {
+        Object.keys(notesAll).forEach(function (id) {
+            var n = notesAll[id];
+            if (n.isOpen && n.failed) n.retry();
+        });
+    });
+
+    /** Panels that were open when the page last went away come back as they were. */
+    function initNotes() {
+        document.querySelectorAll('[data-ui-notes]').forEach(function (el) {
+            var n = notesFor(el);
+            var was = n && n.recall();
+            if (!was || root.classList.contains('ui-is-snapshot')) return;
+            n.top = !!was.top;
+            n.at = was.at && typeof was.at.x === 'number' && typeof was.at.y === 'number' ? was.at : null;
+            n.open({ focus: false, small: !!was.small });
+        });
+    }
+
+    HOD.notes = {
+        open: function (id) { var n = notesFor(id); if (n) n.open({ focus: true }); },
+        close: function (id) { var n = notesFor(id); return n ? n.close() : Promise.resolve(); },
+        save: function (id) { var n = notesFor(id); return n ? n.save() : Promise.resolve(true); }
+    };
+
+    /* ------------------------------------------------------------------ *
      * Boot
      * ------------------------------------------------------------------ */
 
@@ -1401,5 +1798,6 @@
         syncSnapshot();
         initTabs(document);
         document.querySelectorAll('select[data-ui-combobox]').forEach(enhanceSelect);
+        initNotes();
     });
 })();

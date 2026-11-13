@@ -111,7 +111,7 @@ function trn_db(bool $withTrainings = true): PDO
         $pdo->exec($stmt);
     }
     if ($withTrainings) {
-        foreach (['20261208090000_trainings_core.sql', '20261211090000_trainings_certificates.sql'] as $file) {
+        foreach (['20261208090000_trainings_core.sql', '20261211090000_trainings_certificates.sql', '20261212090000_trainings_notes.sql'] as $file) {
             foreach (trn_schema_sql($file) as $stmt) {
                 $pdo->exec($stmt);
             }
@@ -428,6 +428,83 @@ eq('you may leave what you joined', 'success', act($pdo, 902, 'leave', ['enrolme
 eq('…but not what the Academy gave you', 'error', act($pdo, 903, 'leave', ['enrolment_id' => trainings_enrolment_for($pdo, $weeks, 903)['id']])['status']);
 eq('…nor someone else\'s', 'FORBIDDEN', act($pdo, 902, 'leave', ['enrolment_id' => trainings_enrolment_for($pdo, $weeks, 903)['id']])['code'] ?? null);
 eq('a draft cannot be viewed by a learner', 'FORBIDDEN', act($pdo, 904, 'view', ['training_id' => $mem])['code'] ?? null);
+
+// ---------------------------------------------------------------------------
+section('My notes (owner, 13 Nov 2026): the learner\'s own, saved as they type, a Word copy');
+$nb = trn_db();
+$nb->exec('DROP TABLE training_notes');
+eq('before the notes migration the panel is not offered', false, trainings_notes_ready($nb));
+eq('…and the API says FEATURE_NOT_READY', 'FEATURE_NOT_READY', act($nb, 904, 'note_get', ['training_id' => 1])['code'] ?? null);
+eq('after it, it is', true, trainings_notes_ready($pdo));
+$g = act($pdo, 904, 'note_get', ['training_id' => $weeks]);
+eq('no note yet: empty, never saved, with its limit', ['success', '', null, TRAININGS_NOTE_MAX], [$g['status'], $g['body'] ?? null, array_key_exists('updated_at', $g) ? $g['updated_at'] : 'missing', $g['max'] ?? null]);
+$sv = act($pdo, 904, 'note_save', ['training_id' => $weeks, 'body' => "Faith comes by hearing.\r\n\tRomans 10:17\x07"]);
+eq('saving works and says when', ['success', '2026-12-01 10:00:00'], [$sv['status'], $sv['updated_at'] ?? null]);
+eq('…kept with Unix line ends, tabs, and no control characters', "Faith comes by hearing.\n\tRomans 10:17", act($pdo, 904, 'note_get', ['training_id' => $weeks])['body'] ?? null);
+act($pdo, 904, 'note_save', ['training_id' => $weeks, 'body' => 'Second draft <&> é']);
+eq('saving again updates the one row', [1, 'Second draft <&> é'],
+    [trn_count($pdo, 'training_notes', 'training_id = ? AND user_id = ?', [$weeks, 904]), trainings_note_get($pdo, $weeks, 904)['body']]);
+eq('each person has their own: another learner sees an empty note', '', act($pdo, 903, 'note_get', ['training_id' => $weeks])['body'] ?? null);
+eq('a note over 20,000 characters is refused', 'TOO_LONG', act($pdo, 904, 'note_save', ['training_id' => $weeks, 'body' => str_repeat('é', 20001)])['code'] ?? null);
+eq('…20,000 is kept', 'success', act($pdo, 904, 'note_save', ['training_id' => $weeks, 'body' => str_repeat('é', 20000)])['status']);
+act($pdo, 904, 'note_save', ['training_id' => $weeks, 'body' => "Second draft <&> é\n\nPray daily."]);
+eq('someone browsing the catalogue may take notes too', 'success', act($pdo, 902, 'note_save', ['training_id' => $weeks, 'body' => 'Browsing'])['status']);
+eq('a draft is not open to a learner', 'FORBIDDEN', act($pdo, 904, 'note_save', ['training_id' => $mem, 'body' => 'x'])['code'] ?? null);
+eq('…nor is reading a note on it', 'FORBIDDEN', act($pdo, 904, 'note_get', ['training_id' => $mem])['code'] ?? null);
+eq('the Academy previewing a draft may note it', 'success', act($pdo, 901, 'note_save', ['training_id' => $mem, 'body' => 'Check slide 3'])['status']);
+eq('a removed training says so', 'NOT_FOUND', act($pdo, 904, 'note_get', ['training_id' => 99999])['code'] ?? null);
+act($pdo, 901, 'settings', ['training_id' => $weeks, 'title' => 'Foundations', 'catalogue' => 0, 'live_percent' => 50]);
+eq('once a training closes to someone, their own note is still theirs to read', 'Browsing', act($pdo, 902, 'note_get', ['training_id' => $weeks])['body'] ?? null);
+eq('…but not to change', 'FORBIDDEN', act($pdo, 902, 'note_save', ['training_id' => $weeks, 'body' => 'more'])['code'] ?? null);
+act($pdo, 901, 'settings', ['training_id' => $weeks, 'title' => 'Foundations', 'catalogue' => 1, 'live_percent' => 50]);
+$readers = [];
+foreach (['includes', 'api', 'modules', 'cron'] as $dir) {
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root . '/' . $dir, FilesystemIterator::SKIP_DOTS));
+    foreach ($it as $f) {
+        if (str_ends_with($f->getFilename(), '.php') && str_contains((string) file_get_contents($f->getPathname()), 'training_notes')) {
+            $readers[] = substr($f->getPathname(), strlen($root) + 1);
+        }
+    }
+}
+sort($readers);
+eq('only the notes code touches the table: no Academy screen, report or AI reads a note', ['includes/trainings/notes.php'], $readers);
+$docSrc = (string) file_get_contents($root . '/api/trainings_notes_doc.php');
+ok('the Word download serves the signed-in person\'s own note only (no user parameter)',
+    str_contains($docSrc, "trainings_note_get(\$pdo, (int) \$t['id'], \$me)") && !preg_match('/\$_GET\[\'(u|user|user_id)\'\]/', $docSrc));
+$bytes = trainings_note_docx(trainings_get($pdo, $weeks), 'Dayo Test', trainings_note_get($pdo, $weeks, 904));
+$tmpDoc = tempnam(sys_get_temp_dir(), 'trnnote');
+file_put_contents($tmpDoc, $bytes);
+$zip = new ZipArchive();
+ok('the Word copy is a zip', $zip->open($tmpDoc) === true);
+$docXml = (string) $zip->getFromName('word/document.xml');
+$parts = [];
+for ($i = 0; $i < $zip->numFiles; $i++) {
+    $parts[] = $zip->getNameIndex($i);
+}
+$zip->close();
+@unlink($tmpDoc);
+sort($parts);
+eq('…with the parts Word needs', ['[Content_Types].xml', '_rels/.rels', 'docProps/core.xml', 'word/_rels/document.xml.rels', 'word/document.xml', 'word/styles.xml'], $parts);
+$dom = new DOMDocument();
+ok('…well-formed XML', @$dom->loadXML($docXml, LIBXML_NONET) === true);
+$paras = [];
+foreach ($dom->getElementsByTagNameNS(DOCX_NS_W, 'p') as $p) {
+    $paras[] = $p->textContent;
+}
+eq('…the training, who and when, then the note line by line (blank lines kept, text escaped)',
+    ['Foundations', 'My notes · Dayo Test · Saved 1 Dec 2026', 'Second draft <&> é', '', 'Pray daily.'], $paras);
+eq('the file name is safe', 'My notes - Foundations Week 1.docx', docx_filename('My notes - Foundations: <Week 1>'));
+eq('…and never empty', 'Notes.docx', docx_filename('!!!'));
+$page = (string) file_get_contents($root . '/modules/trainings/index.php');
+ok('the training page offers Take notes and the panel, remembered per training',
+    str_contains($page, "'data-notes-open' => 'trn-notes'") && str_contains($page, "ui_notetaker('trn-notes'") && str_contains($page, "'remember' => 'trn-' . (int) \$t['id']"));
+$panel = ui_notetaker('n1', ['subject' => 'A <b>', 'endpoint' => '/api/x.php', 'download' => '/d?t=1', 'remember' => 'k']);
+ok('the panel is a labelled region, hidden until opened, never a dialog', str_contains($panel, '<section id="n1" class="ui-notes" aria-labelledby="n1-title"')
+    && str_contains($panel, ' hidden>') && !str_contains($panel, '<dialog') && !str_contains($panel, 'aria-modal'));
+ok('…escapes what it prints and labels the note', str_contains($panel, 'A &lt;b&gt;') && str_contains($panel, '<label class="sr-only" for="n1-text">My notes on A &lt;b&gt;</label>'));
+ok('…offers Move, Minimise, Close and Download as Word', str_contains($panel, 'aria-label="Move notes"') && str_contains($panel, 'aria-label="Minimise"')
+    && str_contains($panel, 'aria-label="Close notes"') && str_contains($panel, 'aria-label="Download as Word"'));
+ok('…and without a download link, no Download', !str_contains(ui_notetaker('n2', []), 'data-notes-download'));
 
 // ---------------------------------------------------------------------------
 section('Progress, handing in work, marking, completion');
@@ -973,7 +1050,7 @@ ok('the API answers POST only', str_contains($api, "!== 'POST'"));
 $actions = (string) file_get_contents($root . '/includes/trainings/actions.php');
 preg_match_all("/case '([a-z_]+)':/", $actions, $m);
 foreach ($m[1] as $name) {
-    if (in_array($name, ['mine', 'view', 'join', 'leave', 'item_done', 'submit_work'], true)) {
+    if (in_array($name, ['mine', 'view', 'join', 'leave', 'item_done', 'submit_work', 'note_get', 'note_save'], true)) {
         continue;
     }
     eq("a learner is refused '{$name}'", 'FORBIDDEN', act($pdo, 904, $name, ['training_id' => $mem, 'enrolment_id' => trainings_enrolment_for($pdo, $mat, 904)['id'],

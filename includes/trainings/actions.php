@@ -5,7 +5,8 @@
 // against the permission matrix (can('trainings', …)). Kept out of the
 // endpoint so tests/trainings/run.php runs the same decisions on SQLite.
 //
-//   Learner (own records):  mine, catalogue, view, join, leave, item_done, submit_work
+//   Learner (own records):  mine, catalogue, view, join, leave, item_done, submit_work,
+//                           note_get, note_save (My notes: the learner's alone, never the Academy's)
 //   The Academy (church):   overview, create, builder, settings, publish, unpublish,
 //                           archive, delete, section_*, item_*, learners,
 //                           people_search, audience_options, assign, remove_learner,
@@ -115,6 +116,28 @@ function trainings_action(PDO $pdo, string $action, array $in, array $files, int
                 return $reply(trainings_self_done($pdo, $t, $e, $item, !empty($in['done'])));
             }
             return $reply(trainings_submit($pdo, $t, $e, $item, array_values((array) ($in['answers'] ?? []))));
+    }
+
+    // ------------------------------------------------------------- my notes
+    if ($action === 'note_get' || $action === 'note_save') {
+        if (!trainings_notes_ready($pdo)) {
+            return trainings_fail('Notes are being set up. Try again later.', 'FEATURE_NOT_READY');
+        }
+        if ($err = $needTraining()) {
+            return $err;
+        }
+        $mine = trainings_note_get($pdo, $tid, $uid);
+        if ($action === 'note_get') {
+            // Your own note is yours to read back even once the training has closed to you.
+            if ($mine === null && !trainings_note_can_take($pdo, $t, $uid)) {
+                return trainings_forbidden();
+            }
+            return trainings_ok(['body' => $mine['body'] ?? '', 'updated_at' => $mine['updated_at'] ?? null, 'max' => TRAININGS_NOTE_MAX]);
+        }
+        if (!trainings_note_can_take($pdo, $t, $uid) || !trainings_self_can($uid, 'view')) {
+            return trainings_forbidden();
+        }
+        return $reply(trainings_note_save($pdo, $tid, $uid, (string) ($in['body'] ?? '')));
     }
 
     // ------------------------------------------------------------- the Academy

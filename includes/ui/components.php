@@ -409,6 +409,71 @@ function ui_no_access(?string $text = null, string $title = 'This page is not op
     ]) . '</div>';
 }
 
+/**
+ * A notes panel that floats over the page while the person keeps working
+ * (docs/UI.md, "Notes"). Not a dialog: nothing behind it is blocked and
+ * focus is never trapped. On a computer or tablet it is dragged by its bar
+ * (or moved with the arrow keys on Move notes); on a phone it docks full
+ * width at the foot of the screen, or the top with Move to top. Minimise
+ * keeps its bar; Close hides it. It saves itself as the person types.
+ *
+ *   ui_notetaker('trn-notes', [
+ *       'subject'  => $training['title'],                        // under the title
+ *       'endpoint' => '/api/trainings_api.php',                  // HOD.api target; omit for a local demo
+ *       'load'     => ['action' => 'note_get', 'training_id' => 7],   // answers {body, updated_at}
+ *       'save'     => ['action' => 'note_save', 'training_id' => 7],  // the text goes as 'body'
+ *       'download' => '/api/trainings_notes_doc.php?t=7',        // Download (a Word file); optional
+ *       'remember' => 'trn-7',   // open, minimised and where it sat survive a reload, per device
+ *       'max'      => 20000,
+ *   ])
+ *
+ * Open it with any element carrying data-notes-open="<id>" (a Take notes
+ * button). Behaviour: HOD.notes in assets/ui/js/ui.js.
+ */
+function ui_notetaker(string $id, array $o = []): string
+{
+    $title = (string) ($o['title'] ?? 'My notes');
+    $subject = (string) ($o['subject'] ?? '');
+    $cfg = [
+        'endpoint' => (string) ($o['endpoint'] ?? ''),
+        'load' => (object) ($o['load'] ?? []),
+        'save' => (object) ($o['save'] ?? []),
+        'download' => (string) ($o['download'] ?? ''),
+        'remember' => (string) ($o['remember'] ?? ''),
+        'max' => (int) ($o['max'] ?? 20000),
+    ];
+    $tool = static fn (string $label, string $icon, string $data, array $extra = []): string => ui_button($label, [
+        'variant' => 'ghost', 'size' => 'sm', 'icon' => $icon, 'icon_only' => true, 'class' => 'ui-notes__tool',
+        'attrs' => [$data => true] + $extra,
+    ]);
+
+    return '<section id="' . ui_e($id) . '" class="ui-notes" aria-labelledby="' . ui_e($id) . '-title"'
+        . ' data-ui-notes="' . ui_e((string) json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) . '" hidden>'
+        . '<div class="ui-notes__bar" data-notes-grip>'
+        . '<span class="ui-notes__mark" aria-hidden="true">' . ui_icon('notebook-pen', 'ui-icon--sm') . '</span>'
+        . '<div class="ui-notes__heading">'
+        . '<h2 class="ui-notes__title" id="' . ui_e($id) . '-title">' . ui_e($title) . '</h2>'
+        . ($subject !== '' ? '<p class="ui-notes__subject">' . ui_e($subject) . '</p>' : '')
+        . '</div>'
+        . '<span class="ui-notes__status" role="status" aria-live="polite" data-notes-status></span>'
+        . '<div class="ui-notes__tools">'
+        . $tool('Try again', 'refresh-cw', 'data-notes-retry', ['hidden' => true])
+        . $tool('Move notes', 'grip-vertical', 'data-notes-move', ['aria-keyshortcuts' => 'ArrowUp ArrowDown ArrowLeft ArrowRight'])
+        . $tool('Minimise', 'minus', 'data-notes-min', ['aria-expanded' => 'true', 'aria-controls' => $id . '-body'])
+        . $tool('Close notes', 'x', 'data-notes-close')
+        . '</div></div>'
+        . '<div class="ui-notes__body" id="' . ui_e($id) . '-body">'
+        . '<label class="sr-only" for="' . ui_e($id) . '-text">' . ui_e($subject !== '' ? $title . ' on ' . $subject : $title) . '</label>'
+        . '<textarea id="' . ui_e($id) . '-text" class="ui-textarea ui-notes__text" maxlength="' . (int) $cfg['max'] . '"'
+        . ' placeholder="Type your notes" spellcheck="true" data-notes-text></textarea>'
+        . '<div class="ui-notes__foot">'
+        . '<span class="ui-notes__count" data-notes-count></span>'
+        . ($cfg['download'] !== '' ? ui_button('Download', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'file-down',
+            'href' => $cfg['download'], 'attrs' => ['data-notes-download' => true, 'aria-label' => 'Download as Word', 'download' => true]]) : '')
+        . '</div></div>'
+        . '</section>';
+}
+
 /** Hidden CSRF input for a classic form post (fetch/jQuery get the header automatically). */
 function ui_csrf_field(): string
 {
