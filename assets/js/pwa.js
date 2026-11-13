@@ -859,12 +859,23 @@
 
     var ASK_AGAIN_DAYS = 7;
 
+    /* A card closed without an answer (a tap outside it, Esc) is not a "Not
+     * now", but it must not come back on every page either: once a visit. */
+    function askedThisVisit() {
+        try { return sessionStorage.getItem('hod:alerts-asked') === '1'; } catch (e) { return false; }
+    }
+
+    function markAsked() {
+        try { sessionStorage.setItem('hod:alerts-asked', '1'); } catch (e) { /* private mode */ }
+    }
+
     function askForAlerts() {
         if (QUIET || !CFG.signedIn || env.inAppBrowser || openSheet) return;
-        if (store.snoozed('alerts-ask', ASK_AGAIN_DAYS)) return;
+        if (store.snoozed('alerts-ask', ASK_AGAIN_DAYS) || askedThisVisit()) return;
 
         // Step 1: install, where this browser can.
         if (!env.standalone && (env.iOS || deferredPrompt)) {
+            markAsked();
             showInstallStep();
             return;
         }
@@ -881,6 +892,8 @@
                 enablePush().catch(function () { /* the next visit asks */ });
                 return;
             }
+            if (openSheet) return;
+            markAsked();
             if (state.permission === 'denied') {
                 showBlockedCard();
                 return;
