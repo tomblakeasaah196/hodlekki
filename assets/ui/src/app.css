@@ -3473,8 +3473,8 @@
        column on phones, two from 640 px, three from 1024 px), and a month
        calendar by the day each sermon was preached, Sunday first. Phones see
        a dot on the day and the month's cards under the grid; from 640 px the
-       titles sit in the days. The sermon page and Envision's manager reuse
-       the artwork tiles. */
+       titles sit in the days. Envision's manager reuses the artwork tiles.
+       The sermon page (S2) has its own section below, on the osl- prefix. */
     .os-filters {
         display: flex;
         flex-wrap: wrap;
@@ -3505,7 +3505,6 @@
     }
     .os-card__art,
     .os-thumb,
-    .os-hero__art,
     .os-media__art {
         flex: none;
         object-fit: cover;
@@ -3513,7 +3512,6 @@
     }
     .os-card__art { width: 80px; height: 80px; border-radius: var(--ui-radius); }
     .os-thumb { width: 48px; height: 48px; border-radius: var(--ui-radius-sm); }
-    .os-hero__art { width: 120px; height: 120px; border-radius: var(--ui-radius-lg); }
     .os-media__art { width: 96px; height: 96px; border-radius: var(--ui-radius-lg); }
     .os-card__art--none,
     .os-thumb--none {
@@ -3593,13 +3591,6 @@
     .os-cal__label { display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .os-cal__list { margin-top: 16px; }
 
-    .os-hero { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
-    .os-hero__facts { flex: 1 1 220px; }
-    .os-audio { display: block; width: 100%; }
-    .os-links { display: flex; flex-wrap: wrap; gap: 8px; }
-    .os-points { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; padding-left: 20px; list-style: disc; }
-    .os-scriptures { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
-
     .os-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
     .os-media { display: flex; align-items: center; gap: 16px; }
     .os-media__facts {
@@ -3629,6 +3620,658 @@
     }
     @media (min-width: 1024px) {
         .os-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    /* ---------- Our sermons: the listening page (modules/our_sermons/sermon.php) ---------- */
+    /* Connect's family. The sermon sits on the warm wash (artwork, title, who
+       and when); our own player is a calm card under it: a big round Play,
+       15 s back and forward, speed, and a scrubber with small gold dots where
+       the member's notes sit. Once the player scrolls away, a navy mini-bar
+       docks above the phone's bottom bar. The Bible opens in a side panel (a
+       sheet on phones) that is NOT a dialog: the sermon plays on and its
+       controls stay in reach. Notes sit beside the sermon on a computer and
+       right under the player on a phone. Motion is calm: the panel and the
+       mini-bar slide and fade, a new note rises in; only transform and
+       opacity move, nothing loops, and reduced motion shows things at once.
+       Small targets (time chips, the stamp) get a 44 px hit area from a
+       pseudo-element, so they stay compact to the eye. */
+    /* The page is a size container: notes go beside the sermon only when the
+       PAGE is wide enough (the Bible panel takes 420 px of it from 1280 px). */
+    .osl { --os-ease: cubic-bezier(.22, 1, .36, 1); container: osl-page / inline-size; }
+
+    .osl-hero {
+        display: grid;
+        grid-template-columns: 76px minmax(0, 1fr);
+        align-items: start;
+        gap: 14px;
+        margin-bottom: 16px;
+        padding: 16px;
+        border: 1px solid rgba(209, 25, 32, .1);
+        border-radius: var(--ui-radius-xl);
+        background:
+            radial-gradient(26rem 15rem at 100% 0%, rgba(209, 25, 32, .12), transparent 70%),
+            radial-gradient(24rem 15rem at 0% 100%, rgba(29, 53, 106, .06), transparent 70%),
+            var(--ui-warm);
+    }
+    .osl-hero__art {
+        aspect-ratio: 1;
+        overflow: hidden;
+        border-radius: 14px;
+        background: var(--ui-primary);
+        box-shadow: 0 12px 28px -14px rgba(10, 14, 23, .55);
+    }
+    .osl-hero__art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .osl-hero__mark { display: grid; place-items: center; width: 100%; height: 100%; color: #FFFFFF; }
+    .osl-hero__mark .ui-icon { width: 34px; height: 34px; }
+    .osl-hero__main { min-width: 0; }
+    .osl-hero .ui-page-header { margin-bottom: 0; }
+    .osl-hero .ui-h1 {
+        font-size: clamp(1.3125rem, 1.05rem + 1.2vw, 2rem);
+        line-height: 1.18;
+        letter-spacing: -.02em;
+        text-wrap: balance;
+        overflow-wrap: anywhere;
+    }
+    .osl-hero .ui-page-header__description { margin-top: 6px; color: #454C5C; }
+    .osl-facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+    .osl-fact {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 28px;
+        padding: 0 10px;
+        border: 1px solid rgba(29, 53, 106, .12);
+        border-radius: 999px;
+        background: var(--ui-surface);
+        font-size: var(--ui-text-sm);
+        font-weight: 500;
+        color: var(--ui-text);
+        white-space: nowrap;
+    }
+    .osl-fact[hidden] { display: none; }
+    .osl-fact .ui-icon { width: 14px; height: 14px; color: var(--ui-text-muted); }
+    .osl-fact--series { border-color: var(--ui-hue-violet-line); background: var(--ui-hue-violet-soft); color: var(--ui-hue-violet); }
+    .osl-fact--heard { border-color: transparent; background: var(--ui-success-soft); color: var(--ui-success-text); }
+    .osl-fact--series .ui-icon,
+    .osl-fact--heard .ui-icon { color: inherit; }
+    .osl-hero__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+    .osl .ui-tabs { margin-bottom: 12px; }
+
+    /* The player. */
+    .osl-player,
+    .osl-watch { margin-bottom: 16px; }
+    .osl-player {
+        position: relative;
+        padding: 16px 16px 12px;
+        border: 1px solid var(--ui-border);
+        border-radius: var(--ui-radius-xl);
+        background: var(--ui-surface);
+        box-shadow: var(--ui-shadow-sm);
+        transition: border-color 320ms var(--ui-ease);
+    }
+    .osl.is-playing .osl-player { border-color: var(--ui-hue-navy-line); }
+    .osl-resume { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 0 0 6px; font-size: var(--ui-text-sm); color: var(--ui-text-muted); }
+    .osl-resume[hidden] { display: none; }
+    .osl-resume .ui-icon { width: 15px; height: 15px; color: var(--ui-hue-teal); }
+    .osl-resume b { font-weight: 600; color: var(--ui-heading); font-variant-numeric: tabular-nums; }
+    .osl-link {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0;
+        border: 0;
+        background: none;
+        font: inherit;
+        font-weight: 600;
+        color: var(--ui-primary-text);
+        text-decoration: underline;
+        text-decoration-color: var(--navy-200);
+        text-underline-offset: 3px;
+        cursor: pointer;
+    }
+    .osl-link::after { content: ""; position: absolute; inset: -12px -6px; }
+    .osl-link:hover { text-decoration-color: currentColor; }
+    .osl-link .ui-icon { width: 14px; height: 14px; }
+
+    /* The scrubber: a native range on top of a drawn track. The track is
+       inset by half the thumb so the fill always meets the thumb's centre. */
+    .osl-scrub__track { --os-p: 0; position: relative; height: 32px; }
+    .osl-scrub__track::before,
+    .osl-scrub__fill {
+        content: "";
+        position: absolute;
+        left: 9px;
+        right: 9px;
+        top: 50%;
+        height: 6px;
+        margin-top: -3px;
+        border-radius: 999px;
+        pointer-events: none;
+    }
+    .osl-scrub__track::before { background: rgba(29, 53, 106, .12); }
+    .osl-scrub__fill { background: var(--ui-primary); transform-origin: left center; transform: scaleX(var(--os-p)); }
+    .osl-scrub__marks { position: absolute; left: 9px; right: 9px; top: 50%; pointer-events: none; }
+    .osl-mark {
+        position: absolute;
+        top: -13px;
+        width: 6px;
+        height: 6px;
+        margin-left: -3px;
+        border-radius: 999px;
+        background: var(--ui-hue-gold);
+        box-shadow: 0 0 0 2px var(--ui-surface);
+    }
+    .osl-scrub__range {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: transparent;
+        cursor: pointer;
+        -webkit-appearance: none;
+        appearance: none;
+        touch-action: pan-y;
+    }
+    .osl-scrub__range:focus { outline: none; }
+    .osl-scrub__range::-webkit-slider-runnable-track { height: 32px; background: transparent; }
+    .osl-scrub__range::-moz-range-track { height: 32px; background: transparent; }
+    .osl-scrub__range::-webkit-slider-thumb {
+        width: 18px;
+        height: 18px;
+        margin-top: 7px;
+        border: 3px solid var(--ui-surface);
+        border-radius: 999px;
+        background: var(--ui-primary);
+        box-shadow: 0 1px 4px rgba(10, 14, 23, .35);
+        -webkit-appearance: none;
+        appearance: none;
+    }
+    .osl-scrub__range::-moz-range-thumb {
+        width: 12px;
+        height: 12px;
+        border: 3px solid var(--ui-surface);
+        border-radius: 999px;
+        background: var(--ui-primary);
+        box-shadow: 0 1px 4px rgba(10, 14, 23, .35);
+    }
+    .osl-scrub__range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--ui-surface), 0 0 0 4px var(--ui-focus); }
+    .osl-scrub__range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(--ui-surface), 0 0 0 4px var(--ui-focus); }
+    .osl-scrub__times { display: flex; justify-content: space-between; margin-top: 2px; padding: 0 2px; font-size: var(--ui-text-sm); color: var(--ui-text-muted); }
+
+    .osl-controls { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 6px; }
+    .osl-play {
+        display: grid;
+        place-items: center;
+        width: 64px;
+        height: 64px;
+        margin: 0 4px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--ui-primary);
+        color: #FFFFFF;
+        box-shadow: 0 12px 24px -12px rgba(29, 53, 106, .8);
+        cursor: pointer;
+        transition: background-color var(--ui-dur) var(--ui-ease), transform var(--ui-dur) var(--os-ease);
+    }
+    .osl-play:hover { background: var(--ui-primary-hover); }
+    .osl-play:active { transform: scale(.96); }
+    .osl-play .ui-icon { width: 26px; height: 26px; fill: currentColor; }
+    .osl-play__on { margin-left: 3px; }
+    .osl-play__off,
+    .is-on > .osl-play__on { display: none; }
+    .is-on > .osl-play__off { display: block; margin-left: 0; }
+    .osl-skip {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 52px;
+        height: 52px;
+        border: 0;
+        border-radius: 999px;
+        background: none;
+        color: var(--ui-heading);
+        cursor: pointer;
+        transition: background-color var(--ui-dur-fast) var(--ui-ease);
+    }
+    .osl-skip:hover { background: var(--ui-surface-sunken); }
+    .osl-skip .ui-icon { width: 38px; height: 38px; stroke-width: 1.6; }
+    .osl-skip span {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding-top: 2px;
+        font-size: .75rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+    .osl-speed {
+        display: grid;
+        place-items: center;
+        min-width: 52px;
+        height: 44px;
+        padding: 0 10px;
+        border: 1px solid var(--ui-border-strong);
+        border-radius: 999px;
+        background: var(--ui-surface);
+        font: 600 var(--ui-text-sm)/1 var(--ui-font-sans);
+        font-variant-numeric: tabular-nums;
+        color: var(--ui-heading);
+        cursor: pointer;
+        transition: border-color var(--ui-dur-fast) var(--ui-ease), background-color var(--ui-dur-fast) var(--ui-ease);
+    }
+    .osl-speed:hover { border-color: var(--ui-text-subtle); background: var(--ui-surface-subtle); }
+    .osl-speed .ui-icon { width: 18px; height: 18px; }
+    .osl-player__help { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; margin: 6px 0 0; font-size: var(--ui-text-sm); color: var(--ui-text-muted); }
+    .osl-player__error { margin-top: 10px; }
+
+    /* Watch: the YouTube player, made only when the member asks for it. */
+    .osl-video { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--ui-radius-xl); background: #0A0E17; }
+    .osl-video__start {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        border: 0;
+        background: radial-gradient(circle at 50% 42%, rgba(29, 53, 106, .7), #0A0E17 72%);
+        color: #FFFFFF;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .osl-video__play {
+        display: grid;
+        place-items: center;
+        width: 64px;
+        height: 64px;
+        border-radius: 999px;
+        background: var(--ui-brand-red);
+        transition: transform var(--ui-dur) var(--os-ease);
+    }
+    .osl-video__start:hover .osl-video__play { transform: scale(1.05); }
+    .osl-video__play .ui-icon { width: 26px; height: 26px; margin-left: 3px; fill: currentColor; }
+    .osl-video__frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+    /* The Bible bar: Open Bible, then the key scriptures as chips. */
+    .osl-biblebar { display: flex; align-items: center; gap: 10px; min-width: 0; margin-bottom: 16px; }
+    .osl-biblebar > .ui-btn { flex: none; }
+    .osl-chips { display: flex; gap: 8px; min-width: 0; margin: 0; padding: 4px 2px; list-style: none; overflow-x: auto; scrollbar-width: none; }
+    .osl-chips::-webkit-scrollbar { display: none; }
+    .osl-chip {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        height: 36px;
+        padding: 0 12px;
+        border: 1px solid var(--ui-hue-gold-line);
+        border-radius: 999px;
+        background: var(--ui-hue-gold-soft);
+        font: 600 var(--ui-text-sm)/1 var(--ui-font-sans);
+        color: var(--ui-hue-gold);
+        white-space: nowrap;
+        cursor: pointer;
+        transition: border-color var(--ui-dur-fast) var(--ui-ease);
+    }
+    .osl-chip::after { content: ""; position: absolute; inset: -4px 0; }
+    .osl-chip:hover { border-color: var(--ui-hue-gold); }
+    .osl-chip--plain { cursor: default; }
+
+    /* The two columns: notes beside the sermon from 1024 px. */
+    .osl-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    .osl-about { display: grid; gap: 16px; min-width: 0; }
+    .osl-card { min-width: 0; padding: 16px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-xl); background: var(--ui-surface); }
+    .osl-card__title { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font: 600 var(--ui-text-lg)/1.3 var(--ui-font-sans); color: var(--ui-heading); }
+    .osl-card__title .ui-icon { width: 18px; height: 18px; color: var(--ui-primary); }
+    .osl-prose p { max-width: 68ch; margin: 0; font-size: 1rem; line-height: 1.7; color: var(--ui-text); text-wrap: pretty; }
+    .osl-prose p + p { margin-top: 12px; }
+
+    .osl-points { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+    .osl-point { --os-hue: var(--ui-hue-navy); --os-hue-soft: var(--ui-hue-navy-soft); display: flex; align-items: flex-start; gap: 12px; }
+    .osl-point[data-hue="violet"] { --os-hue: var(--ui-hue-violet); --os-hue-soft: var(--ui-hue-violet-soft); }
+    .osl-point[data-hue="teal"] { --os-hue: var(--ui-hue-teal); --os-hue-soft: var(--ui-hue-teal-soft); }
+    .osl-point[data-hue="gold"] { --os-hue: var(--ui-hue-gold); --os-hue-soft: var(--ui-hue-gold-soft); }
+    .osl-point[data-hue="rose"] { --os-hue: var(--ui-hue-rose); --os-hue-soft: var(--ui-hue-rose-soft); }
+    .osl-point__n { display: grid; flex: none; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--os-hue-soft); color: var(--os-hue); font-weight: 700; }
+    .osl-point__body { min-width: 0; }
+    .osl-point__text { margin: 5px 0 0; font-weight: 600; line-height: 1.45; color: var(--ui-heading); }
+    .osl-point__detail { margin: 4px 0 0; line-height: 1.6; color: var(--ui-text-muted); }
+
+    .osl-scriptures { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+    .osl-scripture__ref {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 14px;
+        border: 1px solid var(--ui-hue-gold-line);
+        border-radius: var(--ui-radius-lg);
+        background: var(--ui-hue-gold-soft);
+        font-weight: 600;
+        color: var(--ui-hue-gold);
+        cursor: pointer;
+        transition: border-color var(--ui-dur-fast) var(--ui-ease);
+    }
+    .osl-scripture__ref:hover { border-color: var(--ui-hue-gold); }
+    .osl-scripture__ref .ui-icon { width: 16px; height: 16px; }
+    .osl-scripture__ref--plain { cursor: default; }
+    .osl-scripture__note { margin: 6px 0 0 4px; line-height: 1.55; color: var(--ui-text-muted); }
+
+    /* A reference inside text (the summary, a key point, a note). */
+    .osl-ref {
+        margin: 0 -2px;
+        padding: 0 2px;
+        border-radius: 4px;
+        font-weight: 600;
+        color: var(--ui-hue-gold);
+        text-decoration: underline;
+        text-decoration-color: var(--ui-hue-gold-line);
+        text-decoration-thickness: 2px;
+        text-underline-offset: 3px;
+        cursor: pointer;
+    }
+    .osl-ref:hover { background: var(--ui-hue-gold-soft); text-decoration-color: currentColor; }
+
+    /* My notes. */
+    .osl-notes__head { display: flex; align-items: center; gap: 2px; margin-bottom: 12px; }
+    .osl-notes__head .osl-card__title { margin: 0; }
+    .osl-notes__email { margin-left: auto; }
+    .osl-compose { display: grid; gap: 8px; padding: 12px; border: 1px solid rgba(209, 25, 32, .1); border-radius: var(--ui-radius-lg); background: var(--ui-warm); }
+    .osl-compose__label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .osl-compose__label label { font-size: var(--ui-text-sm); font-weight: 600; color: var(--ui-heading); }
+    .osl-stamp {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 11px;
+        border: 1px solid var(--ui-hue-teal-line);
+        border-radius: 999px;
+        background: var(--ui-surface);
+        font: 600 var(--ui-text-sm)/1 var(--ui-font-sans);
+        font-variant-numeric: tabular-nums;
+        color: var(--ui-hue-teal);
+        cursor: pointer;
+        transition: background-color var(--ui-dur) var(--ui-ease);
+    }
+    .osl-stamp::after { content: ""; position: absolute; inset: -6px -2px; }
+    .osl-stamp.is-frozen { background: var(--ui-hue-teal-soft); }
+    .osl-stamp .ui-icon { width: 14px; height: 14px; }
+    .osl-compose__text.ui-textarea { min-height: 84px; resize: vertical; background: var(--ui-surface); }
+    .osl-compose__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .osl-compose__count { font-size: var(--ui-text-xs); color: var(--ui-text-subtle); }
+    .osl-compose__count.is-near { color: var(--ui-danger); }
+
+    .osl-notelist { display: grid; margin: 12px 0 0; padding: 0; list-style: none; }
+    .osl-notelist:empty { display: none; }
+    .osl-note {
+        position: relative;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 4px 10px;
+        padding: 10px 6px;
+        border-radius: var(--ui-radius-lg);
+        transition: background-color 600ms var(--ui-ease);
+    }
+    .osl-note + .osl-note::before { content: ""; position: absolute; top: 0; left: 6px; right: 6px; height: 1px; background: var(--ui-border); }
+    .osl-note.is-now { background: var(--ui-hue-teal-soft); }
+    .osl-note.is-now::before,
+    .osl-note.is-now + .osl-note::before { opacity: 0; }
+    .osl-note__at {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 30px;
+        padding: 0 10px 0 8px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--ui-hue-teal-soft);
+        font: 600 var(--ui-text-sm)/1 var(--ui-font-sans);
+        font-variant-numeric: tabular-nums;
+        color: var(--ui-hue-teal);
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background-color var(--ui-dur-fast) var(--ui-ease);
+    }
+    .osl-note__at::after { content: ""; position: absolute; inset: -7px -2px; }
+    .osl-note__at:hover,
+    .osl-note.is-now .osl-note__at { background: var(--ui-hue-teal-line); }
+    .osl-note__at .ui-icon { width: 12px; height: 12px; fill: currentColor; }
+    .osl-note__at--none { background: var(--ui-surface-sunken); color: var(--ui-text-muted); cursor: default; }
+    .osl-note__main { min-width: 0; }
+    .osl-note__text { margin: 4px 0 0; line-height: 1.55; color: var(--ui-text); white-space: pre-line; overflow-wrap: anywhere; }
+    .osl-note__tools { display: flex; gap: 2px; margin: -4px -2px 0 0; }
+    .osl-note.is-editing { grid-template-columns: auto minmax(0, 1fr); }
+    .osl-note.is-editing .osl-note__tools { display: none; }
+    .osl-note__edit { display: grid; gap: 8px; }
+    .osl-note__editrow { display: flex; justify-content: flex-end; gap: 8px; }
+    .osl-note.is-new { animation: osl-rise 520ms var(--os-ease) both; }
+    @keyframes osl-rise { from { opacity: 0; transform: translate3d(0, 8px, 0); } to { opacity: 1; transform: none; } }
+    @media (hover: hover) and (pointer: fine) {
+        .osl-note__tools { opacity: 0; transition: opacity var(--ui-dur-fast) var(--ui-ease); }
+        .osl-note:hover .osl-note__tools,
+        .osl-note:focus-within .osl-note__tools { opacity: 1; }
+    }
+    .osl-email__choice { display: grid; gap: 10px; margin: 0 0 12px; padding: 0; border: 0; }
+
+    /* The mini-bar: docks above the bottom bar once the player scrolls away. */
+    .osl-dock {
+        position: sticky;
+        bottom: var(--ui-bottom-offset);
+        z-index: var(--ui-z-sticky);
+        height: 0;
+        margin: 0 calc(-1 * var(--ui-gutter));
+        pointer-events: none;
+    }
+    .osl-mini {
+        position: absolute;
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        overflow: hidden;
+        padding: 8px 6px 6px 8px;
+        border-radius: var(--ui-radius-lg);
+        background: var(--ui-primary);
+        color: #FFFFFF;
+        box-shadow: var(--ui-shadow-lg);
+        opacity: 0;
+        visibility: hidden;
+        transform: translate3d(0, 16px, 0);
+        transition: opacity 240ms var(--os-ease), transform 320ms var(--os-ease), visibility 0s linear 320ms;
+    }
+    .osl-mini.is-shown { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; pointer-events: auto; }
+    .osl-mini :focus-visible { outline-color: #FFFFFF; }
+    .osl-mini__bar { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: rgba(255, 255, 255, .18); }
+    .osl-mini__fill { position: absolute; inset: 0; background: #FFFFFF; transform-origin: left center; transform: scaleX(var(--os-p, 0)); }
+    .osl-mini__art { flex: none; width: 40px; height: 40px; border-radius: 8px; object-fit: cover; }
+    .osl-mini__art--mark { display: grid; place-items: center; background: rgba(255, 255, 255, .12); }
+    .osl-mini__art--mark .ui-icon { width: 20px; height: 20px; }
+    .osl-mini__main {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 2px;
+        min-width: 0;
+        min-height: 44px;
+        padding: 2px 6px;
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+    }
+    .osl-mini__title { max-width: 100%; overflow: hidden; font-size: var(--ui-text-md); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    .osl-mini__time { font-size: var(--ui-text-xs); color: rgba(255, 255, 255, .8); }
+    .osl-mini__btn {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        border: 0;
+        border-radius: 999px;
+        background: none;
+        color: #FFFFFF;
+        cursor: pointer;
+        transition: background-color var(--ui-dur-fast) var(--ui-ease);
+    }
+    .osl-mini__btn:hover { background: rgba(255, 255, 255, .12); }
+    .osl-mini__btn .ui-icon { width: 22px; height: 22px; }
+    .osl-mini__btn--play { background: #FFFFFF; color: var(--ui-primary); }
+    .osl-mini__btn--play:hover { background: var(--ui-primary-soft); }
+    .osl-mini__btn--play .ui-icon { width: 20px; height: 20px; fill: currentColor; }
+    .osl-mini__btn--play .osl-play__on { margin-left: 2px; }
+
+    /* The Bible panel: a sheet above the phone's bottom bar; a side panel
+       under the top bar from 1024 px, and from 1280 px the page makes room. */
+    .osl-bible {
+        position: fixed;
+        z-index: calc(var(--ui-z-chrome) - 4);
+        left: 0;
+        right: 0;
+        bottom: var(--ui-bottom-offset);
+        display: flex;
+        flex-direction: column;
+        height: min(78dvh, calc(100dvh - var(--ui-bottom-offset) - var(--ui-safe-top) - var(--ui-appbar-h) - 8px));
+        border: 1px solid var(--ui-border-strong);
+        border-bottom: 0;
+        border-radius: var(--ui-radius-xl) var(--ui-radius-xl) 0 0;
+        background: var(--ui-warm);
+        box-shadow: 0 -18px 48px -16px rgba(10, 14, 23, .35);
+        opacity: 0;
+        transform: translate3d(0, 24px, 0);
+        transition: opacity 200ms var(--ui-ease), transform 320ms var(--os-ease);
+    }
+    .osl-bible[hidden] { display: none; }
+    .osl-bible.is-open { opacity: 1; transform: none; }
+    .osl-bible__head { display: flex; align-items: center; gap: 4px; padding: 10px 6px 6px 14px; }
+    .osl-bible__mark { display: grid; flex: none; place-items: center; width: 32px; height: 32px; margin-right: 6px; border-radius: 10px; background: var(--ui-hue-gold-soft); color: var(--ui-hue-gold); }
+    .osl-bible__mark .ui-icon { width: 18px; height: 18px; }
+    .osl-bible__ref {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin: 0;
+        overflow: hidden;
+        font: 700 var(--ui-text-lg)/1.3 var(--ui-font-display);
+        color: var(--ui-heading);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .osl-bible__ref:focus { outline: none; }
+    .osl-bible__ref:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; border-radius: 4px; }
+    .osl-bible__btn {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        border: 0;
+        border-radius: 999px;
+        background: none;
+        color: var(--ui-text);
+        cursor: pointer;
+        transition: background-color var(--ui-dur-fast) var(--ui-ease);
+    }
+    .osl-bible__btn:hover:not(:disabled) { background: rgba(29, 53, 106, .07); }
+    .osl-bible__btn:disabled { opacity: .35; cursor: default; }
+    .osl-bible__btn .ui-icon { width: 20px; height: 20px; }
+    .osl-bible__btn[data-os-play] .ui-icon { fill: currentColor; }
+    .osl-bible__tools { display: flex; align-items: center; gap: 4px; padding: 0 6px 10px; border-bottom: 1px solid rgba(209, 25, 32, .1); }
+    .osl-bible__go { flex: 1 1 auto; min-width: 0; }
+    .osl-bible__go .ui-input { width: 100%; }
+    .osl-bible__t.ui-select { flex: none; width: auto; min-width: 84px; }
+    .osl-bible__body {
+        flex: 1 1 auto;
+        min-height: 0;
+        padding: 14px 20px 24px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        font-size: 1.0625rem;
+        line-height: 1.75;
+        color: #2B261F;
+    }
+    .osl-bible__body:focus { outline: none; }
+    .osl-bible__body:focus-visible { box-shadow: inset 0 0 0 2px var(--ui-focus); }
+    .osl-bible__h { margin: 18px 0 6px; font: 600 var(--ui-text-sm)/1.4 var(--ui-font-sans); color: var(--ui-text-muted); }
+    .osl-v { margin: 0 -8px 4px; padding: 2px 8px; border-radius: 8px; transition: background-color 600ms var(--ui-ease); }
+    .osl-v--poetry { padding-left: 1.75em; }
+    .osl-v__n { font: 700 .75rem/1 var(--ui-font-sans); color: var(--ui-hue-gold); vertical-align: .35em; }
+    .osl-v.is-target { background: rgba(214, 167, 72, .22); box-shadow: inset 3px 0 0 var(--ui-hue-gold); }
+    .osl-bible__loading { display: grid; gap: 12px; padding-top: 6px; }
+    .osl-bible__error { display: grid; justify-items: start; gap: 10px; font-family: var(--ui-font-sans); color: var(--ui-text-muted); }
+    .osl-bible__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; border-top: 1px solid rgba(209, 25, 32, .1); }
+    .osl-bible__copy { max-height: 3.4em; margin: 0; overflow: auto; font-size: var(--ui-text-xs); line-height: 1.4; color: var(--ui-text-subtle); }
+    .osl-bible__foot .osl-link { flex: none; font-size: var(--ui-text-sm); white-space: nowrap; }
+
+    @media (min-width: 640px) {
+        .osl-hero { grid-template-columns: 132px minmax(0, 1fr); gap: 20px; padding: 24px; }
+        .osl-player { padding: 20px 24px 14px; }
+        .osl-card { padding: 20px; }
+        .osl-dock { margin: 0; }
+        .osl-mini { left: 0; right: 0; bottom: 16px; max-width: 560px; margin: 0 auto; }
+    }
+    @media (max-width: 1023px) {
+        .osl-chip { height: 40px; }
+        .osl-speed { min-width: 48px; }
+    }
+    @media (min-width: 1024px) {
+        .osl-hero { grid-template-columns: 160px minmax(0, 1fr); gap: 28px; padding: 28px 32px; }
+        .osl-bible {
+            top: var(--ui-topbar-h);
+            left: auto;
+            bottom: 0;
+            width: 420px;
+            height: auto;
+            border: 0;
+            border-left: 1px solid var(--ui-border);
+            border-radius: 0;
+            box-shadow: -24px 0 48px -28px rgba(10, 14, 23, .3);
+            transform: translate3d(24px, 0, 0);
+        }
+    }
+    @container osl-page (min-width: 860px) {
+        .osl-grid { grid-template-areas: "about notes"; grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); gap: 24px; align-items: start; }
+        .osl-grid--notes { grid-template-areas: "notes"; grid-template-columns: minmax(0, 760px); }
+        .osl-about { grid-area: about; }
+        .osl-notes { position: sticky; top: 16px; grid-area: notes; }
+    }
+    @media (min-width: 1280px) {
+        html.osl-bible-open .ui-main-col { margin-right: 420px; }
+        .ui-main-col:has(.osl) { transition: margin-left var(--ui-dur) var(--ui-ease), margin-right var(--ui-dur-slow) var(--ui-ease); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .osl .osl-mini,
+        .osl-bible { transform: none !important; transition: none !important; }
+        .osl .osl-note,
+        .osl .osl-play,
+        .osl .osl-video__play,
+        .osl-v { transition: none !important; animation: none !important; transform: none !important; }
+    }
+    @media print {
+        .osl-dock,
+        .osl-bible,
+        .osl-biblebar,
+        .osl .ui-tabs,
+        .osl-player,
+        .osl-watch,
+        .osl-compose,
+        .osl-notes__email,
+        .osl-note__tools { display: none !important; }
     }
 
     /* A dialog that fills the screen (a document reader). */

@@ -60,6 +60,7 @@ ui_public_open([
                 <li>Services we rely on handle data for us: our web host, Cloudflare (security), our text-message provider, and Google (see below).</li>
                 <li>When staff use AI help, only the text they choose is sent to Google's Gemini service. Personal records are not sent.</li>
                 <li>Training slides are shown through Microsoft's Office viewer, which reads the slide file from our site.</li>
+                <li>Sermon audio plays from Spotify's servers; a sermon video plays from YouTube (no-cookie mode) only when you choose Watch.</li>
             </ul>
 
             <h2>Cookies</h2>
