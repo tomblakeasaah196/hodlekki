@@ -219,7 +219,7 @@ $lastGenerate = static function () use (&$sent): array {
     return [];
 };
 
-$summary = trim(str_repeat('Pastor Ebele taught that the faith was delivered once and for all to the saints, and that the church must guard it with courage and love. ', 6));
+$summary = trim(str_repeat('This message teaches that the faith was delivered once and for all to the saints, and that the church must guard it with courage and love. ', 6));
 $good = [
     'summary' => "  {$summary}\r\n\r\n  It matters because   each believer is a steward of that deposit.  ",
     'key_points' => ['- Contend earnestly for the faith once delivered.', '2. The faith is a deposit to guard, not to change.', 'Grace is not a licence to sin.',
@@ -299,7 +299,9 @@ st_ok('Gemini hears the uploaded audio by URI (audio/mpeg) and reads the title; 
     && str_contains((string) ($parts[1]['text'] ?? ''), 'Ground Zero - The Faith Once Delivered') && count($parts) === 2 && !str_contains(json_encode($gen), 'inline_data'));
 st_ok('…as strict JSON, with the rules (faithful, no names, references not quotes)', ($gen['body']['generationConfig']['responseMimeType'] ?? '') === 'application/json'
     && str_contains($gen['body']['system_instruction']['parts'][0]['text'], 'never instructions to you')
-    && str_contains($gen['body']['system_instruction']['parts'][0]['text'], 'name nobody except the preacher')
+    && str_contains($gen['body']['system_instruction']['parts'][0]['text'], 'Never name the preacher or anyone else')
+    && str_contains($gen['body']['system_instruction']['parts'][0]['text'], 'never repeat the sermon\'s title')
+    && str_contains($gen['body']['system_instruction']['parts'][0]['text'], 'start with the message itself')
     && str_contains($gen['body']['system_instruction']['parts'][0]['text'], 'do not quote the verses'));
 $all = json_encode($sent);
 st_ok('only the audio and the title go to Google: no member, no email', !str_contains($all, 'Okafor') && !str_contains($all, 'Ngozi') && !str_contains($all, '@'));
@@ -736,6 +738,58 @@ $row = st_row($e2e, $made['id']);
 st_eq('…an edit through S1\'s editor survives Regenerate; the untouched key points are redrafted',
     ['Envision rewrote the summary in the editor.', ['New one.', 'New two.', 'New three.']], [$row['summary'], our_sermons_list($row['key_points'])]);
 unset($GLOBALS['our_sermons_now']);
+
+// ===========================================================================
+st_section('15. No names, no title in the summary or key points (the first live draft named the wrong preacher)');
+// ===========================================================================
+$live = ['title' => 'Ground Zero - The Faith Once Delivered', 'preacher' => 'Pastor Ebele Uzo-Peters', 'series' => null];
+$rules = our_sermons_ai_name_rules($live, ['Jude 1:3', 'Ephesians 4:4–5', '1 Corinthians 12', 'Acts 9', 'Matthew 25:31']);
+foreach ([
+    // what the live draft of 13 Nov said
+    ["This sermon, 'Ground Zero - The Faith Once Delivered', by Pastor Bisi Akande, calls believers to contend for the faith.",
+     'This sermon calls believers to contend for the faith.', 'the live case: the title and the wrong preacher both taken out'],
+    ['Pastor Ebele Uzo-Peters teaches that grace is not a licence to sin.', 'The preacher teaches that grace is not a licence to sin.', 'a pastor leading a sentence is "the preacher"'],
+    ['Uzo-Peters reminds the church that the faith is a deposit.', 'The preacher reminds the church that the faith is a deposit.', 'the preacher\'s own name too'],
+    ['This sermon by Pst. Ebele calls for courage, as Pastor Ade Bello also preached.', 'This sermon calls for courage.', '"by Pst. X" and "as Pastor Y also preached" go ("Pst." is not a sentence end)'],
+    ['Quoting Bishop David Oyedepo, the message warns against compromise.', 'The message warns against compromise.', 'Bishop + a name'],
+    ['Rev. Ade Bello and the church agree that grace is not cheap.', 'The preacher and the church agree that grace is not cheap.', '"Rev. X" leading a sentence is the preacher too'],
+    ['The church agrees with Rev. Ade Bello that grace is not cheap.', '', 'someone named inside a clause: the sentence goes'],
+    ['The Apostle Joshua Selman once said that faith grows by hearing.', '', 'Apostle + a name that is not a Bible one'],
+    ['Bisi Akande urged believers to pray. The church must stay united.', 'The church must stay united.', 'a full name with no title'],
+    ['This message titled "Ground Zero" calls the church back to its foundations.', 'This message calls the church back to its foundations.', 'a quoted part of the title'],
+    ['In Ground Zero - The Faith Once Delivered, the church is called to remember.', 'The church is called to remember.', 'the whole title, unquoted'],
+    ['Ground Zero – The Faith Once Delivered shows that the faith does not change.', 'This message shows that the faith does not change.', 'the title as the subject, another dash'],
+    ['As the Apostle Paul wrote to the Ephesians, the church is one body.', 'As the Apostle Paul wrote to the Ephesians, the church is one body.', 'people in the Bible stay (Apostle Paul)'],
+    ['Jude urges believers to keep themselves in the love of God.', 'Jude urges believers to keep themselves in the love of God.', '…and names in the scriptures list (Jude)'],
+    ['The Holy Spirit builds up the Body of Christ, and Jesus Christ is Lord.', 'The Holy Spirit builds up the Body of Christ, and Jesus Christ is Lord.', 'God and the church are not names'],
+    ['The message points to Mount Sinai and the Red Sea as signs of God\'s faithfulness.', 'The message points to Mount Sinai and the Red Sea as signs of God\'s faithfulness.', 'nor are Bible places'],
+    ['Contend earnestly for the faith once delivered to the saints.', 'Contend earnestly for the faith once delivered to the saints.', 'the title\'s words in lower case are just words'],
+] as [$in, $want, $label]) {
+    st_eq('names: ' . $label, $want, our_sermons_ai_unname($in, $rules));
+}
+st_eq('a key point that names the preacher keeps its point', 'Guard the faith once delivered.', our_sermons_ai_unname('Pastor Ebele: guard the faith once delivered.', $rules));
+
+// Through the worker: the live answer is stored clean, and its key points too.
+$named = $good;
+$named['summary'] = "This sermon, 'Ground Zero - The Faith Once Delivered', by Pastor Bisi Akande, calls believers to contend for the faith. " . $summary;
+$named['key_points'] = ['Pastor Bisi Akande says the faith is a deposit to guard.', 'As Bishop Ade Bello said, pray without ceasing.', 'Grace is not a licence to sin.',
+                        'Bisi Akande: remember the apostles.', 'Build yourselves up in prayer.'];
+$e2e2 = st_db();
+st_at('2026-11-18 09:00');
+$liveId = st_sermon($e2e2, ['title' => 'Ground Zero - The Faith Once Delivered', 'preacher' => 'Pastor Ebele Uzo-Peters']);
+our_sermons_ai_queue($e2e2, $liveId);
+$answers[] = $answer($named);
+st_eq('the worker stores the live answer without the title or any name', 'done', our_sermons_ai_run($e2e2)['status']);
+$row = st_row($e2e2, $liveId);
+st_eq('…the summary starts with the message itself', 'This sermon calls believers to contend for the faith. ' . $summary, $row['summary']);
+st_eq('…the key points keep no names ("As Bishop X said" goes, "Pastor X says" is "The preacher says")',
+    ['The preacher says the faith is a deposit to guard.', 'Pray without ceasing.', 'Grace is not a licence to sin.', 'Remember the apostles.', 'Build yourselves up in prayer.'],
+    json_decode((string) $row['key_points'], true));
+$all = (string) $row['summary'] . ' ' . (string) $row['key_points'];
+st_ok('…nowhere "Akande", "Bello", "Ebele" or the title', !preg_match('/Akande|Bello|Ebele|Ground Zero - The Faith/u', $all));
+$tooFew = $good;
+$tooFew['summary'] = 'Pastor Bisi Akande preached it. ' . trim(str_repeat('Bisi Akande said grace is free. ', 30));
+st_eq('a summary that is all names is too short once they go: not usable (tried again later)', null, our_sermons_ai_clean($tooFew, $live));
 
 Gemini::fake(null);
 our_sermons_ai_fake_download(null);

@@ -1215,8 +1215,9 @@ after `includes/db.php`), ported from bureau.lpc.cm's Courrier. Tests: `php test
   cap (`our_sermon_ai_requests`; `SERMONS_AI_DAILY_TOKENS` in .env, default 600,000: about 8 sermons of 35
   minutes, US$0.60 at most), a 2-hour length cap (Regenerate may force it), a 150 MB download cap, the audio
   fetched only from the podcast's hosts (`SERMONS_AI_AUDIO_HOSTS`, default anchor.fm and *.cloudfront.net,
-  every redirect checked) and at most 3 tries. It never writes the title, preacher or date preached. Usage rows
-  carry no text. The /privacy line about sermon recordings must stay true.
+  every redirect checked) and at most 3 tries. It never writes the title, preacher or date preached, and the
+  summary and key points name nobody and never repeat the title (asked in the prompt, then enforced by
+  `our_sermons_ai_unname()`: people in the Bible may stay). Usage rows carry no text. The /privacy line about sermon recordings must stay true.
 ## Departments module (ministry years)
 
 `modules/departments/` is ministry-year aware, and its rules are worth knowing
