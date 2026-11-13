@@ -190,6 +190,24 @@ columns on it are context. This matters: `api/regions_api.php` writes one row
 per member of a region, each carrying both `user_id` and `region_id`.
 Expanding both would turn a 200-member broadcast into 40,000 queue writes.
 
+**Only members with a live device are queued** (`push_users_with_devices()`).
+A notice to the whole church is one row per member, and most members have no
+device. Before 13 Nov 2026 they were all queued, then closed as "no device"
+one by one, and the few people with a phone waited behind them: six sermons
+published back to back reached phones 5 to 10 minutes late. Members without a
+device still see the alert in the bell, and as a toast while the app is open.
+
+**A row is pushed even if it was already read.** Every device a member
+switched on gets every alert (the owner's rule, 13 Nov 2026): reading it on the
+PC must not stop it reaching the phone.
+
+**Every push is sent with `Urgency: high`.** With `normal`, Android holds the
+message while the phone is idle and delivers it in a batch when the screen
+comes on, which looked like alerts arriving hours late or not at all. Every
+push here shows a notification, which is what high priority is for. The job's
+own urgency (`push_urgency_for()`) still decides quiet hours and whether the
+notification stays on screen.
+
 ### Delivery outcomes
 
 | Response | What happens |
