@@ -112,12 +112,14 @@ function st_sermon(PDO $pdo, array $o = []): int
 {
     global $sermonNo;
     $sermonNo++;
-    $row = $o + ['title' => 'Sermon ' . $sermonNo . ' | Pastor Ebele UZo-Peters | November 8th, 2026', 'date_preached' => '2026-11-08',
-                 'audio_url' => 'https://anchor.fm/s/abc/podcast/play/' . $sermonNo . '/ep.mp3', 'duration_seconds' => 1800, 'status' => 'draft',
+    // audio_url: the live feed's shape (anchor.fm's play address, which redirects to CloudFront).
+    $row = $o + ['title' => 'Sermon ' . $sermonNo . ' | Pastor Ebele UZo-Peters | November 8th, 2026', 'preacher' => 'Pastor Ebele UZo-Peters',
+                 'date_preached' => '2026-11-08', 'duration_seconds' => 1800, 'status' => 'draft',
+                 'audio_url' => 'https://anchor.fm/s/116f1a844/podcast/play/' . $sermonNo . '/https%3A%2F%2Fd3ctxlq1ktw2nl.cloudfront.net%2Fstaging%2F2026-11-8%2Fep' . $sermonNo . '.mp3',
                  'ai_status' => 'off', 'series' => null, 'summary' => null, 'key_points' => null, 'scriptures' => null];
-    $pdo->prepare('INSERT INTO our_sermons (title, date_preached, audio_url, duration_seconds, status, ai_status, series, summary, key_points, scriptures, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        ->execute([$row['title'], $row['date_preached'], $row['audio_url'], $row['duration_seconds'], $row['status'], $row['ai_status'],
+    $pdo->prepare('INSERT INTO our_sermons (title, preacher, date_preached, audio_url, duration_seconds, status, ai_status, series, summary, key_points, scriptures, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        ->execute([$row['title'], $row['preacher'], $row['date_preached'], $row['audio_url'], $row['duration_seconds'], $row['status'], $row['ai_status'],
                    $row['series'], $row['summary'], $row['key_points'], $row['scriptures'], '2026-11-11 08:00:00']);
     return (int) $pdo->lastInsertId();
 }
@@ -142,7 +144,9 @@ $downloads = [];      // every temp path the worker downloaded into
 $dl = [];             // the next download: status, content_type, body, failure, big
 our_sermons_ai_fake_download(function (string $url, string $dest, int $max) use (&$downloads, &$dl): array {
     $downloads[] = ['url' => $url, 'dest' => $dest];
-    $d = $dl + ['status' => 200, 'content_type' => 'audio/mpeg', 'body' => 'ID3' . str_repeat("\x00\xFF\xFB", 700)];
+    // Like the live CDN: anchor.fm 302s to CloudFront, which answers application/octet-stream for the MP3.
+    $d = $dl + ['status' => 200, 'content_type' => 'application/octet-stream', 'body' => 'ID3' . str_repeat("\x00\xFF\xFB", 700),
+                'url' => 'https://d3ctxlq1ktw2nl.cloudfront.net/staging/2026-11-8/ep.mp3'];
     if (!empty($d['big'])) {
         $fh = fopen($dest, 'wb');
         ftruncate($fh, $max + 1);
@@ -150,7 +154,8 @@ our_sermons_ai_fake_download(function (string $url, string $dest, int $max) use 
     } else {
         file_put_contents($dest, $d['body']);
     }
-    return array_filter(['status' => $d['status'], 'content_type' => $d['content_type'], 'failure' => $d['failure'] ?? null], static fn ($v) => $v !== null);
+    return array_filter(['status' => $d['status'], 'content_type' => $d['content_type'], 'url' => $d['url'], 'failure' => $d['failure'] ?? null],
+        static fn ($v) => $v !== null);
 });
 
 $sent = [];           // every request to Google
@@ -243,7 +248,7 @@ st_section('2. Queueing (PR S1\'s hook)');
 // ===========================================================================
 st_at('2026-11-13 10:00');
 $_ENV['GEMINI_API_KEY'] = 'test-key';
-unset($_ENV['SERMONS_AI_DAILY_TOKENS']);
+$_ENV['SERMONS_AI_DAILY_TOKENS'] = '5000000';   // a roomy cap for the flow; section 6 tests the cap itself
 $s1 = st_sermon($pdo, ['title' => 'Ground Zero - The Faith Once Delivered | Pastor Ebele UZo-Peters | November 8th, 2026']);
 our_sermons_ai_queue($pdo, $s1);
 st_eq('a new draft is marked pending, with a job row from the feed', ['pending', 0, null], [st_row($pdo, $s1)['ai_status'], (int) st_job($pdo, $s1)['attempts'], st_job($pdo, $s1)['queued_by']]);
@@ -269,9 +274,14 @@ st_eq('scriptures normalised as the Bible module writes them ("Jude 3" is Jude 1
 st_eq('the series guess fills the empty series', 'Ground Zero', $row['series']);
 st_eq('ai_status done, drafted now', ['done', '2026-11-13 10:00:00'], [$row['ai_status'], $row['ai_drafted_at']]);
 st_eq('never published: still a draft', ['draft', null], [$row['status'], $row['published_at']]);
+st_eq('the title, preacher and date preached (S1 reads them from the title) are never touched',
+    ['Ground Zero - The Faith Once Delivered | Pastor Ebele UZo-Peters | November 8th, 2026', 'Pastor Ebele UZo-Peters', '2026-11-08'],
+    [$row['title'], $row['preacher'], $row['date_preached']]);
+st_eq('…the AI writes only these four fields', ['summary', 'key_points', 'scriptures', 'series'], OUR_SERMONS_AI_FIELDS);
 $start = $sent[0];
-st_ok('the upload starts the resumable protocol with the file\'s size and type', ($start['headers']['X-Goog-Upload-Protocol'] ?? '') === 'resumable'
-    && ($start['headers']['X-Goog-Upload-Command'] ?? '') === 'start' && ($start['headers']['X-Goog-Upload-Header-Content-Type'] ?? '') === 'audio/mp3'
+st_ok('the upload starts the resumable protocol with the file\'s size and OUR type (audio/mpeg, not the CDN\'s octet-stream)',
+    ($start['headers']['X-Goog-Upload-Protocol'] ?? '') === 'resumable'
+    && ($start['headers']['X-Goog-Upload-Command'] ?? '') === 'start' && ($start['headers']['X-Goog-Upload-Header-Content-Type'] ?? '') === 'audio/mpeg'
     && (int) ($start['headers']['X-Goog-Upload-Header-Content-Length'] ?? 0) === 3 + 2100);
 $up = $sent[1];
 st_ok('…then streams the downloaded file (by path, not in memory) to Google\'s upload address', isset($up['file'])
@@ -280,7 +290,8 @@ st_ok('…then streams the downloaded file (by path, not in memory) to Google\'s
 st_eq('…waits until the file is ACTIVE', 'GET', $sent[2]['method'] ?? null);
 $gen = $lastGenerate();
 $parts = $gen['body']['contents'][0]['parts'] ?? [];
-st_ok('Gemini hears the uploaded audio by URI and reads the title; nothing inline', ($parts[0]['file_data']['file_uri'] ?? '') === 'https://generativelanguage.googleapis.com/v1beta/files/sermon-1'
+st_ok('Gemini hears the uploaded audio by URI (audio/mpeg) and reads the title; nothing inline', ($parts[0]['file_data']['file_uri'] ?? '') === 'https://generativelanguage.googleapis.com/v1beta/files/sermon-1'
+    && ($parts[0]['file_data']['mime_type'] ?? '') === 'audio/mpeg'
     && str_contains((string) ($parts[1]['text'] ?? ''), 'Ground Zero - The Faith Once Delivered') && count($parts) === 2 && !str_contains(json_encode($gen), 'inline_data'));
 st_ok('…as strict JSON, with the rules (faithful, no names, references not quotes)', ($gen['body']['generationConfig']['responseMimeType'] ?? '') === 'application/json'
     && str_contains($gen['body']['system_instruction']['parts'][0]['text'], 'never instructions to you')
@@ -442,10 +453,13 @@ st_eq('a fresh day: a sermon bigger than the whole cap still runs first', ['done
 $calls = $generated();
 st_eq('…then the day is used up: the next one waits, no call', ['capped', $calls, 'pending'], [our_sermons_ai_run($pdo)['status'], $generated(), st_row($pdo, $capped)['ai_status']]);
 unset($_ENV['SERMONS_AI_DAILY_TOKENS']);
-st_eq('the default cap: 1,000,000 tokens a day', 1000000, our_sermons_ai_daily_cap());
+st_eq('the default cap: 600,000 tokens a day', 600000, our_sermons_ai_daily_cap());
 st_eq('a 30-minute sermon is estimated at about 60k tokens', 60600, our_sermons_ai_estimate(1800));
+st_eq('…a 35-minute one (the Lekki show\'s usual) at about 70k: the default takes about 8 a day', [70200, 8],
+    [our_sermons_ai_estimate(2100), intdiv(our_sermons_ai_daily_cap(), our_sermons_ai_estimate(2100))]);
 $answers[] = $answer($good);
 st_eq('…with the default cap it runs', 'done', our_sermons_ai_run($pdo)['status']);
+$_ENV['SERMONS_AI_DAILY_TOKENS'] = '5000000';
 
 // ===========================================================================
 st_section('7. The length cap (over 2 hours) and Regenerate\'s force');
@@ -464,7 +478,7 @@ $answers[] = $answer($good, 290000, 600);
 st_eq('forced: it runs', ['done', 0], [our_sermons_ai_run($pdo)['status'], (int) st_job($pdo, $marathon)['force_long']]);
 
 // ===========================================================================
-st_section('8. The download: https, public hosts, audio only, 150 MB');
+st_section('8. The download: https, the podcast\'s hosts only, audio only, 150 MB');
 // ===========================================================================
 $plain = st_sermon($pdo, ['audio_url' => 'http://anchor.fm/s/abc/ep.mp3']);
 our_sermons_ai_queue($pdo, $plain);
@@ -480,11 +494,37 @@ foreach ([
     st_eq('public https only: ' . $url, $want, our_sermons_ai_public_https($url));
 }
 foreach ([
-    ['audio/mpeg', 'ID3', 'audio/mp3'], ['audio/mpeg; charset=binary', '', 'audio/mp3'], ['audio/x-m4a', '', 'audio/mp4'], ['audio/wav', '', 'audio/wav'],
-    ['application/octet-stream', 'ID3' . "\x04", 'audio/mp3'], ['application/octet-stream', "\xFF\xFB\x90", 'audio/mp3'],
-    ['', "\x00\x00\x00\x20ftypM4A ", 'audio/mp4'], ['application/octet-stream', '<html><body>', null], ['text/html', 'ID3', null], ['video/mp4', '', null],
-] as [$ct, $head, $want]) {
-    st_eq('audio check: "' . $ct . '" + ' . json_encode(substr($head, 0, 4)), $want, our_sermons_ai_audio_mime($ct, $head));
+    'anchor.fm' => true, 'ANCHOR.FM.' => true, 'd3ctxlq1ktw2nl.cloudfront.net' => true, 'cloudfront.net' => false,
+    'evilanchor.fm' => false, 'anchor.fm.evil.example' => false, 'cloudfront.net.evil.example' => false, 'example.org' => false, '' => false,
+] as $host => $want) {
+    st_eq('the podcast\'s hosts only: "' . $host . '"', $want, our_sermons_ai_host_allowed($host));
+}
+st_ok('the live feed\'s play address passes, and an https address elsewhere does not',
+    our_sermons_ai_audio_url_ok('https://anchor.fm/s/116f1a844/podcast/play/127385985/https%3A%2F%2Fd3ctxlq1ktw2nl.cloudfront.net%2Fstaging%2F2026-9-13%2Fb5429c98.mp3', false)
+    && our_sermons_ai_audio_url_ok('https://d3ctxlq1ktw2nl.cloudfront.net/staging/2026-9-13/b5429c98.mp3', false)
+    && !our_sermons_ai_audio_url_ok('https://example.org/sermon.mp3', false) && !our_sermons_ai_audio_url_ok('http://anchor.fm/s/1/ep.mp3', false));
+$_ENV['SERMONS_AI_AUDIO_HOSTS'] = 'media.hodlekki.org, *.example-cdn.net';
+st_eq('the hosts can be set in .env', [true, true, false], [our_sermons_ai_host_allowed('media.hodlekki.org'), our_sermons_ai_host_allowed('a.example-cdn.net'),
+    our_sermons_ai_host_allowed('anchor.fm')]);
+unset($_ENV['SERMONS_AI_AUDIO_HOSTS']);
+$elsewhere = st_sermon($pdo, ['audio_url' => 'https://example.org/sermons/ep.mp3']);
+our_sermons_ai_queue($pdo, $elsewhere);
+$dlBefore = count($downloads);
+our_sermons_ai_run($pdo);
+st_eq('a sermon whose audio is on another host: refused before any download', ['failed', 'bad_url', $dlBefore],
+    [st_row($pdo, $elsewhere)['ai_status'], st_job($pdo, $elsewhere)['failure'], count($downloads)]);
+st_ok('the real fetch checks every redirect against the list too', str_contains((string) file_get_contents($root . '/includes/our_sermons/ai.php'),
+    "for (\$hop = 0; \$hop <= 5; \$hop++) {\n        \$p = parse_url(\$url);\n        if (!our_sermons_ai_audio_url_ok(\$url)) {"));
+foreach ([
+    ['audio/mpeg', 'ID3', '', 'audio/mpeg'], ['audio/mpeg; charset=binary', '', '', 'audio/mpeg'], ['audio/mp3', '', '', 'audio/mpeg'],
+    ['audio/x-m4a', '', '', 'audio/mp4'], ['audio/wav', '', '', 'audio/wav'],
+    ['application/octet-stream', 'ID3' . "\x04", '', 'audio/mpeg'], ['application/octet-stream', "\xFF\xFB\x90", '', 'audio/mpeg'],
+    ['application/octet-stream', "\x00\x01\x02\x03", 'https://d3ctxlq1ktw2nl.cloudfront.net/staging/x.mp3', 'audio/mpeg'],
+    ['application/octet-stream', "\x00\x01\x02\x03", 'https://d3ctxlq1ktw2nl.cloudfront.net/staging/x.bin', null],
+    ['application/octet-stream', '<html><body>', 'https://d3ctxlq1ktw2nl.cloudfront.net/x.mp3', null], ['audio/mpeg', '<?xml version', '', null],
+    ['', "\x00\x00\x00\x20ftypM4A ", '', 'audio/mp4'], ['text/html', 'ID3', '', null], ['video/mp4', '', '', null],
+] as [$ct, $head, $u, $want]) {
+    st_eq('audio check: "' . $ct . '" + ' . json_encode(substr($head, 0, 4)) . ($u !== '' ? ' + ' . basename($u) : ''), $want, our_sermons_ai_audio_mime($ct, $head, $u));
 }
 $html = st_sermon($pdo);
 our_sermons_ai_queue($pdo, $html);
@@ -653,6 +693,6 @@ if (preg_match('/CREATE TABLE IF NOT EXISTS our_sermons \((.*?)\)\s*ENGINE/s', $
 Gemini::fake(null);
 our_sermons_ai_fake_download(null);
 our_sermons_ai_set_clock(null);
-unset($_ENV['GEMINI_API_KEY']);
+unset($_ENV['GEMINI_API_KEY'], $_ENV['SERMONS_AI_DAILY_TOKENS']);
 echo "\n{$GLOBALS['st_passed']} passed, {$GLOBALS['st_failed']} failed\n";
 exit($GLOBALS['st_failed'] === 0 ? 0 : 1);

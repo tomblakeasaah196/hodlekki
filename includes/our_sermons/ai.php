@@ -13,13 +13,16 @@
 //   our_sermons_ai_regenerate()  Envision's Regenerate (api/our_sermons_ai_api.php)
 //   our_sermons_ai_panel()       the status and the Regenerate button, for the draft page
 //
-// The worker downloads the episode's audio (https only, at most 150 MB, a
-// timeout, audio only), uploads it to Gemini's file store, asks for strict
+// The worker downloads the episode's audio (https only, on the podcast's
+// hosts only: anchor.fm and its CloudFront CDN, at most 150 MB, a timeout,
+// audio only), uploads it to Gemini's file store, asks for strict
 // JSON (summary, key_points, scriptures, series_guess), checks it, writes it
 // into the DRAFT and deletes the file at Gemini and the temp file.
 //
 // Never publish: the AI only fills a draft. Envision reads, fixes and
-// publishes. A sermon that is no longer a draft is left alone.
+// publishes. A sermon that is no longer a draft is left alone. Only summary,
+// key_points, scriptures and series are written: never the title, the
+// preacher or the date preached (S1 reads those from the title).
 // Never overwrite Envision: our_sermon_ai_jobs.filled keeps a fingerprint of
 // what the AI last wrote into each field. A field is written only when it is
 // empty or still holds exactly what the AI wrote; a field edited by hand is
@@ -48,7 +51,8 @@ use HOD\Mail\Ai\Ai;
 use HOD\Mail\Ai\Gemini;
 
 const OUR_SERMONS_AI_TZ             = 'Africa/Lagos';
-const OUR_SERMONS_AI_DAILY_TOKENS   = 1000000;            // per Lagos day: about 8 one-hour sermons, at most about US$1 (2.5 Flash audio input, US$1 per million)
+const OUR_SERMONS_AI_DAILY_TOKENS   = 600000;             // per Lagos day: about 8 sermons of 35 minutes (≈70k each), at most about US$0.60 (2.5 Flash audio input, US$1 per million)
+const OUR_SERMONS_AI_AUDIO_HOSTS    = 'anchor.fm,*.anchor.fm,*.cloudfront.net';   // the Lekki show (Spotify for Creators) and its CDN; SERMONS_AI_AUDIO_HOSTS overrides
 const OUR_SERMONS_AI_TOKENS_PER_SEC = 32;                 // Gemini counts audio at 32 tokens a second (30 min ≈ 58k)
 const OUR_SERMONS_AI_UNKNOWN_LENGTH = 120000;             // the estimate when the feed gave no length (about an hour)
 const OUR_SERMONS_AI_MAX_SECONDS    = 7200;               // over 2 hours: only when Regenerate forces it
@@ -65,7 +69,7 @@ const OUR_SERMONS_AI_FAILURES = [
     'not_draft'   => ['Not a draft, so left alone.', 'off', false],
     'no_audio'    => ['No audio to listen to.', 'off', false],
     'too_long'    => ['Over 2 hours. Regenerate to try anyway.', 'off', false],
-    'bad_url'     => ['The audio link is not a public https link.', 'failed', false],
+    'bad_url'     => ['The audio link is not the podcast\'s https link.', 'failed', false],
     'too_big'     => ['The audio file is over 150 MB.', 'failed', false],
     'not_audio'   => ['The audio link does not give audio.', 'failed', false],
     'download'    => ['The audio could not be downloaded.', 'failed', true],
@@ -349,7 +353,7 @@ function our_sermons_ai_process(PDO $pdo, int $sermonId): array
     $early = match (true) {
         (string) $sermon['status'] !== 'draft' => 'not_draft',
         $url === '' => 'no_audio',
-        !our_sermons_ai_public_https($url, false) => 'bad_url',
+        !our_sermons_ai_audio_url_ok($url, false) => 'bad_url',
         $seconds !== null && $seconds > OUR_SERMONS_AI_MAX_SECONDS && empty($job['force_long']) => 'too_long',
         default => null,
     };
@@ -385,7 +389,7 @@ function our_sermons_ai_process(PDO $pdo, int $sermonId): array
                 $failure = Gemini::$lastFailure ?? 'unreachable';
             } else {
                 $text = Gemini::generate(our_sermons_ai_system(), [
-                    ['file_data' => ['mime_type' => $active['mime'] !== '' ? $active['mime'] : (string) $got['mime'], 'file_uri' => $active['uri']]],
+                    ['file_data' => ['mime_type' => (string) $got['mime'], 'file_uri' => $active['uri']]],   // our own type, not the CDN's
                     ['text' => 'SERMON TITLE: ' . mb_substr(trim((string) $sermon['title']), 0, 300)],
                 ], OUR_SERMONS_AI_MAX_OUT, true, 0.3, OUR_SERMONS_AI_TIMEOUTS['answer']);
                 $usage = Gemini::$lastUsage ?? $usage;
@@ -602,7 +606,7 @@ function our_sermons_ai_write(PDO $pdo, int $sermonId, array $draft): array
 // The download (https only, public hosts, a size cap, audio only)
 // ---------------------------------------------------------------------------
 
-/** Tests: fn (string $url, string $dest, int $maxBytes): array{status:int, content_type:string, failure?:string} that writes $dest. */
+/** Tests: fn (string $url, string $dest, int $maxBytes): array{status:int, content_type:string, url?:string, failure?:string} that writes $dest. */
 function our_sermons_ai_fake_download(?callable $fetch): void
 {
     our_sermons_ai_fetch_slot($fetch, true);
@@ -615,6 +619,35 @@ function our_sermons_ai_fetch_slot(?callable $set = null, bool $write = false): 
         $slot = $set;
     }
     return $slot;
+}
+
+/** The hosts the audio may come from (and redirect through): exact names, or "*.example.net" for its subdomains. */
+function our_sermons_ai_audio_hosts(): array
+{
+    $env = function_exists('site_env') ? (string) site_env('SERMONS_AI_AUDIO_HOSTS') : trim((string) ($_ENV['SERMONS_AI_AUDIO_HOSTS'] ?? ''));
+    $list = array_values(array_filter(array_map(static fn ($h) => strtolower(trim($h)), explode(',', $env !== '' ? $env : OUR_SERMONS_AI_AUDIO_HOSTS))));
+    return $list !== [] ? $list : explode(',', OUR_SERMONS_AI_AUDIO_HOSTS);
+}
+
+function our_sermons_ai_host_allowed(string $host): bool
+{
+    $host = rtrim(strtolower(trim($host)), '.');
+    if ($host === '') {
+        return false;
+    }
+    foreach (our_sermons_ai_audio_hosts() as $rule) {
+        $ok = str_starts_with($rule, '*.') ? strlen($host) > strlen($rule) - 1 && str_ends_with($host, substr($rule, 1)) : $host === $rule;
+        if ($ok) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** An audio address the worker may fetch: public https (below) on one of the podcast's hosts. */
+function our_sermons_ai_audio_url_ok(string $url, bool $resolve = true): bool
+{
+    return our_sermons_ai_host_allowed((string) parse_url($url, PHP_URL_HOST)) && our_sermons_ai_public_https($url, $resolve);
 }
 
 /** https, no credentials, port 443, and (when $resolve) every address of the host public. */
@@ -648,12 +681,18 @@ function our_sermons_ai_resolve(string $host): array
     return is_array($ips) ? array_values($ips) : [];
 }
 
-/** The MIME type Gemini is given, from the server's Content-Type and the first bytes; null when it is not audio. */
-function our_sermons_ai_audio_mime(string $contentType, string $head): ?string
+/**
+ * The MIME type Gemini is given (ours, not the server's), from the server's Content-Type, the first bytes and the
+ * address; null when it is not audio. The Lekki show's CDN answers application/octet-stream for its MP3s.
+ */
+function our_sermons_ai_audio_mime(string $contentType, string $head, string $url = ''): ?string
 {
     $ct = strtolower(trim(explode(';', $contentType)[0]));
+    if (preg_match('/^\s*</', $head)) {
+        return null;   // an HTML or XML page (an error page), whatever it is labelled
+    }
     $known = [
-        'audio/mpeg' => 'audio/mp3', 'audio/mp3' => 'audio/mp3', 'audio/mpeg3' => 'audio/mp3', 'audio/x-mpeg' => 'audio/mp3', 'audio/x-mp3' => 'audio/mp3',
+        'audio/mpeg' => 'audio/mpeg', 'audio/mp3' => 'audio/mpeg', 'audio/mpeg3' => 'audio/mpeg', 'audio/x-mpeg' => 'audio/mpeg', 'audio/x-mp3' => 'audio/mpeg',
         'audio/aac' => 'audio/aac', 'audio/aacp' => 'audio/aac', 'audio/x-aac' => 'audio/aac',
         'audio/mp4' => 'audio/mp4', 'audio/x-m4a' => 'audio/mp4', 'audio/m4a' => 'audio/mp4',
         'audio/wav' => 'audio/wav', 'audio/x-wav' => 'audio/wav', 'audio/wave' => 'audio/wav',
@@ -666,13 +705,14 @@ function our_sermons_ai_audio_mime(string $contentType, string $head): ?string
     if (!in_array($ct, ['', 'application/octet-stream', 'binary/octet-stream'], true)) {
         return null;   // text/html (an error page), video, anything else
     }
-    // A server that does not say: the file's own signature.
+    // A server that does not say: the file's own signature, then the address's .mp3.
     return match (true) {
-        str_starts_with($head, 'ID3'), strlen($head) > 1 && ord($head[0]) === 0xFF && (ord($head[1]) & 0xE0) === 0xE0 => 'audio/mp3',
+        str_starts_with($head, 'ID3'), strlen($head) > 1 && ord($head[0]) === 0xFF && (ord($head[1]) & 0xE0) === 0xE0 => 'audio/mpeg',
         str_starts_with($head, 'RIFF') && substr($head, 8, 4) === 'WAVE' => 'audio/wav',
         str_starts_with($head, 'OggS') => 'audio/ogg',
         str_starts_with($head, 'fLaC') => 'audio/flac',
         substr($head, 4, 4) === 'ftyp' => 'audio/mp4',
+        (bool) preg_match('/\.mp3$/i', (string) parse_url($url, PHP_URL_PATH)) => 'audio/mpeg',
         default => null,
     };
 }
@@ -704,7 +744,7 @@ function our_sermons_ai_download(string $url, string $dest): array
     if ($fh) {
         fclose($fh);
     }
-    $mime = our_sermons_ai_audio_mime((string) ($got['content_type'] ?? ''), $head);
+    $mime = our_sermons_ai_audio_mime((string) ($got['content_type'] ?? ''), $head, (string) ($got['url'] ?? $url));
     if ($mime === null) {
         return ['ok' => false, 'bytes' => $bytes, 'failure' => 'not_audio'];
     }
@@ -712,9 +752,10 @@ function our_sermons_ai_download(string $url, string $dest): array
 }
 
 /**
- * The real fetch: redirects followed by hand (at most 5, each https to a public
- * host, the address pinned), stopped early past the size cap or on a body
- * that is not audio. @return array{status:int, content_type:string, failure?:string}
+ * The real fetch: redirects followed by hand (at most 5, each https to one of
+ * the podcast's public hosts, the address pinned; anchor.fm answers 302 to
+ * CloudFront), stopped early past the size cap or on a body that is not audio.
+ * @return array{status:int, content_type:string, url?:string, failure?:string}
  */
 function our_sermons_ai_fetch(string $url, string $dest, int $maxBytes, int $timeout): array
 {
@@ -724,7 +765,7 @@ function our_sermons_ai_fetch(string $url, string $dest, int $maxBytes, int $tim
     $deadline = time() + $timeout;
     for ($hop = 0; $hop <= 5; $hop++) {
         $p = parse_url($url);
-        if (!our_sermons_ai_public_https($url)) {
+        if (!our_sermons_ai_audio_url_ok($url)) {
             return ['status' => 0, 'content_type' => '', 'failure' => is_array($p) && !empty($p['host']) && our_sermons_ai_resolve((string) $p['host']) === [] ? 'download' : 'bad_url'];
         }
         $host = (string) $p['host'];
@@ -755,7 +796,7 @@ function our_sermons_ai_fetch(string $url, string $dest, int $maxBytes, int $tim
                 }
                 return strlen($line);
             },
-            CURLOPT_WRITEFUNCTION => static function ($ch, string $chunk) use (&$headers, &$written, &$stop, $out, $maxBytes): int {
+            CURLOPT_WRITEFUNCTION => static function ($ch, string $chunk) use (&$headers, &$written, &$stop, $out, $maxBytes, $url): int {
                 $status = (int) ($headers['status'] ?? 0);
                 if ($status >= 300 && $status < 400) {
                     return strlen($chunk);   // a redirect's body is not kept
@@ -765,7 +806,7 @@ function our_sermons_ai_fetch(string $url, string $dest, int $maxBytes, int $tim
                         $stop = 'too_big';
                         return 0;
                     }
-                    if (our_sermons_ai_audio_mime((string) ($headers['content-type'] ?? ''), substr($chunk, 0, 16)) === null && strlen($chunk) >= 16) {
+                    if (our_sermons_ai_audio_mime((string) ($headers['content-type'] ?? ''), substr($chunk, 0, 16), $url) === null && strlen($chunk) >= 16) {
                         $stop = 'not_audio';
                         return 0;
                     }
@@ -793,7 +834,7 @@ function our_sermons_ai_fetch(string $url, string $dest, int $maxBytes, int $tim
             $url = our_sermons_ai_join_url($url, (string) $headers['location']);
             continue;
         }
-        return ['status' => $status, 'content_type' => (string) ($headers['content-type'] ?? '')];
+        return ['status' => $status, 'content_type' => (string) ($headers['content-type'] ?? ''), 'url' => $url];
     }
     return ['status' => 0, 'content_type' => '', 'failure' => 'download'];   // too many redirects
 }
