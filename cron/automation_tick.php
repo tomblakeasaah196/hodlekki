@@ -10,7 +10,8 @@
  * each person gets a step once (automation_sends is unique per person, step and
  * week/streak). Emails go to the outbox (cron/email_worker.php sends them);
  * texts go to SMS Studio's queue (cron/sms_queue_worker.php sends them).
- * Everything lives in includes/campaigns/automation.php.
+ * Everything lives in includes/campaigns/automation.php. After it, Our sermons'
+ * AI drafts one sermon's summary (includes/our_sermons/ai.php).
  *
  * Crontab:
  *     0,5,10,15,20,25,30,35,40,45,50,55 * * * * /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/cron/automation_tick.php >> /home/smartqaq/logs/hod-email.log 2>&1
@@ -122,5 +123,25 @@ try {
 } catch (Throwable $e) {
     $line('ERROR: ' . $e->getMessage());
     error_log('[automation] tick: ' . $e->getMessage());
-    exit(1);
+    $exitCode = 1;
 }
+
+// Our sermons' AI drafts (includes/our_sermons/ai.php, PR S3) ride on this 5-minute beat after the automation,
+// so a long listen never holds a message back: ONE sermon per run (download, Gemini, fill the draft). Its own
+// try; never on --dry-run, --rule or --at (it spends tokens and uses the real clock). No new cron line.
+if (!$dry && $at === null && $opt('rule') === null) {
+    if (is_file(__DIR__ . '/../includes/our_sermons/ai.php')) {
+        require_once __DIR__ . '/../includes/our_sermons/ai.php';
+    }
+    if (function_exists('our_sermons_ai_run')) {
+        try {
+            $sa = our_sermons_ai_run($pdo);
+            if (!in_array($sa['status'], ['idle', 'not_ready', 'off', 'busy'], true)) {
+                $line('sermon AI: ' . $sa['status'] . (isset($sa['sermon_id']) ? ' #' . $sa['sermon_id'] : '') . ' — ' . $sa['message']);
+            }
+        } catch (Throwable $e) {
+            error_log('[sermons-ai] run: ' . $e->getMessage());
+        }
+    }
+}
+exit($exitCode ?? 0);

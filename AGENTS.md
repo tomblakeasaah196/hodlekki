@@ -1205,6 +1205,16 @@ after `includes/db.php`), ported from bureau.lpc.cm's Courrier. Tests: `php test
   questions arrive as drafts, explanations are stored only when a tutor confirms them, content only on Apply.
   Marking never calls it. One shared client (`HOD\Mail\Ai\Gemini`), a daily token cap for the church
   (`training_ai_requests`), and the /privacy promise ("only the text staff choose is sent") must stay true.
+- **Our sermons' AI drafts are the third written exception** (owner's answer 8, 13 Nov 2026; OUR-SERMONS-PLAN.md):
+  `includes/our_sermons/ai.php` sends Gemini ONLY a sermon's public audio (the church's own podcast episode,
+  uploaded to Gemini's file store and deleted as soon as it has been heard) and its title. Never a member, a note,
+  a listening record or anything else from the ERP. It only fills a DRAFT (summary, key points, key scriptures, a
+  series guess for an empty series): it never publishes, leaves a sermon that is no longer a draft alone, and never
+  overwrites a field Envision edited (`our_sermon_ai_jobs.filled` fingerprints what it wrote). It runs on the
+  */5 beat of `cron/automation_tick.php`, ONE sermon per run, through the shared client, with its own daily token
+  cap (`our_sermon_ai_requests`; `SERMONS_AI_DAILY_TOKENS` in .env, default 1,000,000, about US$1 at most), a
+  2-hour length cap (Regenerate may force it), a 150 MB download cap and at most 3 tries. Usage rows carry no
+  text. The /privacy line about sermon recordings must stay true.
 ## Departments module (ministry years)
 
 `modules/departments/` is ministry-year aware, and its rules are worth knowing
