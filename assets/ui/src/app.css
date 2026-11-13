@@ -3238,13 +3238,16 @@
         margin-inline: auto;
         padding: 28px 20px 24px;
     }
+    /* Logo and title sit centred on every screen. */
     .si-panel__logo {
+        display: block;
         width: auto;
         height: 48px;
-        margin-bottom: 18px;
+        margin: 0 auto 18px;
     }
     .si-panel__title {
         margin: 0 0 20px;
+        text-align: center;
         font-family: var(--ui-font-display);
         font-weight: 700;
         font-size: 1.75rem;
@@ -3344,6 +3347,14 @@
             transition: transform 300ms var(--si-out), visibility 0s;
         }
         html.si-js .si.is-dragging .si-panel { transition: none; }
+        /* The on-screen keyboard covers the page without resizing it, so the
+           sheet rides on top of it (ui.js measures the visual viewport) and
+           shrinks to the space left; its contents scroll. */
+        html.si-js.ui-kb-open .si-panel {
+            bottom: var(--ui-kb-inset, 0px);
+            max-height: calc(var(--ui-vv-h, 100dvh) - 8px);
+            padding-bottom: 0;
+        }
         html.si-js .si-panel__grip {
             display: flex;
             justify-content: center;

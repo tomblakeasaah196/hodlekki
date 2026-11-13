@@ -7,6 +7,8 @@
 //     focus returns to the button). It starts open when the page has a notice
 //     to show or was asked for the form (?signin=1). Wide screens keep the
 //     form on its panel and none of this runs.
+//   - With the keyboard up the sheet rides on it (CSS, from ui.js's
+//     measurements) and the field being typed in is kept in view.
 //   - The scripture under the title rotates (KJV, from the page's JSON block).
 //   - The pinned button rises above the install banner while that is shown.
 //   - The form posts to /api/auth_api.php exactly as before (email, password,
@@ -100,6 +102,24 @@
         }
         grip.addEventListener('pointerup', end);
         grip.addEventListener('pointercancel', end);
+    }
+
+    // Once the sheet has settled above the keyboard (ui.js moves it), bring
+    // the field being typed in back into view inside it.
+    function keepFieldInView() {
+        var vv = window.visualViewport;
+        if (!vv) return;
+        var timer = null;
+        function reveal() {
+            clearTimeout(timer);
+            timer = setTimeout(function () {
+                var el = document.activeElement;
+                if (!isOpen() || !el || el === panel || !panel.contains(el)) return;
+                el.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+            }, 120);
+        }
+        vv.addEventListener('resize', reveal);
+        panel.addEventListener('focusin', reveal);
     }
 
     // The install banner (assets/js/pwa.js) sits at the foot of the screen:
@@ -228,6 +248,7 @@
         else if (sheetMq.addListener) sheetMq.addListener(onChange);
 
         dragToClose();
+        keepFieldInView();
         liftAboveInstall();
         rotateScripture();
 
