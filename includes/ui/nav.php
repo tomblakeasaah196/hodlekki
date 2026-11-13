@@ -70,6 +70,14 @@ function ui_nav_registry(): array
                 'membership class', 'maturity class', 'live class', 'assignment'],
             'info' => 'Your classes, live sessions, exams and certificates in one place.',
             'tabs' => ['mine' => 'My trainings', 'catalogue' => 'Catalogue']],
+        // Our sermons (OUR-SERMONS-PLAN.md): every signed-in person listens; Envision's manager is reached from the
+        // page (and the search) by those who may check sermons.
+        ['key' => 'our_sermons', 'label' => 'Our sermons', 'icon' => 'headphones', 'href' => '/modules/our_sermons/', 'section' => 'command',
+            'match' => ['our_sermons'], 'keywords' => ['sermons', 'sermon', 'messages', 'preaching', 'listen', 'audio', 'podcast', 'spotify',
+                'youtube', 'pastor', 'midweek', 'exousia', 'sunday service', 'calendar'],
+            'info' => 'Listen to recent sermons, by list or calendar.',
+            'links' => [['key' => 'our_sermons_manage', 'label' => 'Manage sermons', 'href' => '/modules/our_sermons/manage',
+                'ability' => ['our_sermons', 'create'], 'keywords' => ['manage sermons', 'sermon drafts', 'publish sermon', 'rss feed', 'envision']]]],
         ['key' => 'hymnal', 'label' => 'Hymnary', 'icon' => 'music', 'href' => '/modules/hymnal/', 'section' => 'command',
             'match' => ['hymnal'],
             'keywords' => ['hymn', 'hymnal', 'hymnary', 'song', 'songs', 'worship', 'choir', 'sol-fa', 'solfa', 'tonic solfa', 'notes', 'score',

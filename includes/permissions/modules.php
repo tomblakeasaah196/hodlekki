@@ -73,6 +73,11 @@ return [
     // ready to serve); Manage = the Academy's settings. Own records: a learner's trainings and handed-in work.
     'trainings' => ['label' => 'Trainings (HOD Academy)', 'group' => 'growth', 'max' => 'delete', 'extras' => ['approve', 'manage'],
         'partitioned' => false, 'member' => true, 'own' => 'your trainings and the work you hand in'],
+    // Our sermons (OUR-SERMONS-PLAN.md): the members' sermon library, separate from the public Word Library.
+    // View = browse and listen (everyone); Create = paste a link; Edit = check drafts, publish, hide;
+    // Delete = remove a sermon; Manage = the RSS feeds. Owned by Envision (migration 20261213090100).
+    'our_sermons' => ['label' => 'Our sermons', 'group' => 'command', 'max' => 'delete', 'extras' => ['manage'],
+        'partitioned' => false, 'member' => true],
 
     'junior_church' => ['label' => 'Junior Church', 'group' => 'units', 'max' => 'delete', 'extras' => [], 'partitioned' => false],
     'river_of_life' => ['label' => 'River of Life (Choir)', 'group' => 'units', 'max' => 'delete', 'extras' => [], 'partitioned' => false],

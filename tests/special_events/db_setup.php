@@ -212,7 +212,7 @@ foreach ($files as $file) {
     // well as MySQL turns this shared gate red on somebody else's pull request.
     $isModule = str_contains($name, '_se_') || str_contains($name, '_hymnal_') || str_contains($name, '_monitor_')
         || str_contains($name, '_perm_') || str_contains($name, '_campaigns_') || str_contains($name, '_trainings_')
-        || str_contains($name, '_mail_');
+        || str_contains($name, '_mail_') || str_contains($name, '_our_sermons_');
 
     $sql = (string) file_get_contents($file);
     try {

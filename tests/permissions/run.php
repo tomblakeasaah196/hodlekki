@@ -496,5 +496,20 @@ $pdo->exec($aiSql);
 eq('mail.ai migration re-runs as a no-op', $roles,
     (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE module_key = 'mail.ai'")->fetchColumn());
 
+// ---------------------------------------------------------------------------
+section('Our sermons (OUR-SERMONS-PLAN.md, 13 Nov 2026)');
+// Applied after the parity run, like mail.ai: a new module, so every cell is a decided gain.
+$osSql = perm_test_migration('20261213090100_perm_our_sermons.sql');
+ok('our_sermons migration is portable (no ON DUPLICATE / INSERT IGNORE)', !preg_match('/ON DUPLICATE|INSERT IGNORE/i', $osSql));
+$pdo->exec($osSql);
+$osCells = (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE module_key = 'our_sermons'")->fetchColumn();
+eq('Everyone views, 2 pastor roles and the 7 seats of its owners do the rest', 10, $osCells);
+eq('…Everyone: View, church-wide', 1, (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE module_key = 'our_sermons'
+    AND seat_key = '@everyone' AND level = 1 AND scope = 'church' AND can_manage = 0")->fetchColumn());
+eq('…owned by the departments that own Envision', perm_module_owners($pdo)['envision'] ?? [], perm_module_owners($pdo)['our_sermons'] ?? []);
+$pdo->exec($osSql);
+eq('our_sermons migration re-runs as a no-op', $osCells,
+    (int) $pdo->query("SELECT COUNT(*) FROM perm_grants WHERE module_key = 'our_sermons'")->fetchColumn());
+
 echo "\n{$GLOBALS['perm_test_passed']} passed, {$GLOBALS['perm_test_failed']} failed\n";
 exit($GLOBALS['perm_test_failed'] === 0 ? 0 : 1);
