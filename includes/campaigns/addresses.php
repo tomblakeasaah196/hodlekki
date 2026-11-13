@@ -494,26 +494,43 @@ function email_changed_doc(string $maskedNew, DateTimeImmutable $at): array
 }
 
 /**
- * Copy a newly confirmed address into users.email, as a convenience for the
- * screens that show it — but ONLY when users.email is empty. Whatever is there
- * may be what the person signs in with (a @hodlc.com name, or a personal
- * address); changing it would change how they sign in, which is the sign-in
- * change's job (docs/EMAIL.md). Nothing depends on this copy.
+ * Copy a newly confirmed address into users.real_email, and into users.email
+ * when that is empty or a church-issued @hodlc.com sign-in name (the names die
+ * out, owner's decision 13 Nov 2026; the old name is kept in
+ * auth_retired_signin_names so typing it says where to sign in now). A
+ * personal address already in users.email stays. Sign-in never depends on
+ * this copy: email_signin_lookup() tries the confirmed address first.
  */
 function email_sync_users_email(PDO $pdo, int $userId, string $email): void
 {
+    // The personal-email column of older screens (Congregation, the Security
+    // Centre) shows the confirmed address too. Its own statement: a database
+    // without the column still gets the rest.
+    try {
+        $pdo->prepare('UPDATE users SET real_email = ? WHERE id = ?')->execute([$email, $userId]);
+    } catch (PDOException $e) {
+        // no real_email column here
+    }
     try {
         $stmt = $pdo->prepare('SELECT email FROM users WHERE id = ?');
         $stmt->execute([$userId]);
         $current = email_normalize((string) ($stmt->fetchColumn() ?: ''));
-        // Only ever fill an EMPTY users.email: whatever is there may be the
-        // address someone signs in with (a personal one included).
-        if ($current !== '') {
+        // users.email takes the confirmed address when it is EMPTY or a
+        // church-issued @hodlc.com sign-in name (owner's decision, 13 Nov 2026:
+        // those names die out). Any other address stays: it is real, and may
+        // be what the person signs in with.
+        $signinName = $current !== '' && email_domain($current) === SECURITY_LOGIN_EMAIL_DOMAIN_FOR_EMAIL;
+        if (($current !== '' && !$signinName) || $current === $email) {
             return;
         }
         $stmt = $pdo->prepare('SELECT 1 FROM users WHERE LOWER(email) = ? AND id <> ?');
         $stmt->execute([$email, $userId]);
         if ($stmt->fetchColumn()) {
+            return;
+        }
+        // The old name is kept first, so typing it still says where they
+        // sign in now; if it cannot be kept, the name stays in place.
+        if ($signinName && !signin_retire_name($pdo, $userId, $current)) {
             return;
         }
         $pdo->prepare('UPDATE users SET email = ? WHERE id = ?')->execute([$email, $userId]);

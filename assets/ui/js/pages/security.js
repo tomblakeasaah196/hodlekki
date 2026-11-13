@@ -249,22 +249,6 @@
         document.getElementById('panel-accounts').scrollIntoView({ block: 'start' });
     });
 
-    HOD.actions.on('sec.generate', function (btn) {
-        HOD.confirm({
-            title: 'Generate sign-in emails?',
-            message: 'Every account without one gets a unique @' + boot.domain + ' address and is told in the app. Passwords stay the same.',
-            confirmLabel: 'Generate emails'
-        }).then(function (yes) {
-            if (!yes) return;
-            HOD.busy(btn, true);
-            call('generate_missing_emails').then(function (res) {
-                HOD.toast(res.message, 'success');
-                state.page = 1;
-                refresh();
-            }).catch(function () {}).finally(function () { HOD.busy(btn, false); });
-        });
-    });
-
     /* ------------------------------------------------------- manage dialog */
 
     var dlg = document.getElementById('sec-manage-dialog');
@@ -338,9 +322,15 @@
             b.disabled = b.getAttribute('data-value') === u.account_status;
         });
 
-        q('[data-sec-email-now]').textContent = u.email
+        // Only an old @domain name can be renamed; nobody gets a new one.
+        var hasName = !!u.email && String(u.email).toLowerCase().slice(-(boot.domain.length + 1)) === '@' + boot.domain;
+        q('[data-sec-email-now]').textContent = hasName
             ? 'Now: ' + u.email + (u.real_email ? ' · personal: ' + u.real_email : '')
-            : 'None yet: they cannot sign in until they have one.';
+            : (u.email ? 'Signs in with ' + u.email + (u.phone ? ' or their phone.' : '.')
+                : (u.phone ? 'Signs in with their phone.' : 'No phone or email: they cannot sign in yet.'));
+        dlg.querySelectorAll('[data-action="sec.email"] input, [data-action="sec.email"] button').forEach(function (c) {
+            c.disabled = !hasName;
+        });
 
         q('[data-sec-unlock]').disabled = !locked;
         var force = q('[data-sec-force]');

@@ -14,108 +14,48 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// 4. Capture and sanitize inputs
-$email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
-$password = $_POST['password'] ?? '';
+// 4. Capture the inputs. What was typed is a personal email, a church
+//    sign-in name or a phone number (owner's decision, 13 Nov 2026).
+$typed = mb_substr(trim((string) ($_POST['email'] ?? '')), 0, 190);
+$password = (string) ($_POST['password'] ?? '');
 
 // 5. Basic validation
-if (empty($email) || empty($password)) {
-    echo json_encode(['status' => 'error', 'message' => 'Please provide both email and password.']);
+if ($typed === '' || $password === '') {
+    echo json_encode(['status' => 'error', 'message' => 'Enter your email or phone, and your password.']);
     exit;
 }
+$email = $typed; // what the attempt logs record
 
 try {
-    // 6. Fetch user from the database.
-    //    SELECT * (rather than a fixed column list) so this endpoint keeps
-    //    working if it is deployed before db/migrate.php adds the new
-    //    account-security columns.
-    //    A confirmed personal email signs in first; otherwise users.email (the
-    //    church sign-in name). docs/EMAIL.md, "Sign-in and reset".
+    // 6. Who might this be? A confirmed personal email first, then users.email
+    //    (the church sign-in name, or a retired one), or every account on a
+    //    phone number. docs/EMAIL.md, "Sign-in and reset". Rows are SELECT *
+    //    so this keeps working before db/migrate.php adds the security columns.
     require_once '../includes/campaigns/bootstrap.php';
-    $lookup = email_signin_lookup($pdo, $email);
-    $user = $lookup['user'] ?? false;
-    $user = $user ?: false;
+    $found = signin_candidates($pdo, $typed);
 
     $securityOn = security_schema_ready($pdo);
 
-    // 7. Temporary lockout from repeated failed attempts.
-    if ($user && $securityOn && !empty($user['locked_until'])) {
-        $lockedUntil = strtotime((string) $user['locked_until']);
-        if ($lockedUntil !== false && $lockedUntil > time()) {
-            $minutes = max(1, (int) ceil(($lockedUntil - time()) / 60));
-            security_record_attempt($pdo, (int) $user['id'], $email, false, 'account_locked');
-            echo json_encode([
-                'status'  => 'error',
-                'message' => "Too many failed sign-in attempts. This account is locked for another {$minutes} minute"
-                           . ($minutes === 1 ? '' : 's') . '. Contact an administrator if you need it opened sooner.',
-            ]);
-            exit;
-        }
-    }
-
-    // 8. Verify user exists AND password is correct
-    $passwordOk = $user && !empty($user['password_hash']) && password_verify($password, $user['password_hash']);
-
-    if (!$passwordOk) {
-        if ($user && $securityOn) {
-            // Count this failure and lock the account once the threshold trips.
-            $failures = (int) ($user['failed_login_count'] ?? 0) + 1;
-
-            if ($failures >= SECURITY_MAX_FAILED_LOGINS) {
-                $pdo->prepare("
-                    UPDATE users
-                       SET failed_login_count = ?,
-                           locked_until = (NOW() + INTERVAL " . SECURITY_LOCK_MINUTES . " MINUTE)
-                     WHERE id = ?
-                ")->execute([$failures, $user['id']]);
-
-                security_record_attempt($pdo, (int) $user['id'], $email, false, 'bad_password_locked');
-                security_log(
-                    $pdo,
-                    'account_auto_locked',
-                    (int) $user['id'],
-                    "Account locked automatically after {$failures} consecutive failed sign-in attempts.",
-                    null,
-                    'System'
-                );
-
-                echo json_encode([
-                    'status'  => 'error',
-                    'message' => 'Too many failed sign-in attempts. This account has been locked for '
-                               . SECURITY_LOCK_MINUTES . ' minutes for your protection.',
-                ]);
-                exit;
-            }
-
-            $pdo->prepare("UPDATE users SET failed_login_count = ? WHERE id = ?")
-                ->execute([$failures, $user['id']]);
-            security_record_attempt($pdo, (int) $user['id'], $email, false, 'bad_password');
-
-            $left = SECURITY_MAX_FAILED_LOGINS - $failures;
-            echo json_encode([
-                'status'  => 'error',
-                'message' => 'Invalid email or password.'
-                           . ($left <= 2 ? " {$left} attempt" . ($left === 1 ? '' : 's') . ' left before this account is locked.' : ''),
-            ]);
-            exit;
-        }
-
-        // Unknown email (or pre-migration): generic error, no enumeration.
-        security_record_attempt($pdo, null, $email, false, 'unknown_email');
-        echo json_encode(['status' => 'error', 'message' => 'Invalid email or password.']);
+    // 7–8. Locked accounts are not tried; the password decides among the rest
+    //      (a shared number opens the account whose password it is); a wrong
+    //      one counts towards each account's lockout.
+    $check = signin_check_password($pdo, $found['users'], $password, $typed, $securityOn);
+    if (!$check['ok']) {
+        echo json_encode(['status' => 'error', 'message' => $check['message']]);
         exit;
     }
+    $user = $check['user'];
 
     // 8b. The old church sign-in name of someone who has moved to their
     //     personal email (owner's decision: names work until each person has
     //     moved). Only said after the right password, so the masked address is
     //     never shown to someone who merely knows a sign-in name.
-    if (!empty($lookup['moved_to'])) {
+    if (!empty($found['moved_to'])) {
         security_record_attempt($pdo, (int) $user['id'], $email, false, 'signin_name_moved');
         echo json_encode([
             'status'  => 'error',
             'code'    => 'MOVED',
-            'message' => 'You now sign in with your personal email (' . $lookup['moved_to'] . ') and the same password.',
+            'message' => 'You now sign in with your personal email (' . $found['moved_to'] . ') or your phone, and the same password.',
         ]);
         exit;
     }

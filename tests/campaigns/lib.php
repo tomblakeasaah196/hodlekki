@@ -7,7 +7,7 @@
 // the module reads, a pinned Lagos clock and a fake mail transport.
 
 const CT_MIGRATIONS = ['20261127090000_campaigns_core.sql', '20261129090000_campaigns_identity.sql', '20261130090000_campaigns_throttle.sql',
-    '20261207090000_campaigns_people.sql'];
+    '20261207090000_campaigns_people.sql', '20261214090000_campaigns_signin_names.sql'];
 
 $GLOBALS['ct_passed'] = 0;
 $GLOBALS['ct_failed'] = 0;
@@ -94,7 +94,8 @@ function ct_platform_sql(): array
         "CREATE TABLE users (id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, email TEXT UNIQUE, phone TEXT,
             physical_address TEXT, spiritual_status TEXT, attendance_status TEXT, picture_path TEXT,
             region_id INTEGER, created_at TEXT, awol_exempt INTEGER NOT NULL DEFAULT 0,
-            password_hash TEXT, account_status TEXT DEFAULT 'active')",
+            password_hash TEXT, account_status TEXT DEFAULT 'active', real_email TEXT,
+            failed_login_count INTEGER NOT NULL DEFAULT 0, locked_until TEXT)",
         'CREATE TABLE regions (id INTEGER PRIMARY KEY, name TEXT, pastor_id INTEGER)',
         'CREATE TABLE events (id INTEGER PRIMARY KEY, title TEXT, event_category TEXT, event_date TEXT)',
         'CREATE TABLE checkins (id INTEGER PRIMARY KEY, event_id INTEGER, user_id INTEGER, checkin_date TEXT)',

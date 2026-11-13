@@ -13,6 +13,7 @@
 #   4. php db/migrate.php
 #   5. php db/backfill_embrace_sunday_checkins.php
 #   6. php db/backfill_status_ladder.php
+#   7. php db/backfill_signin_names.php
 #
 # Only one deploy runs at a time (flock on /home/smartqaq/.deploy.lock).
 # Full log always mirrored to /home/smartqaq/deploy.log so you can review
@@ -158,6 +159,13 @@ echo "[deploy] composer install done"
 #    AFTER step 4 -- it needs user_status_history, and does nothing if that
 #    table is not there yet.
 "$PHP" db/backfill_status_ladder.php || echo "[deploy] WARNING: status ladder catch-up failed (not fatal) — see output above"
+
+# 7. Sign-in names: everyone who confirmed a personal email before the
+#    @hodlc.com names began dying out gets it in users.email in their place
+#    (owner's decision, 13 Nov 2026). Same contract as steps 5 and 6:
+#    idempotent, re-runs on every deploy, never fails the deploy. Needs the
+#    auth_retired_signin_names table from step 4.
+"$PHP" db/backfill_signin_names.php || echo "[deploy] WARNING: sign-in name swap failed (not fatal) — see output above"
 
 # No cache-clearing step, on purpose. NGINX on this host serves static files
 # straight from disk and PHP pages send no-store, so nothing here holds stale

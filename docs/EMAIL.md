@@ -55,12 +55,19 @@ here builds SMTP settings in code.
 ## 2. Rules that are not negotiable
 
 **Personal email**
-- It lives in `email_addresses`, **never `users.email`**. `users.email` is the
-  members' sign-in name (`grace@hodlc.com`) and the address first timers typed
-  on Connect, and Embrace, Congregation and Profile all overwrite it. On
-  confirmation the address is copied into `users.email` only when that column
-  is EMPTY — whatever is there may be what the person signs in with, and
-  changing it would change how they sign in. Nothing reads that copy back.
+- It lives in `email_addresses`. On confirmation `email_sync_users_email()`
+  copies it to `users.real_email`, and into `users.email` when that is EMPTY or
+  a church-issued `@hodlc.com` sign-in name (owner's decision, 13 Nov 2026:
+  those names die out). The old name is kept in `auth_retired_signin_names`, so
+  typing it on the sign-in page says where the person signs in now. A personal
+  address already in `users.email` (one a first timer typed on Connect) stays.
+  Sign-in never depends on the copy: `email_signin_lookup()` tries the
+  confirmed address first.
+- **No new `@hodlc.com` names.** Congregation's add-member no longer makes one
+  and the Security Centre's "Generate emails" is retired; new members sign in
+  with their phone until they confirm their own email.
+  `db/backfill_signin_names.php` (every deploy, after the migrations) swaps
+  everyone who confirmed before this changed; once done it finds nothing.
 - **Never `@hodlekki.org`** (or a subdomain) and never `@hodlc.com`:
   `email_address_problem()` is the only validator; every screen calls it.
   Reset links must reach someone who is locked out of the ERP.
@@ -169,11 +176,21 @@ plain POST forms with the CSRF field (no page script).
   in, with a banner on every page (resend in one tap, or change it);
   confirmed → nothing. `email_settings.signin_prompt = 0` switches the prompt
   off without a deploy.
-- **Sign-in** (`email_signin_lookup()`, used by `api/auth_api.php`): a
-  confirmed personal email first, then `users.email`. A church sign-in name
-  (`@hodlc.com`) of someone who has confirmed a personal email gets, only after
-  the right password, "You now sign in with your personal email (g•••@gmail.com)".
-  Lockout, attempts and audit rows are unchanged.
+- **Sign-in** (`signin_candidates()` and `signin_check_password()`, used by
+  `api/auth_api.php`): what was typed is a personal email, a church sign-in
+  name or a phone number. An email: a confirmed personal email first, then
+  `users.email`, then a retired `@hodlc.com` name. A church sign-in name of
+  someone who has confirmed a personal email gets, only after the right
+  password, "You now sign in with your personal email (g•••@gmail.com) or your
+  phone". A phone number (`signin_is_phone()`; 0803…, +234 803… and 803… are
+  one number, `signin_phone_key()`): every account whose record has it, at
+  most five. Several people can share one number (spouses, a parent and
+  child): the password decides whose account opens; a wrong one counts towards
+  each account's lockout; locked accounts are not tried; one number AND one
+  password on two accounts is refused ("Sign in with your email"). The one
+  answer for anything that does not match is "Wrong email, phone or password."
+- **Forgot password** accepts a phone number too: each active account on it
+  with a confirmed email gets its own link, at its own address.
 - **Reset**: the link goes only to the confirmed personal email of an active
   account (`email_reset_request()`), throttled 10 an hour per requester and 3
   per identifier (both stored as hashes), token sha256-stored, 30 minutes,
@@ -183,7 +200,8 @@ plain POST forms with the CSRF field (no page script).
   `security_revoke_sessions()`), then emails a "password changed" notice.
   `setup_password.php` stays first-time only.
 - Schema: `db/migrations/20261129090000_campaigns_identity.sql`
-  (`auth_reset_tokens`, `auth_reset_requests`, `email_prompt_skips`).
+  (`auth_reset_tokens`, `auth_reset_requests`, `email_prompt_skips`) and
+  `20261214090000_campaigns_signin_names.sql` (`auth_retired_signin_names`).
 
 **Capture from forms** (`email_capture_after_save()`): the Connect card and
 Embrace add/edit start confirmation for a new or changed address (saving again

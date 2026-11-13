@@ -44,9 +44,6 @@ $tabs = [
         'description' => 'Accounts, sign-ins and the audit trail.',
         'info' => 'Suspend or revoke an account, reset a password, change a sign-in email and sign people out. '
             . 'Every action is kept in the audit trail. You cannot act on your own account here, and only a Super Admin acts on a Super Admin.',
-        'actions' => $schemaReady && $canManage
-            ? ui_button('Generate emails', ['icon' => 'sparkles', 'attrs' => ['data-action' => 'sec.generate']])
-            : '',
     ]) ?>
 
 <?php if (!$schemaReady): ?>
@@ -229,7 +226,7 @@ $tabs = [
             <form class="ui-card" data-action="sec.email" novalidate>
                 <div class="ui-card__header ui-card__header--divided">
                     <div class="ui-title-row"><h3 class="ui-h3">Sign-in email</h3>
-                        <?= ui_info('The address they type to sign in, not their personal email. Their password and personal email are not touched.', 'About the sign-in email') ?></div>
+                        <?= ui_info('Renames an old @' . $domain . ' name. Nobody gets a new one: members sign in with their phone or their own email, which replaces the name once they confirm it.', 'About the sign-in email') ?></div>
                 </div>
                 <div class="ui-card__body ui-stack ui-stack--sm">
                     <p class="ui-meta" data-sec-email-now></p>

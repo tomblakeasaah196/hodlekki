@@ -540,6 +540,17 @@ try {
                 exit;
             }
 
+            // Only an existing @hodlc.com name can be renamed here; nobody gets a
+            // new one (owner's decision, 13 Nov 2026), and a personal email in
+            // users.email is the member's own (they change it on their profile).
+            if (!str_ends_with(strtolower(trim((string) $target['email'])), '@' . SECURITY_LOGIN_EMAIL_DOMAIN)) {
+                echo json_encode([
+                    'status'  => 'error',
+                    'message' => 'They have no @' . SECURITY_LOGIN_EMAIL_DOMAIN . ' name to change: they sign in with their phone or their own email.',
+                ]);
+                exit;
+            }
+
             if ($new_email === '' || $confirm === '') {
                 echo json_encode(['status' => 'error', 'message' => 'Type the new sign-in email twice.']);
                 exit;
@@ -628,89 +639,15 @@ try {
             break;
 
         // =================================================================
-        // WRITE: generate sign-in emails for every account that has none
+        // RETIRED: "Generate emails" (owner's decision, 13 Nov 2026). New
+        // members get no @hodlc.com name; they sign in with their phone until
+        // they add and confirm their own email. Kept so an old open tab gets
+        // an answer instead of "unknown action".
         // =================================================================
-        // One click for "some members were created without an email at all".
-        // Mirrors the generator used when a member is created in the
-        // Congregation module (shortest name parts, numeric suffix until
-        // unique), so bulk-filled addresses look exactly like generated ones.
         case 'generate_missing_emails':
-            $missing = $pdo->query("
-                SELECT id, first_name, last_name
-                  FROM users
-                 WHERE email IS NULL OR email = ''
-                 ORDER BY first_name ASC, last_name ASC, id ASC
-            ")->fetchAll(PDO::FETCH_ASSOC);
-
-            if (!$missing) {
-                echo json_encode([
-                    'status'  => 'success',
-                    'message' => 'Every account already has a sign-in email — nothing to generate.',
-                    'data'    => ['generated' => [], 'skipped' => []],
-                ]);
-                exit;
-            }
-
-            $update  = $pdo->prepare("UPDATE users SET email = ? WHERE id = ? AND (email IS NULL OR email = '')");
-            $reserved = [];   // addresses handed out in this batch
-            $generated = [];  // rows for the response
-            $skipped   = [];  // members whose names yield no usable prefix
-
-            $pdo->beginTransaction();
-            try {
-                foreach ($missing as $m) {
-                    $email = security_generate_login_email(
-                        $pdo,
-                        (string) $m['first_name'],
-                        (string) $m['last_name'],
-                        $reserved
-                    );
-
-                    $name = trim($m['first_name'] . ' ' . $m['last_name']) ?: 'Member #' . $m['id'];
-
-                    if ($email === null) {
-                        // No letters or digits in either name — nothing to
-                        // build an address from. Set it by hand instead.
-                        $skipped[] = ['id' => (int) $m['id'], 'name' => $name];
-                        continue;
-                    }
-
-                    $update->execute([$email, (int) $m['id']]);
-                    if ($update->rowCount() < 1) {
-                        continue; // email was set by someone else mid-batch — leave it
-                    }
-
-                    $reserved[] = $email;
-                    $generated[] = ['id' => (int) $m['id'], 'name' => $name, 'email' => $email];
-
-                    security_log(
-                        $pdo,
-                        'login_email_generated',
-                        (int) $m['id'],
-                        "Sign-in email generated for a member who had none: {$email}."
-                    );
-                    security_notify_user(
-                        $pdo,
-                        (int) $m['id'],
-                        'Your Sign-in Email',
-                        'Your sign-in email is ' . $email . '. Use it with your password to sign in.'
-                    );
-                }
-                $pdo->commit();
-            } catch (Throwable $e) {
-                $pdo->rollBack();
-                throw $e;
-            }
-
-            $msg = count($generated) . ' sign-in email(s) generated.';
-            if ($skipped) {
-                $msg .= ' ' . count($skipped) . ' member(s) were skipped — their names have no letters or digits, so set an email by hand on the Manage panel.';
-            }
-
             echo json_encode([
-                'status'  => 'success',
-                'message' => $msg,
-                'data'    => ['generated' => $generated, 'skipped' => $skipped],
+                'status'  => 'error',
+                'message' => 'No more @hodlc.com names: members sign in with their phone or their own email.',
             ]);
             break;
 
