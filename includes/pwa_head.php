@@ -48,7 +48,7 @@ if (!defined('PWA_HEAD_RENDERED')) {
     define('PWA_HEAD_RENDERED', true);
 
     /** Bump to bust the cached CSS/JS on every phone. Keep in step with manifest.php. */
-    define('PWA_VERSION', '1.2.0');   // 1.2.0: ask to install, then alerts, until they are on (13 Nov 2026)
+    define('PWA_VERSION', '1.2.1');   // 1.2.1: the install and blocked cards share the alert card's badge (13 Nov 2026)
 
     $pwaSignedIn = isset($_SESSION['user_id']);
     $pwaName     = $pwaSignedIn ? (string) ($_SESSION['first_name'] ?? '') : '';
