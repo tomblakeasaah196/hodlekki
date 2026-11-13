@@ -3468,6 +3468,169 @@
         .xt .xt-opt__key .ui-icon { transition: none !important; transform: none !important; }
     }
 
+    /* ---------- Our sermons (modules/our_sermons/) ---------- */
+    /* The members' library: cards with the artwork beside the details (one
+       column on phones, two from 640 px, three from 1024 px), and a month
+       calendar by the day each sermon was preached, Sunday first. Phones see
+       a dot on the day and the month's cards under the grid; from 640 px the
+       titles sit in the days. The sermon page and Envision's manager reuse
+       the artwork tiles. */
+    .os-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 24px;
+    }
+    .os-filters__search { flex: 1 1 220px; min-width: 0; }
+    .os-filters__select { width: auto; flex: 1 1 140px; min-width: 0; max-width: 240px; }
+    .os-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .os-grid > li { display: flex; min-width: 0; }
+    .ui-card.os-card {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 12px;
+        width: 100%;
+        padding: 12px;
+        color: inherit;
+        text-decoration: none;
+    }
+    .os-card__art,
+    .os-thumb,
+    .os-hero__art,
+    .os-media__art {
+        flex: none;
+        object-fit: cover;
+        background: var(--ui-surface-sunken);
+    }
+    .os-card__art { width: 80px; height: 80px; border-radius: var(--ui-radius); }
+    .os-thumb { width: 48px; height: 48px; border-radius: var(--ui-radius-sm); }
+    .os-hero__art { width: 120px; height: 120px; border-radius: var(--ui-radius-lg); }
+    .os-media__art { width: 96px; height: 96px; border-radius: var(--ui-radius-lg); }
+    .os-card__art--none,
+    .os-thumb--none {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--ui-text-subtle);
+    }
+    .os-card__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .os-card__title {
+        display: -webkit-box;
+        overflow: hidden;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        font-weight: 600;
+        line-height: 1.3;
+        color: var(--ui-text);
+    }
+    .os-card__line {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: var(--ui-text-sm);
+        color: var(--ui-text-muted);
+    }
+    .os-card__main .ui-badge { margin-top: 4px; }
+    .os-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; }
+
+    .os-cal__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .os-cal__grid { display: flex; flex-direction: column; border-top: 1px solid var(--ui-border); }
+    .os-cal__row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+    .os-cal__dow {
+        padding: 8px 4px;
+        text-align: center;
+        font-size: var(--ui-text-xs);
+        font-weight: 600;
+        color: var(--ui-text-subtle);
+    }
+    .os-cal__cell {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        min-height: 52px;
+        padding: 4px;
+        border-top: 1px solid var(--ui-border);
+        border-left: 1px solid var(--ui-border);
+    }
+    .os-cal__row > :first-child { border-left: 0; }
+    .os-cal__cell--blank { background: var(--ui-surface-subtle); }
+    .os-cal__day {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        align-self: flex-start;
+        min-width: 24px;
+        height: 24px;
+        padding: 0 4px;
+        border-radius: 999px;
+        font-size: var(--ui-text-sm);
+        color: var(--ui-text-muted);
+    }
+    .os-cal__cell.is-today .os-cal__day { background: var(--ui-primary); color: var(--ui-on-primary); }
+    .os-cal__item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+        min-height: 24px;
+        border-radius: var(--ui-radius-sm);
+        font-size: var(--ui-text-xs);
+        color: var(--ui-primary-text);
+        text-decoration: none;
+    }
+    .os-cal__item:hover { background: var(--ui-surface-hover); }
+    .os-cal__dot { flex: none; width: 8px; height: 8px; margin-left: 4px; border-radius: 999px; background: var(--ui-brand-red); }
+    .os-cal__label { display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .os-cal__list { margin-top: 16px; }
+
+    .os-hero { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
+    .os-hero__facts { flex: 1 1 220px; }
+    .os-audio { display: block; width: 100%; }
+    .os-links { display: flex; flex-wrap: wrap; gap: 8px; }
+    .os-points { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; padding-left: 20px; list-style: disc; }
+    .os-scriptures { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+
+    .os-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+    .os-media { display: flex; align-items: center; gap: 16px; }
+    .os-media__facts {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        font-size: var(--ui-text-md);
+        color: var(--ui-text-muted);
+    }
+    .os-media__facts li { display: flex; align-items: center; gap: 8px; }
+    .os-editor__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .os-editor__spacer { flex: 1 1 auto; }
+    .os-feed { align-items: flex-start; }
+    .os-feed__url { font-size: var(--ui-text-sm); }
+    .os-feed__actions { display: flex; flex: none; gap: 4px; }
+
+    @media (min-width: 640px) {
+        .os-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .os-cal__cell { min-height: 96px; padding: 6px; }
+        .os-cal__item { padding: 2px 4px; background: var(--ui-primary-soft); }
+        .os-cal__label { display: block; }
+        .os-cal__dot,
+        .os-cal__list { display: none; }
+    }
+    @media (min-width: 1024px) {
+        .os-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
     /* A dialog that fills the screen (a document reader). */
     .ui-dialog.ui-dialog--full {
         width: 100vw;
