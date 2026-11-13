@@ -515,13 +515,15 @@ foreach (['play', 'pause', 'rotate-ccw', 'rotate-cw', 'headphones'] as $icon) {
     ok("the {$icon} icon is in the sprite", str_contains((string) file_get_contents($root . '/assets/ui/icons.svg'), 'id="' . $icon . '"'));
 }
 
-// A note is the member's alone: no other file may read the table.
-$allowed = ['includes/our_sermons/listen.php', 'db/migrations/' . OSL_MIGRATION, 'tests/our_sermons/listen.php'];
+// A note is the member's alone: no other file may read the table. Test files are
+// skipped: they name the table to prove it is NOT read (tests/our_sermons/ai.php
+// checks the AI never touches notes), which is not reading it.
+$allowed = ['includes/our_sermons/listen.php', 'db/migrations/' . OSL_MIGRATION];
 $offenders = [];
 $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
 foreach ($it as $file) {
     $rel = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
-    if (preg_match('#^(vendor|node_modules|\.git|\.tailwind|\.claude|uploads|assets/uploads)/#', $rel) || !preg_match('/\.(php|js|sql)$/', $rel)) {
+    if (preg_match('#^(vendor|node_modules|\.git|\.tailwind|\.claude|uploads|assets/uploads|tests)/#', $rel) || !preg_match('/\.(php|js|sql)$/', $rel)) {
         continue;
     }
     if (!in_array($rel, $allowed, true) && preg_match('/\bour_sermon_notes\b/', (string) file_get_contents($file->getPathname()))) {
