@@ -369,7 +369,10 @@ if (!function_exists('hod_monitor_request')) {
         $plain = (string) parse_url($uri, PHP_URL_PATH);
         $source = str_starts_with($plain, '/api/') ? 'api'
             : (str_starts_with($plain, '/webhook/') ? 'webhook' : 'page');
-        $session = (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION) && is_array($_SESSION)) ? $_SESSION : [];
+        // Not only an ACTIVE session: an endpoint that released its lock early
+        // (session_write_close(), as 14 do) keeps $_SESSION and was being recorded
+        // as "guest". A revoked session is emptied ($_SESSION = []) before it is closed.
+        $session = (isset($_SESSION) && is_array($_SESSION)) ? $_SESSION : [];
         $userId = isset($session['user_id']) ? (int) $session['user_id'] : null;
         $role = isset($session['active_role']) ? (string) $session['active_role'] : ($userId ? 'member' : 'guest');
 

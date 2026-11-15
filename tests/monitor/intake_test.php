@@ -46,6 +46,32 @@ $svg = $beacon(['errors' => [
 eq('a field sent as an object is not filed as /Array', ['Could not load a file', ''], [$svg['events'][0]['title'], $svg['events'][0]['file']]);
 eq('a sprite that failed is named by its path', 'Could not load /assets/ui/icons.svg', $svg['events'][1]['title']);
 
+// Problems #101 / #102: a page-to-page view transition the browser skipped or
+// aborted is the browser's own business, on any page (/connect has no pwa_head guard).
+$vt = $beacon(['errors' => [
+    ['type' => 'rejection', 'msg' => 'InvalidStateError: Transition was aborted because of invalid state. ViewTransition opt-in disabled'],
+    ['type' => 'rejection', 'msg' => 'InvalidStateError: Transition was aborted because of invalid state. Page already revealed'],
+    ['type' => 'rejection', 'msg' => 'AbortError: Transition was skipped'],
+    ['type' => 'rejection', 'msg' => 'InvalidStateError: The object is in an invalid state.'],
+    ['type' => 'error', 'msg' => 'Uncaught AbortError: Transition was skipped', 'src' => '/assets/js/app.js'],
+]]);
+eq('skipped and aborted view transitions are dropped; other InvalidStateErrors and thrown errors are kept',
+    ['InvalidStateError: The object is in an invalid state.', 'Uncaught AbortError: Transition was skipped'],
+    array_map(fn ($e) => $e['message'], $vt['events']));
+
+// #105: an object in any field raises no PHP warning (it was "Array to string conversion").
+$warned = [];
+set_error_handler(function (int $no, string $msg) use (&$warned) { $warned[] = $msg; return true; });
+$obj = $beacon(['errors' => [
+    ['type' => 'resource', 'msg' => 'Could not load x', 'src' => new stdClass(), 'tag' => ['use']],
+    ['type' => 'error', 'msg' => ['not' => 'text'], 'src' => '/a.js'],
+    ['type' => 'error', 'msg' => 'TypeError: x', 'src' => '/a.js', 'stack' => ['a', 'b']],
+]]);
+restore_error_handler();
+eq('a field sent as an object raises no PHP warning', [], $warned);
+eq('…a message that is not text is dropped, the rest kept without a stack', [2, 'TypeError', null],
+    [count($obj['events']), $obj['events'][1]['exception_class'] ?? null, $obj['events'][1]['trace_text'] ?? null]);
+
 $many = $beacon(['errors' => array_map(fn ($i) => ['type' => 'error', 'msg' => 'E' . $i, 'src' => '/a.js'], range(1, 30))]);
 eq('at most 10 errors a beacon', 10, count($many['events']));
 

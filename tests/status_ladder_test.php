@@ -214,6 +214,20 @@ echo "\nThe ladder: 1, 2, 3 Sundays, then Visitor\n";
     sl_present($pdo, 12, $midweek, '2026-10-08');
     $r = ladder_advance_user($pdo, 12);
     ok('a Sunday plus a midweek is still one time', $r === null && sl_status($pdo, 12) === '1st_Timer');
+
+    // Problem #99: Events' mark_attendance read lastInsertId() AFTER calling the
+    // ladder, so a promotion pointed it at the history row, the time lookup found
+    // nothing and the reply hit "Trying to access array offset on false".
+    sl_user($pdo, 13, '1st_Timer');
+    sl_present($pdo, 13, $sun['2026-10-04'], '2026-10-04');
+    $attId = sl_present($pdo, 13, $sun['2026-10-11'], '2026-10-11');
+    ladder_advance_user($pdo, 13);
+    ok('a promotion moves lastInsertId() off the attendance row (so the caller must read it first)',
+        sl_status($pdo, 13) === '2nd_Timer' && (int) $pdo->lastInsertId() !== $attId);
+    $api = (string) file_get_contents(__DIR__ . '/../api/events_api.php');
+    ok('mark_attendance takes the attendance id before it calls the ladder, and looks the time up by it',
+        (bool) preg_match('/\$attStmt->execute\([^;]*;\s*(\/\/[^\n]*\n\s*)*\$attendanceId = \$pdo->lastInsertId\(\);[\s\S]{0,300}ladder_advance_user\(\$pdo, \(int\) \$target_user_id\);[\s\S]{0,300}\$timeStmt->execute\(\[\$attendanceId\]\)/', $api)
+        && str_contains($api, "\$timeData['time_format'] ?? date('h:i A')"));
 }
 
 // ---------------------------------------------------------------------------

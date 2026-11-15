@@ -44,6 +44,9 @@ if (!Settings::ready()) {
 $in = json_decode((string) file_get_contents('php://input'), true);
 $action = is_array($in) ? (string) ($in['action'] ?? '') : '';
 session_write_close();
+// Both buttons wait on Google (a token refresh, then the call: up to 20 s by design), so a
+// few seconds here is the person's own request, not a slow page.
+hod_monitor_context(['not_slow' => true]);
 
 try {
     switch ($action) {
