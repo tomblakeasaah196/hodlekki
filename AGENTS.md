@@ -635,6 +635,17 @@ notification, call `push_send_to_user()` or `push_enqueue()` directly.
   than pushing directly, so quiet hours and opt-outs are honoured by the
   normal fan-out; keep it that way. Every broadcast and switch flip goes to
   `security_audit_log`. Member guide: `modules/alerts/how_to_use.md`.
+- **Edge on Android never fires `beforeinstallprompt`** (seen on the owner's
+  phone, 15 Nov 2026), so `assets/js/pwa.js` shows the install banner and the
+  "Step 1 of 2" card there itself (`env.edgeAndroid`, `edgeOffer()`). Owner's
+  decisions: Edge only; nothing is replaced, "Use Chrome" sits beside Install
+  with the reasons behind an (i); a member signs in again in Chrome (no
+  sign-in hand-off); and the alerts ask is untouched, because alerts arrive in
+  Edge. "Use Chrome" is an Android `intent://` link: keep it a real `<a>` the
+  tap itself follows (a browser hands an intent to another app only on a tap),
+  and keep its `href` set with `setAttribute`, never written into markup.
+  Install there opens a guide to Edge's own menu. Edge spells itself `Edg/`,
+  `EdgA/` and `EdgiOS/`; `push_device_label()` knows all three.
 - **Special Events registration alerts** live in `se_registration_notify()`
   (`includes/special_events/capacity.php`), called from `se_register()` so
   every channel is covered. `registration.notify_crew` defaults to `digest`:

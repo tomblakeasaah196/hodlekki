@@ -102,8 +102,18 @@ alert**.
 
 ## 2. What a member sees
 
-**Android / Chrome / Edge.** A banner slides up: *Install HOD Lekki*. One tap
-installs it. If they dismiss it, it stays away for 14 days.
+**Android / Chrome, and Edge on a computer.** A banner slides up: *Install HOD
+Lekki*. One tap installs it. If they dismiss it, it stays away for 14 days.
+
+**Edge on Android.** Edge gives a page no install signal there (seen on the
+owner's phone, 15 Nov 2026), so the app shows the same banner itself, with two
+buttons. **Install** opens a two-step guide to Edge's own menu (*Add to
+phone*). **Use Chrome** reopens the page in Chrome, where install is one tap;
+if Chrome does not open, a toast offers the link to copy. An (i) beside the
+title opens the reasons in place. A signed-in member gets the same pair on the
+"Step 1 of 2" card and signs in once more in Chrome. Alerts arrive in Edge, so
+the alerts ask is the same as everywhere else. Once the app has been opened
+from its icon, Edge's tabs stop offering it.
 
 **iPhone / iPad.** Safari offers no install API at all, so the app shows a
 sheet with the three real steps — Share → Add to Home Screen → Add — and an
@@ -328,7 +338,7 @@ registrations never notify anyone.
 | `manifest.php` | Web App Manifest. PHP so the MIME type is certain. |
 | `sw.js` | Service worker. Root scope. |
 | `offline.html` | Offline fallback. Static, contains no member data. |
-| `assets/js/pwa.js` | Install prompts, iOS guide, push opt-in, alerts sheet, native feel. |
+| `assets/js/pwa.js` | Install prompts, iOS guide, the Edge-on-Android banner and guide, push opt-in, alerts sheet, native feel. |
 | `assets/css/pwa.css` | App shell styling. Everything is `hod-` namespaced. |
 | `assets/pwa/` | Generated icons and launch images — **committed**. |
 | `bin/build_pwa_icons.php` | Rebuilds `assets/pwa/` from `assets/images/logo_hod.png`. |
@@ -468,6 +478,7 @@ minute.
 | One member gets nothing | `SELECT is_active, failure_count, last_error FROM push_subscriptions WHERE user_id = …`. |
 | iPhone shows no prompt | Expected in a Safari tab. iOS only delivers Web Push to an installed app. |
 | Install banner never appears | Already installed, dismissed within 14 days, or an in-app browser (Facebook, Instagram) which cannot install anything. |
+| "Use Chrome" opens nothing (Edge on Android) | Chrome is missing or disabled on that phone, or Edge refused to hand over. After three seconds the app offers the link to copy into Chrome. |
 | Everything works but the icon is stale | Bump `PWA_ASSET_VERSION` in `manifest.php` and `PWA_VERSION` in `includes/pwa_head.php`. |
 | It worked, then everyone stopped receiving | The signing keys changed after people subscribed. The Alerts Centre shows a red banner for exactly this. Either remove the `.env` keys to go back to the generated pair, or clear the generated one and have everyone turn alerts on again. |
 

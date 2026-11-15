@@ -441,6 +441,9 @@
         if (install && !root.classList.contains('hod-standalone')) {
             window.addEventListener('beforeinstallprompt', function () { install.hidden = false; });
             if (/iphone|ipad|ipod/i.test(navigator.userAgent)) install.hidden = false;
+            // Edge on Android installs from its own menu and sends no event;
+            // pwa.js answers this entry with the guide to that menu.
+            if (/Android/.test(navigator.userAgent) && /\bEdgA\//.test(navigator.userAgent)) install.hidden = false;
         }
 
         watchPageTitle();

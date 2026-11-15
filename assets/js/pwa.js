@@ -11,6 +11,9 @@
  *   · Android/desktop: catches beforeinstallprompt and offers a real install
  *   · iPhone/iPad: there is no install event, so it walks the member through
  *     Share -> Add to Home Screen, with an arrow pointing at the right button
+ *   · Edge on Android: no install event either, so the same banner and
+ *     install step show anyway, with "Use Chrome" beside Install, the reasons
+ *     behind an (i), and a guide to Edge's own menu
  *   · asks every signed-in device, until alerts are on: install the app
  *     first where it can be installed, then turn alerts on ("Not now" waits
  *     7 days); then subscribes the device to Web Push and registers it
@@ -55,6 +58,10 @@
             // iPadOS 13+ reports itself as a Mac; the touch points give it away.
             (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1),
         android: /Android/.test(ua),
+        // Edge on Android never sends beforeinstallprompt (seen on the owner's
+        // phone, 15 Nov 2026): it installs from its own menu only. Alerts do
+        // arrive there, so only the install offer differs.
+        edgeAndroid: /Android/.test(ua) && /\bEdgA\//.test(ua),
         standalone: window.matchMedia('(display-mode: standalone)').matches ||
             window.navigator.standalone === true,
         // Facebook / Instagram / TikTok in-app browsers cannot install anything,
@@ -115,6 +122,7 @@
     var ICON = {
         tick: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
         warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>',
+        info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>',
         bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
         share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V3"/><path d="m8 7 4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>',
         plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>',
@@ -502,6 +510,7 @@
         deferredPrompt = null;
         hideInstallBanner();
         store.drop('install-dismissed');
+        if (env.edgeAndroid) store.set('edge-installed', '1');
         toast('HOD Lekki is on your home screen.');
         haptic([30, 40, 30]);
 
@@ -512,16 +521,22 @@
     function showInstallBanner() {
         if (document.getElementById('hodInstall') || env.standalone) return;
 
+        // Edge on Android: "Use Chrome" beside Install, the reasons behind the (i).
+        var edge = env.edgeAndroid;
+
         var banner = el('div', { id: 'hodInstall', role: 'region', 'aria-label': 'Install HOD Lekki' },
             '<div class="hod-mark"><img src="/assets/pwa/icon-192.png" alt="" width="36" height="36"></div>' +
             '<div class="hod-install-copy">' +
-                '<strong>Install HOD Lekki</strong>' +
+                '<strong>Install HOD Lekki' + (edge ? infoButton('hodInstallWhy') : '') + '</strong>' +
                 '<span>Full screen, works offline, and alerts reach you straight away.</span>' +
             '</div>' +
+            (edge ? whyChrome('hodInstallWhy', false) : '') +
             '<div class="hod-install-actions">' +
                 '<button type="button" class="hod-x" aria-label="Not now">&times;</button>' +
+                (edge ? '<a class="hod-btn hod-btn-glass" data-chrome>Use Chrome</a>' : '') +
                 '<button type="button" class="hod-btn hod-btn-primary" data-install>Install</button>' +
             '</div>');
+        if (edge) banner.classList.add('hod-install-two');
 
         document.body.appendChild(banner);
         requestAnimationFrame(function () { banner.classList.add('hod-open'); });
@@ -531,6 +546,8 @@
             hideInstallBanner();
         });
         banner.querySelector('[data-install]').addEventListener('click', runInstall);
+        wireInfo(banner);
+        wireChromeLink(banner, hideInstallBanner);
     }
 
     function hideInstallBanner() {
@@ -558,6 +575,147 @@
             }
             hideInstallBanner();
         }).catch(function () { hideInstallBanner(); });
+    }
+
+    /* ================================================================== *
+     * Install — Edge on Android
+     * ------------------------------------------------------------------
+     * Edge sends no install event, so its banner and install step show on
+     * their own (owner, 15 Nov 2026). Both keep Install, which opens a guide
+     * to Edge's own menu, and gain two things: "Use Chrome", which reopens
+     * this page in Chrome where install is one tap, and an (i) that opens
+     * the reasons in place. Alerts arrive in Edge, so they are left alone.
+     * ================================================================== */
+
+    var CHROME_PACKAGE = 'com.android.chrome';
+
+    /**
+     * May this Edge be offered the app? Not once it has opened as the
+     * installed app: Edge cannot tell a tab that it is installed, so the
+     * installed app leaves a note for the tabs (they share storage).
+     */
+    function edgeOffer() {
+        return env.edgeAndroid && !env.standalone && store.get('edge-installed') !== '1';
+    }
+
+    /**
+     * This page's address as an Android intent for Chrome: the one kind of
+     * link a browser hands to another app. With no Chrome on the phone, the
+     * browser follows the fallback to Chrome's page on Google Play. The
+     * #fragment stays behind: an intent's own settings start at its "#".
+     */
+    function chromeUrl() {
+        return 'intent://' + location.host + location.pathname + location.search +
+            '#Intent;scheme=' + location.protocol.replace(':', '') +
+            ';package=' + CHROME_PACKAGE +
+            ';S.browser_fallback_url=' +
+            encodeURIComponent('https://play.google.com/store/apps/details?id=' + CHROME_PACKAGE) +
+            ';end';
+    }
+
+    /**
+     * A card's "Use Chrome" link. It is a real link, so the tap itself is the
+     * navigation: a browser only hands an intent to another app on a tap.
+     * `onLeft` runs once Chrome has taken the screen. If this page is still
+     * in front a moment later, nothing opened: offer the address to copy.
+     */
+    function wireChromeLink(card, onLeft) {
+        var link = card.querySelector('[data-chrome]');
+        if (!link) return;
+        link.setAttribute('href', chromeUrl());
+
+        link.addEventListener('click', function () {
+            haptic(18);
+
+            var left = false;
+            var watch = function () {
+                if (document.visibilityState !== 'hidden') return;
+                left = true;
+                document.removeEventListener('visibilitychange', watch);
+                onLeft();
+            };
+            document.addEventListener('visibilitychange', watch);
+            setTimeout(function () { document.removeEventListener('visibilitychange', watch); }, 20000);
+
+            setTimeout(function () {
+                if (left || document.visibilityState === 'hidden') return;
+
+                var canCopy = navigator.clipboard && typeof navigator.clipboard.writeText === 'function';
+                toast('Copy this link into Chrome instead.', 'bad', canCopy ? {
+                    label: 'Copy link',
+                    run: function () {
+                        navigator.clipboard.writeText(location.href)
+                            .then(function () { toast('Link copied.'); })
+                            .catch(function () {});
+                    }
+                } : undefined);
+            }, 3000);
+        });
+    }
+
+    /**
+     * The (i) beside a card's title: the rest of the story, opened in place
+     * (docs/UI.md §12). Built here rather than with ui_info() because these
+     * cards also show on pages that do not load the members' app.
+     */
+    function infoButton(noteId) {
+        return '<button type="button" class="hod-info" data-more aria-expanded="false"' +
+            ' aria-controls="' + noteId + '" aria-label="Why use Chrome">' + ICON.info + '</button>';
+    }
+
+    function wireInfo(card) {
+        var button = card.querySelector('[data-more]');
+        var note = button && card.querySelector('#' + button.getAttribute('aria-controls'));
+        if (!note) return;
+
+        button.addEventListener('click', function () {
+            var open = button.getAttribute('aria-expanded') !== 'true';
+            note.hidden = !open;
+            button.setAttribute('aria-expanded', open ? 'true' : 'false');
+            // After the note, so anything watching the card's class measures
+            // it at its new height (the sign-in page lifts its button above
+            // the banner).
+            card.classList.toggle('hod-more-open', open);
+        });
+    }
+
+    /** Why Chrome, for the (i). A signed-in member is told the one cost too. */
+    function whyChrome(noteId, member) {
+        return '<ul class="hod-why" id="' + noteId + '" hidden>' +
+            '<li>' + ICON.tick + '<span>Chrome installs the app in one tap</span></li>' +
+            '<li>' + ICON.tick + '<span>The app is built for Chrome</span></li>' +
+            '<li>' + ICON.tick + '<span>Edge stays your default browser</span></li>' +
+            (member ? '<li class="hod-why-cost">' + ICON.info + '<span>You sign in once more in Chrome</span></li>' : '') +
+        '</ul>';
+    }
+
+    /**
+     * Edge installs from its own menu and gives a page no way to open it, so
+     * say where to tap. `next` runs after "Got it" (the alerts step, for a
+     * signed-in member).
+     */
+    function showEdgeGuide(next) {
+        // They have been shown how: the offer rests, as after a dismissal.
+        store.snooze('install-dismissed');
+        hideInstallBanner();
+
+        var panel = sheet('hodEdgeSheet',
+            '<div class="hod-sheet-head">' +
+                '<div class="hod-mark"><img src="/assets/pwa/icon-192.png" alt="" width="36" height="36"></div>' +
+                '<div><h2 class="hod-m0">Install from Edge</h2>' +
+                '<p class="hod-sub">Two steps in the Edge menu.</p></div>' +
+            '</div>' +
+            '<ul class="hod-steps">' +
+                '<li><span class="hod-step-n"></span><span>Open the <span class="hod-chip">menu</span> at the bottom of Edge.</span></li>' +
+                '<li><span class="hod-step-n"></span><span>Choose <span class="hod-chip">Add to phone</span> and confirm.</span></li>' +
+            '</ul>' +
+            '<button type="button" class="hod-btn hod-btn-navy" data-close>Got it</button>');
+
+        if (typeof next === 'function') {
+            panel.querySelector('[data-close]').addEventListener('click', function () {
+                setTimeout(next, 600);
+            });
+        }
     }
 
     /* ================================================================== *
@@ -636,6 +794,10 @@
         }
         if (env.iOS) {
             showIosGuide();
+            return;
+        }
+        if (env.edgeAndroid) {
+            showEdgeGuide();
             return;
         }
 
@@ -873,8 +1035,10 @@
         if (QUIET || !CFG.signedIn || env.inAppBrowser || openSheet) return;
         if (store.snoozed('alerts-ask', ASK_AGAIN_DAYS) || askedThisVisit()) return;
 
-        // Step 1: install, where this browser can.
-        if (!env.standalone && (env.iOS || deferredPrompt)) {
+        // Step 1: install, where this browser can. Edge on Android cannot say
+        // so itself; there the step rests for 14 days once its guide has shown.
+        var edge = edgeOffer() && !store.snoozed('install-dismissed', 14);
+        if (!env.standalone && (env.iOS || deferredPrompt || edge)) {
             markAsked();
             showInstallStep();
             return;
@@ -904,20 +1068,29 @@
 
     function showInstallStep() {
         var ios = env.iOS;
+        // Edge on Android: "Use Chrome" under Install, the reasons behind the (i).
+        var edge = env.edgeAndroid;
         var panel = sheet('hodInstallStep',
             '<div class="hod-centered">' +
                 '<div class="hod-bell"><img src="/assets/pwa/icon-192.png" alt="" width="40" height="40"></div>' +
                 '<p class="hod-sub">Step 1 of 2</p>' +
-                '<h2>Install HOD Lekki</h2>' +
+                '<h2>Install HOD Lekki' + (edge ? infoButton('hodStepWhy') : '') + '</h2>' +
             '</div>' +
             '<p>' + (ios
                 ? 'On iPhone and iPad, alerts only reach you through the installed app. It takes three taps.'
                 : 'Install the app, then turn on alerts, so sermons, tasks and announcements reach you straight away.') +
             '</p>' +
+            (edge ? whyChrome('hodStepWhy', true) : '') +
             '<button type="button" class="hod-btn hod-btn-primary" data-install-step>' +
                 (ios ? 'Show me how' : 'Install the app') +
             '</button>' +
+            (edge ? '<a class="hod-btn hod-btn-navy hod-mt-9" data-chrome>Use Chrome</a>' : '') +
             '<button type="button" class="hod-btn hod-btn-ghost hod-mt-9" data-later>Not now</button>');
+
+        wireInfo(panel);
+        wireChromeLink(panel, function () {
+            if (openSheet && openSheet.panel === panel) closeSheet();
+        });
 
         panel.querySelector('[data-later]').addEventListener('click', function () {
             store.snooze('alerts-ask');
@@ -928,6 +1101,13 @@
             closeSheet();
             if (ios) {
                 setTimeout(showIosGuide, 300);
+                return;
+            }
+            if (!deferredPrompt && edge) {
+                // Its menu does the installing; alerts are asked for after.
+                setTimeout(function () {
+                    showEdgeGuide(function () { askAlertsStep(true); });
+                }, 300);
                 return;
             }
             if (!deferredPrompt) {
@@ -1258,6 +1438,14 @@
         // Hide anything that only makes sense before installing.
         if (env.standalone) {
             document.documentElement.classList.add('hod-installed');
+            // The note edgeOffer() reads from this browser's tabs.
+            if (env.edgeAndroid) store.set('edge-installed', '1');
+        }
+
+        // Edge on Android sends no install event, so nothing above would ever
+        // show its banner: show it on the same terms as Chrome's.
+        if (edgeOffer() && !QUIET && !CFG.signedIn && !store.snoozed('install-dismissed', 14)) {
+            setTimeout(showInstallBanner, 2600);
         }
 
         if (CFG.signedIn) {

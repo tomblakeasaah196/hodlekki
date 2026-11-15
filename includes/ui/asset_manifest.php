@@ -85,7 +85,7 @@ return [
     '/assets/ui/js/pages/verify.js' => '32cd3c7f9dfa',
     '/assets/ui/js/pages/zoe.js' => '7285ef8a8a53',
     '/assets/ui/js/poster.js' => '5b167abf6bd1',
-    '/assets/ui/js/shell.js' => '981bfb04f6b5',
+    '/assets/ui/js/shell.js' => 'a5789a2e9428',
     '/assets/ui/js/ui.js' => 'c7edce3ae18e',
     '/assets/ui/vendor/chart.js-4.5.0/chart.umd.min.js' => '2f27bcf471b2',
     '/assets/ui/vendor/cropperjs-1.5.13/cropper.min.css' => '055b9c1ce540',
