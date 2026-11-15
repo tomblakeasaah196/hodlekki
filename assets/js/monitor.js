@@ -109,6 +109,13 @@
         var t = ev.target;
         if (t && t !== window && t.tagName) {
             var url = t.currentSrc || t.src || t.href || '';
+            // An SVG <use>/<image> gives href as an SVGAnimatedString, not a
+            // string: it reached the server as {} and was filed as "/Array".
+            if (url && typeof url === 'object') {
+                url = url.animVal || url.baseVal || '';
+                try { url = url ? new URL(url, location.href).href : ''; } catch (e) { /* keep as given */ }
+            }
+            url = String(url);
             // Not failures a person sees: a prefetch/prerender hint the browser
             // dropped (leaving a page cancels it), an inline data:/blob: image,
             // or anything that fails while the page is being left.
