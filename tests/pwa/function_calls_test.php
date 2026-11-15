@@ -201,7 +201,7 @@ suite('every signed-in device is asked until alerts are on');
 ok('"Not now" waits 7 days, then asks again', str_contains($runtime, 'var ASK_AGAIN_DAYS = 7;')
     && substr_count($runtime, "store.snooze('alerts-ask')") >= 3);
 ok('install comes first where this browser can install',
-    str_contains($runtime, 'if (!env.standalone && (env.iOS || deferredPrompt))'));
+    str_contains($runtime, 'if (!env.standalone && (env.iOS || deferredPrompt || edge))'));
 ok('a member who switched alerts off here is never switched back on silently',
     str_contains($runtime, "store.set('push-off', '1')") && str_contains($runtime, "store.get('push-off') !== '1'"));
 ok('the old pacing is gone (12-day push card, 30-day iOS guide)',
@@ -220,6 +220,30 @@ ok('no chime for a push, which has already rung', str_contains($shellJs, 'if (!f
 ok('the shell tells the script who is signed in',
     str_contains((string) file_get_contents($repoRoot . '/includes/ui/shell.php'), "'user' => (int) (\$_SESSION['user_id'] ?? 0)"));
 ok('a subtree can opt out of the pull gesture', str_contains($runtime, "closest('[data-no-pull]')"));
+
+suite('Edge on Android is offered the app, and Chrome beside it');
+// Edge on Android sends no beforeinstallprompt (the owner's phone, 15 Nov
+// 2026), so pwa.js shows its banner and install step itself, with "Use
+// Chrome" beside Install. Alerts arrive in Edge and are left alone.
+ok('Edge on Android is told apart by its own token',
+    str_contains($runtime, 'edgeAndroid: /Android/.test(ua) && /\\bEdgA\\//.test(ua)'));
+ok('its banner keeps the quiet, signed-out and 14-day rules',
+    str_contains($runtime, "if (edgeOffer() && !QUIET && !CFG.signedIn && !store.snoozed('install-dismissed', 14))"));
+ok('its install step rests for 14 days once the guide has shown',
+    str_contains($runtime, "var edge = edgeOffer() && !store.snoozed('install-dismissed', 14);"));
+ok('"Use Chrome" is an Android intent for Chrome, with Google Play behind it',
+    str_contains($runtime, "var CHROME_PACKAGE = 'com.android.chrome';")
+    && str_contains($runtime, "'#Intent;scheme='")
+    && str_contains($runtime, "';S.browser_fallback_url='"));
+ok('the link is set as an attribute, never written into markup',
+    str_contains($runtime, "link.setAttribute('href', chromeUrl());"));
+ok('Install opens the guide to its own menu',
+    (bool) preg_match('/if \\(env\\.edgeAndroid\\) \\{\\s+showEdgeGuide\\(\\);/', $runtime));
+ok('the installed app quietens the offer in its tabs',
+    str_contains($runtime, "store.get('edge-installed') !== '1'")
+    && substr_count($runtime, "store.set('edge-installed', '1')") >= 2);
+ok('the menu entry shows there too',
+    str_contains($shellJs, "/Android/.test(navigator.userAgent) && /\\bEdgA\\//.test(navigator.userAgent)"));
 
 suite('the Alerts Centre is gated by the permission matrix');
 $alerts = (string) file_get_contents($repoRoot . '/modules/alerts/index.php');

@@ -388,6 +388,69 @@ html.hod-standalone main {
     #hodInstall { left: auto; right: 20px; bottom: 20px; width: 400px; }
 }
 
+/* Edge on Android (pwa.js "Install — Edge on Android"): two buttons need a
+ * row of their own under the copy, and the (i) opens the reasons for Chrome
+ * between the two. The close button moves to the banner's own corner. */
+#hodInstall.hod-install-two { flex-wrap: wrap; row-gap: 12px; }
+#hodInstall.hod-install-two .hod-install-actions {
+    position: static;
+    flex: 1 0 100%;
+    display: flex;
+    gap: 9px;
+}
+#hodInstall.hod-install-two .hod-btn { flex: 1 1 0; }
+.hod-btn-glass {
+    background: rgba(255, 255, 255, .12);
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16);
+}
+a.hod-btn { text-decoration: none; }
+
+/* The (i) beside a card's title. Small to look at, a thumb wide to tap. */
+.hod-info {
+    -webkit-appearance: none;
+    appearance: none;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin: 0 0 0 6px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: inherit;
+    opacity: .7;
+    cursor: pointer;
+    vertical-align: -5px;
+    -webkit-tap-highlight-color: transparent;
+}
+.hod-info::after { content: ""; position: absolute; inset: -11px; }
+.hod-info svg { width: 18px; height: 18px; }
+.hod-info[aria-expanded="true"] { opacity: 1; }
+.hod-info:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* What the (i) opens: a short list, in place. */
+.hod-why { margin: 0; padding: 10px 12px; list-style: none; border-radius: 12px; }
+.hod-why[hidden] { display: none; }
+.hod-why li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 3px 0;
+    font-size: .78rem;
+    line-height: 1.45;
+}
+.hod-why svg { width: 15px; height: 15px; flex: 0 0 auto; margin-top: 2px; }
+#hodInstall .hod-why { flex: 1 0 100%; background: rgba(255, 255, 255, .07); }
+#hodInstall .hod-why span { margin: 0; font-size: inherit; color: #DCE5F5; }
+#hodInstall .hod-why svg { color: #4ADE80; }
+.hod-sheet .hod-why { margin-bottom: 16px; background: #F4F7FB; color: #334155; text-align: left; }
+.hod-sheet .hod-why svg { color: #16A34A; }
+.hod-sheet .hod-why .hod-why-cost svg { color: var(--hod-muted); }
+
 /* ======================================================================
  * 5. Add to Home Screen (iOS)
  * ====================================================================== */
@@ -559,9 +622,11 @@ html.hod-standalone main {
  * 10. Inside the members' app shell
  * The bottom bar owns the foot of the screen on phones: the install banner
  * sits above it, and toasts go through the shared component (ui.js).
+ * Only where there is a bottom bar: the sign-in page is a ui-app page too,
+ * and there the banner belongs at the foot of the screen.
  * ====================================================================== */
 @media (max-width: 1023px) {
-    body.ui-app #hodInstall {
+    body.ui-app:has(.ui-bottombar) #hodInstall {
         bottom: calc(64px + var(--hod-safe-bottom) + 12px);
     }
 }

@@ -348,7 +348,9 @@ if (!defined('PUSH_HELPERS_LOADED')) {
         elseif (preg_match('/Linux/i', $ua))         $platform = 'Linux';
 
         $browser = '';
-        if (preg_match('/Edg\//i', $ua))                 $browser = 'Edge';
+        // Edge names itself Edg/ on a computer, EdgA/ on Android and EdgiOS/
+        // on iPhone; all three carry Chrome or Safari as well, so it goes first.
+        if (preg_match('/Edg(A|iOS)?\//i', $ua))         $browser = 'Edge';
         elseif (preg_match('/OPR\/|Opera/i', $ua))       $browser = 'Opera';
         elseif (preg_match('/SamsungBrowser/i', $ua))    $browser = 'Samsung Internet';
         elseif (preg_match('/Firefox/i', $ua))           $browser = 'Firefox';

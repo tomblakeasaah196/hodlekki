@@ -138,6 +138,12 @@ check('an iPhone reads as iPhone + Safari', 'iPhone · Safari', push_device_labe
 check('a Pixel reads as Android + Chrome', 'Android · Chrome', push_device_label($pixel));
 // Edge sends Chrome in its string too, so order of testing matters.
 check('Edge is not mistaken for Chrome', 'Windows · Edge', push_device_label($edge));
+// On a phone Edge spells its token differently (EdgA/, EdgiOS/), and an
+// Android Edge that reads as Chrome hides which browser a member's alerts use.
+$edgeAndroid = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 EdgA/131.0.0.0';
+$edgeIphone  = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 EdgiOS/124.0.2478.50 Mobile/15E148 Safari/604.1';
+check('Edge on Android is not mistaken for Chrome', 'Android · Edge', push_device_label($edgeAndroid));
+check('Edge on iPhone is not mistaken for Safari', 'iPhone · Edge', push_device_label($edgeIphone));
 check('an unknown agent still gets a label', 'Device', push_device_label(''));
 
 check('iOS platform', 'ios', push_platform_from_ua($iphone));
