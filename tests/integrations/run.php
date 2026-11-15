@@ -300,6 +300,8 @@ check('the callback: state from this session (hash_equals, 15 minutes), used onc
 check('the callback never echoes text from Google into the page', !preg_match('/\$_GET\[[\'"]error_description/', $cb) && !str_contains($cb, 'echo'));
 $api = $read('api/integrations_api.php');
 check('the API: CSRF and manage permission', str_contains($api, 'csrf_require();') && str_contains($api, "can('integrations', 'manage')"));
+check('the API: its buttons wait on Google, so they are not reported as slow (problem #97), and only after the gates',
+    ($ns = strpos($api, "hod_monitor_context(['not_slow' => true]);")) !== false && $ns > strpos($api, "can('integrations', 'manage')"));
 check('the page: manage permission', str_contains($read('modules/integrations/index.php'), "can('integrations', 'manage')"));
 $g = $read('includes/integrations/Google/Google.php');
 check('no token, code or secret is ever logged', !preg_match('/error_log\([^;]*(\$token|\$refresh|\$access|\$code|\$params|\$body|\$data|secret)/i', $g));

@@ -124,3 +124,21 @@ PHP);
 eq('a script with late warnings still ends normally', 0, $code);
 ok('a warning from a later shutdown function is recorded', (bool) $db->query("SELECT 1 FROM monitor_error_groups WHERE title = 'Undefined array key \"late_shutdown\"'")->fetchColumn());
 has('a warning after the write is left to PHP\'s own log, where the log reader finds it', (string) @file_get_contents($log), 'PHP Warning:  Undefined array key "in_destructor"');
+
+// ---- Problem #97: an endpoint that released its session early was recorded as "guest"
+$savedMon = $GLOBALS['hod_monitor'] ?? null;
+$savedServer = $_SERVER;
+$GLOBALS['hod_monitor'] = ['cli' => false, 'cron' => null];
+$_SERVER['REQUEST_URI'] = '/api/integrations_api.php';
+$_SERVER['REQUEST_METHOD'] = 'POST';
+$_SESSION = ['user_id' => 1, 'active_role' => 'Super_Admin'];   // as left by session_write_close()
+$asClosed = hod_monitor_request();
+$_SESSION = [];                                                  // as left by a revoked session
+$asRevoked = hod_monitor_request();
+unset($_SESSION);
+$asNone = hod_monitor_request();
+$GLOBALS['hod_monitor'] = $savedMon;
+$_SERVER = $savedServer;
+eq('a session closed early still names the role', ['Super_Admin', 1, 'api'], [$asClosed['role'], $asClosed['user_id'], $asClosed['source']]);
+eq('…an emptied (revoked) or absent session is a guest', ['guest', null, 'guest', null],
+    [$asRevoked['role'], $asRevoked['user_id'], $asNone['role'], $asNone['user_id']]);

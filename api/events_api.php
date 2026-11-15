@@ -572,15 +572,18 @@ try {
                 VALUES (?, ?, 'Present', NOW(), ?, ?)
             ");
             $attStmt->execute([$event_id, $target_user_id, $user_id, $today]);
+            // Taken now: a promotion below inserts a user_status_history row, which
+            // moves lastInsertId() off this attendance row.
+            $attendanceId = $pdo->lastInsertId();
 
             // A Sunday clock-in can move a 1st/2nd/3rd Timer up the ladder.
             ladder_advance_user($pdo, (int) $target_user_id);
 
             $timeStmt = $pdo->prepare("SELECT DATE_FORMAT(check_in_time, '%h:%i %p') as time_format FROM attendance WHERE id = ?");
-            $timeStmt->execute([$pdo->lastInsertId()]);
+            $timeStmt->execute([$attendanceId]);
             $timeData = $timeStmt->fetch(PDO::FETCH_ASSOC);
 
-            echo json_encode(['status' => 'success', 'message' => 'Attendance logged successfully.', 'clock_time' => $timeData['time_format']]);
+            echo json_encode(['status' => 'success', 'message' => 'Attendance logged successfully.', 'clock_time' => $timeData['time_format'] ?? date('h:i A')]);
             break;
 
         // =====================================================================================

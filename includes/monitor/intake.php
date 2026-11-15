@@ -113,11 +113,16 @@ function monitor_intake_js_event(array $err, array $req, int $now): ?array
     $stack = mb_substr($str($err['stack'] ?? ''), 0, 6000);
 
     // Noise: browser extensions, cross-origin "Script error." with nothing to go on,
-    // and the ResizeObserver notice browsers raise for harmless layout loops.
+    // the ResizeObserver notice browsers raise for harmless layout loops, and a
+    // page-to-page view transition the browser skipped or aborted ("Transition was
+    // skipped", "…Page already revealed", "…ViewTransition opt-in disabled" when
+    // one side does not opt in): the browser raises those itself, on pages with or
+    // without includes/pwa_head.php's guard (/connect has none).
     $all = $msg . ' ' . $src . ' ' . $stack;
     if ($msg === '' || preg_match('#(chrome|moz|safari(-web)?|ms-browser)-extension://|webkit-masked-url://#i', $all)
         || (preg_match('/^Script error\.?$/i', $msg) && $src === '')
-        || preg_match('/^ResizeObserver loop (limit exceeded|completed with undelivered notifications)/i', $msg)) {
+        || preg_match('/^ResizeObserver loop (limit exceeded|completed with undelivered notifications)/i', $msg)
+        || ($type === 'rejection' && preg_match('/^(InvalidStateError|AbortError): Transition was (aborted|skipped)\b/', $msg))) {
         return null;
     }
 
