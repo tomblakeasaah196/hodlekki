@@ -105,9 +105,12 @@ function monitor_intake_page(string $page): string
 function monitor_intake_js_event(array $err, array $req, int $now): ?array
 {
     $type = in_array($err['type'] ?? '', ['error', 'rejection', 'resource'], true) ? (string) $err['type'] : 'error';
-    $msg = trim(mb_substr((string) ($err['msg'] ?? ''), 0, 500));
-    $src = (string) ($err['src'] ?? '');
-    $stack = mb_substr((string) ($err['stack'] ?? ''), 0, 6000);
+    // Only text counts: an object sent as a field ({} from an SVG href) used to
+    // be cast to the word "Array" and filed as a file called /Array.
+    $str = fn ($v) => is_string($v) || is_int($v) || is_float($v) ? (string) $v : '';
+    $msg = trim(mb_substr($str($err['msg'] ?? ''), 0, 500));
+    $src = $str($err['src'] ?? '');
+    $stack = mb_substr($str($err['stack'] ?? ''), 0, 6000);
 
     // Noise: browser extensions, cross-origin "Script error." with nothing to go on,
     // and the ResizeObserver notice browsers raise for harmless layout loops.
@@ -132,7 +135,7 @@ function monitor_intake_js_event(array $err, array $req, int $now): ?array
         return [
             'kind' => 'js', 'level' => 'warning', 'exception_class' => 'ResourceError', 'message' => $title,
             'title' => $title, 'file' => $srcPath, 'line' => null, 'trace_text' => null,
-            'request' => $req, 'at' => $now, 'context' => ['tag' => mb_substr((string) ($err['tag'] ?? ''), 0, 12)],
+            'request' => $req, 'at' => $now, 'context' => ['tag' => mb_substr($str($err['tag'] ?? ''), 0, 12)],
         ];
     }
 

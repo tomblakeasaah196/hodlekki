@@ -37,6 +37,15 @@ eq('a failed load says which file', 'Could not load /assets/ui/app.css', $r['eve
 eq('an unhandled rejection is its own kind', 'UnhandledRejection', $r['events'][2]['exception_class']);
 eq('the role comes from the session', 'Church_Member', $r['events'][0]['request']['role']);
 
+// An SVG <use> whose sprite failed: its href is an object, which JSON sends as {}.
+// It used to be cast to the word "Array" and filed as "Could not load /Array".
+$svg = $beacon(['errors' => [
+    ['type' => 'resource', 'msg' => 'Could not load [object SVGAnimatedString]', 'src' => [], 'tag' => 'use'],
+    ['type' => 'resource', 'msg' => 'Could not load https://hodlekki.org/assets/ui/icons.svg?v=e3ba#search', 'src' => 'https://hodlekki.org/assets/ui/icons.svg?v=e3ba#search', 'tag' => 'use'],
+]]);
+eq('a field sent as an object is not filed as /Array', ['Could not load a file', ''], [$svg['events'][0]['title'], $svg['events'][0]['file']]);
+eq('a sprite that failed is named by its path', 'Could not load /assets/ui/icons.svg', $svg['events'][1]['title']);
+
 $many = $beacon(['errors' => array_map(fn ($i) => ['type' => 'error', 'msg' => 'E' . $i, 'src' => '/a.js'], range(1, 30))]);
 eq('at most 10 errors a beacon', 10, count($many['events']));
 
