@@ -206,6 +206,14 @@ eq('all green from outside', ['probe' => 'ok', 'outside_site' => 'ok', 'outside_
 $down = $byKey(monitor_check_outside(['site' => ['ok' => false, 'http_status' => 522, 'ttfb_ms' => 0] + $site] + $latest, [], $now, 60, true));
 eq('the site down from outside: bad', 'bad', $down['outside_site']);
 eq('reports stopped for 4 hours: worth a look', 'warn', $byKey(monitor_check_outside(array_map(fn ($r) => ['at' => $now - 4 * 3600] + $r, $latest), [], $now, 60, true))['probe'] === 'warn' ? 'warn' : 'x');
+$fresh = array_column(monitor_check_outside($latest, [], $now, 60, true), null, 'key');
+eq('each outside result carries the time it was measured', $now - 600, $fresh['dns']['at'] ?? null);
+$old = array_column(monitor_check_outside(array_map(fn ($r) => ['at' => $now - 29 * 3600] + $r, $latest), [], $now, 60, true), null, 'key');
+eq('reports stopped: a green result is no longer OK', ['outside_site' => 'unknown', 'outside_connect' => 'unknown', 'tls' => 'unknown', 'dns' => 'unknown', 'origin_lock' => 'unknown'],
+    array_intersect_key(array_column($old, 'state', 'key'), array_flip(['outside_site', 'outside_connect', 'tls', 'dns', 'origin_lock'])));
+has('…and says how old its last result is', $old['dns']['detail'], 'Last result, 29 hours ago');
+eq('…while a red result stays red', 'bad', $byKey(monitor_check_outside(array_map(fn ($r) => ['at' => $now - 29 * 3600] + $r, ['dns' => ['ok' => false, 'detail' => ['a' => true, 'mx' => false, 'spf' => true, 'dkim' => true, 'dmarc' => true]]] + $latest), [], $now, 60, true))['dns']);
+eq('the lock being off is read from .env, not the probe: no report time', null, array_column(monitor_check_outside($latest, [], $now, 60, false), null, 'key')['origin_lock']['at'] ?? null);
 eq('a certificate with 10 days left: worth a look', 'warn', $byKey(monitor_check_outside(['tls' => ['ok' => false, 'detail' => ['edge_days' => 10], 'at' => $now]] + $latest, [], $now, 60, true))['tls']);
 eq('no MX record: bad', 'bad', $byKey(monitor_check_outside(['dns' => ['ok' => false, 'detail' => ['a' => true, 'mx' => false, 'spf' => true, 'dkim' => true, 'dmarc' => true], 'at' => $now]] + $latest, [], $now, 60, true))['dns']);
 eq('the server answered around Cloudflare: bad', 'bad', $byKey(monitor_check_outside(['origin_lock' => ['ok' => false, 'http_status' => 200, 'detail' => ['tested' => true], 'at' => $now]] + $latest, [], $now, 60, true))['origin_lock']);

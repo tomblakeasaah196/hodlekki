@@ -16,7 +16,8 @@ $ui = [
     'mode' => 'strict',
     // training-live.js (PR 3) logs each press of Join class for attendance, then the link opens as usual.
     'scripts' => array_merge(['/assets/ui/js/pages/trainings.js'], function_exists('training_live_url') ? ['/assets/ui/js/pages/training-live.js'] : []),
-    'csp' => ['frame-src' => TRAININGS_FRAME_HOSTS],
+    // img-src: YouTube's still frames (i.ytimg.com), as on Junior Church (monitor error #98)
+    'csp' => ['frame-src' => TRAININGS_FRAME_HOSTS, 'img-src' => ['https://i.ytimg.com']],
 ];
 require_once '../../includes/header.php';
 $me = (int) $_SESSION['user_id'];
