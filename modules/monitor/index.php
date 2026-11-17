@@ -272,7 +272,8 @@ foreach ($tabs as $k => $t) {
                             </div>
                             <div class="ui-list__end ui-stack ui-stack--sm items-end">
                                 <?= ui_badge($stateWord[$c['state']] ?? $c['state'], $stateTone[$c['state']] ?? 'neutral', ['dot' => true]) ?>
-                                <span class="ui-meta">since <?= ui_e($ago(monitor_ts($c['since']))) ?></span>
+                                <?php // When it was last measured; how long it has been in this state is the tooltip ?>
+                                <span class="ui-meta" title="<?= ui_e(($stateWord[$c['state']] ?? $c['state']) . ' since ' . monitor_fmt(monitor_ts($c['since']), 'j M, H:i')) ?>">checked <?= ui_e($ago(monitor_ts($c['checked_at'] ?? null))) ?></span>
                             </div>
                         </li>
                     <?php endforeach; ?>

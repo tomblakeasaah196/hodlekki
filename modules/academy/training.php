@@ -14,7 +14,8 @@ $ui = [
     'title' => 'Training builder',
     'mode' => 'strict',
     'scripts' => ['/assets/ui/js/pages/academy-training.js'],
-    'csp' => ['frame-src' => TRAININGS_FRAME_HOSTS],
+    // img-src: YouTube's still frames (i.ytimg.com), as on Junior Church (monitor error #98)
+    'csp' => ['frame-src' => TRAININGS_FRAME_HOSTS, 'img-src' => ['https://i.ytimg.com']],
 ];
 require_once '../../includes/header.php';
 require_can('trainings', 'view', 'church');

@@ -93,6 +93,9 @@ eq('still red after 6 hours: told again', 1, monitor_alert_health($db, $db));
 monitor_checks_store($db, [monitor_check('disk', 'Server', 'Disk space', 'ok', '60% used')], monitor_time());
 eq('green again: told it recovered', 1, monitor_alert_health($db, $db));
 eq('…once', 0, monitor_alert_health($db, $db));
+monitor_checks_store($db, [monitor_check('dns', 'From outside', 'DNS and mail records', 'ok', 'All published.', null, monitor_time() - 3600)], monitor_time());
+eq('a result measured earlier is stored with its own time', monitor_fmt(monitor_time() - 3600),
+    $db->query("SELECT checked_at FROM monitor_checks WHERE check_key = 'dns'")->fetchColumn());
 
 // ---- The morning summary
 $GLOBALS['mt_mail'] = [];

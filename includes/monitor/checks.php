@@ -54,9 +54,10 @@ function monitor_urgent_checks(): array
             'outside_site', 'outside_connect', 'tls', 'dns', 'origin_lock'];
 }
 
-function monitor_check(string $key, string $grp, string $label, string $state, string $detail, ?string $fix = null): array
+function monitor_check(string $key, string $grp, string $label, string $state, string $detail, ?string $fix = null, ?int $at = null): array
 {
-    return compact('key', 'grp', 'label', 'state', 'detail', 'fix');
+    // $at: when the result was really measured, when that is not now (the outside probe's report)
+    return compact('key', 'grp', 'label', 'state', 'detail', 'fix') + ($at !== null ? ['at' => $at] : []);
 }
 
 /** The worst state in a list: bad, then warn, then unknown, else ok. */
@@ -692,6 +693,26 @@ function monitor_check_outside(array $latest, array $uptime, int $now, int $ever
             $lock['ok'] ? null : 'Run bash ~/repositories/hodlekki/bin/edge_lock.sh and check the block at the top of the docroot .htaccess.');
     }
 
+    // Each result is as old as the report it came from (owner, 17 Nov 2026: "6 days ago since last
+    // check of dns???"). Say when it was measured, and once reports stop, a green result is no
+    // longer known to hold: it shows as Waiting with its last result, not as OK.
+    $from = ['probe' => $lastAt, 'outside_site' => $latest['site']['at'] ?? null, 'outside_connect' => $latest['connect']['at'] ?? null,
+             'tls' => $latest['tls']['at'] ?? null, 'dns' => $latest['dns']['at'] ?? null,
+             'origin_lock' => $lockConfigured ? ($latest['origin_lock']['at'] ?? null) : null];
+    foreach ($checks as &$c) {
+        $at = $from[$c['key']] ?? null;
+        if ($at === null) {
+            continue;
+        }
+        $c['at'] = (int) $at;
+        if ($stale && $c['key'] !== 'probe' && $c['state'] === 'ok') {
+            $c['state'] = 'unknown';
+            $c['detail'] = 'Not checked since the probe stopped. Last result, ' . monitor_ago((int) $at, $now) . ': ' . $c['detail'];
+            $c['fix'] = $fixProbe;
+        }
+    }
+    unset($c);
+
     return $checks;
 }
 
@@ -1306,7 +1327,8 @@ function monitor_checks_store(PDO $db, array $checks, int $now): void
         $changed = $old === null || $old['state'] !== $c['state'];
         monitor_upsert($db, 'monitor_checks', [
             'check_key' => $c['key'], 'grp' => $c['grp'], 'label' => $c['label'], 'state' => $c['state'],
-            'detail' => $c['detail'], 'fix' => $c['fix'], 'since' => $changed ? $at : $old['since'], 'checked_at' => $at,
+            'detail' => $c['detail'], 'fix' => $c['fix'], 'since' => $changed ? $at : $old['since'],
+            'checked_at' => isset($c['at']) ? monitor_fmt((int) $c['at']) : $at,
         ], ['check_key'], [
             'grp' => '{grp}', 'label' => '{label}', 'state' => '{state}', 'detail' => '{detail}', 'fix' => '{fix}',
             'since' => '{since}', 'checked_at' => '{checked_at}',
