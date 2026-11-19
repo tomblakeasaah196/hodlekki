@@ -406,8 +406,9 @@ function monitor_check_disk(array $f): array
     $limit = (float) ($f['limit'] ?? 0);
     if ($used > 0 && $limit > 0) {
         $share = $used / $limit;
+        $old = isset($f['measured_at']) && monitor_time() - (int) $f['measured_at'] > 90 * 60;
         $detail = monitor_mb($used) . ' used of the ' . monitor_mb($limit) . ' cPanel quota (' . round($share * 100) . '%)'
-            . (($f['source'] ?? '') === 'du' ? ', measured from the home folder.' : '.');
+            . (($f['source'] ?? '') === 'du' ? ', measured from the home folder' . ($old ? ' ' . monitor_ago((int) $f['measured_at']) : '') . '.' : '.');
         $state = $share >= 0.95 ? 'bad' : ($share >= 0.85 ? 'warn' : 'ok');
     } elseif ($used > 0) {
         return monitor_check('disk', 'Server', $label, 'ok', monitor_mb($used) . ' used by the home folder; the account has no cPanel quota.');
@@ -1045,8 +1046,9 @@ function monitor_home_dir(): ?string
  * cPanel answers "0 MB used" when the server's filesystem quotas are off, so a
  * used figure of 0 is never believed: the home folder's size stands in.
  */
-function monitor_disk_facts(?array $quota, ?int $duKb, $free, $total): array
+function monitor_disk_facts(?array $quota, ?int $duKb, $free, $total, ?array $previous = null, ?int $now = null): array
 {
+    $now ??= monitor_time();
     $f = [];
     $limit = (float) ($quota['megabyte_limit'] ?? 0);
     $used = (float) ($quota['megabytes_used'] ?? 0);
@@ -1056,7 +1058,14 @@ function monitor_disk_facts(?array $quota, ?int $duKb, $free, $total): array
     if ($used > 0) {
         $f += ['used' => $used * 1048576, 'source' => 'quota'];
     } elseif ($duKb !== null && $duKb > 0) {
-        $f += ['used' => (float) $duKb * 1024, 'source' => 'du'];
+        $f += ['used' => (float) $duKb * 1024, 'source' => 'du', 'measured_at' => $now];
+    } elseif (isset($previous['used']) && (float) $previous['used'] > 0
+        && $now - (int) ($previous['measured_at'] ?? $previous['at'] ?? 0) <= 86400) {
+        // du ran out of time this hour (19 Nov 2026, 06:00: every hourly cron starts at :00 and the
+        // home folder took longer than 90 s). The account's size moves slowly: the last measure from
+        // the past day stands, with its own time, rather than an amber "unknown".
+        $f += ['used' => (float) $previous['used'], 'source' => (string) ($previous['source'] ?? 'du'),
+            'measured_at' => (int) ($previous['measured_at'] ?? $previous['at'])];
     }
     if (!isset($f['limit']) && !isset($f['used']) && $free !== false && $free !== null && $total) {
         $f = ['free' => (float) $free, 'total' => (float) $total];
@@ -1088,7 +1097,9 @@ function monitor_refresh_disk(PDO $db): void
             $duKb = (int) $m[1];
         }
     }
-    $f = monitor_disk_facts($quota, $duKb, @disk_free_space(monitor_root()), @disk_total_space(monitor_root()));
+    $previous = json_decode((string) monitor_state_get($db, 'disk'), true);
+    $f = monitor_disk_facts($quota, $duKb, @disk_free_space(monitor_root()), @disk_total_space(monitor_root()),
+        is_array($previous) ? $previous : null);
     $f['at'] = monitor_time();
     monitor_state_set($db, 'disk', (string) json_encode($f));
 }

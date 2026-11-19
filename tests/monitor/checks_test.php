@@ -163,6 +163,19 @@ eq('a quota that reports its use is believed', [1073741824.0, 'quota'], array_va
 eq('no quota and no du: the disk\'s free space', ['free' => 50.0, 'total' => 100.0], monitor_disk_facts(['megabytes_used' => 0, 'megabyte_limit' => 0], null, 50, 100));
 eq('no limit but a measured home folder: fine', 'ok', monitor_check_disk(monitor_disk_facts(null, 1024, 50, 100))['state']);
 eq('nothing could be read: amber', 'warn', monitor_check_disk(['at' => $now])['state']);
+// du ran out of time this hour: the last measure from the past day stands, with its age
+$quota = ['megabytes_used' => '0.00', 'megabyte_limit' => '200000.00'];
+$good = monitor_disk_facts($quota, 12745560, 1e12, 2e12, null, $now - 3 * 3600);
+eq('a fresh du measure keeps its time', [$now - 3 * 3600, 'du'], [$good['measured_at'], $good['source']]);
+$kept = monitor_disk_facts($quota, null, 1e12, 2e12, $good + ['at' => $now - 3 * 3600], $now);
+eq('du failed: the measure of 3 hours ago stands', [$good['used'], $now - 3 * 3600], [$kept['used'], $kept['measured_at']]);
+monitor_test_clock('2026-11-11 10:00:00'); // the clock moved to 06:30 above; $now is 10:00
+$keptCheck = monitor_check_disk($kept + ['at' => $now]);
+eq('…and the check stays green', 'ok', $keptCheck['state']);
+has('…saying how old the measure is', $keptCheck['detail'], 'measured from the home folder 3 hours ago');
+$stale = monitor_disk_facts($quota, null, 1e12, 2e12, ['used' => 5e9, 'source' => 'du', 'measured_at' => $now - 2 * 86400], $now);
+eq('a measure older than a day is not kept: amber again', 'warn', monitor_check_disk($stale + ['at' => $now])['state']);
+eq('a quota that answers is still believed over an old measure', 'quota', monitor_disk_facts(['megabytes_used' => 1024, 'megabyte_limit' => 2048], null, 1, 2, $good, $now)['source']);
 eq('not read yet: waiting', 'unknown', monitor_check_disk([])['state']);
 eq('no backup found: bad', 'bad', monitor_check_backups(['readable' => true, 'dir' => '/x'], $now)['state']);
 eq('last backup 30 hours old: bad', 'bad', monitor_check_backups(['readable' => true, 'dir' => '/x', 'db_at' => $now - 30 * 3600, 'db_size' => 9e6], $now)['state']);
