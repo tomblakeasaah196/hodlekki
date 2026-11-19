@@ -120,10 +120,10 @@
 
     HOD.actions.on('trb.settings', function (form) {
         var btn = form.querySelector('button[type="submit"]');
-        var v = values(form);
-        v.catalogue = form.elements.catalogue.checked ? 1 : 0;
-        v.gives_certificate = form.elements.gives_certificate.checked ? 1 : 0;
-        api('settings', v, btn).then(function () { flash('Settings saved.'); }).catch(function (err) { fieldError(form, err); });
+        var body = new FormData(form);   // FormData: the signature images go with it
+        body.set('catalogue', form.elements.catalogue.checked ? '1' : '0');
+        body.set('gives_certificate', form.elements.gives_certificate.checked ? '1' : '0');
+        api('settings', body, btn).then(function () { flash('Settings saved.'); }).catch(function (err) { fieldError(form, err); });
     });
 
     /* ------------------------------------------------------------ cards */

@@ -111,7 +111,8 @@ function trn_db(bool $withTrainings = true): PDO
         $pdo->exec($stmt);
     }
     if ($withTrainings) {
-        foreach (['20261208090000_trainings_core.sql', '20261211090000_trainings_certificates.sql', '20261212090000_trainings_notes.sql'] as $file) {
+        foreach (['20261208090000_trainings_core.sql', '20261211090000_trainings_certificates.sql', '20261212090000_trainings_notes.sql',
+            '20261220090000_trainings_signatories.sql'] as $file) {
             foreach (trn_schema_sql($file) as $stmt) {
                 $pdo->exec($stmt);
             }
@@ -934,8 +935,9 @@ ok('completing it issues the certificate (CERT-XXXX-XXXX)', $cur !== null && pre
 $ceNow = trainings_enrolment_get($pdo, $ce['id']);
 eq('…held on the enrolment with its hash', [$cur['code'], $cur['hash']], [$ceNow['certificate_no'], $ceNow['certificate_hash']]);
 eq('…the hash covers the code and what was printed', hash('sha256', $cur['code'] . '|' . $ce['id'] . '|' . trainings_json($cur['snapshot'])), $cur['hash']);
-eq('…what was printed', ['learner' => 'Dayo Test', 'training' => 'Certified course', 'completed_on' => '2026-12-01',
-    'signatory_name' => 'The Signatory', 'signatory_title' => 'Resident Pastor'], $cur['snapshot']);
+eq('…what was printed (a training with no signatories of its own: the Academy\'s signs)', ['learner' => 'Dayo Test', 'training' => 'Certified course',
+    'completed_on' => '2026-12-01', 'signatory_name' => 'The Signatory', 'signatory_title' => 'Resident Pastor',
+    'signatories' => [['name' => 'The Signatory', 'title' => 'Resident Pastor']]], $cur['snapshot']);
 eq('…the learner is told and can download it', [1, $cur['code']], [trn_count($pdo, 'system_notifications', "user_id = 904 AND title = 'Certificate ready'"),
     act($pdo, 904, 'view', ['training_id' => $ct])['enrolment']['certificate']]);
 eq('…the Academy sees it', $cur['code'], array_values(array_filter(act($pdo, 901, 'learners', ['training_id' => $ct])['learners'],
@@ -980,9 +982,74 @@ $c2 = trainings_certificate_current($pdo, trainings_enrolment_for($pdo, $ct, 902
 $html = trainings_certificate_html($c2, trainings_settings($pdo));
 ok('the certificate page escapes names', str_contains($html, '&lt;b&gt;Bola&lt;/b&gt;') && !str_contains($html, '<b>Bola'));
 ok('…and shows the training, the code, who signs and the QR', str_contains($html, 'Certified course') && str_contains($html, $c2['code'])
-    && str_contains($html, 'The Signatory') && str_contains($html, 'Resident Pastor') && str_contains($html, 'data:image/png;base64,'));
+    && str_contains($html, 'The Signatory') && str_contains($html, 'Resident Pastor') && str_contains($html, 'data:image/svg+xml;base64,'));
 $pdf = trainings_certificate_pdf($c2, trainings_settings($pdo));
 ok('the PDF comes from dompdf where Composer installed it (CI has none)', $pdf === null || str_starts_with($pdf, '%PDF'));
+
+// The design the owner picked (19 Nov 2026, "Gilded") and who signs, per training.
+ok('the design carries the HOD logo, the church, the title and Hodlekki\'s verify line', str_contains($html, 'HOUSEHOLD OF DAVID &#183; LEKKI CENTRE')
+    && str_contains($html, 'CERTIFICATE OF COMPLETION') && str_contains($html, 'data:image/png;base64,' . base64_encode((string) file_get_contents($root . '/assets/images/logo_hod.png')))
+    && str_contains($html, 'Verify at hodlekki.org/verify') && str_contains($html, 'Given on the 1st of December, 2026'));
+$qrSvg = trainings_certificate_qr_svg(trainings_certificate_verify_url($c2['code']), '#1D356A');
+$qrN = count(hod_qr_matrix(trainings_certificate_verify_url($c2['code']))) + 4;
+ok('…the QR is a vector of the verify link, with a quiet zone', str_contains($html, base64_encode($qrSvg)) && str_contains($qrSvg, 'viewBox="0 0 ' . $qrN . ' ' . $qrN . '"'));
+ok('…the seal is the flat gold foil seal: a saw-tooth edge, no ribbons', substr_count(trainings_certificate_seal_svg(), '<polygon') === 1
+    && str_contains($html, base64_encode(trainings_certificate_seal_svg())));
+$fontsCss = trainings_certificate_fonts_css();
+ok('…its fonts ship with the site (SIL OFL), every one of them', substr_count($fontsCss, '@font-face') === count(TRAININGS_CERT_FONTS)
+    && is_file($root . '/assets/fonts/certificate/OFL-cinzel.txt') && is_file($root . '/assets/fonts/certificate/OFL-ebgaramond.txt')
+    && is_file($root . '/assets/fonts/certificate/OFL-pinyonscript.txt'));
+$long = trainings_certificate_html(['code' => 'CERT-AAAA-BBBB', 'snapshot' => ['learner' => str_repeat('Oluwaseun ', 6), 'training' => str_repeat('Long title ', 10),
+    'completed_on' => '2026-11-19']], trainings_settings($pdo), []);
+ok('a long name gets smaller (never under 24pt) and a long title wraps smaller', str_contains($long, 'font-size:24pt;') && str_contains($long, 'font-size:16pt;')
+    && str_contains($long, 'Given on the 19th of November, 2026') && !str_contains($long, 'class="sig"'));
+
+eq('a signatory needs a title', 'signer1_title', act($pdo, 901, 'settings', ['training_id' => $ct, 'title' => 'Certified course', 'gives_certificate' => 1,
+    'live_percent' => 100, 'signer1_name' => 'Pastor A', 'signer1_title' => ''])['field'] ?? null);
+eq('…and nothing was saved', [], trainings_signatories($pdo, $ct));
+act($pdo, 901, 'settings', ['training_id' => $ct, 'title' => 'Certified course', 'gives_certificate' => 1, 'live_percent' => 100,
+    'signer1_name' => 'Pastor Sola Osunmakinde', 'signer1_title' => 'Senior Pastor, Household of David',
+    'signer2_name' => 'Pastor Muyiwa Ogunfowora', 'signer2_title' => 'Rector, HOD Academy']);
+eq('a training names its own two signatories in its Settings', [1 => 'Pastor Sola Osunmakinde', 2 => 'Pastor Muyiwa Ogunfowora'],
+    array_map(static fn ($s) => $s['name'], trainings_signatories($pdo, $ct)));
+eq('…a member cannot', 'FORBIDDEN', act($pdo, 904, 'settings', ['training_id' => $ct, 'title' => 'x', 'signer1_title' => 'x'])['code'] ?? null);
+act($pdo, 901, 'assign', ['training_id' => $ct, 'users' => [906]]);
+act($pdo, 906, 'item_done', ['item_id' => $ctItem, 'done' => 1]);
+$c3 = trainings_certificate_current($pdo, trainings_enrolment_for($pdo, $ct, 906)['id']);
+eq('…the next certificate names both, the first also where older readers look',
+    [[['name' => 'Pastor Sola Osunmakinde', 'title' => 'Senior Pastor, Household of David'], ['name' => 'Pastor Muyiwa Ogunfowora', 'title' => 'Rector, HOD Academy']],
+        'Pastor Sola Osunmakinde', 'Senior Pastor, Household of David'],
+    [$c3['snapshot']['signatories'], $c3['snapshot']['signatory_name'], $c3['snapshot']['signatory_title']]);
+eq('…/verify says both signed', 'Pastor Sola Osunmakinde, Senior Pastor, Household of David; Pastor Muyiwa Ogunfowora, Rector, HOD Academy',
+    trainings_certificate_verify_reply(trainings_certificate_lookup($pdo, $c3['code']))['validated_by']);
+$drawn = trainings_certificate_signers($pdo, $c3);
+eq('…and both are drawn, side by side', ['Pastor Sola Osunmakinde', 'Pastor Muyiwa Ogunfowora'], array_column($drawn, 'name'));
+$h3 = trainings_certificate_html($c3, trainings_settings($pdo), $drawn);
+ok('…in the left and right places, the seal between', substr_count($h3, 'class="sig"') === 2 && str_contains($h3, 'left:50mm;') && str_contains($h3, 'left:177mm;')
+    && str_contains($h3, 'Rector, HOD Academy'));
+eq('an older certificate keeps the one person it named', ['The Signatory'], array_column(trainings_certificate_signers($pdo, $c2), 'name'));
+$own = [1 => ['name' => 'Pastor A', 'title' => 'Senior Pastor', 'signature_image' => '/uploads/trainings/signature/20261119_0123456789abcdef.png']];
+eq('a signature image is drawn only for the same person in the same place', [null, null],
+    array_column(trainings_certificate_signers_drawn(['signatories' => [['name' => 'Pastor B', 'title' => 'Senior Pastor'], ['name' => 'Pastor A', 'title' => 'Senior Pastor']]],
+        $own, ['signatory_name' => '', 'signatory_title' => 'Resident Pastor', 'signature_image' => '']), 'image'));
+eq('…a signatory with no name signs with their title', 'Resident Pastor', trainings_certificate_named(['signatory_name' => '', 'signatory_title' => 'Resident Pastor'])[0]['title']);
+act($pdo, 901, 'settings', ['training_id' => $ct, 'title' => 'Certified course', 'gives_certificate' => 1, 'live_percent' => 100,
+    'signer1_name' => '', 'signer1_title' => '', 'signer2_name' => '', 'signer2_title' => '']);
+eq('emptying both rows hands it back to the Academy\'s signatory', [[], [['name' => 'The Signatory', 'title' => 'Resident Pastor']]],
+    [trainings_signatories($pdo, $ct), trainings_certificate_signers_now($pdo, $ct)]);
+act($pdo, 901, 'settings', ['training_id' => $ct, 'title' => 'Certified course', 'gives_certificate' => 1, 'live_percent' => 100, 'signer2_title' => 'Rector']);
+eq('…a form that sends one row leaves the other as it is', [2 => 'Rector'], array_map(static fn ($s) => $s['title'], trainings_signatories($pdo, $ct)));
+$gone = (int) act($pdo, 901, 'create', ['title' => 'Signed then deleted', 'length' => 'self_paced'])['id'];
+act($pdo, 901, 'settings', ['training_id' => $gone, 'title' => 'Signed then deleted', 'signer1_title' => 'Pastor']);
+trainings_delete($pdo, $gone);
+eq('deleting a training clears who signed it', 0, trn_count($pdo, 'training_signatories', 'training_id = ' . $gone));
+$dlSrc = (string) file_get_contents($root . '/api/trainings_certificate.php');
+ok('the download draws who the certificate names, with their images', str_contains($dlSrc, 'trainings_certificate_signers($pdo, $cert)'));
+$trbPage = (string) file_get_contents($root . '/modules/academy/training.php');
+ok('the training\'s Settings tab names up to two signatories, with signature images', str_contains($trbPage, "'signer' . \$p . '_title'")
+    && str_contains($trbPage, "'signer' . \$p . '_file'") && str_contains($trbPage, 'TRAININGS_SIGNERS_MAX'));
+ok('…and its form posts the images (FormData)', str_contains((string) file_get_contents($root . '/assets/ui/js/pages/academy-training.js'),
+    "var body = new FormData(form);   // FormData: the signature images go with it"));
 $verifyApi = (string) file_get_contents($root . '/api/public_verify_api.php');
 ok('the existing /verify API checks CERT- codes', str_contains($verifyApi, 'trainings_certificate_lookup($pdo, $code)'));
 $verifyPage = (string) file_get_contents($root . '/verify.php');

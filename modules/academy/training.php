@@ -253,7 +253,29 @@ if ($canEdit && $t['status'] !== 'published') {
                 <label class="ui-check"><input type="checkbox" name="catalogue" value="1"<?= $t['catalogue'] ? ' checked' : '' ?><?= $canEdit ? '' : ' disabled' ?>>
                     <span>Show in the catalogue<span class="ui-check__hint">Anyone signed in can join it.</span></span></label>
                 <label class="ui-check"><input type="checkbox" name="gives_certificate" value="1"<?= $t['gives_certificate'] ? ' checked' : '' ?><?= $canEdit ? '' : ' disabled' ?>>
-                    <span>Gives a certificate<span class="ui-check__hint">Certificates arrive in a later update.</span></span></label>
+                    <span>Gives a certificate<span class="ui-check__hint">Learners who finish can download it.</span></span></label>
+<?php $signers = trainings_signatories($pdo, $tid); ?>
+                <fieldset class="ui-fieldset ui-stack ui-stack--sm">
+                    <legend class="ui-legend">Who signs the certificate <?= ui_info('Up to two people sign side by side on this training\'s certificates. Leave both empty and the Academy\'s signatory signs (Academy, Settings). A certificate keeps the names it was issued with.', 'About who signs') ?></legend>
+<?php for ($p = 1; $p <= TRAININGS_SIGNERS_MAX; $p++): $s = $signers[$p] ?? ['name' => '', 'title' => '', 'signature_image' => '']; ?>
+                    <div class="ui-form-grid">
+                        <?= ui_field('text', ['name' => 'signer' . $p . '_name', 'label' => 'Signatory ' . $p, 'optional' => true, 'value' => $s['name'],
+                            'attrs' => ['maxlength' => 120, 'autocomplete' => 'off', 'disabled' => !$canEdit]]) ?>
+                        <?= ui_field('text', ['name' => 'signer' . $p . '_title', 'label' => 'Their title', 'optional' => true, 'value' => $s['title'],
+                            'attrs' => ['maxlength' => 120, 'autocomplete' => 'off', 'disabled' => !$canEdit]]) ?>
+                    </div>
+<?php if ($s['signature_image'] !== '' && trainings_signature_path($s['signature_image']) !== null): ?>
+                    <img class="h-16 w-auto max-w-xs rounded-ui border border-line bg-surface p-2" src="<?= ui_e($s['signature_image']) ?>" alt="Signature of signatory <?= $p ?>">
+<?php if ($canEdit): ?>
+                    <label class="ui-check"><input type="checkbox" name="signer<?= $p ?>_remove" value="1"><span>Remove this signature</span></label>
+<?php endif; ?>
+<?php endif; ?>
+<?php if ($canEdit): ?>
+                    <?= ui_field('file', ['name' => 'signer' . $p . '_file', 'label' => 'Signature ' . $p, 'optional' => true, 'hint' => 'PNG or JPEG, up to 2 MB.',
+                        'attrs' => ['accept' => '.png,.jpg,.jpeg,image/png,image/jpeg']]) ?>
+<?php endif; ?>
+<?php endfor; ?>
+                </fieldset>
             </div>
 <?php if ($canEdit): ?>
             <div class="ui-card__footer flex flex-wrap gap-2 justify-between">

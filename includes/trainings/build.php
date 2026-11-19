@@ -373,6 +373,9 @@ function trainings_delete(PDO $pdo, int $trainingId): void
     foreach (trainings_items_flat($pdo, $trainingId) as $item) {
         trainings_item_forget_files($item['details']);
     }
+    if (function_exists('trainings_signatories_forget')) {
+        trainings_signatories_forget($pdo, $trainingId);   // who signed its certificates, and their images
+    }
     $own = !$pdo->inTransaction();
     if ($own) {
         $pdo->beginTransaction();

@@ -155,7 +155,7 @@ if ($canManage) {
         <form class="ui-card" id="acd-settings-form" data-action="acd.settings" data-ui-validate novalidate>
             <div class="ui-card__header ui-card__header--divided">
                 <h2 class="ui-card__title">Certificates</h2>
-                <?= ui_info('Every certificate carries this signature, name and title, a code and a QR code that anyone can check at hodlekki.org/verify.', 'About certificates') ?>
+                <?= ui_info('This person signs the certificates of every training that names no signatories of its own (a training\'s Settings tab names up to two). Every certificate also carries a code and a QR code that anyone can check at hodlekki.org/verify.', 'About certificates') ?>
             </div>
             <div class="ui-card__body ui-stack ui-stack--md">
                 <div class="ui-form-grid">
