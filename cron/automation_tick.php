@@ -93,6 +93,17 @@ if (function_exists('trainings_reminders_run')) {
         error_log('[trainings] reminders: ' . $e->getMessage());
     }
 }
+// Live classes that invite their learners as Google guests: the guest list follows who is on the training.
+if (function_exists('training_live_tick') && !$dry) {
+    try {
+        $tl = training_live_tick($pdo);
+        if ($tl > 0) {
+            $line('live classes: guest list sent for ' . $tl);
+        }
+    } catch (Throwable $e) {
+        error_log('[trainings] live guests: ' . $e->getMessage());
+    }
+}
 
 // Our sermons (includes/our_sermons/feeds.php): each RSS feed Envision pasted is read every 15 minutes on this
 // beat, and a new episode becomes a draft for Envision to check. Its own try, so a problem there never stops

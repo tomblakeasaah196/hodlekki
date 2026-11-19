@@ -179,18 +179,24 @@
 
         var s = sectionOf(form.elements.section_id.value);
         var dated = !!(s && s.date_from);
-        show(form.querySelector('.trb-when'), dated);
+        var live = type === 'live';
+        // A live class always has a time; on a card without dates it takes its own day (owner, 19 Nov 2026)
+        show(form.querySelector('.trb-when'), dated || live);
         var week = dated && s.kind === 'week';
-        show(form.querySelector('.trb-when-week'), week);
+        show(form.querySelector('.trb-when-week'), week || (live && !dated));
         if (week) {
             form.elements.date.min = s.date_from;
             form.elements.date.max = s.date_to || s.date_from;
+        } else {
+            form.elements.date.removeAttribute('min');
+            form.elements.date.removeAttribute('max');
         }
 
-        if (type === 'live') {
+        if (live) {
             var online = (form.querySelector('input[name="live_mode"]:checked') || {}).value === 'online';
-            show(form.querySelector('.trb-inperson'), !online);
-            show(form.querySelector('.trb-online'), online);
+            form.querySelectorAll('.trb-inperson').forEach(function (n) { show(n, !online); });
+            form.querySelectorAll('.trb-online').forEach(function (n) { show(n, online); });
+            presentHint();
         }
         if (type === 'audio') {
             var upload = form.querySelector('input[name="audio_source"]').checked;
@@ -209,6 +215,20 @@
         }
     }
     HOD.actions.on('trb.itemType', syncItem);
+
+    /** "That is 21 of 30 minutes": Present after as minutes of this class (60 when Minutes is empty) */
+    function presentHint() {
+        var form = itemForm;
+        var out = document.getElementById('trb-present-minutes');
+        if (!form || !out || !form.elements.present_percent) return;
+        var length = parseInt(form.elements.minutes.value, 10) || 60;
+        var pct = parseInt(form.elements.present_percent.value, 10);
+        out.textContent = pct >= 10 && pct <= 100
+            ? 'That is ' + Math.max(1, Math.round(length * pct / 100)) + ' of ' + length + ' minutes'
+                + (form.elements.minutes.value ? '.' : ' (an hour, while Minutes is empty).')
+            : '';
+    }
+    HOD.actions.on('trb.presentHint', presentHint);
 
     function current(form, key, text) {
         var node = form.querySelector('[data-trb-current="' + key + '"]');
@@ -246,8 +266,10 @@
             if (item.type === 'live') {
                 radio(form, 'live_mode', d.mode || 'in_person');
                 form.elements.venue.value = d.venue || '';
-                form.elements.link.value = d.link || '';
-                form.elements.present_minutes.value = d.present_minutes || 30;
+                radio(form, 'access', d.access || 'open');
+                // A class saved with fixed minutes before shows them as a share of its length
+                form.elements.present_percent.value = d.present_percent
+                    || (d.present_minutes ? Math.min(100, Math.max(10, Math.round(d.present_minutes * 100 / (item.minutes || 60)))) : 70);
             } else if (item.type === 'video') {
                 form.querySelector('#trb-video-url').value = d.url || '';
             } else if (item.type === 'audio') {
@@ -282,7 +304,18 @@
         var btn = document.querySelector('button[form="trb-item-form"]');
         var body = new FormData(form);
         if (!form.elements.required.checked) body.set('required', '0');
-        api('item_save', body, btn).then(function () { flash('Item saved.'); }).catch(function (err) { fieldError(form, err); });
+        api('item_save', body, btn).then(function (res) {
+            // An online class: its Meet link was made on save; its Meet page opens (owner, 19 Nov 2026)
+            var live = res && res.live;
+            if (live && live.page) {
+                try {
+                    window.sessionStorage.setItem('hod:live-flash', live.warning ? 'Saved. ' + live.warning : (live.meet_url ? 'Saved. The Meet link is ready.' : 'Saved.'));
+                } catch (e) { /* no toast after the move */ }
+                window.location.assign(live.page);
+                return;
+            }
+            flash('Item saved.');
+        }).catch(function (err) { fieldError(form, err); });
     });
 
     HOD.actions.on('trb.itemMove', function (btn) {

@@ -28,6 +28,43 @@ final class Live
     public const TABLES = ['training_meetings', 'training_join_log', 'training_attendance', 'training_meet_participants'];
     public const DEFAULT_MINUTES = 60;
 
+    /**
+     * Who can join a class's Meet (owner, 19 Nov 2026): the item's details.access → the Meet space's access type.
+     *   open      anyone with the link walks in (only learners on the training are given it)
+     *   learners  everyone knocks and the host lets them in
+     *   guests    the learners are invited as Calendar guests (Google emails them) and walk in; others knock
+     */
+    public const ACCESS = ['open' => 'OPEN', 'learners' => 'RESTRICTED', 'guests' => 'RESTRICTED'];
+    public const DEFAULT_ACCESS = 'open';
+    /** Present: this share of the class's length (owner: 20 of 30 minutes, rounded to 70%) */
+    public const DEFAULT_PRESENT_PERCENT = 70;
+
+    public static function access(array $item): string
+    {
+        $a = (string) ($item['details']['access'] ?? self::DEFAULT_ACCESS);
+
+        return isset(self::ACCESS[$a]) ? $a : self::DEFAULT_ACCESS;
+    }
+
+    /** The learners' confirmed personal emails, for a class set to invite them (else none), sorted */
+    public static function guestEmails(PDO $pdo, array $item): array
+    {
+        if (self::access($item) !== 'guests' || !function_exists('member_confirmed_email')) {
+            return [];
+        }
+        $emails = [];
+        foreach (self::learners($pdo, (int) $item['training_id']) as $l) {
+            $e = strtolower(trim((string) member_confirmed_email($pdo, $l['user_id'])));
+            if ($e !== '' && filter_var($e, FILTER_VALIDATE_EMAIL)) {
+                $emails[$e] = true;
+            }
+        }
+        $emails = array_keys($emails);
+        sort($emails);
+
+        return $emails;
+    }
+
     public static function ready(PDO $pdo): bool
     {
         if (!function_exists('trainings_ready') || !trainings_ready($pdo)) {
@@ -97,9 +134,11 @@ final class Live
         if ($have !== null && $have['status'] === 'active' && $have['meet_url']) {
             return ['ok' => true, 'meet_url' => $have['meet_url']];
         }
+        $guests = self::access($item) === 'guests' ? self::guestEmails($pdo, $item) : null;
         try {
             $ev = Google::createEvent(['title' => self::eventTitle($t, $item), 'starts_at' => $window[0], 'ends_at' => $window[1],
-                'description' => 'HOD Lekki Trainings. Join from the Trainings page so your attendance counts.']);
+                'description' => 'HOD Lekki Trainings. Join from the Trainings page so your attendance counts.']
+                + ($guests !== null ? ['guests' => $guests] : []));
         } catch (GoogleError $e) {
             return self::fail($e->getMessage());
         }
@@ -107,15 +146,37 @@ final class Live
         $row = ['training_id' => $t['id'], 'provider' => 'google', 'status' => 'active', 'event_id' => $ev['event_id'],
             'meet_url' => $ev['meet_url'], 'meet_code' => $ev['meet_code'], 'html_link' => $ev['html_link'],
             'title_sent' => self::eventTitle($t, $item), 'starts_at' => trainings_sql_dt($window[0]), 'ends_at' => trainings_sql_dt($window[1]),
-            'last_error' => null, 'updated_at' => $now];
+            'last_error' => null, 'updated_at' => $now, 'access_sent' => null, 'space_name' => null,
+            'guests_sent' => $guests !== null ? json_encode($guests) : null];
         if ($have !== null) {
             self::update($pdo, 'training_meetings', $row + ['conference_record' => null, 'synced_at' => null], (int) $have['id']);
         } else {
             self::insert($pdo, 'training_meetings', $row + ['item_id' => $itemId, 'created_by' => $by, 'created_at' => $now]);
         }
         self::setDetails($pdo, $itemId, $ev['meet_url'], $ev['event_id']);
+        // Who can join: a problem here keeps the link (it works, people may only have to knock) and waits on the Meet page
+        $accessError = self::applyAccess($pdo, (array) self::meeting($pdo, $itemId), self::access($item));
 
-        return ['ok' => true, 'meet_url' => $ev['meet_url']];
+        return ['ok' => true, 'meet_url' => $ev['meet_url']] + ($accessError !== null ? ['warning' => $accessError] : []);
+    }
+
+    /** Set who can join on the Meet space and remember it; null when done, else why not (kept in last_error) */
+    private static function applyAccess(PDO $pdo, array $m, string $access): ?string
+    {
+        if (empty($m['id']) || empty($m['meet_code'])) {
+            return null;
+        }
+        try {
+            $space = Google::setAccess((string) $m['meet_code'], self::ACCESS[$access], $m['space_name'] ?? null);
+            self::update($pdo, 'training_meetings', ['access_sent' => $access, 'space_name' => $space, 'updated_at' => trainings_sql_dt()], (int) $m['id']);
+
+            return null;
+        } catch (GoogleError $e) {
+            $why = 'Who can join was not set: ' . $e->getMessage();
+            self::update($pdo, 'training_meetings', ['last_error' => mb_substr($why, 0, 250), 'updated_at' => trainings_sql_dt()], (int) $m['id']);
+
+            return $why;
+        }
     }
 
     /** Send the item's title and time to Google again (normally automatic after an edit). */
@@ -182,16 +243,29 @@ final class Live
             $title = self::eventTitle($ctx[1], $item);
             $starts = trainings_sql_dt($window[0]);
             $ends = trainings_sql_dt($window[1]);
-            if ($force || $title !== $m['title_sent'] || $starts !== $m['starts_at'] || $ends !== $m['ends_at']) {
-                Google::updateEvent((string) $m['event_id'], ['title' => $title, 'starts_at' => $window[0], 'ends_at' => $window[1]]);
+            $moved = $title !== $m['title_sent'] || $starts !== $m['starts_at'] || $ends !== $m['ends_at'];
+            // Guests: the learners while the class invites them; none once it stops (Google tells the removed ones)
+            $access = self::access($item);
+            $sent = json_decode((string) ($m['guests_sent'] ?? ''), true);
+            $sent = is_array($sent) ? $sent : [];
+            $guests = $access === 'guests' ? self::guestEmails($pdo, $item) : [];
+            $withGuests = $guests !== $sent || ($access === 'guests' && $moved);
+            if ($force || $moved || $withGuests) {
+                Google::updateEvent((string) $m['event_id'], ['title' => $title, 'starts_at' => $window[0], 'ends_at' => $window[1]]
+                    + ($withGuests ? ['guests' => $guests] : []));
                 self::update($pdo, 'training_meetings', ['title_sent' => $title, 'starts_at' => $starts, 'ends_at' => $ends,
-                    'last_error' => null, 'updated_at' => trainings_sql_dt()], (int) $m['id']);
+                    'last_error' => null, 'updated_at' => trainings_sql_dt()]
+                    + ($withGuests ? ['guests_sent' => json_encode($guests)] : []), (int) $m['id']);
             } elseif ($m['last_error'] !== null) {
                 // Back in step without a call (the item went back to what Google has): the old problem is gone
                 self::update($pdo, 'training_meetings', ['last_error' => null, 'updated_at' => trainings_sql_dt()], (int) $m['id']);
             }
             if (($item['details']['meet_url'] ?? '') !== $m['meet_url']) {
                 self::setDetails($pdo, $item['id'], $m['meet_url'], $m['event_id']);
+            }
+            // Who can join, when it changed (or on Update); a Meet made before this setting existed counts as open
+            if ($force || ($m['access_sent'] ?? null) !== $access) {
+                return self::applyAccess($pdo, (array) self::meeting($pdo, (int) $m['item_id']), $access);
             }
 
             return null;
@@ -525,13 +599,53 @@ final class Live
             'status' => (string) $r['status'], 'user_id' => $r['user_id'] !== null ? (int) $r['user_id'] : null,
             'suggestions' => trainings_decode($r['suggestions'])], $stmt->fetchAll(PDO::FETCH_ASSOC));
 
-        return ['item' => $item, 'training' => $t, 'meeting' => self::meeting($pdo, $itemId), 'window' => self::window($item),
-            'present_minutes' => self::presentMinutes($item), 'learners' => $learners, 'review' => $review];
+        $meeting = self::meeting($pdo, $itemId);
+        $guests = json_decode((string) ($meeting['guests_sent'] ?? ''), true);
+
+        return ['item' => $item, 'training' => $t, 'meeting' => $meeting, 'window' => self::window($item),
+            'present_minutes' => self::presentMinutes($item), 'learners' => $learners, 'review' => $review,
+            'access' => self::access($item), 'access_set' => ($meeting['access_sent'] ?? null) === self::access($item),
+            'guests' => is_array($guests) ? count($guests) : 0];
     }
 
+    /**
+     * Minutes in the call that count as present: present_percent of the class's length (owner, 19 Nov 2026,
+     * 70% by default), or the fixed present_minutes a class saved before that kept.
+     */
     public static function presentMinutes(array $item): int
     {
-        return max(1, (int) ($item['details']['present_minutes'] ?? 30) ?: 30);
+        $d = $item['details'] ?? [];
+        if (isset($d['present_percent']) && (int) $d['present_percent'] > 0) {
+            $length = max(1, (int) ($item['minutes'] ?: self::DEFAULT_MINUTES));
+
+            return max(1, (int) round($length * min(100, (int) $d['present_percent']) / 100));
+        }
+
+        return max(1, (int) ($d['present_minutes'] ?? 30) ?: 30);
+    }
+
+    /**
+     * The 5-minute beat (cron/automation_tick.php): a class that invites its learners as guests sends the list
+     * again when someone joined or left the training, until the class has ended. Returns how many were sent.
+     */
+    public static function syncGuestsDue(PDO $pdo): int
+    {
+        $stmt = $pdo->prepare("SELECT * FROM training_meetings WHERE status = 'active' AND ends_at > ?");
+        $stmt->execute([trainings_sql_dt()]);
+        $n = 0;
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $m) {
+            $item = self::context($pdo, (int) $m['item_id'])[0] ?? null;
+            $sent = json_decode((string) ($m['guests_sent'] ?? ''), true);
+            if ($item === null || (self::access($item) !== 'guests' && empty($sent))) {
+                continue;
+            }
+            if (self::guestEmails($pdo, $item) !== (is_array($sent) ? $sent : [])) {
+                self::reconcile($pdo, $m);
+                $n++;
+            }
+        }
+
+        return $n;
     }
 
     // ---- Plumbing ---------------------------------------------------------------------------------------

@@ -69,6 +69,20 @@ $fmt = static fn (?string $dt): string => $dt ? substr($dt, 11, 5) : '';
                 <div class="ui-list__end"><?= ui_button('Copy link', ['size' => 'sm', 'variant' => 'ghost', 'icon' => 'copy', 'icon_only' => true,
                     'attrs' => ['data-action' => 'live.copy', 'data-url' => $m['meet_url']]]) ?></div>
             </li>
+<?php
+            // Who can join (owner, 19 Nov 2026): set on the Meet itself; changed with Edit item in the builder
+            $accessText = [
+                'open' => ['Anyone with the link', 'They walk straight in. Only learners on this training see the link.'],
+                'learners' => ['Learners knock', 'Everyone asks to join; let them in from the call, signed in as ' . ($google['email'] ?? 'the church account') . '.'],
+                'guests' => ['Learners invited', $state['guests'] . ' learner' . ($state['guests'] === 1 ? '' : 's') . ' with a confirmed email got a Google invite and walk in; others knock.'],
+            ][$state['access']]; ?>
+            <li class="ui-list__item">
+                <div class="ui-list__main">
+                    <span class="ui-list__title"><?= ui_e('Who can join: ' . $accessText[0]) ?></span>
+                    <span class="ui-list__meta"><?= ui_e($accessText[1]) ?></span>
+                </div>
+                <div class="ui-list__end"><?= $state['access_set'] ? ui_badge('Set on Meet', 'success') : ui_badge('Not set yet', 'warning') ?></div>
+            </li>
         </ul>
 <?php if ($canEdit): ?>
         <div class="ui-card__footer">

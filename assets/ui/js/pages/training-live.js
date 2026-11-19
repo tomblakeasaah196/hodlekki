@@ -18,6 +18,15 @@
     var DATA = HOD.data('training-live') || {};
     if (!root || !DATA.item) return;
 
+    // Arrived from the builder after saving an online class: say how the Meet link went
+    try {
+        var arrived = window.sessionStorage.getItem('hod:live-flash');
+        if (arrived) {
+            window.sessionStorage.removeItem('hod:live-flash');
+            HOD.toast(arrived, /^Saved\. (The Meet link is ready\.)?$/.test(arrived) ? 'success' : 'warning');
+        }
+    } catch (e) { /* storage blocked */ }
+
     function post(action, extra, button) {
         var body = { action: action, item: DATA.item };
         Object.keys(extra || {}).forEach(function (k) { body[k] = extra[k]; });

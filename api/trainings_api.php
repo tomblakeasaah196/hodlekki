@@ -33,9 +33,10 @@ try {
     if (($out['code'] ?? '') === 'FORBIDDEN') {
         http_response_code(403);
     }
-    // PR 3: a live class's Meet follows its item (moved, retitled, removed).
+    // PR 3: a live class's Meet follows its item (moved, retitled, removed); saving an online class makes its
+    // Meet link and tells the builder to open the class's Meet page ($out['live']).
     if (($out['status'] ?? '') === 'success' && function_exists('training_live_after_action')) {
-        training_live_after_action($pdo, (string) ($_POST['action'] ?? ''), $_POST);
+        $out += (array) training_live_after_action($pdo, (string) ($_POST['action'] ?? ''), $_POST, $out);
     }
     echo json_encode($out);
 } catch (Throwable $e) {

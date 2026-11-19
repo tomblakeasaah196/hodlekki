@@ -31,7 +31,7 @@ Switching accounts needs no code change: **Integrations → Google → Disconnec
 ## Setup (once)
 
 1. **Google Cloud** project (the lead does this with the owner): enable the **Google Calendar API** and the **Google Meet REST API**.
-2. **OAuth consent screen**: External, the four scopes below, and **published to production**. In Testing mode, refresh tokens die after 7 days.
+2. **OAuth consent screen**: External, the five scopes below, and **published to production**. In Testing mode, refresh tokens die after 7 days.
 3. **OAuth client**: a Web application, with redirect URI `https://hodlekki.org/integrations/google/callback`.
 4. **`.env`**, filled in by the owner, never typed by anyone else:
    - `GOOGLE_OAUTH_CLIENT_ID`
@@ -39,7 +39,7 @@ Switching accounts needs no code change: **Integrations → Google → Disconnec
    - `INTEGRATIONS_VAULT_KEY`: 64 hex characters, made on the server with `php -r "echo bin2hex(random_bytes(32));"`.
 5. **Integrations → Google → Connect**, signed in as the account to use. Allow every box.
 
-**Scopes:** `openid email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/meetings.space.readonly`.
+**Scopes:** `openid email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/meetings.space.readonly https://www.googleapis.com/auth/meetings.space.settings` (the last added on 19 Nov 2026 for who can join a class: non-sensitive, so no Google review; an existing connection is reconnected once).
 
 ## What is kept, and where
 
@@ -96,20 +96,38 @@ A participant counts for a learner automatically only when the match is clear:
 
 Everyone else lands in **Needs a look**, with up to three suggestions: learners who pressed Join first, then the best name matches. A learner who pressed Join but was not found in the call is listed too.
 
-Minutes are the time in the call, with overlapping stretches counted once, so a phone and a laptop together count as one. **Present** means at least N minutes, set per class (default 30). The tutor can always correct the result.
+Minutes are the time in the call, with overlapping stretches counted once, so a phone and a laptop together count as one. **Present** means at least a share of the class's length, set per class (`details.present_percent`, default 70%: 21 of 30 minutes, 42 of an hour; `Live::presentMinutes()`). A class saved before 19 Nov 2026 keeps its fixed `present_minutes` until it is saved again. The tutor can always correct the result.
 
 ## Live classes (`HOD\TrainingLive\Live`)
 
-**The Meet link.** In the builder, a live item has a **Meet** button (or **Attendance** for an in-person class). It opens `/modules/academy/live?item=…`, where the Academy:
+**The Meet link is made on save** (owner, 19 Nov 2026). In the builder's **Add item**, a live class has **Day** and **Time** on any card. On a card without dates it takes its own day; on a dated card the day comes from the card, as before. An **Online** class must have both, plus **Who can join** and **Present after (%)**. There is no pasted link any more; a link pasted before still works.
 
-- presses **Create Meet link**. This needs an online class with a date and time, and Google connected;
-- gets an event on the church's calendar with a Meet: titled "Training: class", at the class's time and length, in Lagos time;
-- adds no guests and has Google send nothing, so no learner record goes to Google;
-- sees the link stored in the item's `details.meet_url` / `meet_event_id`. PR 1 keeps those on every edit, and the learner's page prefers them to a pasted link.
+Pressing **Save item** on an online class:
+
+- saves it;
+- makes the Meet if it has none (`training_live_after_action()` → `Live::createMeet()`, with Google connected): an event on the church's calendar, titled "Training: class", at the class's time and length in Lagos time;
+- sets who can join on the Meet space;
+- stores the link in `details.meet_url` / `meet_event_id`. PR 1 keeps those on every edit, and the learner's page prefers them to a pasted link;
+- opens the class's Meet page (`/modules/academy/live?item=…`, from `$out['live']['page']`). The form's hint says so, and a toast there says how it went.
+
+The page still has **Create Meet link** for a class saved while Google was not connected. The builder's live items keep their **Meet** button (or **Attendance** for an in-person class).
+
+**Who can join** (`details.access`; the Meet REST API `spaces.patch` with `config.accessType`, scope `meetings.space.settings`):
+
+| In the form | Google | What happens |
+|---|---|---|
+| Anyone with the link (default) | `OPEN` | No guests, Google sends nothing. Anyone with the link walks straight in; only learners on the training are given it. |
+| Learners knock | `RESTRICTED` | No guests. Everyone asks to join; the host (signed in as the connected account) lets them in. |
+| Invite learners | `RESTRICTED` + Calendar guests | The learners' confirmed personal emails (`member_confirmed_email()`) become guests. Google emails each one the invite (`sendUpdates=all`), and the invited walk in; anyone else knocks. Guests cannot see each other or invite others. Only this choice sends learners' emails to Google. |
+
+The space is found once from the meeting code (`GET spaces/{code}`, an alias Google allows for reading) and its name is kept (`training_meetings.space_name`). What was last sent is remembered in `access_sent` / `guests_sent` (migration `20261219090000_trainings_live_access.sql`), so only a change is sent again. For an invited class, the guest list follows the training: `cron/automation_tick.php` (every 5 minutes, `Live::syncGuestsDue()`) sends it again when a learner joins, leaves or confirms an email, until the class has ended. Switching away from **Invite learners** removes the guests, and Google tells them.
+
+A Meet made before 19 Nov 2026 counts as open. Its access is set on the next save or with **Update**.
 
 **The Meet follows the item.** `api/trainings_api.php` calls `training_live_after_action()` after a builder change (an item saved or removed, a card removed, the settings, the training deleted):
 
-- a moved or retitled class patches its event;
+- a moved or retitled class patches its event (an invited class's guests get the change from Google);
+- a change of **Who can join** is set on the space, and the guest list follows;
 - a removed class, or one made in person or left without a time, deletes the event.
 
 A Google problem never fails the builder. It is kept on the meeting, shown on the Meet page, and tried again on the next save or with **Update**.
@@ -134,9 +152,8 @@ The rest go to **Needs a look** (`training_meet_participants`), one row per name
 
 A tutor's choice (`source = manual`, progress `by = 'tutor'`) is never changed by a later read. A read removes only what an earlier read added.
 
-## Known limit: who may enter the call
+## Who can let people in
 
-A Meet made through Calendar on a personal Gmail belongs to that account. People who are not invited may have to **ask to join**, and only the host can admit them. If this gets in the way, there are two options:
+A Meet made through Calendar on a personal Gmail belongs to that account, so on **Learners knock** (and for anyone not invited on **Invite learners**) only the connected account can let people in. Run those classes signed in as that account. **Anyone with the link** needs nobody to let people in.
 
-- the tutor runs the class signed in as the connected account;
-- a later change makes the space open, which needs the `meetings.space.created` scope (the Meet REST API, `spaces.patch` with `accessType: OPEN`).
+The access needs the `meetings.space.settings` permission (added 19 Nov 2026). A connection made before then lacks it: Integrations shows **Reconnect**, and until then the Meet page shows "Who can join was not set". The link itself still works.
