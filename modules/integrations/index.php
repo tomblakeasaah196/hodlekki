@@ -52,7 +52,9 @@ if ($g['connected_by']) {
     'no_table' => ['Not ready', 'neutral'],
     default => ['Not set up', 'warning'],
 };
-$canConnect = in_array($g['state'], ['not_connected', 'revoked'], true);
+// Connected but a newer build needs another permission (19 Nov 2026: who can join a class's Meet): connect again in
+// place. Google keeps what was given (include_granted_scopes) and the callback stores the new token.
+$canConnect = in_array($g['state'], ['not_connected', 'revoked'], true) || ($g['state'] === 'connected' && $g['missing_scopes']);
 $setup = 'In .env: GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET (Google Cloud → Credentials → the web client), and '
     . 'INTEGRATIONS_VAULT_KEY (64 hex characters; on the server: php -r "echo bin2hex(random_bytes(32));"). '
     . 'The client\'s redirect URI must be ' . Google::redirectUri() . '.';
@@ -88,7 +90,7 @@ $setup = 'In .env: GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET (Google
             <?php if ($g['state'] === 'connected' && $g['missing_scopes']): ?>
             <li class="ui-list__item">
                 <div class="ui-list__main"><span class="ui-list__title">Permissions missing</span></div>
-                <div class="ui-list__end"><?= ui_info('Not allowed: ' . implode(', ', $g['missing_scopes']) . '. Disconnect, then Connect and allow every box.') ?></div>
+                <div class="ui-list__end"><?= ui_info('Not allowed: ' . implode(', ', $g['missing_scopes']) . '. Press Allow new permissions and tick every box; nothing stops while you do.') ?></div>
             </li>
             <?php endif; ?>
             <?php if ($g['state'] === 'connected' || $g['state'] === 'revoked'): ?>
@@ -104,7 +106,7 @@ $setup = 'In .env: GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET (Google
             <?php if ($canConnect): ?>
                 <form method="post" action="/integrations/google/connect">
                     <?= ui_csrf_field() ?>
-                    <?= ui_button($g['state'] === 'revoked' ? 'Connect again' : 'Connect', ['variant' => 'primary', 'type' => 'submit', 'icon' => 'link']) ?>
+                    <?= ui_button($g['state'] === 'revoked' ? 'Connect again' : ($g['state'] === 'connected' ? 'Allow new permissions' : 'Connect'), ['variant' => 'primary', 'type' => 'submit', 'icon' => 'link']) ?>
                 </form>
             <?php endif; ?>
             <?php if ($g['state'] === 'connected'): ?>
