@@ -336,7 +336,9 @@ function trainings_action(PDO $pdo, string $action, array $in, array $files, int
             if (!trainings_staff_can('edit')) {
                 return trainings_forbidden();
             }
-            return $reply(trainings_update_settings($pdo, $t, $in));
+            // Who signs its certificates first: a bad image or a missing title saves nothing.
+            $signed = trainings_signatories_save($pdo, (int) $t['id'], $in, $files, $uid);
+            return $reply($signed['ok'] ? trainings_update_settings($pdo, $t, $in) : $signed);
 
         case 'publish':
             if (!trainings_staff_can('edit')) {

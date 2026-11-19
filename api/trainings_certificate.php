@@ -34,7 +34,7 @@ if ($cert === null) {
     $fail(404, 'There is no certificate for this training yet.');
 }
 try {
-    $pdf = trainings_certificate_pdf($cert, trainings_settings($pdo));
+    $pdf = trainings_certificate_pdf($cert, trainings_settings($pdo), trainings_certificate_signers($pdo, $cert));
 } catch (Throwable $ex) {
     error_log('[trainings] certificate PDF failed: ' . $ex->getMessage());
     $pdf = null;
