@@ -1027,7 +1027,23 @@ eq('…and both are drawn, side by side', ['Pastor Sola Osunmakinde', 'Pastor Mu
 $h3 = trainings_certificate_html($c3, trainings_settings($pdo), $drawn);
 ok('…in the left and right places, the seal between', substr_count($h3, 'class="sig"') === 2 && str_contains($h3, 'left:50mm;') && str_contains($h3, 'left:177mm;')
     && str_contains($h3, 'Rector, HOD Academy'));
-eq('an older certificate keeps the one person it named', ['The Signatory'], array_column(trainings_certificate_signers($pdo, $c2), 'name'));
+// Owner, 19 Nov 2026: signatures added after a certificate was issued must be on it (same code).
+$c2now = trainings_certificate_current($pdo, (int) $c2['enrolment_id']);
+eq('saving who signs re-signs the certificates already issued: the same code, both names, a new hash that covers them',
+    [$c2['code'], ['Pastor Sola Osunmakinde', 'Pastor Muyiwa Ogunfowora'], hash('sha256', $c2['code'] . '|' . $c2['enrolment_id'] . '|' . trainings_json($c2now['snapshot'])), $c2now['hash']],
+    [$c2now['code'], array_column($c2now['snapshot']['signatories'], 'name'), $c2now['hash'], trainings_enrolment_get($pdo, (int) $c2['enrolment_id'])['certificate_hash']]);
+ok('…the learner, training and date stay as printed', [$c2now['snapshot']['learner'], $c2now['snapshot']['training'], $c2now['snapshot']['completed_on']]
+    === [$c2['snapshot']['learner'], $c2['snapshot']['training'], $c2['snapshot']['completed_on']] && $c2['hash'] !== $c2now['hash']);
+eq('…/verify agrees', 'Pastor Sola Osunmakinde, Senior Pastor, Household of David; Pastor Muyiwa Ogunfowora, Rector, HOD Academy',
+    trainings_certificate_verify_reply(trainings_certificate_lookup($pdo, $c2['code']))['validated_by']);
+eq('…a revoked or replaced certificate keeps what it said', ['The Signatory', 'The Signatory'],
+    [trainings_certificate_lookup($pdo, $new['code'])['signatory_name'], trainings_certificate_lookup($pdo, $cur['code'])['signatory_name']]);
+$pdo->prepare('UPDATE training_certificates SET snapshot = ? WHERE id = ?')->execute([trainings_json(['learner' => 'Femi Test', 'training' => 'Certified course',
+    'completed_on' => '2026-12-01', 'signatory_name' => '', 'signatory_title' => 'Resident Pastor']), $c3['id']]);
+eq('one issued before signatories (a title, no name) is re-signed at its next download, once', [1, ['Pastor Sola Osunmakinde', 'Pastor Muyiwa Ogunfowora'], 0],
+    [trainings_certificates_resign($pdo, $ct, (int) $c3['enrolment_id']),
+        array_column(trainings_certificate_current($pdo, (int) $c3['enrolment_id'])['snapshot']['signatories'], 'name'),
+        trainings_certificates_resign($pdo, $ct, (int) $c3['enrolment_id'])]);
 $own = [1 => ['name' => 'Pastor A', 'title' => 'Senior Pastor', 'signature_image' => '/uploads/trainings/signature/20261119_0123456789abcdef.png']];
 eq('a signature image is drawn only for the same person in the same place', [null, null],
     array_column(trainings_certificate_signers_drawn(['signatories' => [['name' => 'Pastor B', 'title' => 'Senior Pastor'], ['name' => 'Pastor A', 'title' => 'Senior Pastor']]],
@@ -1037,14 +1053,21 @@ act($pdo, 901, 'settings', ['training_id' => $ct, 'title' => 'Certified course',
     'signer1_name' => '', 'signer1_title' => '', 'signer2_name' => '', 'signer2_title' => '']);
 eq('emptying both rows hands it back to the Academy\'s signatory', [[], [['name' => 'The Signatory', 'title' => 'Resident Pastor']]],
     [trainings_signatories($pdo, $ct), trainings_certificate_signers_now($pdo, $ct)]);
+eq('…and its certificates with it', ['The Signatory'], array_column(trainings_certificate_current($pdo, (int) $c2['enrolment_id'])['snapshot']['signatories'], 'name'));
 act($pdo, 901, 'settings', ['training_id' => $ct, 'title' => 'Certified course', 'gives_certificate' => 1, 'live_percent' => 100, 'signer2_title' => 'Rector']);
 eq('…a form that sends one row leaves the other as it is', [2 => 'Rector'], array_map(static fn ($s) => $s['title'], trainings_signatories($pdo, $ct)));
+act($pdo, 901, 'settings_save', ['signatory_name' => 'New Signatory', 'signatory_title' => 'Resident Pastor']);
+eq('changing the Academy\'s signatory re-signs the trainings it signs for, not one with its own', ['New Signatory', 'Rector'],
+    [trainings_certificate_current($pdo, $me2['id'])['snapshot']['signatories'][0]['name'],
+        trainings_certificate_current($pdo, (int) $c2['enrolment_id'])['snapshot']['signatories'][0]['title']]);
+act($pdo, 901, 'settings_save', ['signatory_name' => 'The Signatory', 'signatory_title' => 'Resident Pastor']);
 $gone = (int) act($pdo, 901, 'create', ['title' => 'Signed then deleted', 'length' => 'self_paced'])['id'];
 act($pdo, 901, 'settings', ['training_id' => $gone, 'title' => 'Signed then deleted', 'signer1_title' => 'Pastor']);
 trainings_delete($pdo, $gone);
 eq('deleting a training clears who signed it', 0, trn_count($pdo, 'training_signatories', 'training_id = ' . $gone));
 $dlSrc = (string) file_get_contents($root . '/api/trainings_certificate.php');
-ok('the download draws who the certificate names, with their images', str_contains($dlSrc, 'trainings_certificate_signers($pdo, $cert)'));
+ok('the download re-signs first, then draws who the certificate names, with their images', str_contains($dlSrc, 'trainings_certificate_signers($pdo, $cert)')
+    && strpos($dlSrc, "trainings_certificates_resign(\$pdo, \$e['training_id'], \$e['id'])") < strpos($dlSrc, 'trainings_certificate_pdf('));
 $trbPage = (string) file_get_contents($root . '/modules/academy/training.php');
 ok('the training\'s Settings tab names up to two signatories, with signature images', str_contains($trbPage, "'signer' . \$p . '_title'")
     && str_contains($trbPage, "'signer' . \$p . '_file'") && str_contains($trbPage, 'TRAININGS_SIGNERS_MAX'));

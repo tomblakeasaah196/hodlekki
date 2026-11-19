@@ -14,7 +14,9 @@
 //   - Who signs (name, title, signature image) is never written in code: up
 //     to two per training (training_signatories, its Settings tab; owner,
 //     19 Nov 2026), else the Academy's signatory (training_settings). The
-//     names and titles are part of what was printed (the snapshot).
+//     names and titles are part of what was printed (the snapshot), kept in
+//     step: saving who signs re-signs the current certificates (same code,
+//     new hash), and a download re-signs one that fell behind.
 //   - The PDF is dompdf (Composer, as the Charis and event reports); the QR is
 //     includes/qr.php (no package), drawn as a vector. The design (owner's
 //     pick, 19 Nov 2026, "Gilded"): ivory paper, a navy and gold double frame,
@@ -103,6 +105,7 @@ function trainings_settings_save(PDO $pdo, array $in, array $files, int $by): ar
     trainings_setting_set($pdo, 'signatory_name', $name, $by);
     trainings_setting_set($pdo, 'signatory_title', $title, $by);
     trainings_setting_set($pdo, 'signature_image', $image, $by);
+    trainings_certificates_resign_academy($pdo);   // the certificates this person signs carry the change
     return ['ok' => true];
 }
 
@@ -249,6 +252,63 @@ function trainings_certificate_signers_now(PDO $pdo, int $trainingId): array
         }
     }
     return $out;
+}
+
+/**
+ * Re-sign certificates with who signs their training now (owner, 19 Nov
+ * 2026: signatures added after a certificate was issued must be on it). The
+ * code and QR stay; the snapshot's signatories and the hash change together,
+ * so the PDF, /verify and the hash agree. Only current certificates: a
+ * revoked or replaced one keeps what it said. $enrolmentId: just that one.
+ * @return int how many changed
+ */
+function trainings_certificates_resign(PDO $pdo, int $trainingId, ?int $enrolmentId = null): int
+{
+    if (!trainings_certs_ready($pdo)) {
+        return 0;
+    }
+    $stmt = $pdo->prepare('SELECT c.id, c.code, c.enrolment_id, c.snapshot FROM training_certificates c
+                           JOIN training_enrolments e ON e.id = c.enrolment_id
+                           WHERE e.training_id = ? AND c.revoked_at IS NULL' . ($enrolmentId !== null ? ' AND c.enrolment_id = ?' : ''));
+    $stmt->execute($enrolmentId !== null ? [$trainingId, $enrolmentId] : [$trainingId]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($rows === []) {
+        return 0;
+    }
+    $signers = trainings_certificate_signers_now($pdo, $trainingId);
+    $changed = 0;
+    foreach ($rows as $c) {
+        $snap = trainings_decode($c['snapshot']);
+        if ($snap === [] || ($snap['signatories'] ?? null) === $signers) {
+            continue;
+        }
+        $snap['signatory_name'] = $signers[0]['name'] ?? '';
+        $snap['signatory_title'] = $signers[0]['title'] ?? '';
+        $snap['signatories'] = $signers;
+        $json = trainings_json($snap);
+        $hash = hash('sha256', $c['code'] . '|' . (int) $c['enrolment_id'] . '|' . $json);
+        $pdo->prepare('UPDATE training_certificates SET snapshot = ?, hash = ? WHERE id = ?')->execute([$json, $hash, $c['id']]);
+        $pdo->prepare('UPDATE training_enrolments SET certificate_hash = ? WHERE id = ? AND certificate_no = ?')->execute([$hash, $c['enrolment_id'], $c['code']]);
+        $changed++;
+    }
+    return $changed;
+}
+
+/** Re-sign the certificates of every training the Academy's signatory signs (none of its own). */
+function trainings_certificates_resign_academy(PDO $pdo): int
+{
+    if (!trainings_certs_ready($pdo)) {
+        return 0;
+    }
+    $ids = $pdo->query('SELECT DISTINCT e.training_id FROM training_certificates c JOIN training_enrolments e ON e.id = c.enrolment_id
+                        WHERE c.revoked_at IS NULL')->fetchAll(PDO::FETCH_COLUMN);
+    $changed = 0;
+    foreach ($ids as $tid) {
+        if (trainings_signatories($pdo, (int) $tid) === []) {
+            $changed += trainings_certificates_resign($pdo, (int) $tid);
+        }
+    }
+    return $changed;
 }
 
 /** The people a certificate names (one issued before 20 Nov 2026 names one). @return list<array{name:string,title:string}> */
