@@ -156,4 +156,4 @@ A tutor's choice (`source = manual`, progress `by = 'tutor'`) is never changed b
 
 A Meet made through Calendar on a personal Gmail belongs to that account, so on **Learners knock** (and for anyone not invited on **Invite learners**) only the connected account can let people in. Run those classes signed in as that account. **Anyone with the link** needs nobody to let people in.
 
-The access needs the `meetings.space.settings` permission (added 19 Nov 2026). A connection made before then lacks it: Integrations shows **Reconnect**, and until then the Meet page shows "Who can join was not set". The link itself still works.
+The access needs the `meetings.space.settings` permission (added 19 Nov 2026). A connection made before then lacks it: Integrations shows **Permissions missing** with an **Allow new permissions** button, which goes through Google's consent again without disconnecting (Google keeps what was given). Until then the Meet page shows "Who can join was not set". The link itself still works.
