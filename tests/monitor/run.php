@@ -30,6 +30,7 @@ $files = [
     'wall_test.php',
     'screens_test.php',
     'function_calls_test.php',
+    'db_connect_test.php',
 ];
 
 foreach ($files as $f) {
