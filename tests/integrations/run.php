@@ -112,7 +112,7 @@ check('the redirect URI is the registered one', Google::redirectUri() === 'https
 check('PKCE: a 64-character verifier and its S256 challenge', strlen($verifier) === 64 && preg_match('/^[A-Za-z0-9_-]+$/', $verifier)
     && $challenge === rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '='));
 parse_str((string) parse_url(Google::authorizationUrl('state-1', $challenge), PHP_URL_QUERY), $q);
-check('the consent link asks for exactly the four scopes', $q['scope'] === 'openid email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/meetings.space.readonly');
+check('the consent link asks for exactly the five scopes (meetings.space.settings: who can join a class, 19 Nov 2026)', $q['scope'] === 'openid email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/meetings.space.readonly https://www.googleapis.com/auth/meetings.space.settings');
 check('…offline, with consent (so a refresh token comes), state and S256', $q['access_type'] === 'offline' && $q['prompt'] === 'consent'
     && $q['state'] === 'state-1' && $q['code_challenge'] === $challenge && $q['code_challenge_method'] === 'S256'
     && $q['redirect_uri'] === 'https://hodlekki.org/integrations/google/callback' && $q['client_id'] === 'client-123.apps.googleusercontent.com');
@@ -136,7 +136,7 @@ Google::fake(function (array $r) use (&$calls, &$replies): array {
     return ['status' => 500, 'body' => '{}'];
 });
 $idToken = 'x.' . rtrim(strtr(base64_encode(json_encode(['email' => 'PraxisJBS@gmail.com'])), '+/', '-_'), '=') . '.y';
-$scopes = 'openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/meetings.space.readonly';
+$scopes = 'openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/meetings.space.readonly https://www.googleapis.com/auth/meetings.space.settings';
 $replies = [['POST https://oauth2.googleapis.com/token', ['status' => 200, 'once' => true, 'body' => json_encode(['access_token' => 'ya29.first', 'expires_in' => 3599,
     'scope' => $scopes, 'id_token' => $idToken])]]];
 check('a code without a refresh token is refused', throws(fn () => Google::connect('code-0', $verifier), 'failed'));
@@ -306,7 +306,7 @@ check('the page: manage permission', str_contains($read('modules/integrations/in
 $g = $read('includes/integrations/Google/Google.php');
 check('no token, code or secret is ever logged', !preg_match('/error_log\([^;]*(\$token|\$refresh|\$access|\$code|\$params|\$body|\$data|secret)/i', $g));
 check('Google certificates are checked, no redirects followed', str_contains($g, 'CURLOPT_SSL_VERIFYPEER => true') && str_contains($g, 'CURLOPT_FOLLOWLOCATION => false'));
-check('no transcripts, no Drive, no Docs (the four scopes only)', !preg_match('/transcript|drive|documents/i', implode(' ', Google::SCOPES)));
+check('no transcripts, no Drive, no Docs (the five scopes only)', !preg_match('/transcript|drive|documents/i', implode(' ', Google::SCOPES)));
 $modules = require "{$root}/includes/permissions/modules.php";
 check('the permission row: Integrations, manage only', ($modules['integrations']['extras'] ?? null) === ['manage'] && $modules['integrations']['max'] === 'none');
 check('the links are clean (no .php)', !preg_match('#[\'"]/(modules/)?integrations/[^\'"\s]*\.php#', $read('modules/integrations/index.php') . $g . $cb . $read('integrations/google/connect.php'))

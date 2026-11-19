@@ -285,7 +285,7 @@ if ($canEdit && $t['status'] !== 'published') {
             'options' => array_column(array_filter($sections, static fn ($s) => (int) $s['id'] > 0), 'title', 'id'), 'attrs' => ['data-action-change' => 'trb.itemType']]) ?>
         <?= ui_field('date', ['name' => 'date', 'id' => 'trb-date', 'label' => 'Day', 'class' => 'trb-when-week', 'optional' => true]) ?>
         <?= ui_field('time', ['name' => 'time', 'id' => 'trb-time', 'label' => 'Time', 'class' => 'trb-when', 'optional' => true]) ?>
-        <?= ui_field('number', ['name' => 'minutes', 'id' => 'trb-minutes', 'label' => 'Minutes', 'optional' => true, 'attrs' => ['min' => 1, 'max' => 720, 'inputmode' => 'numeric']]) ?>
+        <?= ui_field('number', ['name' => 'minutes', 'id' => 'trb-minutes', 'label' => 'Minutes', 'optional' => true, 'attrs' => ['min' => 1, 'max' => 720, 'inputmode' => 'numeric', 'data-action-input' => 'trb.presentHint']]) ?>
     </div>
     <label class="ui-check"><input type="checkbox" name="required" value="1" checked><span>Required<span class="ui-check__hint">Counts towards completing the training.</span></span></label>
 
@@ -294,10 +294,17 @@ if ($canEdit && $t['status'] !== 'published') {
         <label class="ui-check"><input type="radio" name="live_mode" value="in_person" checked data-action-change="trb.itemType"><span>In person</span></label>
         <label class="ui-check"><input type="radio" name="live_mode" value="online" data-action-change="trb.itemType"><span>Online</span></label>
         <?= ui_field('text', ['name' => 'venue', 'id' => 'trb-venue', 'label' => 'Venue', 'optional' => true, 'class' => 'trb-inperson', 'attrs' => ['maxlength' => 160]]) ?>
-        <?= ui_field('url', ['name' => 'link', 'id' => 'trb-link', 'label' => 'Meeting link', 'optional' => true, 'class' => 'trb-online', 'placeholder' => 'https://',
-            'info' => 'Paste the Google Meet or Zoom link for now. Creating Meet links from here comes in a later update.']) ?>
-        <?= ui_field('number', ['name' => 'present_minutes', 'id' => 'trb-present', 'label' => 'Present after (minutes)', 'value' => '30',
-            'info' => 'How long someone must be in the class to count as present.', 'attrs' => ['min' => 1, 'max' => 720, 'inputmode' => 'numeric']]) ?>
+        <fieldset class="ui-fieldset trb-online">
+            <legend class="ui-legend">Who can join</legend>
+            <label class="ui-check"><input type="radio" name="access" value="open" checked><span>Anyone with the link<span class="ui-check__hint">They walk straight in. Only learners on this training see the link.</span></span></label>
+            <label class="ui-check"><input type="radio" name="access" value="learners"><span>Learners knock<span class="ui-check__hint">Everyone asks to join and the host lets them in.</span></span></label>
+            <label class="ui-check"><input type="radio" name="access" value="guests"><span>Invite learners<span class="ui-check__hint">Google emails each learner an invite; they walk in, others knock.</span></span></label>
+        </fieldset>
+        <?= ui_field('number', ['name' => 'present_percent', 'id' => 'trb-present', 'label' => 'Present after (% of the class)', 'value' => '70',
+            'info' => 'How much of the class someone must be in to count as present. 70% of a 30-minute class is 21 minutes.',
+            'attrs' => ['min' => 10, 'max' => 100, 'inputmode' => 'numeric', 'data-action-input' => 'trb.presentHint']]) ?>
+        <p class="ui-hint" id="trb-present-minutes" aria-live="polite"></p>
+        <p class="ui-hint trb-online">Saving makes the Google Meet link and opens the class's Meet page.</p>
     </fieldset>
 
     <fieldset class="ui-fieldset" data-trb-type="video" hidden>

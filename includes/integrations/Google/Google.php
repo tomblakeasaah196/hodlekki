@@ -28,6 +28,8 @@ final class Google
         'email',
         'https://www.googleapis.com/auth/calendar.events',
         'https://www.googleapis.com/auth/meetings.space.readonly',
+        // Who can join a class's Meet (open or knock), also on Meets made through Calendar (non-sensitive scope)
+        'https://www.googleapis.com/auth/meetings.space.settings',
     ];
 
     public const TIME_ZONE = 'Africa/Lagos';
@@ -198,13 +200,14 @@ final class Google
 
     /**
      * A calendar event with a Meet link. $m: title, starts_at, ends_at (DateTimeInterface or Lagos 'Y-m-d H:i'),
-     * description (optional). No guests are added and Google sends nothing: Trainings gives the link and reminds.
+     * description (optional), guests (optional list of emails). Without guests Google sends nothing: Trainings
+     * gives the link and reminds. With guests (a class set to "Invite learners") Google emails each one the invite.
      *
      * @return array{event_id: string, meet_url: ?string, meet_code: ?string, html_link: ?string}
      */
     public static function createEvent(array $m): array
     {
-        $event = self::call('POST', self::CALENDAR . '/calendars/primary/events', ['conferenceDataVersion' => 1, 'sendUpdates' => 'none'],
+        $event = self::call('POST', self::CALENDAR . '/calendars/primary/events', ['conferenceDataVersion' => 1, 'sendUpdates' => !empty($m['guests']) ? 'all' : 'none'],
             self::eventBody($m) + ['conferenceData' => ['createRequest' => [
                 'requestId' => bin2hex(random_bytes(16)),
                 'conferenceSolutionKey' => ['type' => 'hangoutsMeet'],
@@ -218,11 +221,36 @@ final class Google
         return self::eventOut($event);
     }
 
-    /** Move or retitle the event; the Meet link stays. */
+    /**
+     * Move or retitle the event; the Meet link stays. With 'guests' in $m the guest list is replaced by it, and
+     * Google emails the guests (the new ones their invite, the others the change, the removed a cancellation).
+     */
     public static function updateEvent(string $eventId, array $m): array
     {
         return self::eventOut(self::call('PATCH', self::CALENDAR . '/calendars/primary/events/' . rawurlencode($eventId),
-            ['conferenceDataVersion' => 1, 'sendUpdates' => 'none'], self::eventBody($m)));
+            ['conferenceDataVersion' => 1, 'sendUpdates' => array_key_exists('guests', $m) ? 'all' : 'none'], self::eventBody($m)));
+    }
+
+    /**
+     * Who can join the Meet without knocking: OPEN (anyone with the link) or RESTRICTED (only the event's guests;
+     * everyone else knocks and the host lets them in). The space is found once from its meeting code (an alias
+     * Google allows for reading only), then changed by its name. Returns the space's name (spaces/…) to keep.
+     */
+    public static function setAccess(string $meetCode, string $accessType, ?string $spaceName = null): string
+    {
+        if (!in_array($accessType, ['OPEN', 'TRUSTED', 'RESTRICTED'], true)) {
+            throw new \InvalidArgumentException('Unknown Meet access type ' . $accessType);
+        }
+        if ($spaceName === null || $spaceName === '') {
+            $space = self::call('GET', self::MEET . '/spaces/' . rawurlencode(strtolower(preg_replace('/[^A-Za-z-]/', '', $meetCode))));
+            $spaceName = (string) ($space['name'] ?? '');
+            if (!preg_match('#^spaces/[A-Za-z0-9_-]+$#', $spaceName)) {
+                throw new GoogleError('failed');
+            }
+        }
+        self::call('PATCH', self::MEET . '/' . $spaceName, ['updateMask' => 'config.accessType'], ['config' => ['accessType' => $accessType]]);
+
+        return $spaceName;
     }
 
     /** Delete the event; one already gone counts as cancelled. */
@@ -286,13 +314,21 @@ final class Google
     {
         $time = fn ($t) => ['dateTime' => self::lagos($t)->format(DATE_RFC3339), 'timeZone' => self::TIME_ZONE];
 
-        return array_filter([
+        $body = array_filter([
             'summary' => (string) $m['title'],
             'description' => $m['description'] ?? null,
             'start' => $time($m['starts_at']),
             'end' => $time($m['ends_at']),
             'guestsCanModify' => false,
         ], fn ($v) => $v !== null);
+        if (array_key_exists('guests', $m)) {
+            // Replaces the list (an empty one removes every guest); guests never see each other's addresses
+            $body['attendees'] = array_map(fn ($email) => ['email' => (string) $email], array_values((array) $m['guests']));
+            $body['guestsCanSeeOtherGuests'] = false;
+            $body['guestsCanInviteOthers'] = false;
+        }
+
+        return $body;
     }
 
     private static function eventOut(array $event): array

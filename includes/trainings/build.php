@@ -565,6 +565,22 @@ function trainings_item_save(PDO $pdo, array $t, array $in, array $files = []): 
             }
         }
         $startsAt = $date . ' ' . $time . ':00';
+    } elseif ($type === 'live' && $section['date_from'] === null && ($time !== null || trim((string) ($in['date'] ?? '')) !== '')) {
+        // A live class on a card without dates takes its own day (owner, 19 Nov 2026): a Meet needs a time
+        $date = trainings_date($in['date'] ?? '');
+        if ($date === null) {
+            return ['ok' => false, 'message' => 'Choose the day of the class.', 'field' => 'date'];
+        }
+        if ($time === null) {
+            return ['ok' => false, 'message' => 'Choose the time of the class.', 'field' => 'time'];
+        }
+        $startsAt = $date . ' ' . $time . ':00';
+    }
+    if ($type === 'live' && $startsAt === null && (string) ($in['live_mode'] ?? ($old['details']['mode'] ?? '')) === 'online'
+        && array_key_exists('access', $in)) {
+        // An online class from the builder: its Meet link is made on save, and a Meet needs a day and a time
+        return ['ok' => false, 'message' => 'Give the class a day and a time; the Meet link needs them.',
+            'field' => $section['date_from'] === null && trim((string) ($in['date'] ?? '')) === '' ? 'date' : 'time'];
     }
     $minutes = trim((string) ($in['minutes'] ?? '')) === '' ? null : (int) $in['minutes'];
     if ($minutes !== null && ($minutes < 1 || $minutes > 720)) {
@@ -615,18 +631,40 @@ function trainings_item_details(string $type, array $in, array $old, array $file
             if (!in_array($mode, ['in_person', 'online'], true)) {
                 return ['error' => 'Choose in person or online.', 'field' => 'live_mode'];
             }
-            $link = trim((string) ($in['link'] ?? ''));
+            // The builder no longer asks for a pasted link (the Meet is made on save): a link saved before
+            // stays unless the form sends one.
+            $link = array_key_exists('link', $in) ? trim((string) $in['link']) : (string) ($old['link'] ?? '');
             if ($link !== '' && !trainings_is_https_url($link)) {
                 return ['error' => 'Paste the full link, starting https://', 'field' => 'link'];
             }
-            $present = trim((string) ($in['present_minutes'] ?? '')) === '' ? 30 : (int) $in['present_minutes'];
-            if ($present < 1 || $present > 720) {
-                return ['error' => 'Use 1 to 720 minutes.', 'field' => 'present_minutes'];
-            }
-            // A pasted link lives in 'link'. meet_url / meet_event_id belong to PR 3 (the Meet it
-            // creates): never written here, and kept as they are when the item is edited.
             $d = array_merge($old, ['mode' => $mode, 'venue' => trainings_text($in['venue'] ?? '', 160),
-                'link' => $mode === 'online' ? mb_substr($link, 0, 500) : '', 'present_minutes' => $present]);
+                'link' => $mode === 'online' ? mb_substr($link, 0, 500) : '']);
+            // Present: a share of the class's length (owner, 19 Nov 2026: 70% unless changed); a class saved
+            // with fixed minutes before keeps them until it is saved with a share.
+            if (array_key_exists('present_percent', $in)) {
+                $pct = trim((string) $in['present_percent']) === '' ? 70 : (int) $in['present_percent'];
+                if ($pct < 10 || $pct > 100) {
+                    return ['error' => 'Use 10 to 100%.', 'field' => 'present_percent'];
+                }
+                $d['present_percent'] = $pct;
+                unset($d['present_minutes']);
+            } elseif (array_key_exists('present_minutes', $in) || !isset($d['present_percent'])) {
+                $present = trim((string) ($in['present_minutes'] ?? '')) === '' ? 30 : (int) $in['present_minutes'];
+                if ($present < 1 || $present > 720) {
+                    return ['error' => 'Use 1 to 720 minutes.', 'field' => 'present_minutes'];
+                }
+                $d['present_minutes'] = $present;
+            }
+            // Who can join the Meet: open (default), learners (they knock), guests (invited by Google)
+            if ($mode === 'online') {
+                $access = (string) ($in['access'] ?? ($old['access'] ?? 'open'));
+                if (!in_array($access, ['open', 'learners', 'guests'], true)) {
+                    return ['error' => 'Choose who can join.', 'field' => 'access'];
+                }
+                $d['access'] = $access;
+            }
+            // meet_url / meet_event_id belong to PR 3 (the Meet it creates): never written here, and kept as
+            // they are when the item is edited.
             return ['details' => $d, 'replaced' => $replaced];
 
         case 'video':

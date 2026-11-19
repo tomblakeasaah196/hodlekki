@@ -103,7 +103,7 @@ function act(PDO $pdo, int $uid, string $action, array $in = []): array
     tl_as($uid);
     $out = trainings_action($pdo, $action, $in, [], $uid);
     if (($out['status'] ?? '') === 'success') {
-        training_live_after_action($pdo, $action, $in);   // as api/trainings_api.php does
+        $out += (array) training_live_after_action($pdo, $action, $in, $out);   // as api/trainings_api.php does
     }
     return $out;
 }
@@ -137,6 +137,14 @@ section('Before this PR\'s migration nothing breaks');
 ok('Live::ready() is false', !Live::ready($pdo));
 foreach (array_merge(tl_schema('20261210090000_integrations_google.sql'), tl_schema('20261210100000_trainings_live.sql')) as $stmt) {
     $pdo->exec($stmt);
+}
+// Who can join (19 Nov 2026): the columns the access migration adds, read from its ALTERs
+$access = (string) file_get_contents($root . '/db/migrations/20261219090000_trainings_live_access.sql');
+preg_match_all("/'ALTER TABLE training_meetings ADD COLUMN (\w+) [^']+'/", $access, $cols);
+eq('the access migration adds access_sent, space_name and guests_sent, each only once (re-runnable)', ['access_sent', 'space_name', 'guests_sent'], $cols[1]);
+ok('…portable: information_schema checks, no DROP', substr_count($access, 'information_schema.columns') === 3 && stripos($access, 'DROP ') === false);
+foreach ($cols[1] as $col) {
+    $pdo->exec("ALTER TABLE training_meetings ADD COLUMN {$col} TEXT NULL");
 }
 ok('after it, ready', Live::ready($pdo));
 $live = (string) file_get_contents($root . '/db/migrations/20261210100000_trainings_live.sql');
@@ -177,11 +185,18 @@ Settings::set(Google::EMAIL, 'hodlekkichurch@gmail.com');
 Settings::setSecret(Google::ACCESS, json_encode(['t' => 'ya29.ok', 'e' => time() + 3000]));
 eq('an in-person class gets no Meet', 'Make the class online first (Edit item).', Live::createMeet($pdo, $inPerson, 901)['message'] ?? null);
 $replies = [['POST https://www.googleapis.com/calendar/v3/calendars/primary/events', $json(['id' => 'ev1', 'hangoutLink' => 'https://meet.google.com/abc-defg-hij',
-    'conferenceData' => ['conferenceId' => 'abc-defg-hij']])]];
+    'conferenceData' => ['conferenceId' => 'abc-defg-hij']])],
+    ['GET https://meet.googleapis.com/v2/spaces/abc-defg-hij', $json(['name' => 'spaces/sp1', 'meetingCode' => 'abc-defg-hij'])],
+    ['PATCH https://meet.googleapis.com/v2/spaces/sp1', $json(['name' => 'spaces/sp1', 'config' => ['accessType' => 'OPEN']])]];
 $calls = [];
 $r = Live::createMeet($pdo, $itemId, 901);
 $sent = json_decode((string) $calls[0]['body'], true);
-ok('Create Meet link: one events.insert', !empty($r['ok']) && count($calls) === 1, json_encode($r));
+ok('Create Meet link: one events.insert, then who can join', !empty($r['ok']) && empty($r['warning']) && count($calls) === 3, json_encode($r));
+ok('…no guests and Google sends nothing (an open class)', !isset($sent['attendees']) && str_contains($calls[0]['url'], 'sendUpdates=none'));
+eq('…the space found by its code, then made open by its name', ['GET', 'PATCH', ['config' => ['accessType' => 'OPEN']]],
+    [$calls[1]['method'], $calls[2]['method'], json_decode((string) $calls[2]['body'], true)]);
+ok('…changing only the access type', str_contains($calls[2]['url'], 'updateMask=config.accessType'));
+eq('…and the meeting remembers it', ['open', 'spaces/sp1'], [Live::meeting($pdo, $itemId)['access_sent'], Live::meeting($pdo, $itemId)['space_name']]);
 eq('…titled training: class, at the class\'s time and length in Lagos', ['Workers\' training: Opening class', '2026-12-05T10:00:00+01:00', '2026-12-05T12:00:00+01:00'],
     [$sent['summary'], $sent['start']['dateTime'], $sent['end']['dateTime']]);
 $item = trainings_item_get($pdo, $itemId);
@@ -210,6 +225,111 @@ Settings::set(Google::STATUS, 'connected');
 $replies[] = ['PATCH', $json(['id' => 'ev1'])];
 act($pdo, 901, 'item_save', ['id' => $itemId, 'time' => '10:00', 'link' => ''] + $itemIn);
 ok('the next save puts it right', Live::meeting($pdo, $itemId)['last_error'] === null && Live::meeting($pdo, $itemId)['title_sent'] === 'Workers\' training: Opening class');
+
+section('Who can join (owner, 19 Nov 2026)');
+$confirmed = $pdo->prepare("INSERT INTO email_addresses (user_id, email, status, source, confirmed_user_id, confirmed_email, confirmed_at, created_at)
+    VALUES (?, ?, 'confirmed', 'profile', ?, ?, '2026-11-01 10:00:00', '2026-11-01 10:00:00')");
+$confirmed->execute([903, 'chiamaka@example.test', 903, 'chiamaka@example.test']);
+$confirmed->execute([904, 'Dayo@Example.test', 904, 'Dayo@Example.test']);
+$replies = [['PATCH https://meet.googleapis.com/v2/spaces/sp1', $json(['name' => 'spaces/sp1'])],
+    ['PATCH https://www.googleapis.com/calendar/v3/calendars/primary/events/ev1', $json(['id' => 'ev1'])]];
+$calls = [];
+act($pdo, 901, 'item_save', ['id' => $itemId, 'time' => '10:00', 'link' => '', 'access' => 'learners'] + $itemIn);
+eq('Learners knock: one call, the space made RESTRICTED by its kept name (no lookup)',
+    [1, 'PATCH', 'https://meet.googleapis.com/v2/spaces/sp1?updateMask=config.accessType', ['config' => ['accessType' => 'RESTRICTED']]],
+    [count($calls), $calls[0]['method'] ?? null, $calls[0]['url'] ?? null, json_decode((string) ($calls[0]['body'] ?? ''), true)]);
+eq('…and remembered', 'learners', Live::meeting($pdo, $itemId)['access_sent']);
+
+$calendar = static fn (array $calls): array => array_values(array_filter($calls, fn ($c) => str_contains($c['url'], '/calendar/v3/')))[0] ?? ['url' => '', 'body' => '{}'];
+$calls = [];
+act($pdo, 901, 'item_save', ['id' => $itemId, 'time' => '10:00', 'link' => '', 'access' => 'guests'] + $itemIn);
+$patch = $calendar($calls);
+$body = json_decode((string) $patch['body'], true);
+eq('Invite learners: the learners with a confirmed email become guests (Femi has none), sorted, lower case',
+    ['chiamaka@example.test', 'dayo@example.test'], array_column($body['attendees'] ?? [], 'email'));
+ok('…Google emails them the invite, and they never see each other\'s address', str_contains($patch['url'], 'sendUpdates=all')
+    && ($body['guestsCanSeeOtherGuests'] ?? null) === false && ($body['guestsCanInviteOthers'] ?? null) === false);
+eq('…the list and the access are remembered (RESTRICTED: the invited walk in, others knock)',
+    [['chiamaka@example.test', 'dayo@example.test'], 'guests'],
+    [json_decode((string) Live::meeting($pdo, $itemId)['guests_sent'], true), Live::meeting($pdo, $itemId)['access_sent']]);
+$calls = [];
+act($pdo, 901, 'item_save', ['id' => $itemId, 'time' => '10:00', 'link' => '', 'access' => 'guests'] + $itemIn);
+ok('saving again sends nothing', $calls === []);
+eq('the 5-minute beat has nothing to send while the list is the same', 0, training_live_tick($pdo));
+$confirmed->execute([906, 'femi@example.test', 906, 'femi@example.test']);
+$calls = [];
+eq('a learner confirms an email: the 5-minute beat sends the guest list again', 1, training_live_tick($pdo));
+eq('…with them in it', ['chiamaka@example.test', 'dayo@example.test', 'femi@example.test'],
+    array_column(json_decode((string) $calendar($calls)['body'], true)['attendees'] ?? [], 'email'));
+$calls = [];
+act($pdo, 901, 'item_save', ['id' => $itemId, 'time' => '10:00', 'link' => '', 'access' => 'open'] + $itemIn);
+$patch = $calendar($calls);
+$space = array_values(array_filter($calls, fn ($c) => str_contains($c['url'], 'meet.googleapis.com')))[0] ?? ['body' => '{}'];
+eq('back to open: the guests are removed (Google tells them) and the space opens',
+    [[], true, 'OPEN'], [json_decode((string) $patch['body'], true)['attendees'] ?? null, str_contains($patch['url'], 'sendUpdates=all'),
+        json_decode((string) $space['body'], true)['config']['accessType'] ?? null]);
+eq('…remembered', ['[]', 'open'], [Live::meeting($pdo, $itemId)['guests_sent'], Live::meeting($pdo, $itemId)['access_sent']]);
+$calls = [];
+eq('…and the beat leaves it alone', 0, training_live_tick($pdo));
+
+section('Present: a share of the class (70% unless changed)');
+eq('70% of 30 minutes is 21; of 120, 84; of a class without minutes (an hour), 42', [21, 84, 42], [
+    Live::presentMinutes(['minutes' => 30, 'details' => ['present_percent' => 70]]),
+    Live::presentMinutes(['minutes' => 120, 'details' => ['present_percent' => 70]]),
+    Live::presentMinutes(['minutes' => null, 'details' => ['present_percent' => 70]])]);
+eq('a class saved with fixed minutes before keeps them', 45, Live::presentMinutes(['minutes' => 120, 'details' => ['present_minutes' => 45]]));
+
+section('Saving an online class makes its Meet and opens its page');
+$replies = [['POST https://www.googleapis.com/calendar/v3/calendars/primary/events', $json(['id' => 'ev2', 'hangoutLink' => 'https://meet.google.com/qrs-tuvw-xyz',
+    'conferenceData' => ['conferenceId' => 'qrs-tuvw-xyz']])],
+    ['GET https://meet.googleapis.com/v2/spaces/qrs-tuvw-xyz', $json(['name' => 'spaces/sp2'])],
+    ['PATCH https://meet.googleapis.com/v2/spaces/sp2', $json(['name' => 'spaces/sp2'])]];
+$evening = ['title' => 'Evening class', 'time' => '15:00', 'link' => null, 'access' => 'open', 'present_percent' => '70'] + $itemIn;
+unset($evening['link'], $evening['present_minutes']);
+$calls = [];
+$out = act($pdo, 901, 'item_save', $evening);
+$eveningId = (int) ($out['id'] ?? 0);
+eq('the builder is told to open the class\'s Meet page, with the link made', ['/modules/academy/live?item=' . $eveningId, 'https://meet.google.com/qrs-tuvw-xyz'],
+    [$out['live']['page'] ?? null, $out['live']['meet_url'] ?? null]);
+$eveningItem = trainings_item_get($pdo, $eveningId);
+eq('…present is a share (70%), not fixed minutes: 84 of its 120', [70, false, 84],
+    [$eveningItem['details']['present_percent'] ?? null, array_key_exists('present_minutes', $eveningItem['details']), Live::presentMinutes($eveningItem)]);
+eq('…open, set on the Meet', 'open', Live::meeting($pdo, $eveningId)['access_sent']);
+$calls = [];
+$out = act($pdo, 901, 'item_save', ['id' => $eveningId] + $evening);
+ok('saving it again opens the page without making another Meet', ($out['live']['page'] ?? '') !== '' && !isset($out['live']['meet_url']) && $calls === []);
+eq('an online class without a time is refused: the Meet needs one', ['Give the class a day and a time; the Meet link needs them.', 'time'],
+    [act($pdo, 901, 'item_save', ['title' => 'No time', 'time' => ''] + $evening)['message'] ?? null, act($pdo, 901, 'item_save', ['title' => 'No time', 'time' => ''] + $evening)['field'] ?? null]);
+eq('present outside 10 to 100% is refused', 'present_percent', act($pdo, 901, 'item_save', ['title' => 'Odd', 'present_percent' => '5'] + $evening)['field'] ?? null);
+ok('an in-person class has no Meet page to open', !isset(act($pdo, 901, 'item_save', ['id' => $inPerson, 'live_mode' => 'in_person', 'venue' => 'Main hall', 'time' => '13:00'] + $itemIn)['live']));
+$replies = [['DELETE https://www.googleapis.com/calendar/v3/calendars/primary/events/ev2', ['status' => 204, 'body' => '']]];
+act($pdo, 901, 'item_delete', ['training_id' => $tid, 'item_id' => $eveningId]);
+eq('removing the evening class removes its Meet (the attendance below is the opening class\'s alone)', 'cancelled', Live::meeting($pdo, $eveningId)['status'] ?? null);
+
+// A card without dates (a self-paced training): the class takes its own day
+$selfPaced = (int) act($pdo, 901, 'create', ['title' => 'Self-paced course', 'length' => 'self_paced'])['id'];
+$modules = array_values(array_filter(trainings_outline($pdo, $selfPaced), fn ($s) => (int) $s['id'] > 0));
+$undated = ['training_id' => $selfPaced, 'type' => 'live', 'title' => 'Q&A', 'section_id' => (int) $modules[0]['id'], 'minutes' => 30,
+    'live_mode' => 'online', 'access' => 'guests', 'present_percent' => '70', 'time' => '18:00'];
+eq('on a card without dates a time alone is not enough', ['Choose the day of the class.', 'date'],
+    [act($pdo, 901, 'item_save', $undated)['message'] ?? null, act($pdo, 901, 'item_save', $undated)['field'] ?? null]);
+$replies = [['POST https://www.googleapis.com/calendar/v3/calendars/primary/events', $json(['id' => 'ev3', 'hangoutLink' => 'https://meet.google.com/klm-nopq-rst',
+    'conferenceData' => ['conferenceId' => 'klm-nopq-rst']])],
+    ['GET https://meet.googleapis.com/v2/spaces/klm-nopq-rst', $json(['name' => 'spaces/sp3'])],
+    ['PATCH https://meet.googleapis.com/v2/spaces/sp3', $json(['name' => 'spaces/sp3'])]];
+$calls = [];
+$out = act($pdo, 901, 'item_save', ['date' => '2026-12-10'] + $undated);
+$qa = trainings_item_get($pdo, (int) ($out['id'] ?? 0));
+eq('…with its own day it gets its time, and its Meet', ['2026-12-10 18:00:00', 'https://meet.google.com/klm-nopq-rst'], [$qa['starts_at'] ?? null, $out['live']['meet_url'] ?? null]);
+$insert = json_decode((string) ($calls[0]['body'] ?? '{}'), true);
+ok('…invite learners with nobody on it yet: an empty guest list, and Google sends nothing', ($insert['attendees'] ?? null) === [] && str_contains($calls[0]['url'] ?? '', 'sendUpdates=none'));
+eq('…a learner\'s 21 of 30 minutes count as present', 21, Live::presentMinutes($qa));
+
+Settings::set(Google::STATUS, 'revoked');
+$out = act($pdo, 901, 'item_save', ['title' => 'Later', 'date' => '2026-12-11'] + $undated);
+ok('Google not connected: saved, the Meet page opens (it says so), no link', ($out['status'] ?? '') === 'success' && ($out['live']['page'] ?? '') !== '' && !isset($out['live']['meet_url']));
+Settings::set(Google::STATUS, 'connected');
+act($pdo, 901, 'item_delete', ['training_id' => $selfPaced, 'item_id' => (int) $out['id']]);
 
 section('Join class');
 at('2026-12-05 09:58:00');
