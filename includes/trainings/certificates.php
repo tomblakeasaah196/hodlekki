@@ -712,10 +712,10 @@ function trainings_certificate_html(array $cert, array $settings, ?array $signer
         .rule { position: absolute; left: 88.5mm; width: 120mm; top: 112mm; height: 0; border-top: 0.3mm solid ' . $gold . '; }
         .training { top: 121mm; font-family: "Cert Garamond SemiBold", ' . $serif . '; line-height: 1.05; color: #A3161C; }
         .given { font-family: "Cert Garamond Medium", ' . $serif . '; font-size: 12pt; letter-spacing: 0.3pt; color: ' . $navy . '; }
-        .sig { position: absolute; top: 153mm; width: 70mm; text-align: center; }
+        .sig { position: absolute; top: 148mm; width: 70mm; text-align: center; }
         .ink { width: 60mm; margin: 0 auto; border-collapse: collapse; border-bottom: 0.3mm solid ' . $gold . '; }
-        .ink td { height: 14mm; padding: 0 0 1mm; vertical-align: bottom; text-align: center; }
-        .ink img { max-height: 13mm; max-width: 50mm; }
+        .ink td { height: 19mm; padding: 0 0 1mm; vertical-align: bottom; text-align: center; }
+        .ink img { max-height: 18mm; max-width: 56mm; }
         .sig-name { margin-top: 1.8mm; font-family: "Cert Garamond SemiBold", ' . $serif . '; font-size: 11.5pt; color: ' . $navy . '; }
         .sig-title { margin-top: 0.4mm; font-family: "Cert Cinzel", ' . $serif . '; font-size: 7pt; letter-spacing: 0.8pt; color: #6B5B3E; }
         .verify { left: 176mm; width: 100mm; top: 189mm; text-align: right; font-family: "Cert Garamond Medium", ' . $serif . '; font-size: 7.5pt; color: #6B5B3E; }
