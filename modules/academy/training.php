@@ -256,7 +256,7 @@ if ($canEdit && $t['status'] !== 'published') {
                     <span>Gives a certificate<span class="ui-check__hint">Learners who finish can download it.</span></span></label>
 <?php $signers = trainings_signatories($pdo, $tid); ?>
                 <fieldset class="ui-fieldset ui-stack ui-stack--sm">
-                    <legend class="ui-legend">Who signs the certificate <?= ui_info('Up to two people sign side by side on this training\'s certificates. Leave both empty and the Academy\'s signatory signs (Academy, Settings). A certificate keeps the names it was issued with.', 'About who signs') ?></legend>
+                    <legend class="ui-legend">Who signs the certificate <?= ui_info('Up to two people sign side by side on this training\'s certificates. Leave both empty and the Academy\'s signatory signs (Academy, Settings). Certificates already issued carry the change too, with the same code.', 'About who signs') ?></legend>
 <?php for ($p = 1; $p <= TRAININGS_SIGNERS_MAX; $p++): $s = $signers[$p] ?? ['name' => '', 'title' => '', 'signature_image' => '']; ?>
                     <div class="ui-form-grid">
                         <?= ui_field('text', ['name' => 'signer' . $p . '_name', 'label' => 'Signatory ' . $p, 'optional' => true, 'value' => $s['name'],

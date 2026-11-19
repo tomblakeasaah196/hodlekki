@@ -338,7 +338,14 @@ function trainings_action(PDO $pdo, string $action, array $in, array $files, int
             }
             // Who signs its certificates first: a bad image or a missing title saves nothing.
             $signed = trainings_signatories_save($pdo, (int) $t['id'], $in, $files, $uid);
-            return $reply($signed['ok'] ? trainings_update_settings($pdo, $t, $in) : $signed);
+            if (!$signed['ok']) {
+                return $reply($signed);
+            }
+            $saved = trainings_update_settings($pdo, $t, $in);
+            if ($saved['ok']) {
+                trainings_certificates_resign($pdo, (int) $t['id']);   // its certificates carry who signs now, same codes
+            }
+            return $reply($saved);
 
         case 'publish':
             if (!trainings_staff_can('edit')) {

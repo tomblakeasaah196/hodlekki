@@ -34,6 +34,14 @@ if ($cert === null) {
     $fail(404, 'There is no certificate for this training yet.');
 }
 try {
+    // One issued before its training named who signs is re-signed now (same code), never blocking the download.
+    if (trainings_certificates_resign($pdo, $e['training_id'], $e['id']) > 0) {
+        $cert = trainings_certificate_current($pdo, $e['id']) ?? $cert;
+    }
+} catch (Throwable $ex) {
+    error_log('[trainings] certificate re-sign failed: ' . $ex->getMessage());
+}
+try {
     $pdf = trainings_certificate_pdf($cert, trainings_settings($pdo), trainings_certificate_signers($pdo, $cert));
 } catch (Throwable $ex) {
     error_log('[trainings] certificate PDF failed: ' . $ex->getMessage());
