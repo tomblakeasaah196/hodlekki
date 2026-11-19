@@ -148,6 +148,22 @@ attributes: no inline code, no nonce, so it works under the strictest CSP
 it sees errors in the inline scripts below it; it is about 6 KB and cached by
 its `?v=`.
 
+**A failed load of one of the site's own files** (19 Nov 2026) is checked
+against the server:
+- **File present.** The visitor's connection failed: a phone switched apps or
+  lost signal mid-load. On 18 Nov, three scripts of an event page failed for
+  one iPhone in the same second. These are filed as a notice, "Could not load
+  … (visitor's connection)", in a group of their own. The Errors list keeps
+  them, but the Errors check does not count them.
+- **File missing.** A deploy lost it, or the path is wrong. It stays a warning.
+- Failures while the page is being left are dropped in the browser.
+
+**The database connection** (`includes/db_connect.php`) is tried again after
+1 s, then 2 s, when the error means the server is restarting: MySQL client
+errors 2002, 2003, 2006 and 2013. The host restarted MariaDB at 04:48:38 on
+19 Nov, and one request failed in that gap. A wrong password or database name
+still fails at once.
+
 ---
 
 ## 4. Privacy

@@ -33,7 +33,9 @@ eq('three errors kept: noise from extensions and bare "Script error." dropped', 
 eq('the error\'s class is read from its message', 'TypeError', $r['events'][0]['exception_class']);
 eq('the script is its path, no version query', '/assets/js/events.js', $r['events'][0]['file']);
 has('stack frames keep line and column, lose the query', (string) $r['events'][0]['trace_text'], '/assets/js/events.js:40:7');
-eq('a failed load says which file', 'Could not load /assets/ui/app.css', $r['events'][1]['title']);
+eq("a failed load of a file that is on the server: the visitor's connection, a notice in its own group",
+    ["Could not load /assets/ui/app.css (visitor's connection)", 'notice', 'ConnectionDropped', '/assets/ui/app.css'],
+    [$r['events'][1]['title'], $r['events'][1]['level'], $r['events'][1]['exception_class'], $r['events'][1]['file']]);
 eq('an unhandled rejection is its own kind', 'UnhandledRejection', $r['events'][2]['exception_class']);
 eq('the role comes from the session', 'Church_Member', $r['events'][0]['request']['role']);
 
@@ -44,7 +46,17 @@ $svg = $beacon(['errors' => [
     ['type' => 'resource', 'msg' => 'Could not load https://hodlekki.org/assets/ui/icons.svg?v=e3ba#search', 'src' => 'https://hodlekki.org/assets/ui/icons.svg?v=e3ba#search', 'tag' => 'use'],
 ]]);
 eq('a field sent as an object is not filed as /Array', ['Could not load a file', ''], [$svg['events'][0]['title'], $svg['events'][0]['file']]);
-eq('a sprite that failed is named by its path', 'Could not load /assets/ui/icons.svg', $svg['events'][1]['title']);
+eq('a sprite that failed is named by its path', "Could not load /assets/ui/icons.svg (visitor's connection)", $svg['events'][1]['title']);
+$gone = $beacon(['errors' => [
+    ['type' => 'resource', 'msg' => 'Could not load https://hodlekki.org/assets/se/js/portal/gone.js?v=3', 'src' => 'https://hodlekki.org/assets/se/js/portal/gone.js?v=3', 'tag' => 'script'],
+    ['type' => 'resource', 'msg' => 'Could not load https://hodlekki.org/assets/../../etc/passwd', 'src' => 'https://hodlekki.org/assets/../../etc/passwd', 'tag' => 'img'],
+    ['type' => 'resource', 'msg' => 'Could not load https://cdn.example.com/lib.js', 'src' => 'https://cdn.example.com/lib.js', 'tag' => 'script'],
+]]);
+eq('a file that is NOT on the server stays a warning (a deploy lost it, a wrong path)', ['warning', 'ResourceError', 'Could not load /assets/se/js/portal/gone.js'],
+    [$gone['events'][0]['level'], $gone['events'][0]['exception_class'], $gone['events'][0]['title']]);
+eq("a path that climbs out, or another site's file, is never on the server", ['warning', 'warning'], [$gone['events'][1]['level'], $gone['events'][2]['level']]);
+eq('the two kinds group apart, so a dropped connection never reopens a real missing file', true,
+    monitor_fingerprint($gone['events'][0] + ['source' => 'browser', 'route' => '/']) !== monitor_fingerprint(['message' => "Could not load /assets/se/js/portal/gone.js (visitor's connection)", 'exception_class' => 'ConnectionDropped'] + $gone['events'][0] + ['source' => 'browser', 'route' => '/']));
 
 // Problems #101 / #102: a page-to-page view transition the browser skipped or
 // aborted is the browser's own business, on any page (/connect has no pwa_head guard).

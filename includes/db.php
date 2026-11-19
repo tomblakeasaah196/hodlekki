@@ -60,9 +60,10 @@ $options = [
     PDO::ATTR_EMULATE_PREPARES   => false,                  // Native prepared statements to prevent SQL injection
 ];
 
-// 7. Establish the Connection
+// 7. Establish the Connection (tried again for up to 3 s while MariaDB restarts: includes/db_connect.php)
+require_once __DIR__ . '/db_connect.php';
 try {
-    $pdo = new PDO($dsn, $username, $password, $options);
+    $pdo = hod_db_connect(fn () => new PDO($dsn, $username, $password, $options));
     
     // 8. Force MySQL to operate in West Africa Time (Lagos / UTC+1)
     $pdo->exec("SET time_zone = '+01:00';");

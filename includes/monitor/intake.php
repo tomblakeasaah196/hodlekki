@@ -136,10 +136,15 @@ function monitor_intake_js_event(array $err, array $req, int $now): ?array
     }
 
     if ($type === 'resource') {
-        $title = 'Could not load ' . ($srcPath !== '' ? $srcPath : 'a file');
+        // One of this site's files that IS on the server, failing in one browser, is that browser's
+        // connection (a phone switching apps or losing signal mid-load; 18 Nov 2026: three scripts of an
+        // event page in the same second): a notice in its own group, kept but not counted as a problem.
+        // A file that is not on the server (a deploy that lost it, a wrong path) stays a warning.
+        $onServer = monitor_intake_file_on_server($srcPath);
+        $title = 'Could not load ' . ($srcPath !== '' ? $srcPath : 'a file') . ($onServer ? " (visitor's connection)" : '');
         return [
-            'kind' => 'js', 'level' => 'warning', 'exception_class' => 'ResourceError', 'message' => $title,
-            'title' => $title, 'file' => $srcPath, 'line' => null, 'trace_text' => null,
+            'kind' => 'js', 'level' => $onServer ? 'notice' : 'warning', 'exception_class' => $onServer ? 'ConnectionDropped' : 'ResourceError',
+            'message' => $title, 'title' => $title, 'file' => $srcPath, 'line' => null, 'trace_text' => null,
             'request' => $req, 'at' => $now, 'context' => ['tag' => mb_substr($str($err['tag'] ?? ''), 0, 12)],
         ];
     }
@@ -159,6 +164,18 @@ function monitor_intake_js_event(array $err, array $req, int $now): ?array
             'after_ms'   => monitor_intake_int($err['at'] ?? null),
         ], fn ($v) => $v !== null),
     ];
+}
+
+/** Whether a path from monitor_intake_src() is one of this site's files, present and not empty on the server. */
+function monitor_intake_file_on_server(string $path): bool
+{
+    if ($path === '' || $path[0] !== '/' || str_contains($path, '..')) {
+        return false; // nothing, another site's file (host/path), or a path that climbs
+    }
+    $root = realpath(dirname(__DIR__, 2));
+    $file = $root !== false ? realpath($root . strtok($path, '#?')) : false;
+
+    return $file !== false && str_starts_with($file, $root . DIRECTORY_SEPARATOR) && is_file($file) && filesize($file) > 0;
 }
 
 /**
