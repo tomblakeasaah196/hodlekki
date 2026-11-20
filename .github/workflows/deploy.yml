@@ -311,13 +311,15 @@ jobs:
           # sign-in suite runs "return to" and the 30-day device token
           # (includes/auth_helpers.php) against SQLite built from the real
           # migration, through a real PHP session. Both print SKIP and exit 0
-          # without pdo_sqlite, so refuse to run without it.
+          # without pdo_sqlite, so refuse to run without it. The department
+          # attendance suite (includes/department_attendance.php) rides along.
           if ! php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'; then
             echo "::error::pdo_sqlite is missing — the dashboard and sign-in tests would be skipped"
             exit 1
           fi
           php tests/dashboard_metrics_test.php
           php tests/auth_helpers_test.php
+          php tests/department_attendance_test.php
 
       - name: Congregation contact tests (who to write to, the contact log)
         run: |
