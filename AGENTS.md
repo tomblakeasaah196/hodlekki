@@ -1298,6 +1298,15 @@ before touching anything that reads `user_departments`:
   as `assets/js/celebrants_export.js`): geometry is arithmetic, names are
   measured with `ctx.measureText`, and the fitter guarantees one A4 page.
 
+- **Attendance tab** (`includes/department_attendance.php`, `attendance_*` actions
+  of `api/department_api.php`, `api/department_attendance_export.php`,
+  `assets/ui/js/pages/departments-attendance.js`): the roll of one event by
+  department, for a workers' meeting. Expected = the live year's Active rows
+  (not the `Worker` label); present = an `attendance` row OR a door `checkins`
+  row. It writes the SAME `attendance` row the Events screen writes and never a
+  table of its own, and never removes a door check-in. Tests:
+  `php tests/department_attendance_test.php` (SQLite, in CI).
+
 ## UI foundation (added 2026-11-11)
 
 Everything about building screens is in **`docs/UI.md`**. The rules an agent

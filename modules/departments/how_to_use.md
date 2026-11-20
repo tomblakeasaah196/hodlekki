@@ -159,3 +159,41 @@ The seats you can give with *Add person* (Worker, Member, Sub-Unit Head, Deputy 
 and their names come from **Roles & permissions → Seats**. A department may use fewer
 seat types or allow fewer holders there; *Add person* refuses a seat that is full or
 not used ("This department already has its 2 Deputy HOD seats").
+
+## Attendance: who is here, who is absent (since November 2026)
+
+The **Attendance** tab takes a roll for **one event** — a workers' meeting — and
+shows every worker on the live ministry year's rosters as present or absent, by
+department.
+
+1. Choose the **event**. It opens on today's workers' meeting when there is one.
+2. Read the four numbers (Workers, Present, Absent, Turnout) and switch the view:
+   **By department** (a card per department, absent first), **Absent** (one list
+   of everyone still missing, with their departments) or **Present** (with the
+   time they came in).
+3. **Search** a name or phone number and press **Clock in**; if only one absent
+   worker matches, **Enter** clocks them in. **Move back** undoes a clock-in made
+   by mistake (it asks first).
+4. Leave **Live** on and the page refreshes by itself every few seconds, so
+   people who scan in at the door, or are clocked in on another phone, move
+   from Absent to Present without anyone pressing anything. **Refresh** does it now.
+5. **Export absent** downloads the absent list as a spreadsheet (CSV), department
+   by department, with phone numbers — for calls and follow-up. It needs
+   **Departments: Export**.
+
+Rules worth knowing:
+
+* **Who is expected** is everybody on an Active roster row in the live year —
+  Primary or Secondary, leaders included. Removed people, people marked
+  *Relocated* and last year's rosters do not count. Someone on two rosters shows
+  under both but is counted once.
+* **It is the same record as Events.** Clocking in writes the same attendance
+  row the Events screen writes, so Events, its analytics and the church-wide
+  attendance numbers all agree. Someone who checked in at the door QR is shown
+  as present (marked *Door*); that check-in is theirs and cannot be removed here.
+* **Only workers.** Someone who is not on a department roster cannot be clocked
+  in here. Anyone present who is not on a roster is counted ("+3 not on a
+  roster") but never listed as a worker.
+* **Who may clock in.** Anyone with **Events & Attendance** access clocks in any
+  worker. A head of department without it clocks in only the people on their own
+  departments' rosters. A closed event cannot be changed.

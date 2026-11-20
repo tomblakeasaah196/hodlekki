@@ -18,6 +18,8 @@
 
 require_once '../includes/db.php';
 require_once '../includes/department_helpers.php';
+require_once '../includes/department_attendance.php';
+require_once '../includes/status_ladder.php';
 csrf_require();
 header('Content-Type: application/json');
 
@@ -1157,6 +1159,69 @@ try {
                 'status' => 'success',
                 'data'   => dept_report_dataset($pdo, $year),
             ]);
+            break;
+
+        // =====================================================================
+        // ACTION 12: ATTENDANCE — open events to choose from
+        // =====================================================================
+        case 'attendance_events':
+            echo json_encode(['status' => 'success', 'data' => dept_att_events($pdo), 'today' => date('Y-m-d')]);
+            break;
+
+        // =====================================================================
+        // ACTION 13: ATTENDANCE — the roll for one event, by department
+        // The live ministry year's Active rosters; present = an attendance row
+        // or a door check-in for the event. Read-only, so a poll is cheap.
+        // =====================================================================
+        case 'attendance_roll':
+            $event = dept_att_event($pdo, (int) ($_POST['event_id'] ?? 0));
+            if (!$event) {
+                dept_fail('Event not found.');
+            }
+            $year = dept_active_year($pdo);
+            if (!$year) {
+                dept_fail('No ministry year configured.');
+            }
+            $att_scope = dept_manageable_ids($pdo, $user_id);
+            $roll = dept_att_roll($pdo, $event['id'], (int) $year['id'], dept_leader_roles());
+            echo json_encode([
+                'status' => 'success',
+                'event' => $event,
+                'year' => ['id' => (int) $year['id'], 'label' => $year['label']],
+                'roll' => $roll,
+                'permissions' => [
+                    // Events access clocks anyone in; a head of department clocks in their own people.
+                    'can_mark' => empty($event['is_closed']) && (can('events', 'view') || $att_scope === null || $att_scope !== []),
+                    'all_people' => can('events', 'view') || $att_scope === null,
+                    'scope' => can('events', 'view') || $att_scope === null ? null : array_values($att_scope),
+                    'can_export' => can('departments', 'export'),
+                ],
+                'at' => date('g:i:s A'),
+            ]);
+            break;
+
+        // =====================================================================
+        // ACTIONS 14–15: ATTENDANCE — clock a worker in / back out
+        // =====================================================================
+        case 'attendance_mark':
+        case 'attendance_unmark':
+            $event_id = (int) ($_POST['event_id'] ?? 0);
+            $target = (int) ($_POST['user_id'] ?? 0);
+            if ($event_id < 1 || $target < 1) {
+                dept_fail('Missing event or person.');
+            }
+            $year = dept_active_year($pdo);
+            if (!$year) {
+                dept_fail('No ministry year configured.');
+            }
+            $att_scope = can('events', 'view') ? null : dept_manageable_ids($pdo, $user_id);
+            if (!dept_att_in_scope($pdo, $target, (int) $year['id'], $att_scope)) {
+                dept_fail('That person is not in your department.', 'forbidden');
+            }
+            $result = $action === 'attendance_mark'
+                ? dept_att_mark($pdo, $event_id, $target, $user_id, (int) $year['id'], date('Y-m-d H:i:s'))
+                : dept_att_unmark($pdo, $event_id, $target);
+            echo json_encode($result);
             break;
 
         default:

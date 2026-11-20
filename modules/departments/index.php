@@ -5,6 +5,10 @@
  * roster for one ministry year; create and edit departments, change a
  * leadership seat, add and move people, ministry years, the rollover
  * worksheet ("Start new year") and the downloads (A4 image, Excel, CSV).
+ * The Attendance tab takes a roll for one event (a workers' meeting) by
+ * department: present, absent, clock in, export the absent list. Behaviour in
+ * assets/ui/js/pages/departments-attendance.js, data from the attendance_*
+ * actions of api/department_api.php and api/department_attendance_export.php.
  *
  * Built on the shared UI (docs/UI.md) in strict mode; behaviour in
  * assets/ui/js/pages/departments.js, the A4 sheet drawn by
@@ -18,7 +22,7 @@
 $ui = [
     'title'   => 'Departments',
     'mode'    => 'strict',
-    'scripts' => ['/assets/js/department_export.js', '/assets/ui/js/pages/departments.js'],
+    'scripts' => ['/assets/js/department_export.js', '/assets/ui/js/pages/departments.js', '/assets/ui/js/pages/departments-attendance.js'],
 ];
 require_once '../../includes/header.php';
 require_once '../../includes/department_helpers.php';
@@ -58,6 +62,13 @@ $seatTypes = dept_seat_types();
             . ui_button('Download', ['icon' => 'download', 'attrs' => ['data-action' => 'dept.download']])
             . ui_button('New department', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-action' => 'dept.new', 'hidden' => true, 'data-perm' => 'new']]),
     ]) ?>
+
+    <?= ui_tabs([
+        'departments' => ['label' => 'Departments', 'icon' => 'building-2'],
+        'attendance' => ['label' => 'Attendance', 'icon' => 'user-check'],
+    ], 'departments', 'Departments sections') ?>
+
+    <div id="panel-departments" data-tab-panel="departments" class="ui-tab-panel ui-stack">
 
     <div data-dept-archived hidden>
         <?= ui_banner('warning', [
@@ -134,6 +145,57 @@ $seatTypes = dept_seat_types();
                 </table>
             </div>
         </section>
+    </section>
+    </div>
+
+    <!-- Attendance ------------------------------------------------------ -->
+    <section id="panel-attendance" data-tab-panel="attendance" class="ui-tab-panel ui-stack ui-stack--md" hidden>
+        <div class="ui-toolbar">
+            <div class="ui-toolbar__grow">
+                <label class="sr-only" for="datt-event">Event</label>
+                <select class="ui-select" id="datt-event" data-action-change="datt.event"><option value="">Choose an event</option></select>
+            </div>
+            <div class="ui-toolbar__end">
+                <label class="ui-check items-center"><input type="checkbox" class="ui-switch" id="datt-live" checked data-action-change="datt.live"><span>Live</span></label>
+                <?= ui_button('Refresh', ['variant' => 'secondary', 'icon' => 'refresh-cw', 'icon_only' => true, 'attrs' => ['data-action' => 'datt.refresh']]) ?>
+<?php if (can('departments', 'export')): ?>
+                <?= ui_button('Export absent', ['variant' => 'secondary', 'icon' => 'file-down', 'href' => '#', 'attrs' => ['id' => 'datt-export', 'hidden' => true]]) ?>
+<?php endif; ?>
+            </div>
+        </div>
+
+        <div id="datt-none">
+            <?= ui_empty(['icon' => 'user-check', 'title' => 'Pick an event', 'text' => 'Its workers show here.']) ?>
+        </div>
+
+        <div class="ui-stack ui-stack--md" id="datt-body" hidden>
+            <div class="ui-grid ui-grid--stats">
+                <div data-datt-stat="workers"><?= ui_stat(['label' => 'Workers', 'value' => '—', 'icon' => 'users']) ?></div>
+                <div data-datt-stat="present"><?= ui_stat(['label' => 'Present', 'value' => '—', 'icon' => 'circle-check']) ?></div>
+                <div data-datt-stat="absent"><?= ui_stat(['label' => 'Absent', 'value' => '—', 'icon' => 'circle-alert']) ?></div>
+                <div data-datt-stat="percent"><?= ui_stat(['label' => 'Turnout', 'value' => '—', 'icon' => 'chart-column']) ?></div>
+            </div>
+            <progress class="ui-progress ui-progress--success" id="datt-progress" value="0" max="100" aria-label="Workers present"></progress>
+
+            <div class="ui-toolbar">
+                <div class="ui-toolbar__grow ui-search">
+                    <?= ui_icon('search') ?>
+                    <label class="sr-only" for="datt-search">Search workers</label>
+                    <input class="ui-input" type="search" id="datt-search" placeholder="Name or phone" autocomplete="off" enterkeyhint="search" data-action-input="datt.search">
+                </div>
+                <div class="ui-toolbar__end">
+                    <?= ui_info('Search, then press Enter to clock in the only match. Someone clocked in by mistake can be moved back; a door check-in stays.', 'About clocking in') ?>
+                    <div class="ui-segmented" role="group" aria-label="Show">
+                        <button type="button" class="ui-segmented__item" data-action="datt.view" data-view="dept" aria-pressed="true">By department</button>
+                        <button type="button" class="ui-segmented__item" data-action="datt.view" data-view="absent" aria-pressed="false">Absent <span class="ui-count" data-datt-count="absent">0</span></button>
+                        <button type="button" class="ui-segmented__item" data-action="datt.view" data-view="present" aria-pressed="false">Present <span class="ui-count" data-datt-count="present">0</span></button>
+                    </div>
+                </div>
+            </div>
+            <p class="ui-meta" id="datt-updated" aria-live="polite"></p>
+
+            <div id="datt-view" class="ui-stack ui-stack--md" aria-live="polite"></div>
+        </div>
     </section>
 </div>
 
