@@ -166,7 +166,7 @@ The **Attendance** tab takes a roll for **one event** — a workers' meeting —
 shows every worker on the live ministry year's rosters as present or absent, by
 department.
 
-1. Choose the **event**. It opens on today's workers' meeting when there is one.
+1. Choose the **event**. It opens on today's workers' meeting when there is one. Create it in Events with the category **Workers' Meeting**: that makes it workers-only.
 2. Read the four numbers (Workers, Present, Absent, Turnout) and switch the view:
    **By department** (a card per department, absent first), **Absent** (one list
    of everyone still missing, with their departments) or **Present** (with the
@@ -192,7 +192,9 @@ Rules worth knowing:
   attendance numbers all agree. Someone who checked in at the door QR is shown
   as present (marked *Door*); that check-in is theirs and cannot be removed here.
 * **Only workers.** Someone who is not on a department roster cannot be clocked
-  in here. Anyone present who is not on a roster is counted ("+3 not on a
+  in here, and an event with the category **Workers' Meeting** refuses non-workers on
+  the Events Attendance tab too, where its roster is the same list (people serving on
+  a department roster, not a profile label). The door QR is not restricted. Anyone present who is not on a roster is counted ("+3 not on a
   roster") but never listed as a worker.
 * **Who may clock in.** Anyone with **Events & Attendance** access clocks in any
   worker. A head of department without it clocks in only the people on their own

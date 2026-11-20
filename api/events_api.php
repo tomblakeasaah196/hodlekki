@@ -4,6 +4,7 @@
 // 1. Core Includes & Headers
 require_once '../includes/db.php';
 require_once __DIR__ . '/../includes/status_ladder.php';
+require_once __DIR__ . '/../includes/department_attendance.php';
 require_once __DIR__ . '/../includes/html_allowlist.php';
 header('Content-Type: application/json');
 
@@ -506,8 +507,10 @@ try {
             // tab would otherwise disappear from the Checked In list on a scoped
             // event and leave staff unsure whether the clock-in worked.
             $scopeSql = '';
-            if ($event['event_category'] === 'Workers_Meeting' || stripos($event['title'], 'worker') !== false) {
-                $scopeSql = "u.spiritual_status IN ('Worker', 'Pastor')";
+            if (dept_att_workers_only($event)) {
+                // A workers' meeting expects the people serving on a live department
+                // roster (the same list as Departments > Attendance), not a profile label.
+                $scopeSql = "u.id IN (SELECT ud.user_id FROM user_departments ud WHERE " . dept_att_live_roster_sql($pdo, 'ud') . ")";
             } elseif (!empty($event['department_id'])) {
                 $scopeSql = "u.id IN (SELECT user_id FROM user_departments WHERE department_id = :dept_id AND is_active = 1)";
                 $params['dept_id'] = $event['department_id'];
@@ -550,7 +553,17 @@ try {
                 exit;
             }
 
-                        // Dedup 1: already in the attendance table for this event+user (existing behaviour)
+            // A Workers' Meeting (the category, not just a title) takes only people serving
+            // on a live department roster.
+            $wkStmt = $pdo->prepare("SELECT event_category, title FROM events WHERE id = ?");
+            $wkStmt->execute([$event_id]);
+            $wkEvent = $wkStmt->fetch(PDO::FETCH_ASSOC);
+            if ($wkEvent && dept_att_workers_only($wkEvent, true) && !dept_att_is_worker($pdo, (int) $target_user_id)) {
+                echo json_encode(['status' => 'error', 'message' => 'This meeting is for workers. They are not on a department roster.']);
+                exit;
+            }
+
+            // Dedup 1: already in the attendance table for this event+user (existing behaviour)
             $checkStmt = $pdo->prepare("SELECT id FROM attendance WHERE event_id = ? AND user_id = ?");
             $checkStmt->execute([$event_id, $target_user_id]);
             if ($checkStmt->fetch()) {
