@@ -1942,5 +1942,74 @@ foreach ($files as $file) {
 ct_eq('no call to a function that does not exist', [], array_keys($missing));
 
 campaigns_set_clock(false);
+// ===========================================================================
+ct_section('Worker messages: the personal or profile address (owner, 20 Nov 2026)');
+// ===========================================================================
+$w = ct_db();
+ct_at('2026-11-20 10:00');
+$wu = static function (int $id, string $first, ?string $real, ?string $email, string $status = 'Worker') use ($w): void {
+    ct_user($w, $id, $first, $status, ['email' => $email]);
+    $w->prepare('UPDATE users SET real_email = ? WHERE id = ?')->execute([$real, $id]);
+};
+$wu(60, 'Conf', 'conf.old@yahoo.com', 'conf@hodlc.com');
+ct_confirm($w, 60, 'conf@gmail.com', false);
+$wu(61, 'Real', 'Real.Person@Yahoo.com ', 'real@hodlc.com');
+$wu(62, 'Prof', null, 'prof@gmail.com');
+$wu(63, 'Signin', '', 'signin@hodlc.com');
+$wu(64, 'Upper', null, 'UPPER@HODLC.COM');
+$wu(65, 'Church', null, 'staff@hodlekki.org');
+$wu(66, 'Bad', 'not-an-email', 'bad.fallback@outlook.com');
+$wu(67, 'Gone', 'gone@gmail.com', 'gone2@gmail.com');
+email_consent_record($w, 67, 'withdrawn', 'profile', ['email' => 'gone@gmail.com']);
+$wu(68, 'Visitor', 'visitor@gmail.com', null, 'Visitor');
+$wu(69, 'Bounced', 'bounced@gmail.com', 'kept@outlook.com');
+email_suppress($w, 'bounced@gmail.com', 'hard_bounce', 'test');
+$wu(70, 'AllBlocked', 'b1@gmail.com', null);
+email_suppress($w, 'b1@gmail.com', 'hard_bounce', 'test');
+$wu(71, 'Borrowed', 'conf@gmail.com', null);   // someone else's confirmed address typed as theirs
+$addr = static fn (int $id): array => email_news_address($w, $id);
+ct_eq('a confirmed personal email wins', ['conf@gmail.com', 'confirmed'], [$addr(60)['email'], $addr(60)['source']]);
+ct_eq('else the personal-email column, cleaned', ['real.person@yahoo.com', 'personal'], [$addr(61)['email'], $addr(61)['source']]);
+ct_eq('else a real address in the sign-in column', ['prof@gmail.com', 'profile'], [$addr(62)['email'], $addr(62)['source']]);
+ct_eq('a @hodlc.com sign-in name is never used', ['no_email', null], [$addr(63)['reason'], $addr(63)['email']]);
+ct_eq('…in any case', 'no_email', $addr(64)['reason']);
+ct_eq('nor a church @hodlekki.org address', 'no_email', $addr(65)['reason']);
+ct_eq('a malformed personal email is passed over', 'bad.fallback@outlook.com', $addr(66)['email']);
+ct_eq('someone who unsubscribed gets nothing at any address', ['withdrawn', null], [$addr(67)['reason'], $addr(67)['email']]);
+ct_eq('a visitor without the box gets nothing', 'no_consent', $addr(68)['reason']);
+ct_eq('a bounced address is passed over for the next', 'kept@outlook.com', $addr(69)['email']);
+ct_eq('every address blocked: suppressed', 'suppressed', $addr(70)['reason']);
+ct_eq('an address another person confirmed is theirs, not this person\'s', 'no_email', $addr(71)['reason']);
+ct_ok('only the worker-message flows may use it', email_flow_takes_profile_address('dept-msg-12')
+    && !email_flow_takes_profile_address('campaign') && !email_flow_takes_profile_address('embrace.welcome'));
+
+// The worker re-checks at send time.
+$queueNews = static function (int $uid, string $to, string $flow) use ($w): int {
+    $r = email_enqueue($w, ['lane' => 'campaign', 'purpose' => 'news', 'flow' => $flow, 'user_id' => $uid,
+        'to_email' => $to, 'subject' => 'Workers meeting', 'html' => '<p>hi</p>', 'text' => 'hi']);
+    return (int) $r['id'];
+};
+$okDept = $queueNews(62, 'prof@gmail.com', 'dept-msg-1');
+$noCamp = $queueNews(62, 'prof@gmail.com', 'campaign');
+$tx = ct_transport();
+email_worker_run($w, ['endpoints_ready' => true, 'transport' => $tx, 'now' => campaigns_now()]);
+$status = static fn (int $id): array => $w->query('SELECT status, last_error FROM email_outbox WHERE id = ' . $id)->fetch(PDO::FETCH_ASSOC);
+ct_eq('a worker message to a profile address is sent', 'sent', $status($okDept)['status']);
+ct_eq('a campaign to the same unconfirmed address is still stopped', 'suppressed', $status($noCamp)['status']);
+ct_eq('…and only the worker message left', ['prof@gmail.com'], array_map(static fn ($m) => $m['to_email'], $tx['sent']->getArrayCopy()));
+ct_ok('it carries the one-click unsubscribe like any church email', isset($tx['sent'][0]['headers']['List-Unsubscribe']));
+
+$changed = $queueNews(61, 'real.person@yahoo.com', 'dept-msg-2');
+$w->exec("UPDATE users SET real_email = 'new.person@yahoo.com' WHERE id = 61");
+$gone = $queueNews(62, 'prof@gmail.com', 'dept-msg-3');
+email_consent_record($w, 62, 'withdrawn', 'profile', ['email' => 'prof@gmail.com']);
+email_worker_run($w, ['endpoints_ready' => true, 'transport' => ct_transport(), 'now' => campaigns_now()]);
+ct_eq('an address changed after queueing is not written to', ['suppressed', 'Not sent: address changed.'],
+    [$status($changed)['status'], $status($changed)['last_error']]);
+ct_eq('an unsubscribe after queueing stops it', ['suppressed', 'Not sent: withdrawn.'], [$status($gone)['status'], $status($gone)['last_error']]);
+$signin = email_enqueue($w, ['lane' => 'campaign', 'purpose' => 'news', 'flow' => 'dept-msg-4', 'user_id' => 63,
+    'to_email' => 'signin@hodlc.com', 'subject' => 'Workers meeting', 'html' => '<p>hi</p>', 'text' => 'hi']);
+ct_eq('the outbox refuses a @hodlc.com church email outright', [false, 'INVALID_EMAIL'], [$signin['ok'], $signin['code'] ?? null]);
+
 echo "\n{$GLOBALS['ct_passed']} passed, {$GLOBALS['ct_failed']} failed\n";
 exit($GLOBALS['ct_failed'] === 0 ? 0 : 1);

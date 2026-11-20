@@ -1311,6 +1311,27 @@ before touching anything that reads `user_departments`:
   restricted. A title that merely says "worker" still scopes the roster list only. Tests:
   `php tests/department_attendance_test.php` (SQLite, in CI).
 
+- **Messages tab** (`includes/department_messages.php`, `msg_*` actions of
+  `api/department_api.php`, `assets/ui/js/pages/departments-messages.js`,
+  table `dept_messages`): one message to workers (all / departments with
+  sub-units / absent at an event / leaders) by text, email and app alert, now
+  or scheduled. **SMS Studio users only** (`can('sms_studio', 'view')`; owner,
+  20 Nov 2026). Who it reaches is worked out on the server at send time. Texts
+  are ONE `sms_campaigns` row (audience `departments`) + `sms_queue` rows, never
+  `sms_log`; email via `email_send_doc()` (lane `campaign`, purpose `news`,
+  flow `dept-msg-<id>`, `send_by` end of day); alerts are `system_notifications`
+  rows. A send-now with no texts sends nothing; a scheduled row is claimed
+  (`dept_msg_claim()`) and expanded by `dept_msg_tick()`, run at the top of
+  `cron/sms_queue_worker.php` (wrapped so it can never stop the SMS sender) and
+  when the tab is open. **Email address** is `email_news_address()`: confirmed,
+  else `users.real_email`, else `users.email`, never `@hodlc.com`/`@hodlekki.org`,
+  never suppressed or someone else's confirmed address, consent as
+  `email_may_send_news()`. The outbox worker accepts that fallback address ONLY
+  for flows in `EMAIL_PROFILE_ADDRESS_FLOWS` (`dept-msg-`), re-checked at send
+  time; campaigns and automations still need the confirmed address. Tests:
+  `php tests/department_messages_test.php` and the "Worker messages" section of
+  `php tests/campaigns/run.php`.
+
 ## UI foundation (added 2026-11-11)
 
 Everything about building screens is in **`docs/UI.md`**. The rules an agent

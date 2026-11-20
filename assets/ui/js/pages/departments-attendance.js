@@ -441,7 +441,7 @@
 
     function onTab(tab) {
         var actions = document.querySelector('.ui-page-header__actions');
-        if (actions) actions.hidden = tab === 'attendance';
+        if (actions) actions.hidden = tab !== 'departments';   // the header's year and buttons belong to the Departments tab
         if (tab === 'attendance') {
             if (!state.loadedEvents) loadEvents();
             else if (state.eventId) { loadRoll(); startPolling(); }

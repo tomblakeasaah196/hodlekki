@@ -168,6 +168,86 @@ function email_may_send_news(PDO $pdo, int $userId): array
 }
 
 /**
+ * Flows that may write to a person's personal or profile address when no
+ * confirmed one exists (owner's decision, 20 Nov 2026: since a migration many
+ * members' real Gmail/Yahoo/Outlook addresses sit in users.email). Only these;
+ * campaigns and automations keep to the confirmed address.
+ */
+const EMAIL_PROFILE_ADDRESS_FLOWS = ['dept-msg-'];
+
+function email_flow_takes_profile_address(string $flow): bool
+{
+    foreach (EMAIL_PROFILE_ADDRESS_FLOWS as $prefix) {
+        if (str_starts_with($flow, $prefix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * The address a church message to this person goes to, looking in order at:
+ *   1. the confirmed personal email (email_addresses),
+ *   2. users.real_email (the personal-email column),
+ *   3. users.email (the sign-in column).
+ * The first that is a valid address, not church-issued (never @hodlc.com, never
+ * @hodlekki.org) and not suppressed (bounced, complained, unsubscribed) wins;
+ * a blank, malformed or blocked one, or one another person has confirmed as
+ * theirs, is passed over to the next. Consent is
+ * exactly email_may_send_news()'s: unsubscribed people get nothing, a visitor
+ * needs the box, members need none.
+ *
+ * @return array{ok:bool, email:?string, source:?string, reason:string}
+ *   source: confirmed | personal | profile
+ *   reason: ok | no_email | no_consent | withdrawn | suppressed | not_ready
+ */
+function email_news_address(PDO $pdo, int $userId): array
+{
+    if (!campaigns_ready($pdo)) {
+        return ['ok' => false, 'email' => null, 'source' => null, 'reason' => 'not_ready'];
+    }
+    $state = email_consent_state($pdo, $userId, 'news', 'email');
+    if ($state === 'withdrawn') {
+        return ['ok' => false, 'email' => null, 'source' => null, 'reason' => 'withdrawn'];
+    }
+    if ($state !== 'granted' && !email_is_member($pdo, $userId)) {
+        return ['ok' => false, 'email' => null, 'source' => null, 'reason' => 'no_consent'];
+    }
+
+    $candidates = [['confirmed', member_confirmed_email($pdo, $userId)]];
+    try {
+        $stmt = $pdo->prepare('SELECT real_email, email FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    } catch (PDOException $e) {
+        // no real_email column on this database
+        $stmt = $pdo->prepare('SELECT email FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    }
+    $candidates[] = ['personal', $row['real_email'] ?? null];
+    $candidates[] = ['profile', $row['email'] ?? null];
+
+    $blocked = false;
+    foreach ($candidates as [$source, $raw]) {
+        $email = email_normalize((string) ($raw ?? ''));
+        if ($email === '' || !email_is_valid_syntax($email) || email_is_church_domain($email)) {
+            continue;
+        }
+        if (email_is_suppressed($pdo, $email)) {
+            $blocked = true;
+            continue;
+        }
+        // An address someone ELSE confirmed is theirs, not this person's.
+        if ($source !== 'confirmed' && ($owner = member_by_confirmed_email($pdo, $email)) !== null && $owner !== $userId) {
+            continue;
+        }
+        return ['ok' => true, 'email' => $email, 'source' => $source, 'reason' => 'ok'];
+    }
+    return ['ok' => false, 'email' => null, 'source' => null, 'reason' => $blocked ? 'suppressed' : 'no_email'];
+}
+
+/**
  * Erase a person's email data (a data-deletion request; Congregation's
  * delete). Addresses and consent rows are deleted, outbox bodies cleared and
  * addresses blanked; the counts are returned for the audit log.
