@@ -20,6 +20,11 @@ require_once '../includes/db.php';
 require_once '../includes/department_helpers.php';
 require_once '../includes/department_attendance.php';
 require_once '../includes/status_ladder.php';
+require_once '../includes/department_messages.php';
+require_once '../includes/sms_functions.php';
+if (is_file(__DIR__ . '/../includes/campaigns/bootstrap.php')) {
+    require_once __DIR__ . '/../includes/campaigns/bootstrap.php';
+}
 csrf_require();
 header('Content-Type: application/json');
 
@@ -1222,6 +1227,184 @@ try {
                 ? dept_att_mark($pdo, $event_id, $target, $user_id, (int) $year['id'], date('Y-m-d H:i:s'))
                 : dept_att_unmark($pdo, $event_id, $target);
             echo json_encode($result);
+            break;
+
+        // =====================================================================
+        // ACTIONS 16–23: MESSAGES — one message to workers by text, email and
+        // app alert (includes/department_messages.php). SMS Studio users only.
+        // =====================================================================
+        case 'msg_boot':
+        case 'msg_preview':
+        case 'msg_send':
+        case 'msg_test':
+        case 'msg_cancel':
+        case 'msg_history':
+        case 'msg_template_save':
+        case 'msg_template_get':
+            if (!sms_user_can_send()) {
+                dept_fail('Only SMS Studio users can send messages to workers.', 'forbidden');
+            }
+            if (!dept_msg_ready($pdo)) {
+                dept_fail('Messages need a database update. Deploy, then reload.', 'not_ready');
+            }
+            $year = dept_active_year($pdo);
+            if (!$year) {
+                dept_fail('No ministry year configured.');
+            }
+            $year_id = (int) $year['id'];
+            $leader_roles = dept_leader_roles();
+
+            if ($action === 'msg_boot' || $action === 'msg_history') {
+                // A scheduled message that is due goes now, even if the cron is late.
+                try {
+                    dept_msg_tick($pdo, null, [], $year_id, $leader_roles);
+                } catch (Throwable $e) {
+                    error_log('Department messages tick: ' . $e->getMessage());
+                }
+            }
+            if ($action === 'msg_history') {
+                echo json_encode(['status' => 'success', 'history' => dept_msg_history($pdo)]);
+                break;
+            }
+            if ($action === 'msg_boot') {
+                $depts = $pdo->query('SELECT d.id, d.name, d.parent_id, p.name AS parent_name FROM departments d
+                                        LEFT JOIN departments p ON p.id = d.parent_id ORDER BY COALESCE(p.name, d.name), d.parent_id IS NOT NULL, d.name')
+                    ->fetchAll(PDO::FETCH_ASSOC);
+                $templates = [];
+                try {
+                    $templates = $pdo->query('SELECT id, name FROM sms_templates ORDER BY name ASC')->fetchAll(PDO::FETCH_ASSOC);
+                } catch (Throwable $e) {
+                    // no templates table yet
+                }
+                echo json_encode([
+                    'status' => 'success',
+                    'departments' => array_map(static fn ($d) => ['id' => (int) $d['id'], 'name' => $d['name'],
+                        'parent_id' => $d['parent_id'] === null ? null : (int) $d['parent_id'], 'parent' => $d['parent_name']], $depts),
+                    'events' => dept_att_events($pdo),
+                    'templates' => $templates,
+                    'history' => dept_msg_history($pdo),
+                    'email_ready' => function_exists('email_news_address'),
+                    'now' => date('Y-m-d\TH:i'),
+                ]);
+                break;
+            }
+            if ($action === 'msg_template_get') {
+                $st = $pdo->prepare('SELECT id, name, body_template FROM sms_templates WHERE id = ?');
+                $st->execute([(int) ($_POST['id'] ?? 0)]);
+                $tpl = $st->fetch(PDO::FETCH_ASSOC);
+                if (!$tpl) {
+                    dept_fail('That template is gone.');
+                }
+                echo json_encode(['status' => 'success', 'template' => $tpl]);
+                break;
+            }
+            if ($action === 'msg_template_save') {
+                $tname = mb_substr(trim((string) ($_POST['name'] ?? '')), 0, 100);
+                $tbody = trim((string) ($_POST['body'] ?? ''));
+                if ($tname === '') {
+                    dept_fail('Name the template.');
+                }
+                if (($problem = dept_msg_body_problem($tbody)) !== null) {
+                    dept_fail($problem);
+                }
+                $pdo->prepare('INSERT INTO sms_templates (name, body_template, created_by) VALUES (?, ?, ?)')->execute([$tname, $tbody, $user_id]);
+                echo json_encode(['status' => 'success', 'message' => 'Template saved.', 'id' => (int) $pdo->lastInsertId()]);
+                break;
+            }
+            if ($action === 'msg_cancel') {
+                if (!dept_msg_cancel($pdo, (int) ($_POST['id'] ?? 0))) {
+                    dept_fail('It has already gone, or was cancelled.');
+                }
+                echo json_encode(['status' => 'success', 'message' => 'Cancelled. Nothing was sent.']);
+                break;
+            }
+
+            $body = (string) ($_POST['body'] ?? '');
+            $subject = (string) ($_POST['subject'] ?? '');
+
+            if ($action === 'msg_test') {
+                if (($problem = dept_msg_body_problem($body)) !== null) {
+                    dept_fail($problem);
+                }
+                $me = $pdo->prepare('SELECT id, first_name, last_name, phone FROM users WHERE id = ?');
+                $me->execute([$user_id]);
+                $me = $me->fetch(PDO::FETCH_ASSOC) ?: ['id' => $user_id, 'first_name' => '', 'last_name' => '', 'phone' => ''];
+                $went = [];
+                $phone = sms_normalize_phone((string) ($me['phone'] ?? ''));
+                if ($phone !== null) {
+                    $failed = [];
+                    $settings = sms_load_settings($pdo, $failed);
+                    if (!empty($settings['api_token'])) {
+                        $r = sms_send_one($pdo, $settings, ['source' => 'user', 'source_id' => $user_id, 'phone' => $phone,
+                            'name' => trim($me['first_name'] . ' ' . $me['last_name']), 'first_name' => $me['first_name'], 'last_name' => $me['last_name']],
+                            $body, null, $user_id, ['source' => 'departments']);
+                        if (($r['status'] ?? '') === 'sent') {
+                            $went[] = 'a text';
+                        }
+                    }
+                }
+                $to = null;
+                if (function_exists('email_news_address')) {
+                    $addr = email_news_address($pdo, $user_id);
+                    $to = $addr['ok'] ? $addr['email'] : member_confirmed_email($pdo, $user_id);
+                }
+                if ($to !== null) {
+                    $doc = dept_msg_email_doc('Test: ' . (trim($subject) !== '' ? $subject : 'Workers message'), $body);
+                    $r = email_send_doc($pdo, $doc, $me + ['email' => $to], [
+                        'lane' => 'test', 'purpose' => 'account', 'flow' => 'dept-msg-test', 'to_email' => $to,
+                        'created_by' => $user_id, 'now' => true,
+                    ]);
+                    if (!empty($r['ok'])) {
+                        $went[] = 'an email';
+                    }
+                }
+                if (!$went) {
+                    dept_fail('Nothing went: add your phone or email to your profile first.');
+                }
+                echo json_encode(['status' => 'success', 'message' => 'Sent you ' . implode(' and ', $went) . '.']);
+                break;
+            }
+
+            $spec = dept_msg_spec($_POST);
+            if (!$spec['ok']) {
+                dept_fail($spec['message']);
+            }
+            $spec = $spec['spec'];
+
+            if ($action === 'msg_preview') {
+                echo json_encode(['status' => 'success', 'preview' => dept_msg_preview($pdo, $spec, $body, $year_id, $leader_roles)]);
+                break;
+            }
+
+            // msg_send — one message per compose token (a double tap sends once).
+            $token = preg_replace('/[^A-Za-z0-9-]/', '', (string) ($_POST['client_token'] ?? ''));
+            $_SESSION['dept_msg_tokens'] = array_slice($_SESSION['dept_msg_tokens'] ?? [], -20, 20, true);
+            if ($token !== '' && isset($_SESSION['dept_msg_tokens'][$token])) {
+                echo json_encode(['status' => 'success', 'duplicate' => true, 'message' => 'Already sent. Not sending it twice.']);
+                break;
+            }
+            $later = ($_POST['when'] ?? 'now') === 'later';
+            $created = dept_msg_create($pdo, $spec, $subject, $body, $later ? (string) ($_POST['send_at'] ?? '') : null, $user_id, new DateTimeImmutable('now'));
+            if (!$created['ok']) {
+                dept_fail($created['message']);
+            }
+            if ($token !== '') {
+                $_SESSION['dept_msg_tokens'][$token] = $created['id'];
+            }
+            if ($later) {
+                echo json_encode(['status' => 'success', 'message' => 'Scheduled for ' . date('j M, g:i A', strtotime($created['row']['send_at'])) . '.']);
+                break;
+            }
+            $result = dept_msg_expand($pdo, $created['row'], $year_id, $leader_roles, [], true);
+            if (!$result['ok']) {
+                dept_fail($result['message'] ?? 'It did not go out.');
+            }
+            $c = $result['counts'];
+            echo json_encode([
+                'status' => 'success',
+                'message' => sprintf('Sent: %d texts, %d emails, %d alerts.', $c['sms']['queued'], $c['email']['queued'], $c['push']['queued']),
+                'counts' => $c,
+            ]);
             break;
 
         default:

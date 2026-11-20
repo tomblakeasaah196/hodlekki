@@ -199,3 +199,52 @@ Rules worth knowing:
 * **Who may clock in.** Anyone with **Events & Attendance** access clocks in any
   worker. A head of department without it clocks in only the people on their own
   departments' rosters. A closed event cannot be changed.
+
+## Messages: text, email and app alert to workers (since November 2026)
+
+The **Messages** tab sends one message to workers by **text, email and app
+alert at once**. Only people with **SMS Studio** access see it: nobody new can
+spend the SMS wallet.
+
+1. **Who gets it**: *All workers* (everyone on an Active roster this ministry
+   year), *Departments* (tick one or more; *Include sub-units* adds e.g. Audio
+   under Choir), *Absent* (workers not yet present at an event you choose: the
+   Attendance tab's list) or *Leaders* (Pastors in charge, Directors, HODs).
+   People marked Relocated never get it.
+2. **Subject**: the email subject and the app alert title. Texts do not show it.
+3. **Message**: tap *First name* or *Full name* to put the person's name in
+   (`{{first_name}}`, `{{full_name}}`; `{{last_name}}` works too, nothing else
+   does). The counter shows how many texts each person costs. Every text
+   starts with `HODLEKKI: ` and one text holds 160 letters; the naira sign and
+   emoji make a text cost about three times more, so write `NGN`.
+4. **It reaches** counts, before you send: workers, texts (and the cost), emails
+   (and why the rest cannot get one), app alerts.
+5. **Send test** sends it to you only (your phone, your email).
+6. **When**: *Now*, or *Later* at a time 5 minutes to 30 days ahead. A scheduled
+   message works out who gets it **at that time** (an *Absent* message sent at
+   9:50 PM reaches whoever is still absent then). *Cancel* stops it until it goes.
+7. **Templates**: *Save template* keeps the message under the subject's name; it
+   is the same list as SMS Studio's templates.
+
+What happens to each part:
+
+* **Texts** go through SMS Studio's own queue: the same wallet check, block
+  list, duplicate guard and sender name. One text per phone number. They show
+  in SMS Studio's *Campaigns* (audience *departments*) and *History*.
+  A **Send now** whose texts cannot go (wallet too low, SMS not set up) sends
+  **nothing** and says why. A **scheduled** one still sends the emails and alerts
+  and tells you (in your bell) why the texts did not go.
+* **Email** goes to each worker's personal address, looked for in this order:
+  the confirmed personal email, else the *Personal email* on their profile,
+  else the email column (where many Gmail, Yahoo and Outlook addresses ended up
+  after the migration). A `@hodlc.com` sign-in name is **never** used, nor a
+  church `@hodlekki.org` address, an address that bounced, or one another
+  person has confirmed as theirs. Workers who unsubscribed from church emails
+  get none. One email per address. Emails leave only between 7 AM and 8 PM and
+  carry the unsubscribe link; one that cannot leave by the end of its day is
+  dropped, never sent late. So send a reminder **before 8 PM**.
+* **App alert**: free. It lands in the worker's bell and as a push on phones
+  with the app installed.
+* **Sent and scheduled** lists every message with its progress: texts sent of
+  total, emails sent, alerts. *Use again* copies a message into the form.
+

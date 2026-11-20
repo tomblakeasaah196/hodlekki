@@ -59,6 +59,22 @@ function logline($msg) { echo '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n"; }
 // tell a cron that never runs from one that runs and fails every minute.
 sms_worker_seen($pdo);
 
+// Departments > Messages: a scheduled workers' message that is due is queued
+// first (its texts into this queue, its emails into the outbox, its app alerts
+// into the bell), so the texts leave in this same run. Each message is claimed
+// before it is sent, and nothing here may stop the SMS sender.
+try {
+    require_once __DIR__ . '/../includes/department_helpers.php';
+    require_once __DIR__ . '/../includes/department_messages.php';
+    if (is_file(__DIR__ . '/../includes/campaigns/bootstrap.php')) {
+        require_once __DIR__ . '/../includes/campaigns/bootstrap.php';
+    }
+    $deptSent = dept_msg_tick($pdo);
+    if ($deptSent > 0) logline("Workers' messages: {$deptSent} went out.");
+} catch (Throwable $e) {
+    error_log('SMS worker: workers\' messages: ' . $e->getMessage());
+}
+
 try {
     $r = sms_process_queue($pdo, 55, 'cron');
     if ($r['locked']) {

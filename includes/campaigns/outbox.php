@@ -507,6 +507,19 @@ function email_worker_run(PDO $pdo, array $opts = []): array
                 $may = email_may_send_news($pdo, (int) $row['user_id']);
                 if (!$may['ok'] || $may['email'] !== $row['to_email']) {
                     $stop = 'Not sent: ' . str_replace('_', ' ', $may['reason'] === 'ok' ? 'address changed' : $may['reason']) . '.';
+                    // A worker message may go to a personal or profile address
+                    // (EMAIL_PROFILE_ADDRESS_FLOWS), but only the one the lookup
+                    // still picks now: consent, suppression and @hodlc.com included.
+                    if (email_flow_takes_profile_address((string) ($row['flow'] ?? ''))) {
+                        $alt = email_news_address($pdo, (int) $row['user_id']);
+                        if ($alt['ok'] && $alt['email'] === $row['to_email']) {
+                            $stop = null;
+                        } elseif (!$alt['ok']) {
+                            $stop = 'Not sent: ' . str_replace('_', ' ', $alt['reason']) . '.';
+                        } else {
+                            $stop = 'Not sent: address changed.';
+                        }
+                    }
                 }
             }
             if ($stop !== null) {

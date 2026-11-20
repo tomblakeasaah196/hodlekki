@@ -77,6 +77,15 @@ here builds SMTP settings in code.
 - Only the sha256 of a link token is stored. The confirm page's button POSTs;
   the GET only shows the address (mail scanners open links).
 
+- **One exception to "confirmed only"** (owner's decision, 20 Nov 2026: after a
+  migration many members' real Gmail/Yahoo/Outlook addresses sit in
+  `users.email`). Departments > Messages (flows in `EMAIL_PROFILE_ADDRESS_FLOWS`,
+  `dept-msg-`) writes to `email_news_address()`: the confirmed address, else
+  `users.real_email`, else `users.email`, never `@hodlc.com` or `@hodlekki.org`,
+  never a suppressed address or one another person confirmed; consent exactly
+  as `email_may_send_news()`. The worker re-checks that same lookup at send
+  time for those flows only. Campaigns and automations are unchanged.
+
 **Consent (NDPA)**
 - Account mail (confirm links, password resets, security notices) needs none
   and carries no unsubscribe link. Church news (automations, campaigns) needs

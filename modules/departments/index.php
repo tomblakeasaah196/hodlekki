@@ -9,6 +9,9 @@
  * department: present, absent, clock in, export the absent list. Behaviour in
  * assets/ui/js/pages/departments-attendance.js, data from the attendance_*
  * actions of api/department_api.php and api/department_attendance_export.php.
+ * The Messages tab (SMS Studio users only) sends one message to workers by
+ * text, email and app alert, now or later: assets/ui/js/pages/departments-
+ * messages.js, the msg_* actions, includes/department_messages.php.
  *
  * Built on the shared UI (docs/UI.md) in strict mode; behaviour in
  * assets/ui/js/pages/departments.js, the A4 sheet drawn by
@@ -22,7 +25,7 @@
 $ui = [
     'title'   => 'Departments',
     'mode'    => 'strict',
-    'scripts' => ['/assets/js/department_export.js', '/assets/ui/js/pages/departments.js', '/assets/ui/js/pages/departments-attendance.js'],
+    'scripts' => ['/assets/js/department_export.js', '/assets/ui/js/pages/departments.js', '/assets/ui/js/pages/departments-attendance.js', '/assets/ui/js/pages/departments-messages.js'],
 ];
 require_once '../../includes/header.php';
 require_once '../../includes/department_helpers.php';
@@ -48,6 +51,15 @@ $leaders = [
     'hod' => ['hod_id', 'hod'],
 ];
 $seatTypes = dept_seat_types();
+// Messages: SMS Studio users only (owner, 20 Nov 2026): nobody new spends the SMS wallet.
+$deptCanMessage = can('sms_studio', 'view');
+$deptTabs = [
+    'departments' => ['label' => 'Departments', 'icon' => 'building-2'],
+    'attendance' => ['label' => 'Attendance', 'icon' => 'user-check'],
+];
+if ($deptCanMessage) {
+    $deptTabs['messages'] = ['label' => 'Messages', 'icon' => 'send'];
+}
 ?>
 <div class="ui-page ui-page--wide">
     <?= ui_page_header([
@@ -63,10 +75,7 @@ $seatTypes = dept_seat_types();
             . ui_button('New department', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-action' => 'dept.new', 'hidden' => true, 'data-perm' => 'new']]),
     ]) ?>
 
-    <?= ui_tabs([
-        'departments' => ['label' => 'Departments', 'icon' => 'building-2'],
-        'attendance' => ['label' => 'Attendance', 'icon' => 'user-check'],
-    ], 'departments', 'Departments sections') ?>
+    <?= ui_tabs($deptTabs, 'departments', 'Departments sections') ?>
 
     <div id="panel-departments" data-tab-panel="departments" class="ui-tab-panel ui-stack">
 
@@ -197,6 +206,86 @@ $seatTypes = dept_seat_types();
             <div id="datt-view" class="ui-stack ui-stack--md" aria-live="polite"></div>
         </div>
     </section>
+<?php if ($deptCanMessage): ?>
+    <!-- Messages ------------------------------------------------------- -->
+    <section id="panel-messages" data-tab-panel="messages" class="ui-tab-panel ui-stack ui-stack--md" hidden>
+        <div id="dmsg-loading" class="ui-loading"><span class="ui-spinner"></span><span>Loading…</span></div>
+        <div class="grid gap-4 lg:grid-cols-3" id="dmsg-main" hidden>
+            <form class="ui-card lg:col-span-2" id="dmsg-form" data-action="dmsg.send" novalidate>
+                <div class="ui-card__header ui-card__header--divided">
+                    <div class="ui-title-row"><h2 class="ui-card__title">New message</h2>
+                        <?= ui_info('One message to workers by text, email and app alert at once. Texts go through SMS Studio (same wallet and block list); email only to confirmed personal emails, 7 AM to 8 PM; the app alert is free.', 'About messages') ?></div>
+                    <div class="flex items-center gap-2">
+                        <label class="sr-only" for="dmsg-template">Template</label>
+                        <select class="ui-select" id="dmsg-template" data-action-change="dmsg.template"><option value="">Templates</option></select>
+                    </div>
+                </div>
+                <div class="ui-card__body ui-stack">
+                    <fieldset class="ui-fieldset">
+                        <legend class="ui-legend">Who gets it</legend>
+                        <div class="ui-segmented flex-wrap" role="group" aria-label="Who gets it">
+                            <button type="button" class="ui-segmented__item" data-action="dmsg.audience" data-audience="all" aria-pressed="true">All workers</button>
+                            <button type="button" class="ui-segmented__item" data-action="dmsg.audience" data-audience="departments" aria-pressed="false">Departments</button>
+                            <button type="button" class="ui-segmented__item" data-action="dmsg.audience" data-audience="absent" aria-pressed="false">Absent</button>
+                            <button type="button" class="ui-segmented__item" data-action="dmsg.audience" data-audience="leaders" aria-pressed="false">Leaders</button>
+                        </div>
+                    </fieldset>
+                    <div id="dmsg-depts-wrap" class="ui-stack" hidden>
+                        <label class="ui-check"><input type="checkbox" class="ui-switch" id="dmsg-subunits" checked data-action-change="dmsg.changed"><span>Include sub-units</span></label>
+                        <div class="ui-card max-h-64 overflow-y-auto p-3" id="dmsg-depts" role="group" aria-label="Departments"></div>
+                    </div>
+                    <div id="dmsg-event-wrap" class="ui-field" hidden>
+                        <label class="ui-label" for="dmsg-event">Absent at</label>
+                        <select class="ui-select" id="dmsg-event" data-action-change="dmsg.changed"><option value="">Choose an event</option></select>
+                    </div>
+                    <?= ui_field('text', ['name' => 'subject', 'id' => 'dmsg-subject', 'label' => 'Subject', 'required' => true,
+                        'info' => 'The email subject and the app alert title. Texts do not show it.', 'attrs' => ['maxlength' => 150, 'autocomplete' => 'off']]) ?>
+                    <div class="ui-field">
+                        <div class="ui-label-row">
+                            <label class="ui-label" for="dmsg-body">Message</label>
+                            <?= ui_info('Every text starts with HODLEKKI: and one text holds 160 letters. The naira sign and emoji make a text cost about three times more.', 'About the message') ?>
+                        </div>
+                        <textarea class="ui-textarea" id="dmsg-body" name="body" rows="6" maxlength="600" required data-action-input="dmsg.changed"></textarea>
+                        <div class="flex flex-wrap items-center gap-2 mt-2">
+                            <button type="button" class="ui-chip" data-action="dmsg.merge" data-field="first_name">First name</button>
+                            <button type="button" class="ui-chip" data-action="dmsg.merge" data-field="full_name">Full name</button>
+                            <span class="ui-meta ui-num ml-auto" id="dmsg-counter" aria-live="polite"></span>
+                        </div>
+                    </div>
+                    <fieldset class="ui-fieldset">
+                        <legend class="ui-legend">When</legend>
+                        <div class="flex flex-wrap items-center gap-4">
+                            <label class="ui-check"><input type="radio" name="when" value="now" checked data-action-change="dmsg.when"><span>Now</span></label>
+                            <label class="ui-check"><input type="radio" name="when" value="later" data-action-change="dmsg.when"><span>Later</span></label>
+                            <label class="sr-only" for="dmsg-at">Send at</label>
+                            <input class="ui-input w-auto" type="datetime-local" id="dmsg-at" name="send_at" hidden>
+                        </div>
+                    </fieldset>
+                </div>
+                <div class="ui-card__footer ui-form-actions">
+                    <?= ui_button('Save template', ['variant' => 'ghost', 'icon' => 'copy', 'attrs' => ['data-action' => 'dmsg.save-template']]) ?>
+                    <?= ui_button('Send test', ['variant' => 'secondary', 'icon' => 'smartphone', 'attrs' => ['data-action' => 'dmsg.test']]) ?>
+                    <?= ui_button('Send now', ['variant' => 'primary', 'icon' => 'send', 'type' => 'submit', 'attrs' => ['id' => 'dmsg-send']]) ?>
+                </div>
+            </form>
+
+            <aside class="ui-card" aria-labelledby="dmsg-sum-title">
+                <div class="ui-card__header ui-card__header--divided"><h2 class="ui-card__title" id="dmsg-sum-title">It reaches</h2></div>
+                <div class="ui-card__body ui-stack" id="dmsg-summary" aria-live="polite">
+                    <p class="ui-meta">Choose who gets it.</p>
+                </div>
+            </aside>
+        </div>
+
+        <section class="ui-card" aria-labelledby="dmsg-hist-title" id="dmsg-history-card" hidden>
+            <div class="ui-card__header ui-card__header--divided">
+                <h2 class="ui-card__title" id="dmsg-hist-title">Sent and scheduled</h2>
+                <?= ui_button('Refresh', ['variant' => 'ghost', 'icon' => 'refresh-cw', 'icon_only' => true, 'attrs' => ['data-action' => 'dmsg.refresh']]) ?>
+            </div>
+            <ul class="ui-list" id="dmsg-history"></ul>
+        </section>
+    </section>
+<?php endif; ?>
 </div>
 
 <?= ui_dialog_start('dept-edit-dialog', ['title' => 'New department', 'size' => 'lg']) ?>
