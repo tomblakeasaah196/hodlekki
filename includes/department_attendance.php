@@ -192,6 +192,57 @@ function dept_att_roll(PDO $pdo, int $eventId, int $yearId, array $leaderRoles =
     ];
 }
 
+/**
+ * Is this a workers-only event? The "Workers' Meeting" category says so
+ * outright. The roster LIST also still treats a title that says "worker" that
+ * way (the Events attendance tab always has), but that is only a guess, so
+ * with $strict (what a clock-in is refused on) only the category counts: a
+ * "Workers' Appreciation Dinner" with guests must not lock its guests out.
+ *
+ * @param array $event needs event_category and title
+ */
+function dept_att_workers_only(array $event, bool $strict = false): bool
+{
+    if (($event['event_category'] ?? '') === 'Workers_Meeting') {
+        return true;
+    }
+
+    return !$strict && stripos((string) ($event['title'] ?? ''), 'worker') !== false;
+}
+
+/**
+ * "Serving now" on a roster row aliased $alias: in the live year, and not
+ * Removed inside it (Departments' own meaning, as the dashboard's Workforce
+ * uses it). Before the ministry-years migration there is no roster_status and
+ * is_active alone says the same.
+ */
+function dept_att_live_roster_sql(PDO $pdo, string $alias = 'ud'): string
+{
+    if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/D', $alias)) {
+        throw new InvalidArgumentException('dept_att_live_roster_sql takes a table alias.');
+    }
+    $live = "{$alias}.is_active = 1";
+    try {
+        $pdo->query('SELECT roster_status FROM user_departments LIMIT 0');
+        $live .= " AND {$alias}.roster_status = 'Active'";
+    } catch (Throwable $e) {
+        // pre-migration: is_active alone
+    }
+
+    return "({$live})";
+}
+
+/** Is this person serving on a live department roster right now? */
+function dept_att_is_worker(PDO $pdo, int $userId): bool
+{
+    $st = $pdo->prepare(
+        'SELECT 1 FROM user_departments ud WHERE ud.user_id = ? AND ' . dept_att_live_roster_sql($pdo, 'ud') . ' LIMIT 1'
+    );
+    $st->execute([$userId]);
+
+    return (bool) $st->fetchColumn();
+}
+
 /** Is this person on a live-year roster (the only people a workers' roll takes)? */
 function dept_att_on_roster(PDO $pdo, int $userId, int $yearId): bool
 {

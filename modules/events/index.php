@@ -27,6 +27,7 @@ $evCategories = [
     'Midweek_Service' => 'Midweek Service',
     'Tribe_Meeting' => 'Tribe Meeting',
     'Department_Meeting' => 'Department Meeting',
+    'Workers_Meeting' => "Workers' Meeting",
     'Evangelism' => 'Evangelism',
     'Retreat' => 'Retreat',
     'Academy_Class' => 'Academy Class',

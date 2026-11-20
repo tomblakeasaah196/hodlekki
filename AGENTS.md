@@ -1304,7 +1304,11 @@ before touching anything that reads `user_departments`:
   department, for a workers' meeting. Expected = the live year's Active rows
   (not the `Worker` label); present = an `attendance` row OR a door `checkins`
   row. It writes the SAME `attendance` row the Events screen writes and never a
-  table of its own, and never removes a door check-in. Tests:
+  table of its own, and never removes a door check-in. The **Workers' Meeting** event category
+  (`Workers_Meeting`) is workers-only: `dept_att_workers_only()` scopes the Events
+  attendance roster to live department rosters (`dept_att_live_roster_sql()`) and,
+  on the category alone, `mark_attendance` refuses non-workers. The door QR is not
+  restricted. A title that merely says "worker" still scopes the roster list only. Tests:
   `php tests/department_attendance_test.php` (SQLite, in CI).
 
 ## UI foundation (added 2026-11-11)

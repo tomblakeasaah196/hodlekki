@@ -61,7 +61,7 @@ function da_db(): PDO
     $pdo->exec("CREATE TABLE users (id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, phone TEXT, attendance_status TEXT)");
     $pdo->exec("CREATE TABLE departments (id INTEGER PRIMARY KEY, name TEXT, parent_id INTEGER)");
     $pdo->exec("CREATE TABLE user_departments (id INTEGER PRIMARY KEY, user_id INTEGER, department_id INTEGER,
-        role_in_dept TEXT, membership_type TEXT, ministry_year_id INTEGER, roster_status TEXT DEFAULT 'Active')");
+        role_in_dept TEXT, membership_type TEXT, ministry_year_id INTEGER, roster_status TEXT DEFAULT 'Active', is_active INTEGER DEFAULT 1)");
     $pdo->exec("CREATE TABLE events (id INTEGER PRIMARY KEY, title TEXT, event_category TEXT, event_date TEXT, end_date TEXT, is_closed INTEGER DEFAULT 0)");
     $pdo->exec("CREATE TABLE attendance (id INTEGER PRIMARY KEY, event_id INTEGER, user_id INTEGER, status TEXT,
         attendance_date TEXT, check_in_time TEXT, checked_in_by INTEGER)");
@@ -208,6 +208,27 @@ same('a formula is neutralised', "'=HYPERLINK(\"x\")", dept_att_csv_cell('=HYPER
 same('so is an @ command', "'@SUM(1)", dept_att_csv_cell('@SUM(1)'));
 same('a +234 phone is left alone', '+234 803 333 4444', dept_att_csv_cell('+234 803 333 4444'));
 same('a plain name is untouched', 'Ada Okoro', dept_att_csv_cell('Ada Okoro'));
+
+echo "\nWorkers-only events\n";
+same('the Workers\' Meeting category is workers-only', true, dept_att_workers_only(['event_category' => 'Workers_Meeting', 'title' => 'Monthly']));
+same('so is a title that says worker (the roster list\'s old guess)', true, dept_att_workers_only(['event_category' => 'Conference', 'title' => "Workers' Meeting November 2026"]));
+same('but a clock-in is refused on the category alone', false, dept_att_workers_only(['event_category' => 'Conference', 'title' => 'Workers Appreciation Dinner'], true));
+same('and the category counts when strict', true, dept_att_workers_only(['event_category' => 'Workers_Meeting', 'title' => 'x'], true));
+same('an ordinary event is not', false, dept_att_workers_only(['event_category' => 'Sunday_Service', 'title' => 'Sunday Service']));
+$pdo = da_world();
+$pdo->exec("UPDATE user_departments SET is_active = 0 WHERE user_id = 3");
+same('a serving member is a worker', true, dept_att_is_worker($pdo, 1));
+same('someone whose row is not live is not', false, dept_att_is_worker($pdo, 3));
+same('a removed row is not serving', false, dept_att_is_worker($pdo, 6));
+same('a person on no roster is not', false, dept_att_is_worker($pdo, 7));
+$sql = dept_att_live_roster_sql($pdo, 'ud');
+same('the live-roster test says live and Active', true, str_contains($sql, 'ud.is_active = 1') && str_contains($sql, "ud.roster_status = 'Active'"));
+$names = $pdo->query("SELECT DISTINCT u.id FROM users u WHERE u.id IN (SELECT ud.user_id FROM user_departments ud WHERE {$sql}) ORDER BY u.id")->fetchAll(PDO::FETCH_COLUMN);
+same('as a roster scope it keeps Ada, Bayo and Dayo (Chi switched off, Femi removed, Efe relocated is still on the row)', ['1', '2', '4', '5'], array_map('strval', $names));
+$noStatus = new PDO('sqlite::memory:');
+$noStatus->exec('CREATE TABLE user_departments (id INTEGER PRIMARY KEY, user_id INTEGER, department_id INTEGER, is_active INTEGER)');
+same('before the ministry-years migration is_active alone decides', '(ud.is_active = 1)', dept_att_live_roster_sql($noStatus, 'ud'));
+try { dept_att_live_roster_sql($pdo, 'ud; DROP'); ok('a bad alias is refused', false); } catch (InvalidArgumentException $e) { ok('a bad alias is refused', true); }
 
 echo "\nOpen events\n";
 $events = dept_att_events($pdo);
