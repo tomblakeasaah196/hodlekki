@@ -225,11 +225,21 @@ spend the SMS wallet.
    9:50 PM reaches whoever is still absent then). *Cancel* stops it until it goes.
 7. **Templates**: *Save template* keeps the message under the subject's name; it
    is the same list as SMS Studio's templates.
-8. **After you send**, the form makes way for the result ("Sent to 66 workers",
-   with the texts, emails and alerts), so it cannot be sent twice by a second
-   tap. *New message* brings back an empty form; *See progress* jumps to the list.
-   Sending the **same** message to the same people again within 30 minutes asks
-   first ("The same message went to them 4 minutes ago. Send it again?").
+8. **After you send**, the form makes way for the result ("Sent to 66 workers"),
+   and its counts follow delivery live for a few minutes: texts delivered,
+   awaiting a report or failed; emails sent or waiting; app alerts. The form is
+   gone, so a second tap cannot send it again. *New message* brings back an
+   empty form; *View delivery* opens the details.
+9. **The same message goes to the same group once a day.** Sending the same
+   subject and words to the same people again that day is refused ("This went
+   to them today at 10:42 AM. Change the words to send something new."), and so
+   is sending one that is already scheduled for that day. There is no override.
+   Another group, other words, or the next day is a new message.
+10. **Sent and scheduled**: tap a message to see its delivery, person by person:
+    each worker's text (Delivered, Sent awaiting report, Queued, Failed with the
+    reason, Blocked) and email (Sent, Waiting, Not sent, Failed). *Needs a look*
+    shows only the people something did not reach. *Use again* copies the
+    message into an empty form.
 
 What happens to each part:
 
@@ -251,5 +261,5 @@ What happens to each part:
 * **App alert**: free. It lands in the worker's bell and as a push on phones
   with the app installed.
 * **Sent and scheduled** lists every message with its progress: texts sent of
-  total, emails sent, alerts. *Use again* copies a message into the form.
+  total, emails sent, alerts. Tap one for its delivery, person by person.
 

@@ -2,7 +2,11 @@
 // The Messages tab of Departments (modules/departments/index.php), for SMS
 // Studio users: one message to workers by text, email and app alert, now or at
 // a set time, with a live count of who it reaches and what it costs, a test to
-// yourself, templates and the list of messages sent and scheduled. Data from
+// yourself, templates and the list of messages sent and scheduled. After a
+// send the form makes way for a result card whose counts update live; a row in
+// the list opens the message's delivery, person by person. The same message
+// never goes to the same group twice in a day (the server refuses it, no
+// override). Data from
 // /api/department_api.php (msg_*). Who it reaches is worked out on the server;
 // names come from people, so they go in as TEXT (DOM nodes).
 (function () {
@@ -22,7 +26,8 @@
     var SOURCE_LABELS = { confirmed: 'confirmed', personal: 'personal', profile: 'profile' };
 
     var state = { booted: false, audience: 'all', departments: [], events: [], history: [], preview: null,
-                  previewTimer: null, previewSeq: 0, token: newToken(), historyTimer: null };
+                  previewTimer: null, previewSeq: 0, token: newToken(), historyTimer: null,
+                  lastId: null, liveTimer: null, liveTicks: 0, detail: null, detailId: null, detailTimer: null };
 
     var $form = document.getElementById('dmsg-form');
     var $main = document.getElementById('dmsg-main');
@@ -42,6 +47,9 @@
     var $history = document.getElementById('dmsg-history');
     var $historyCard = document.getElementById('dmsg-history-card');
     var $done = document.getElementById('dmsg-done');
+    var $doneProgress = document.getElementById('dmsg-done-progress');
+    var $detailBody = document.getElementById('dmsg-detail-body');
+    var $detailReuse = document.getElementById('dmsg-detail-reuse');
 
     /* ------------------------------------------------------------- helpers */
 
@@ -275,24 +283,24 @@
         }
         state.history.forEach(function (h) {
             var li = el('li', 'ui-list__item items-start');
-            var main = el('div', 'ui-list__main');
-            var top = el('div', 'flex flex-wrap items-center gap-2');
+            // The whole row opens the message's delivery.
+            var main = el('button', 'ui-list__main text-left');
+            main.type = 'button';
+            main.setAttribute('data-action', 'dmsg.detail');
+            main.setAttribute('data-id', h.id);
+            main.setAttribute('aria-label', 'Details of ' + h.subject);
+            var top = el('span', 'flex flex-wrap items-center gap-2');
             top.appendChild(el('span', 'font-medium text-ink', h.subject));
             top.appendChild(statusBadge(h.status));
             main.appendChild(top);
             var meta = [h.audience_label, (h.status === 'scheduled' ? 'For ' : '') + when(h.status === 'sent' && h.sent_at ? h.sent_at : h.send_at)];
             if (h.by) meta.push('by ' + h.by);
-            main.appendChild(el('p', 'ui-meta', meta.join(' · ')));
+            main.appendChild(el('span', 'block ui-meta', meta.join(' · ')));
             var ch = channelLine(h);
-            if (ch) main.appendChild(el('p', 'ui-meta ui-num', ch));
-            if (h.error) main.appendChild(el('p', 'text-sm text-danger', h.error));
+            if (ch) main.appendChild(el('span', 'block ui-meta ui-num', ch));
+            if (h.error) main.appendChild(el('span', 'block text-sm text-danger', h.error));
             li.appendChild(main);
             var end = el('div', 'flex flex-wrap items-center gap-2');
-            var reuse = el('button', 'ui-btn ui-btn--ghost ui-btn--sm', 'Use again');
-            reuse.type = 'button';
-            reuse.setAttribute('data-action', 'dmsg.reuse');
-            reuse.setAttribute('data-id', h.id);
-            end.appendChild(reuse);
             if (h.status === 'scheduled') {
                 var cancel = el('button', 'ui-btn ui-btn--danger-ghost ui-btn--sm', 'Cancel');
                 cancel.type = 'button';
@@ -300,6 +308,9 @@
                 cancel.setAttribute('data-id', h.id);
                 end.appendChild(cancel);
             }
+            var go = el('span', 'text-ink-subtle');
+            go.innerHTML = HOD.icon('chevron-right');   // our own sprite name
+            end.appendChild(go);
             li.appendChild(end);
             $history.appendChild(li);
         });
@@ -389,19 +400,18 @@
             message: later ? 'Who gets it is worked out at that time. ' + reach : reach,
             confirmLabel: later ? 'Schedule' : 'Send now'
         }).then(function (ok) {
-            if (ok) send(later, false);
+            if (ok) send(later);
         });
     });
 
-    // One send. A repeat of the same message within 30 minutes comes back as
-    // code 'repeat' and is only sent again when the sender says so.
-    function send(later, repeat) {
+    // One send. The same message to the same group on the same day comes back
+    // as code 'repeat': it is refused, with no way round it but new words.
+    function send(later) {
         HOD.busy($send, true);
         lockForm(true);
         var data = Object.assign(spec(), {
             subject: $subject.value, body: $body.value, when: later ? 'later' : 'now', send_at: $at.value, client_token: state.token
         });
-        if (repeat) data.confirm_repeat = '1';
         function release() { HOD.busy($send, false); lockForm(false); }
         call('msg_send', data, { quiet: true }).then(function (res) {
             release();
@@ -410,13 +420,8 @@
             refreshHistory();
         }, function (err) {
             release();
-            if (err && err.code === 'repeat') {
-                HOD.confirm({ title: 'Send it again?', message: err.message, confirmLabel: 'Send again', tone: 'danger' })
-                    .then(function (again) { if (again) send(later, true); });
-                return;
-            }
             // The same token stays, so a retry after a lost reply cannot send twice.
-            HOD.toast((err && err.message) || 'It did not go out. Try again.', 'danger');
+            HOD.toast((err && err.message) || 'It did not go out. Try again.', err && err.code === 'repeat' ? 'warning' : 'danger');
         });
     }
 
@@ -427,14 +432,19 @@
     }
 
     // After a send: the form makes way for the result, so it cannot be sent
-    // twice by a second tap. "New message" brings back an empty form.
+    // twice by a second tap. Its counts update live for a few minutes;
+    // "New message" brings back an empty form.
     function done(later, res) {
         var c = res.counts || {};
         var title = later ? 'Message scheduled' : (res.duplicate ? 'Already sent' : 'Message sent');
         var text = res.message || (later ? 'Scheduled.' : 'Sent.');
         if (!later && c.people !== undefined) title = 'Sent to ' + plural(c.people, 'worker', 'workers');
+        state.lastId = res.id || null;
         $done.querySelector('.ui-empty__title').textContent = title;
-        $done.querySelector('.ui-empty__text').textContent = text + (later ? ' Cancel it below until it goes.' : ' Progress shows below.');
+        $done.querySelector('.ui-empty__text').textContent = later ? text + ' Cancel it in the list below until it goes.' : text;
+        $done.querySelector('[data-action="dmsg.view-done"]').hidden = !state.lastId;
+        $doneProgress.textContent = '';
+        $doneProgress.hidden = later || !state.lastId;
         $form.hidden = true;
         $done.hidden = false;
         $done.focus();
@@ -448,17 +458,205 @@
         $at.hidden = true;
         $send.querySelector('span').textContent = 'Send now';
         drawCounter();
+        if (!later && state.lastId) startLive();
+    }
+
+    var SMS_STATE = {
+        delivered: ['Delivered', 'success'], awaiting: ['Sent, awaiting report', 'warning'], waiting: ['Queued', 'info'],
+        failed: ['Failed', 'danger'], blocked: ['Blocked (NGN 0)', ''], unknown: ['Unknown', ''], cancelled: ['Cancelled', '']
+    };
+    var EMAIL_STATE = { sent: ['Sent', 'success'], waiting: ['Waiting', 'info'], failed: ['Failed', 'danger'], not_sent: ['Not sent', ''] };
+
+    function badge(pair) { return el('span', 'ui-badge self-start' + (pair[1] ? ' ui-badge--' + pair[1] : ''), pair[0]); }
+
+    function parts(map, labels) {
+        var out = [];
+        Object.keys(labels).forEach(function (k) { if (map[k]) out.push(num(map[k]) + ' ' + labels[k][0].charAt(0).toLowerCase() + labels[k][0].slice(1)); });
+        return out.join(' · ');
+    }
+
+    function tile(icon, label, total, meta) {
+        var t = el('div', 'ui-stack ui-stack--sm');
+        var top = el('div', 'flex items-center gap-2 text-sm text-ink-muted');
+        var i = el('span', '');
+        i.innerHTML = HOD.icon(icon);   // our own sprite name
+        top.appendChild(i);
+        top.appendChild(el('span', '', label));
+        t.appendChild(top);
+        t.appendChild(el('span', 'text-2xl font-semibold ui-num text-ink', num(total)));
+        if (meta) t.appendChild(el('span', 'ui-meta', meta));
+        return t;
+    }
+
+    function drawProgress(box, sum) {
+        box.textContent = '';
+        box.appendChild(tile('smartphone', 'Texts', sum.sms.total, parts(sum.sms, SMS_STATE) || 'None'));
+        box.appendChild(tile('mail', 'Emails', sum.email.total, parts(sum.email, EMAIL_STATE) || 'None'));
+        box.appendChild(tile('bell', 'App alerts', sum.push, 'In the bell and on phones'));
+    }
+
+    // The result card follows the message for three minutes (every 5 s).
+    function startLive() {
+        stopLive();
+        state.liveTicks = 0;
+        var tick = function () {
+            if ($done.hidden || !state.lastId) { stopLive(); return; }
+            if (++state.liveTicks > 36) { stopLive(); return; }
+            if (document.hidden || panel.hidden) return;
+            call('msg_detail', { id: state.lastId }, { quiet: true }).then(function (res) {
+                if (!$done.hidden) drawProgress($doneProgress, res.summary);
+            }).catch(function () { /* the next tick tries again */ });
+        };
+        tick();
+        state.liveTimer = setInterval(tick, 5000);
+    }
+
+    function stopLive() {
+        if (state.liveTimer) { clearInterval(state.liveTimer); state.liveTimer = null; }
     }
 
     HOD.actions.on('dmsg.new', function () {
+        stopLive();
         $done.hidden = true;
         $form.hidden = false;
         $subject.focus();
         schedulePreview();
     });
 
-    HOD.actions.on('dmsg.progress', function () {
-        $historyCard.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    HOD.actions.on('dmsg.view-done', function () { if (state.lastId) openDetail(state.lastId); });
+
+    /* ------------------------------------------------- delivery details */
+
+    function openDetail(id) {
+        state.detailId = String(id);
+        state.detail = null;
+        $detailBody.textContent = '';
+        $detailBody.appendChild(el('div', 'ui-loading')).appendChild(el('span', 'ui-spinner'));
+        $detailReuse.setAttribute('data-id', state.detailId);
+        HOD.dialog.open('dmsg-detail');
+        loadDetail();
+        if (state.detailTimer) clearInterval(state.detailTimer);
+        state.detailTimer = setInterval(function () {
+            var dlg = document.getElementById('dmsg-detail');
+            if (!dlg || !dlg.open) { clearInterval(state.detailTimer); state.detailTimer = null; return; }
+            if (!document.hidden) loadDetail();
+        }, 10000);
+    }
+
+    function loadDetail() {
+        var id = state.detailId;
+        if (!id) return;
+        call('msg_detail', { id: id }, { quiet: true }).then(function (res) {
+            if (id !== state.detailId) return;
+            state.detail = res;
+            drawDetail(res);
+        }).catch(function (err) {
+            if (id !== state.detailId || state.detail) return;
+            $detailBody.textContent = '';
+            $detailBody.appendChild(el('p', 'text-sm text-danger', err.message || 'Details did not load. Try Refresh.'));
+        });
+    }
+
+    function drawDetail(d) {
+        var m = d.message;
+        $detailBody.textContent = '';
+        var head = el('div', 'ui-stack ui-stack--sm');
+        var top = el('div', 'flex flex-wrap items-center gap-2');
+        top.appendChild(el('h3', 'ui-h3', m.subject));
+        top.appendChild(statusBadge(m.status));
+        head.appendChild(top);
+        var meta = [m.audience_label, (m.status === 'scheduled' ? 'For ' : '') + when(m.status === 'sent' && m.sent_at ? m.sent_at : m.send_at)];
+        if (m.by) meta.push('by ' + m.by);
+        head.appendChild(el('p', 'ui-meta', meta.join(' · ')));
+        $detailBody.appendChild(head);
+        $detailBody.appendChild(el('p', 'whitespace-pre-line rounded-ui border border-line bg-surface-sunken p-3 text-sm text-ink', m.body));
+        if (m.error) $detailBody.appendChild(el('p', 'text-sm text-danger', m.error));
+        if (m.status === 'scheduled' || m.status === 'cancelled') return;
+
+        var grid = el('div', 'grid gap-3 sm:grid-cols-3');
+        drawProgress(grid, d.summary);
+        $detailBody.appendChild(grid);
+
+        var people = d.people || [];
+        var problems = people.filter(function (p) {
+            return ['failed', 'blocked', 'unknown'].indexOf(p.sms) > -1 || ['failed', 'not_sent'].indexOf(p.email_state) > -1 || (!p.sms && !p.email);
+        });
+        var bar = el('div', 'flex flex-wrap items-center justify-between gap-2');
+        bar.appendChild(el('h4', 'text-sm font-semibold text-ink', plural(people.length, 'person', 'people')));
+        var seg = el('div', 'ui-segmented');
+        seg.setAttribute('role', 'group');
+        seg.setAttribute('aria-label', 'Show');
+        [['all', 'Everyone', people.length], ['problems', 'Needs a look', problems.length]].forEach(function (f) {
+            var b = el('button', 'ui-segmented__item', f[1] + ' (' + num(f[2]) + ')');
+            b.type = 'button';
+            b.setAttribute('data-action', 'dmsg.detail-filter');
+            b.setAttribute('data-filter', f[0]);
+            b.setAttribute('aria-pressed', (state.detailFilter || 'all') === f[0] ? 'true' : 'false');
+            seg.appendChild(b);
+        });
+        bar.appendChild(seg);
+        $detailBody.appendChild(bar);
+
+        var list = (state.detailFilter === 'problems') ? problems : people;
+        var wrap = el('div', 'ui-table-wrap max-h-96 overflow-y-auto');
+        var table = el('table', 'ui-table ui-table--stack');
+        var thead = el('thead');
+        var hr = el('tr');
+        ['Worker', 'Text', 'Email'].forEach(function (h) { var th = el('th', '', h); th.scope = 'col'; hr.appendChild(th); });
+        thead.appendChild(hr);
+        table.appendChild(thead);
+        var tbody = el('tbody');
+        list.forEach(function (p) {
+            var tr = el('tr');
+            var who = el('td');
+            who.setAttribute('data-label', 'Worker');
+            var nameBox = el('div', 'min-w-0');
+            nameBox.appendChild(el('span', 'block font-medium text-ink', p.name || 'Unknown'));
+            if (p.phone) nameBox.appendChild(el('span', 'block ui-meta ui-num', p.phone));
+            who.appendChild(nameBox);
+            var tx = el('td');
+            tx.setAttribute('data-label', 'Text');
+            if (p.sms) {
+                var sbox = el('div', 'ui-stack ui-stack--sm');
+                sbox.appendChild(badge(SMS_STATE[p.sms] || [p.sms, '']));
+                if (p.sms_note) sbox.appendChild(el('span', 'ui-meta', p.sms_note));
+                tx.appendChild(sbox);
+            } else {
+                tx.appendChild(el('span', 'ui-meta', 'No number'));
+            }
+            var em = el('td');
+            em.setAttribute('data-label', 'Email');
+            if (p.email) {
+                var ebox = el('div', 'ui-stack ui-stack--sm');
+                ebox.appendChild(badge(EMAIL_STATE[p.email_state] || [p.email_state, '']));
+                ebox.appendChild(el('span', 'ui-meta break-all', p.email));
+                if (p.email_note) ebox.appendChild(el('span', 'ui-meta', p.email_note));
+                em.appendChild(ebox);
+            } else {
+                em.appendChild(el('span', 'ui-meta', 'No email'));
+            }
+            tr.appendChild(who);
+            tr.appendChild(tx);
+            tr.appendChild(em);
+            tbody.appendChild(tr);
+        });
+        if (!list.length) {
+            var none = el('tr');
+            var td = el('td', 'ui-meta', state.detailFilter === 'problems' ? 'Nothing needs a look.' : 'Nobody yet.');
+            td.colSpan = 3;
+            none.appendChild(td);
+            tbody.appendChild(none);
+        }
+        table.appendChild(tbody);
+        wrap.appendChild(table);
+        $detailBody.appendChild(wrap);
+    }
+
+    HOD.actions.on('dmsg.detail', function (b) { state.detailFilter = 'all'; openDetail(b.getAttribute('data-id')); });
+    HOD.actions.on('dmsg.detail-refresh', function () { loadDetail(); });
+    HOD.actions.on('dmsg.detail-filter', function (b) {
+        state.detailFilter = b.getAttribute('data-filter') || 'all';
+        if (state.detail) drawDetail(state.detail);
     });
 
     HOD.actions.on('dmsg.cancel', function (b) {
@@ -472,9 +670,15 @@
             });
     });
 
+    // "Use again" (in the details) copies the message into an empty form. The
+    // same words to the same group cannot go again the same day.
     HOD.actions.on('dmsg.reuse', function (b) {
-        var h = state.history.filter(function (x) { return String(x.id) === b.getAttribute('data-id'); })[0];
+        var id = b.getAttribute('data-id');
+        var h = (state.detail && String(state.detail.message.id) === String(id)) ? state.detail.message
+            : state.history.filter(function (x) { return String(x.id) === String(id); })[0];
         if (!h) return;
+        HOD.dialog.close('dmsg-detail');
+        stopLive();
         $done.hidden = true;
         $form.hidden = false;
         $subject.value = h.subject;

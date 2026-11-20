@@ -332,9 +332,10 @@ function dept_msg_preview(PDO $pdo, array $spec, string $body, int $yearId, arra
 
 /**
  * Store a message. $sendAt null = now (the row is born 'sending', claimed by
- * this request); else it waits as 'scheduled'.
+ * this request); else it waits as 'scheduled'. The same message to the same
+ * group on the same day is refused (code 'repeat').
  *
- * @return array{ok:bool, id?:int, row?:array, message?:string}
+ * @return array{ok:bool, id?:int, row?:array, message?:string, code?:string}
  */
 function dept_msg_create(PDO $pdo, array $spec, string $subject, string $body, ?string $sendAt, int $userId, DateTimeImmutable $now): array
 {
@@ -366,6 +367,12 @@ function dept_msg_create(PDO $pdo, array $spec, string $subject, string $body, ?
         $sendAtSql = $nowSql;
     }
 
+    // The same message to the same group goes once a day, no override.
+    $twin = dept_msg_same_day_twin($pdo, $spec, $subject, $body, substr($sendAtSql, 0, 10));
+    if ($twin !== null) {
+        return ['ok' => false, 'code' => 'repeat', 'message' => dept_msg_twin_line($twin)];
+    }
+
     $pdo->prepare(
         'INSERT INTO dept_messages (subject, body, audience, department_ids, include_subunits, event_id, send_at, status, created_by, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -381,41 +388,52 @@ function dept_msg_create(PDO $pdo, array $spec, string $subject, string $body, ?
 }
 
 /**
- * The same message (subject, text and audience) already sent or scheduled in
- * the last $minutes, or null. Stops a second tap on Send now reaching every
- * worker twice; the sender can still confirm a deliberate repeat.
+ * The same message (subject, text and audience: departments and event
+ * included) already sent, sending or scheduled on $day ('Y-m-d', Lagos), or
+ * null. Owner's rule (20 Nov 2026): the same message never reaches the same
+ * group twice in a day, and there is no override; changed words are a new
+ * message.
  */
-function dept_msg_recent_twin(PDO $pdo, array $spec, string $subject, string $body, DateTimeImmutable $now, int $minutes = 30): ?array
+function dept_msg_same_day_twin(PDO $pdo, array $spec, string $subject, string $body, string $day, ?int $excludeId = null,
+    array $statuses = ['sent', 'sending', 'scheduled']): ?array
 {
+    $start = new DateTimeImmutable($day . ' 00:00:00');
+    $in = implode(',', array_fill(0, count($statuses), '?'));
     $st = $pdo->prepare(
-        "SELECT id, status, send_at, created_at FROM dept_messages
+        "SELECT id, status, send_at, sent_at, created_at FROM dept_messages
           WHERE subject = ? AND body = ? AND audience = ? AND COALESCE(department_ids, '') = ? AND COALESCE(event_id, 0) = ?
-            AND status IN ('sent', 'sending', 'scheduled') AND created_at >= ?
+            AND status IN ({$in}) AND send_at >= ? AND send_at < ? AND id <> ?
           ORDER BY id DESC LIMIT 1"
     );
     // Bound with their types: SQLite compares COALESCE(event_id, 0) with a
     // number only when the value is bound as one.
-    $st->bindValue(1, trim(preg_replace('/\s+/u', ' ', $subject) ?? ''));
-    $st->bindValue(2, trim($body));
-    $st->bindValue(3, (string) $spec['audience']);
-    $st->bindValue(4, $spec['department_ids'] ? json_encode($spec['department_ids']) : '');
-    $st->bindValue(5, (int) ($spec['event_id'] ?? 0), PDO::PARAM_INT);
-    $st->bindValue(6, $now->modify('-' . max(1, $minutes) . ' minutes')->format('Y-m-d H:i:s'));
+    $i = 1;
+    $st->bindValue($i++, trim(preg_replace('/\s+/u', ' ', $subject) ?? ''));
+    $st->bindValue($i++, trim($body));
+    $st->bindValue($i++, (string) $spec['audience']);
+    $st->bindValue($i++, $spec['department_ids'] ? json_encode($spec['department_ids']) : '');
+    $st->bindValue($i++, (int) ($spec['event_id'] ?? 0), PDO::PARAM_INT);
+    foreach ($statuses as $status) {
+        $st->bindValue($i++, (string) $status);
+    }
+    $st->bindValue($i++, $start->format('Y-m-d H:i:s'));
+    $st->bindValue($i++, $start->modify('+1 day')->format('Y-m-d H:i:s'));
+    $st->bindValue($i, (int) ($excludeId ?? 0), PDO::PARAM_INT);
     $st->execute();
     $row = $st->fetch(PDO::FETCH_ASSOC);
 
     return $row ?: null;
 }
 
-/** "Already sent 4 minutes ago" / "Already scheduled for 6:00 PM", for the repeat check. */
-function dept_msg_twin_line(array $twin, DateTimeImmutable $now): string
+/** Why the same message cannot go again today, in one line. */
+function dept_msg_twin_line(array $twin): string
 {
     if ($twin['status'] === 'scheduled') {
-        return 'The same message is already scheduled for ' . date('g:i A', strtotime((string) $twin['send_at'])) . '. Send it again?';
+        return 'This is already scheduled for ' . date('g:i A', strtotime((string) $twin['send_at'])) . '. Cancel it or change the words.';
     }
-    $mins = max(0, (int) floor(($now->getTimestamp() - strtotime((string) $twin['created_at'])) / 60));
+    $at = (string) ($twin['sent_at'] ?: $twin['send_at']);
 
-    return 'The same message went to them ' . ($mins < 1 ? 'just now' : $mins . ' minute' . ($mins === 1 ? '' : 's') . ' ago') . '. Send it again?';
+    return 'This went to them today at ' . date('g:i A', strtotime($at)) . '. Change the words to send something new.';
 }
 
 function dept_msg_get(PDO $pdo, int $id): ?array
@@ -580,7 +598,7 @@ function dept_msg_expand(PDO $pdo, array $row, int $yearId, array $leaderRoles =
         $people = dept_msg_people($pdo, dept_msg_row_spec($row), $yearId, $leaderRoles);
         $sms = dept_msg_sms_recipients($people);
         $email = dept_msg_email_targets($pdo, $people);
-        $counts = ['people' => count($people),
+        $counts = ['people' => count($people), 'recipients' => array_map(static fn ($p) => $p['user_id'], $people),
             'sms' => ['queued' => 0, 'no_phone' => $sms['no_phone'], 'invalid' => $sms['invalid'], 'duplicates' => $sms['duplicates']],
             'email' => ['queued' => 0, 'skipped' => $email['skipped']],
             'push' => ['queued' => 0]];
@@ -644,6 +662,13 @@ function dept_msg_tick(PDO $pdo, ?string $now = null, array $channels = [], ?int
         if (!dept_msg_claim($pdo, (int) $row['id'])) {
             continue;
         }
+        $twin = dept_msg_same_day_twin($pdo, dept_msg_row_spec($row), (string) $row['subject'], (string) $row['body'],
+            substr((string) $row['send_at'], 0, 10), (int) $row['id'], ['sent', 'sending']);
+        if ($twin !== null) {
+            $pdo->prepare("UPDATE dept_messages SET status = 'cancelled', error_message = ? WHERE id = ?")
+                ->execute(['Not sent: the same message already went to them that day.', (int) $row['id']]);
+            continue;
+        }
         $result = dept_msg_expand($pdo, $row, $yearId, $leaderRoles, $channels, false);
         $sent++;
         // Tell the sender how it went (their bell, so a push too).
@@ -665,6 +690,54 @@ function dept_msg_tick(PDO $pdo, ?string $now = null, array $channels = [], ?int
     return $sent;
 }
 
+/** Is the email outbox installed? */
+function dept_msg_has_outbox(PDO $pdo): bool
+{
+    try {
+        $pdo->query('SELECT flow FROM email_outbox LIMIT 0');
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/** One message for the screen: what it is, who sent it, how far each channel got. */
+function dept_msg_item(PDO $pdo, array $r): array
+{
+    $item = [
+        'id' => (int) $r['id'], 'subject' => (string) $r['subject'], 'body' => (string) $r['body'],
+        'audience' => (string) $r['audience'], 'audience_label' => DEPT_MSG_AUDIENCES[$r['audience']] ?? $r['audience'],
+        'status' => (string) $r['status'], 'send_at' => (string) $r['send_at'], 'sent_at' => $r['sent_at'],
+        'by' => trim(((string) ($r['by_first'] ?? '')) . ' ' . ((string) ($r['by_last'] ?? ''))),
+        'counts' => $r['counts_json'] ? (json_decode((string) $r['counts_json'], true) ?: []) : [],
+        'error' => $r['error_message'], 'sms' => null, 'email' => null,
+    ];
+    unset($item['counts']['recipients']);   // the list is for the detail view only
+    if ($r['sms_campaign_id'] !== null) {
+        try {
+            $st = $pdo->prepare('SELECT total, sent_count, failed_count, status FROM sms_campaigns WHERE id = ?');
+            $st->execute([(int) $r['sms_campaign_id']]);
+            $c = $st->fetch(PDO::FETCH_ASSOC);
+            if ($c) {
+                $item['sms'] = ['total' => (int) $c['total'], 'sent' => (int) $c['sent_count'], 'failed' => (int) $c['failed_count'], 'status' => (string) $c['status']];
+            }
+        } catch (Throwable $e) {
+            // SMS tables missing: leave it out
+        }
+    }
+    if ($r['status'] === 'sent' && dept_msg_has_outbox($pdo)) {
+        $st = $pdo->prepare('SELECT status, COUNT(*) AS n FROM email_outbox WHERE flow = ? GROUP BY status');
+        $st->execute(['dept-msg-' . (int) $r['id']]);
+        $by = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $m) {
+            $by[(string) $m['status']] = (int) $m['n'];
+        }
+        $item['email'] = $by;
+    }
+
+    return $item;
+}
+
 /**
  * Recent messages with how far each channel has got.
  *
@@ -678,47 +751,123 @@ function dept_msg_history(PDO $pdo, int $limit = 30): array
           ORDER BY m.created_at DESC, m.id DESC LIMIT ' . max(1, min(100, $limit))
     )->fetchAll(PDO::FETCH_ASSOC);
 
-    $outbox = false;
-    try {
-        $pdo->query('SELECT flow FROM email_outbox LIMIT 0');
-        $outbox = true;
-    } catch (Throwable $e) {
-        // email not installed
-    }
-    $sms = $pdo->prepare('SELECT total, sent_count, failed_count, status FROM sms_campaigns WHERE id = ?');
-    $mail = $outbox ? $pdo->prepare('SELECT status, COUNT(*) AS n FROM email_outbox WHERE flow = ? GROUP BY status') : null;
+    return array_map(static fn ($r) => dept_msg_item($pdo, $r), $rows);
+}
 
-    $out = [];
-    foreach ($rows as $r) {
-        $item = [
-            'id' => (int) $r['id'], 'subject' => (string) $r['subject'], 'body' => (string) $r['body'],
-            'audience' => (string) $r['audience'], 'audience_label' => DEPT_MSG_AUDIENCES[$r['audience']] ?? $r['audience'],
-            'status' => (string) $r['status'], 'send_at' => (string) $r['send_at'], 'sent_at' => $r['sent_at'],
-            'by' => trim(((string) $r['by_first']) . ' ' . ((string) $r['by_last'])),
-            'counts' => $r['counts_json'] ? (json_decode((string) $r['counts_json'], true) ?: []) : [],
-            'error' => $r['error_message'], 'sms' => null, 'email' => null,
-        ];
-        if ($r['sms_campaign_id'] !== null) {
-            try {
-                $sms->execute([(int) $r['sms_campaign_id']]);
-                $c = $sms->fetch(PDO::FETCH_ASSOC);
-                if ($c) {
-                    $item['sms'] = ['total' => (int) $c['total'], 'sent' => (int) $c['sent_count'], 'failed' => (int) $c['failed_count'], 'status' => (string) $c['status']];
+/** A text's state in words the screen shows: delivered | awaiting | failed | blocked | unknown | waiting | cancelled. */
+function dept_msg_sms_state(?string $logStatus, string $queueStatus): string
+{
+    if ($logStatus !== null && $logStatus !== '') {
+        return match ($logStatus) {
+            'delivered' => 'delivered',
+            'sent', 'pending', 'submitted' => 'awaiting',
+            'blocked' => 'blocked',
+            'unknown' => 'unknown',
+            'queued', 'sending' => 'waiting',
+            default => 'failed',   // failed, invalid, error
+        };
+    }
+    return match ($queueStatus) {
+        'queued', 'sending' => 'waiting',
+        'cancelled' => 'cancelled',
+        'sent' => 'awaiting',
+        default => 'failed',
+    };
+}
+
+/** An email's state in words the screen shows: sent | waiting | not_sent | failed. */
+function dept_msg_email_state(string $status): string
+{
+    return match ($status) {
+        'sent' => 'sent',
+        'queued', 'sending', 'pending' => 'waiting',
+        'failed', 'unknown' => 'failed',
+        default => 'not_sent',   // suppressed, cancelled, dropped
+    };
+}
+
+/**
+ * One message with every person it went to: their text and their email, as
+ * far as each has got. Null when there is no such message.
+ */
+function dept_msg_detail(PDO $pdo, int $id): ?array
+{
+    $st = $pdo->prepare('SELECT m.*, u.first_name AS by_first, u.last_name AS by_last
+                           FROM dept_messages m LEFT JOIN users u ON u.id = m.created_by WHERE m.id = ?');
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return null;
+    }
+    $counts = $row['counts_json'] ? (json_decode((string) $row['counts_json'], true) ?: []) : [];
+    $people = [];
+    foreach ((array) ($counts['recipients'] ?? []) as $uid) {
+        $people[(int) $uid] = ['user_id' => (int) $uid, 'name' => '', 'phone' => '', 'sms' => null, 'sms_note' => null,
+            'email' => null, 'email_state' => null, 'email_note' => null];
+    }
+    $blank = static fn (int $uid): array => ['user_id' => $uid, 'name' => '', 'phone' => '', 'sms' => null, 'sms_note' => null,
+        'email' => null, 'email_state' => null, 'email_note' => null];
+
+    $sms = ['total' => 0, 'delivered' => 0, 'awaiting' => 0, 'waiting' => 0, 'failed' => 0, 'blocked' => 0, 'unknown' => 0, 'cancelled' => 0];
+    if ($row['sms_campaign_id'] !== null) {
+        try {
+            $q = $pdo->prepare('SELECT q.recipient_json, q.status AS q_status, q.error_message AS q_error, l.status AS l_status, l.error_message AS l_error
+                                  FROM sms_queue q LEFT JOIN sms_log l ON l.id = q.log_id WHERE q.campaign_id = ?');
+            $q->execute([(int) $row['sms_campaign_id']]);
+            foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $t) {
+                $rec = json_decode((string) $t['recipient_json'], true) ?: [];
+                $uid = (int) ($rec['source_id'] ?? 0);
+                $state = dept_msg_sms_state($t['l_status'] !== null ? (string) $t['l_status'] : null, (string) $t['q_status']);
+                $sms['total']++;
+                $sms[$state]++;
+                if ($uid > 0) {
+                    $people[$uid] = ($people[$uid] ?? $blank($uid));
+                    $people[$uid]['sms'] = $state;
+                    $people[$uid]['phone'] = (string) ($rec['phone'] ?? '');
+                    $note = (string) ($t['l_error'] ?? $t['q_error'] ?? '');
+                    $people[$uid]['sms_note'] = in_array($state, ['failed', 'blocked'], true) && $note !== '' ? mb_substr($note, 0, 160, 'UTF-8') : null;
                 }
-            } catch (Throwable $e) {
-                // SMS tables missing: leave it out
             }
+        } catch (Throwable $e) {
+            error_log('[dept_messages] text details for message ' . $id . ' unavailable: ' . $e->getMessage());
         }
-        if ($mail !== null && $r['status'] === 'sent') {
-            $mail->execute(['dept-msg-' . (int) $r['id']]);
-            $by = [];
-            foreach ($mail->fetchAll(PDO::FETCH_ASSOC) as $m) {
-                $by[(string) $m['status']] = (int) $m['n'];
-            }
-            $item['email'] = $by;
-        }
-        $out[] = $item;
     }
 
-    return $out;
+    $email = ['total' => 0, 'sent' => 0, 'waiting' => 0, 'failed' => 0, 'not_sent' => 0];
+    if (dept_msg_has_outbox($pdo)) {
+        $e = $pdo->prepare('SELECT user_id, to_email, status, last_error FROM email_outbox WHERE flow = ?');
+        $e->execute(['dept-msg-' . $id]);
+        foreach ($e->fetchAll(PDO::FETCH_ASSOC) as $m) {
+            $state = dept_msg_email_state((string) $m['status']);
+            $email['total']++;
+            $email[$state]++;
+            $uid = (int) ($m['user_id'] ?? 0);
+            if ($uid > 0) {
+                $people[$uid] = ($people[$uid] ?? $blank($uid));
+                $people[$uid]['email'] = (string) $m['to_email'];
+                $people[$uid]['email_state'] = $state;
+                $people[$uid]['email_note'] = in_array($state, ['failed', 'not_sent'], true) && $m['last_error'] ? mb_substr((string) $m['last_error'], 0, 160, 'UTF-8') : null;
+            }
+        }
+    }
+
+    if ($people) {
+        $ids = array_keys($people);
+        $u = $pdo->prepare('SELECT id, first_name, last_name, phone FROM users WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')');
+        $u->execute($ids);
+        foreach ($u->fetchAll(PDO::FETCH_ASSOC) as $p) {
+            $people[(int) $p['id']]['name'] = trim($p['first_name'] . ' ' . $p['last_name']);
+            if ($people[(int) $p['id']]['phone'] === '') {
+                $people[(int) $p['id']]['phone'] = (string) ($p['phone'] ?? '');
+            }
+        }
+    }
+    $people = array_values($people);
+    usort($people, static fn ($a, $b) => strcasecmp($a['name'], $b['name']));
+
+    return [
+        'message' => dept_msg_item($pdo, $row),
+        'summary' => ['sms' => $sms, 'email' => $email, 'push' => (int) ($counts['push']['queued'] ?? 0), 'people' => count($people)],
+        'people' => $people,
+    ];
 }

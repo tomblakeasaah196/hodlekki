@@ -33,7 +33,7 @@ return [
     '/assets/ui/js/pages/contact-extractor.js' => '0f42ead54a34',
     '/assets/ui/js/pages/dashboard.js' => 'eee88a1ac84b',
     '/assets/ui/js/pages/departments-attendance.js' => 'f7cd6c7df744',
-    '/assets/ui/js/pages/departments-messages.js' => 'a7db78047747',
+    '/assets/ui/js/pages/departments-messages.js' => '4ae11fe852b0',
     '/assets/ui/js/pages/departments.js' => '355430a60a4c',
     '/assets/ui/js/pages/embrace.js' => '8320d766e6e4',
     '/assets/ui/js/pages/envision.js' => 'f9af3c8f70bf',

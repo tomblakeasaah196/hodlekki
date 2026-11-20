@@ -64,6 +64,7 @@ function dm_db(): PDO
         'ALTER TABLE events ADD COLUMN is_closed INTEGER DEFAULT 0',
         'ALTER TABLE checkins ADD COLUMN checked_in_at TEXT',
         'ALTER TABLE users ADD COLUMN phone_status TEXT',
+        'ALTER TABLE sms_log ADD COLUMN error_message TEXT',   // production has it (20261004090000)
         "CREATE TABLE dept_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, subject TEXT NOT NULL, body TEXT NOT NULL,
             audience TEXT NOT NULL, department_ids TEXT, include_subunits INTEGER NOT NULL DEFAULT 1, event_id INTEGER,
             send_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled', sms_campaign_id INTEGER, counts_json TEXT,
@@ -276,24 +277,90 @@ $sent = array_values(array_filter($h, static fn ($x) => $x['id'] === $a))[0];
 $eq('a sent message shows its counts', [1, 'Leaders'], [$sent['counts']['push']['queued'], $sent['audience_label']]);
 
 // ===========================================================================
-ct_section('6b. The same message twice');
+ct_section('6b. The same message to the same group: once a day, no override');
 // ===========================================================================
 $pdo->exec('DELETE FROM dept_messages');
 $t0 = new DateTimeImmutable('2026-11-20 12:00:00');
-$sentOne = dept_msg_create($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', null, 900, $t0);
-$pdo->exec("UPDATE dept_messages SET status = 'sent' WHERE id = " . (int) $sentOne['id']);
-$twin = dept_msg_recent_twin($pdo, $spec('all'), ' Workers   meeting ', "Dear {{first_name}}, 10 PM.\n", $t0->modify('+4 minutes'));
-$eq('the same message to the same people minutes later is caught', $sentOne['id'], $twin === null ? null : (int) $twin['id']);
-$eq('…and said plainly', 'The same message went to them 4 minutes ago. Send it again?', dept_msg_twin_line($twin, $t0->modify('+4 minutes')));
-$eq('after 30 minutes it is a new message', null, dept_msg_recent_twin($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', $t0->modify('+31 minutes')));
-$eq('another audience is a new message', null, dept_msg_recent_twin($pdo, $spec('leaders'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', $t0->modify('+4 minutes')));
-$eq('other departments are a new message', null, dept_msg_recent_twin($pdo, $spec('departments', ['department_ids' => [2]]), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', $t0->modify('+4 minutes')));
-$eq('changed words are a new message', null, dept_msg_recent_twin($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10:30 PM.', $t0->modify('+4 minutes')));
-$pdo->exec("UPDATE dept_messages SET status = 'cancelled' WHERE id = " . (int) $sentOne['id']);
-$eq('a cancelled one does not count', null, dept_msg_recent_twin($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', $t0->modify('+4 minutes')));
+$first = dept_msg_create($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', null, 900, $t0);
+$pdo->exec("UPDATE dept_messages SET status = 'sent', sent_at = '2026-11-20 12:00:05' WHERE id = " . (int) $first['id']);
+$again = dept_msg_create($pdo, $spec('all'), ' Workers   meeting ', "Dear {{first_name}}, 10 PM.\n", null, 900, $t0->modify('+4 minutes'));
+$eq('a second send minutes later is refused', [false, 'repeat'], [$again['ok'], $again['code'] ?? null]);
+$eq('…and says why, with no way round it', 'This went to them today at 12:00 PM. Change the words to send something new.', $again['message']);
+$eq('…six hours later too: the rest of the day', false, dept_msg_create($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', null, 900, $t0->modify('+6 hours'))['ok']);
+$eq('…and scheduling it for later today', false, dept_msg_create($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', '2026-11-20T21:00', 900, $t0)['ok']);
+$eq('only one row was ever stored', 1, (int) $pdo->query('SELECT COUNT(*) FROM dept_messages')->fetchColumn());
+$eq('tomorrow it is a new day', true, dept_msg_create($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', '2026-11-21T09:00', 900, $t0)['ok']);
+$eq('another group may get it today', true, dept_msg_create($pdo, $spec('leaders'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', null, 900, $t0)['ok']);
+$eq('other departments may get it today', true, dept_msg_create($pdo, $spec('departments', ['department_ids' => [2]]), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', null, 900, $t0)['ok']);
+$eq('changed words are a new message', true, dept_msg_create($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10:30 PM.', null, 900, $t0)['ok']);
+$pdo->exec('DELETE FROM dept_messages');
 $sched = dept_msg_create($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', '2026-11-20T18:00', 900, $t0);
-$tw = dept_msg_recent_twin($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', $t0->modify('+1 minute'));
-$eq('a scheduled twin says when it goes', 'The same message is already scheduled for 6:00 PM. Send it again?', dept_msg_twin_line($tw, $t0->modify('+1 minute')));
+$now2 = dept_msg_create($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', null, 900, $t0->modify('+1 minute'));
+$eq('a send-now of a message already scheduled today is refused', 'This is already scheduled for 6:00 PM. Cancel it or change the words.', $now2['message'] ?? null);
+dept_msg_cancel($pdo, $sched['id']);
+$eq('once cancelled, it may be sent', true, dept_msg_create($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', null, 900, $t0->modify('+2 minutes'))['ok']);
+// Belt and braces: a scheduled twin that slipped in is stopped when it is due.
+$pdo->exec("INSERT INTO dept_messages (subject, body, audience, include_subunits, send_at, status, created_by, created_at)
+            VALUES ('Workers meeting', 'Dear {{first_name}}, 10 PM.', 'all', 0, '2026-11-20 18:00:00', 'scheduled', 900, '2026-11-20 12:30:00')");
+$slipped = (int) $pdo->lastInsertId();
+$pdo->exec("UPDATE dept_messages SET status = 'sent' WHERE status = 'sending'");
+$calls = [];
+$eq('when due, it does not go out', 0, dept_msg_tick($pdo, '2026-11-20 18:00:30', $fakeAll, 1, $LEAD));
+$eq('…nothing was sent through any channel', [], $calls);
+$eq('…and the row says why', ['cancelled', 'Not sent: the same message already went to them that day.'],
+    [dept_msg_get($pdo, $slipped)['status'], dept_msg_get($pdo, $slipped)['error_message']]);
+
+// ===========================================================================
+ct_section('6c. Delivery, person by person');
+// ===========================================================================
+$pdo->exec('DELETE FROM dept_messages');
+$pdo->exec('DELETE FROM sms_queue');
+$pdo->exec('DELETE FROM sms_log');
+ct_at('2026-11-20 13:00');
+$msg = dept_msg_create($pdo, $spec('all'), 'Detail check', "Dear {{first_name}},\nSee you.", null, 900, new DateTimeImmutable('2026-11-20 13:00:00'));
+$smsInto = static function (PDO $pdo, array $row, array $recipients): array {
+    $pdo->prepare("INSERT INTO sms_campaigns (title, audience, body_template, total, status) VALUES ('t', 'departments', 'b', ?, 'queued')")->execute([count($recipients)]);
+    $cid = (int) $pdo->lastInsertId();
+    foreach ($recipients as $rec) {
+        $pdo->prepare("INSERT INTO sms_queue (campaign_id, recipient_json, status) VALUES (?, ?, 'queued')")->execute([$cid, json_encode($rec)]);
+    }
+    return ['ok' => true, 'campaign_id' => $cid, 'queued' => count($recipients), 'units' => count($recipients)];
+};
+$r = dept_msg_expand($pdo, $msg['row'], 1, $LEAD, ['sms' => $smsInto], true);
+$ok('sent through all three', $r['ok']);
+$eq('the people it went to are kept on the row', [101, 102, 103, 104, 107, 108, 109, 110],
+    json_decode((string) dept_msg_get($pdo, $msg['id'])['counts_json'], true)['recipients']);
+// The SMS worker's progress: Ada delivered, Bayo awaiting a report, Gbenga failed, Ife still queued, Jide blocked.
+$cid = (int) dept_msg_get($pdo, $msg['id'])['sms_campaign_id'];
+$set = static function (string $phone, string $qStatus, ?string $logStatus, ?string $err = null) use ($pdo, $cid): void {
+    $logId = null;
+    if ($logStatus !== null) {
+        $pdo->prepare('INSERT INTO sms_log (campaign_id, recipient_phone, body, status) VALUES (?, ?, ?, ?)')->execute([$cid, $phone, 'x', $logStatus]);
+        $logId = (int) $pdo->lastInsertId();
+    }
+    $pdo->prepare("UPDATE sms_queue SET status = ?, log_id = ?, error_message = ? WHERE campaign_id = ? AND recipient_json LIKE ?")
+        ->execute([$qStatus, $logId, $err, $cid, '%"' . $phone . '"%']);
+};
+$set('2348031112222', 'sent', 'delivered');
+$set('2348033334444', 'sent', 'sent');
+$set('2348070000000', 'failed', 'failed', 'Number not reachable');
+$set('2348100000000', 'sent', 'blocked', 'Same text within 24 hours');
+$email_worker = email_worker_run($pdo, ['endpoints_ready' => true, 'transport' => ct_transport([['ok' => true, 'error' => null], ['ok' => false, 'error' => '550 5.1.1 User unknown']]), 'now' => campaigns_now()]);
+$d = dept_msg_detail($pdo, $msg['id']);
+$eq('text summary: one delivered, one awaiting, one failed, one blocked, one waiting', ['total' => 5, 'delivered' => 1, 'awaiting' => 1, 'waiting' => 1, 'failed' => 1, 'blocked' => 1, 'unknown' => 0, 'cancelled' => 0],
+    $d['summary']['sms']);
+$eq('email summary counts all four', 4, $d['summary']['email']['total']);
+$ok('…one sent, one failed (the 550)', $d['summary']['email']['sent'] >= 1 && $d['summary']['email']['failed'] + $d['summary']['email']['not_sent'] >= 1);
+$eq('alerts', 8, $d['summary']['push']);
+$byName = array_column($d['people'], null, 'name');
+$eq('everyone it went to is listed, A to Z', ['Ada Okoro', 'Bayo Lawal', 'Chi Eze', 'Dayo Ola', 'Gbenga Leader', 'Halima Audio', 'Ife Audio', 'Jide Gone'], array_column($d['people'], 'name'));
+$eq('Ada: delivered, with her email', ['delivered', 'ada.okoro@gmail.com'], [$byName['Ada Okoro']['sms'], $byName['Ada Okoro']['email']]);
+$eq('Gbenga: failed, with the reason', ['failed', 'Number not reachable'], [$byName['Gbenga Leader']['sms'], $byName['Gbenga Leader']['sms_note']]);
+$eq('Jide: blocked, and no email (unsubscribed)', ['blocked', null], [$byName['Jide Gone']['sms'], $byName['Jide Gone']['email']]);
+$eq('Chi: no text of his own (shares Ada\'s number), no email (@hodlc.com)', [null, null], [$byName['Chi Eze']['sms'], $byName['Chi Eze']['email']]);
+$eq('Ife: still queued', 'waiting', $byName['Ife Audio']['sms']);
+$eq('an unknown message has no details', null, dept_msg_detail($pdo, 99999));
+$eq('the list behind it never leaves in the history view', false, isset(dept_msg_history($pdo)[0]['counts']['recipients']));
 
 // ===========================================================================
 ct_section('7. Wiring');
@@ -303,10 +370,13 @@ $page = (string) file_get_contents(__DIR__ . '/../modules/departments/index.php'
 $js = (string) file_get_contents(__DIR__ . '/../assets/ui/js/pages/departments-messages.js');
 $ok('the endpoint lets only SMS Studio users send', str_contains($api, "if (!sms_user_can_send()) {\n                dept_fail('Only SMS Studio users"));
 $ok('a double tap sends once (compose token)', str_contains($api, "\$_SESSION['dept_msg_tokens']"));
-$ok('a repeat within 30 minutes is refused unless confirmed', str_contains($api, "if (empty(\$_POST['confirm_repeat'])) {") && str_contains($api, "dept_fail(dept_msg_twin_line(\$twin, new DateTimeImmutable('now')), 'repeat');"));
+$ok('a repeat the same day is refused, with no override', str_contains($api, "dept_fail(\$created['message'], \$created['code'] ?? 'error');")
+    && !str_contains($api, 'confirm_repeat') && !str_contains($js, 'confirm_repeat') && !str_contains($js, 'Send again'));
 $ok('after a send the form makes way for the result (no second tap)', str_contains($js, '$form.hidden = true;') && str_contains($js, '$done.hidden = false;')
     && str_contains($page, 'id="dmsg-done"'));
-$ok('a repeat is sent again only after "Send again"', str_contains($js, "err.code === 'repeat'") && str_contains($js, "data.confirm_repeat = '1'"));
+$ok('the result card follows delivery live', str_contains($js, 'function startLive()') && str_contains($page, 'id="dmsg-done-progress"'));
+$ok('a row in the list opens its delivery', str_contains($js, "main.setAttribute('data-action', 'dmsg.detail');") && str_contains($page, "ui_dialog_start('dmsg-detail'")
+    && str_contains($api, "case 'msg_detail':"));
 $ok('a send-now is strict: no texts, nothing goes', str_contains($api, 'dept_msg_expand($pdo, $created[\'row\'], $year_id, $leader_roles, [], true)'));
 $cron = (string) file_get_contents(__DIR__ . '/../cron/sms_queue_worker.php');
 $ok('the SMS cron sends due messages before the queue, and cannot be stopped by them',
