@@ -276,18 +276,42 @@ $sent = array_values(array_filter($h, static fn ($x) => $x['id'] === $a))[0];
 $eq('a sent message shows its counts', [1, 'Leaders'], [$sent['counts']['push']['queued'], $sent['audience_label']]);
 
 // ===========================================================================
+ct_section('6b. The same message twice');
+// ===========================================================================
+$pdo->exec('DELETE FROM dept_messages');
+$t0 = new DateTimeImmutable('2026-11-20 12:00:00');
+$sentOne = dept_msg_create($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', null, 900, $t0);
+$pdo->exec("UPDATE dept_messages SET status = 'sent' WHERE id = " . (int) $sentOne['id']);
+$twin = dept_msg_recent_twin($pdo, $spec('all'), ' Workers   meeting ', "Dear {{first_name}}, 10 PM.\n", $t0->modify('+4 minutes'));
+$eq('the same message to the same people minutes later is caught', $sentOne['id'], $twin === null ? null : (int) $twin['id']);
+$eq('…and said plainly', 'The same message went to them 4 minutes ago. Send it again?', dept_msg_twin_line($twin, $t0->modify('+4 minutes')));
+$eq('after 30 minutes it is a new message', null, dept_msg_recent_twin($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', $t0->modify('+31 minutes')));
+$eq('another audience is a new message', null, dept_msg_recent_twin($pdo, $spec('leaders'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', $t0->modify('+4 minutes')));
+$eq('other departments are a new message', null, dept_msg_recent_twin($pdo, $spec('departments', ['department_ids' => [2]]), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', $t0->modify('+4 minutes')));
+$eq('changed words are a new message', null, dept_msg_recent_twin($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10:30 PM.', $t0->modify('+4 minutes')));
+$pdo->exec("UPDATE dept_messages SET status = 'cancelled' WHERE id = " . (int) $sentOne['id']);
+$eq('a cancelled one does not count', null, dept_msg_recent_twin($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', $t0->modify('+4 minutes')));
+$sched = dept_msg_create($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', '2026-11-20T18:00', 900, $t0);
+$tw = dept_msg_recent_twin($pdo, $spec('all'), 'Workers meeting', 'Dear {{first_name}}, 10 PM.', $t0->modify('+1 minute'));
+$eq('a scheduled twin says when it goes', 'The same message is already scheduled for 6:00 PM. Send it again?', dept_msg_twin_line($tw, $t0->modify('+1 minute')));
+
+// ===========================================================================
 ct_section('7. Wiring');
 // ===========================================================================
 $api = (string) file_get_contents(__DIR__ . '/../api/department_api.php');
+$page = (string) file_get_contents(__DIR__ . '/../modules/departments/index.php');
+$js = (string) file_get_contents(__DIR__ . '/../assets/ui/js/pages/departments-messages.js');
 $ok('the endpoint lets only SMS Studio users send', str_contains($api, "if (!sms_user_can_send()) {\n                dept_fail('Only SMS Studio users"));
 $ok('a double tap sends once (compose token)', str_contains($api, "\$_SESSION['dept_msg_tokens']"));
+$ok('a repeat within 30 minutes is refused unless confirmed', str_contains($api, "if (empty(\$_POST['confirm_repeat'])) {") && str_contains($api, "dept_fail(dept_msg_twin_line(\$twin, new DateTimeImmutable('now')), 'repeat');"));
+$ok('after a send the form makes way for the result (no second tap)', str_contains($js, '$form.hidden = true;') && str_contains($js, '$done.hidden = false;')
+    && str_contains($page, 'id="dmsg-done"'));
+$ok('a repeat is sent again only after "Send again"', str_contains($js, "err.code === 'repeat'") && str_contains($js, "data.confirm_repeat = '1'"));
 $ok('a send-now is strict: no texts, nothing goes', str_contains($api, 'dept_msg_expand($pdo, $created[\'row\'], $year_id, $leader_roles, [], true)'));
 $cron = (string) file_get_contents(__DIR__ . '/../cron/sms_queue_worker.php');
 $ok('the SMS cron sends due messages before the queue, and cannot be stopped by them',
     strpos($cron, 'dept_msg_tick($pdo)') < strpos($cron, "sms_process_queue(\$pdo, 55, 'cron')") && str_contains($cron, "workers\\' messages:"));
-$page = (string) file_get_contents(__DIR__ . '/../modules/departments/index.php');
 $ok('the tab shows only to SMS Studio users', str_contains($page, "\$deptCanMessage = can('sms_studio', 'view');"));
-$js = (string) file_get_contents(__DIR__ . '/../assets/ui/js/pages/departments-messages.js');
 preg_match_all("/call\\('(msg_[a-z_]+)'/", $js, $m);
 $missing = array_filter(array_unique($m[1]), static fn ($a) => !str_contains($api, "case '{$a}':"));
 $eq('every action the script calls exists in the API', [], array_values($missing));

@@ -225,6 +225,11 @@ spend the SMS wallet.
    9:50 PM reaches whoever is still absent then). *Cancel* stops it until it goes.
 7. **Templates**: *Save template* keeps the message under the subject's name; it
    is the same list as SMS Studio's templates.
+8. **After you send**, the form makes way for the result ("Sent to 66 workers",
+   with the texts, emails and alerts), so it cannot be sent twice by a second
+   tap. *New message* brings back an empty form; *See progress* jumps to the list.
+   Sending the **same** message to the same people again within 30 minutes asks
+   first ("The same message went to them 4 minutes ago. Send it again?").
 
 What happens to each part:
 

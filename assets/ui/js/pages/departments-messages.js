@@ -41,6 +41,7 @@
     var $template = document.getElementById('dmsg-template');
     var $history = document.getElementById('dmsg-history');
     var $historyCard = document.getElementById('dmsg-history-card');
+    var $done = document.getElementById('dmsg-done');
 
     /* ------------------------------------------------------------- helpers */
 
@@ -388,16 +389,76 @@
             message: later ? 'Who gets it is worked out at that time. ' + reach : reach,
             confirmLabel: later ? 'Schedule' : 'Send now'
         }).then(function (ok) {
-            if (!ok) return;
-            HOD.busy($send, true);
-            call('msg_send', Object.assign(spec(), {
-                subject: $subject.value, body: $body.value, when: later ? 'later' : 'now', send_at: $at.value, client_token: state.token
-            })).then(function (res) {
-                HOD.toast(res.message || 'Done.', 'success');
-                state.token = newToken();
-                refreshHistory();
-            }).catch(function () { /* toast shown; the same token stops a double send on retry */ }).then(function () { HOD.busy($send, false); });
+            if (ok) send(later, false);
         });
+    });
+
+    // One send. A repeat of the same message within 30 minutes comes back as
+    // code 'repeat' and is only sent again when the sender says so.
+    function send(later, repeat) {
+        HOD.busy($send, true);
+        lockForm(true);
+        var data = Object.assign(spec(), {
+            subject: $subject.value, body: $body.value, when: later ? 'later' : 'now', send_at: $at.value, client_token: state.token
+        });
+        if (repeat) data.confirm_repeat = '1';
+        function release() { HOD.busy($send, false); lockForm(false); }
+        call('msg_send', data, { quiet: true }).then(function (res) {
+            release();
+            state.token = newToken();
+            done(later, res);
+            refreshHistory();
+        }, function (err) {
+            release();
+            if (err && err.code === 'repeat') {
+                HOD.confirm({ title: 'Send it again?', message: err.message, confirmLabel: 'Send again', tone: 'danger' })
+                    .then(function (again) { if (again) send(later, true); });
+                return;
+            }
+            // The same token stays, so a retry after a lost reply cannot send twice.
+            HOD.toast((err && err.message) || 'It did not go out. Try again.', 'danger');
+        });
+    }
+
+    function lockForm(on) {
+        Array.prototype.forEach.call($form.querySelectorAll('input, select, textarea, button'), function (n) {
+            if (n !== $send) n.disabled = on;
+        });
+    }
+
+    // After a send: the form makes way for the result, so it cannot be sent
+    // twice by a second tap. "New message" brings back an empty form.
+    function done(later, res) {
+        var c = res.counts || {};
+        var title = later ? 'Message scheduled' : (res.duplicate ? 'Already sent' : 'Message sent');
+        var text = res.message || (later ? 'Scheduled.' : 'Sent.');
+        if (!later && c.people !== undefined) title = 'Sent to ' + plural(c.people, 'worker', 'workers');
+        $done.querySelector('.ui-empty__title').textContent = title;
+        $done.querySelector('.ui-empty__text').textContent = text + (later ? ' Cancel it below until it goes.' : ' Progress shows below.');
+        $form.hidden = true;
+        $done.hidden = false;
+        $done.focus();
+        $done.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        HOD.toast(title, { tone: 'success', detail: text, duration: 9000 });
+        $subject.value = '';
+        $body.value = '';
+        var now = $form.querySelector('input[name="when"][value="now"]');
+        if (now) now.checked = true;
+        $at.value = '';
+        $at.hidden = true;
+        $send.querySelector('span').textContent = 'Send now';
+        drawCounter();
+    }
+
+    HOD.actions.on('dmsg.new', function () {
+        $done.hidden = true;
+        $form.hidden = false;
+        $subject.focus();
+        schedulePreview();
+    });
+
+    HOD.actions.on('dmsg.progress', function () {
+        $historyCard.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
 
     HOD.actions.on('dmsg.cancel', function (b) {
@@ -414,6 +475,8 @@
     HOD.actions.on('dmsg.reuse', function (b) {
         var h = state.history.filter(function (x) { return String(x.id) === b.getAttribute('data-id'); })[0];
         if (!h) return;
+        $done.hidden = true;
+        $form.hidden = false;
         $subject.value = h.subject;
         $body.value = h.body;
         drawCounter();

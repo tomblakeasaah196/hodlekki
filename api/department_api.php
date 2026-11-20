@@ -1384,6 +1384,13 @@ try {
                 break;
             }
             $later = ($_POST['when'] ?? 'now') === 'later';
+            // The same message to the same people in the last 30 minutes: ask first.
+            if (empty($_POST['confirm_repeat'])) {
+                $twin = dept_msg_recent_twin($pdo, $spec, $subject, $body, new DateTimeImmutable('now'));
+                if ($twin !== null) {
+                    dept_fail(dept_msg_twin_line($twin, new DateTimeImmutable('now')), 'repeat');
+                }
+            }
             $created = dept_msg_create($pdo, $spec, $subject, $body, $later ? (string) ($_POST['send_at'] ?? '') : null, $user_id, new DateTimeImmutable('now'));
             if (!$created['ok']) {
                 dept_fail($created['message']);

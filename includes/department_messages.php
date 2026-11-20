@@ -380,6 +380,44 @@ function dept_msg_create(PDO $pdo, array $spec, string $subject, string $body, ?
     return ['ok' => true, 'id' => $id, 'row' => dept_msg_get($pdo, $id)];
 }
 
+/**
+ * The same message (subject, text and audience) already sent or scheduled in
+ * the last $minutes, or null. Stops a second tap on Send now reaching every
+ * worker twice; the sender can still confirm a deliberate repeat.
+ */
+function dept_msg_recent_twin(PDO $pdo, array $spec, string $subject, string $body, DateTimeImmutable $now, int $minutes = 30): ?array
+{
+    $st = $pdo->prepare(
+        "SELECT id, status, send_at, created_at FROM dept_messages
+          WHERE subject = ? AND body = ? AND audience = ? AND COALESCE(department_ids, '') = ? AND COALESCE(event_id, 0) = ?
+            AND status IN ('sent', 'sending', 'scheduled') AND created_at >= ?
+          ORDER BY id DESC LIMIT 1"
+    );
+    // Bound with their types: SQLite compares COALESCE(event_id, 0) with a
+    // number only when the value is bound as one.
+    $st->bindValue(1, trim(preg_replace('/\s+/u', ' ', $subject) ?? ''));
+    $st->bindValue(2, trim($body));
+    $st->bindValue(3, (string) $spec['audience']);
+    $st->bindValue(4, $spec['department_ids'] ? json_encode($spec['department_ids']) : '');
+    $st->bindValue(5, (int) ($spec['event_id'] ?? 0), PDO::PARAM_INT);
+    $st->bindValue(6, $now->modify('-' . max(1, $minutes) . ' minutes')->format('Y-m-d H:i:s'));
+    $st->execute();
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+
+    return $row ?: null;
+}
+
+/** "Already sent 4 minutes ago" / "Already scheduled for 6:00 PM", for the repeat check. */
+function dept_msg_twin_line(array $twin, DateTimeImmutable $now): string
+{
+    if ($twin['status'] === 'scheduled') {
+        return 'The same message is already scheduled for ' . date('g:i A', strtotime((string) $twin['send_at'])) . '. Send it again?';
+    }
+    $mins = max(0, (int) floor(($now->getTimestamp() - strtotime((string) $twin['created_at'])) / 60));
+
+    return 'The same message went to them ' . ($mins < 1 ? 'just now' : $mins . ' minute' . ($mins === 1 ? '' : 's') . ' ago') . '. Send it again?';
+}
+
 function dept_msg_get(PDO $pdo, int $id): ?array
 {
     $st = $pdo->prepare('SELECT * FROM dept_messages WHERE id = ?');

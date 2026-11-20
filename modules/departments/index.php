@@ -269,6 +269,12 @@ if ($deptCanMessage) {
                 </div>
             </form>
 
+            <section class="ui-card lg:col-span-2" id="dmsg-done" tabindex="-1" hidden>
+                <?= ui_empty(['icon' => 'circle-check', 'title' => 'Message sent', 'text' => 'Progress shows below.',
+                    'actions' => ui_button('New message', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-action' => 'dmsg.new']])
+                        . ui_button('See progress', ['variant' => 'secondary', 'icon' => 'activity', 'attrs' => ['data-action' => 'dmsg.progress']])]) ?>
+            </section>
+
             <aside class="ui-card" aria-labelledby="dmsg-sum-title">
                 <div class="ui-card__header ui-card__header--divided"><h2 class="ui-card__title" id="dmsg-sum-title">It reaches</h2></div>
                 <div class="ui-card__body ui-stack" id="dmsg-summary" aria-live="polite">
