@@ -1230,7 +1230,7 @@ try {
             break;
 
         // =====================================================================
-        // ACTIONS 16–23: MESSAGES — one message to workers by text, email and
+        // ACTIONS 16–24: MESSAGES — one message to workers by text, email and
         // app alert (includes/department_messages.php). SMS Studio users only.
         // =====================================================================
         case 'msg_boot':
@@ -1239,6 +1239,7 @@ try {
         case 'msg_test':
         case 'msg_cancel':
         case 'msg_history':
+        case 'msg_detail':
         case 'msg_template_save':
         case 'msg_template_get':
             if (!sms_user_can_send()) {
@@ -1286,6 +1287,14 @@ try {
                     'email_ready' => function_exists('email_news_address'),
                     'now' => date('Y-m-d\TH:i'),
                 ]);
+                break;
+            }
+            if ($action === 'msg_detail') {
+                $detail = dept_msg_detail($pdo, (int) ($_POST['id'] ?? 0));
+                if ($detail === null) {
+                    dept_fail('That message is gone.');
+                }
+                echo json_encode(['status' => 'success'] + $detail);
                 break;
             }
             if ($action === 'msg_template_get') {
@@ -1386,13 +1395,14 @@ try {
             $later = ($_POST['when'] ?? 'now') === 'later';
             $created = dept_msg_create($pdo, $spec, $subject, $body, $later ? (string) ($_POST['send_at'] ?? '') : null, $user_id, new DateTimeImmutable('now'));
             if (!$created['ok']) {
-                dept_fail($created['message']);
+                // 'repeat': the same message already went (or is scheduled) to them that day. No override.
+                dept_fail($created['message'], $created['code'] ?? 'error');
             }
             if ($token !== '') {
                 $_SESSION['dept_msg_tokens'][$token] = $created['id'];
             }
             if ($later) {
-                echo json_encode(['status' => 'success', 'message' => 'Scheduled for ' . date('j M, g:i A', strtotime($created['row']['send_at'])) . '.']);
+                echo json_encode(['status' => 'success', 'id' => $created['id'], 'message' => 'Scheduled for ' . date('j M, g:i A', strtotime($created['row']['send_at'])) . '.']);
                 break;
             }
             $result = dept_msg_expand($pdo, $created['row'], $year_id, $leader_roles, [], true);
@@ -1402,8 +1412,9 @@ try {
             $c = $result['counts'];
             echo json_encode([
                 'status' => 'success',
+                'id' => $created['id'],
                 'message' => sprintf('Sent: %d texts, %d emails, %d alerts.', $c['sms']['queued'], $c['email']['queued'], $c['push']['queued']),
-                'counts' => $c,
+                'counts' => ['people' => $c['people'], 'sms' => $c['sms'], 'email' => $c['email'], 'push' => $c['push']],
             ]);
             break;
 

@@ -269,6 +269,13 @@ if ($deptCanMessage) {
                 </div>
             </form>
 
+            <section class="ui-card lg:col-span-2" id="dmsg-done" tabindex="-1" hidden>
+                <?= ui_empty(['icon' => 'circle-check', 'title' => 'Message sent', 'text' => 'Delivery updates live.',
+                    'actions' => ui_button('View delivery', ['variant' => 'secondary', 'icon' => 'activity', 'attrs' => ['data-action' => 'dmsg.view-done']])
+                        . ui_button('New message', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-action' => 'dmsg.new']])]) ?>
+                <div class="grid gap-3 border-t border-line p-4 sm:grid-cols-3" id="dmsg-done-progress" aria-live="polite"></div>
+            </section>
+
             <aside class="ui-card" aria-labelledby="dmsg-sum-title">
                 <div class="ui-card__header ui-card__header--divided"><h2 class="ui-card__title" id="dmsg-sum-title">It reaches</h2></div>
                 <div class="ui-card__body ui-stack" id="dmsg-summary" aria-live="polite">
@@ -287,6 +294,18 @@ if ($deptCanMessage) {
     </section>
 <?php endif; ?>
 </div>
+
+<?php if ($deptCanMessage): ?>
+<?= ui_dialog_start('dmsg-detail', ['title' => 'Message details', 'size' => 'lg',
+    'actions' => ui_button('Refresh', ['variant' => 'ghost', 'icon' => 'refresh-cw', 'icon_only' => true, 'attrs' => ['data-action' => 'dmsg.detail-refresh']])]) ?>
+    <div class="ui-stack" id="dmsg-detail-body" aria-live="polite">
+        <div class="ui-loading"><span class="ui-spinner"></span><span>Loading…</span></div>
+    </div>
+<?= ui_dialog_end(
+    ui_button('Use again', ['variant' => 'ghost', 'icon' => 'copy', 'attrs' => ['data-action' => 'dmsg.reuse', 'id' => 'dmsg-detail-reuse']])
+    . ui_button('Close', ['variant' => 'secondary', 'attrs' => ['data-dialog-close' => true]])
+) ?>
+<?php endif; ?>
 
 <?= ui_dialog_start('dept-edit-dialog', ['title' => 'New department', 'size' => 'lg']) ?>
     <form class="ui-form" id="dept-edit-form" data-action="dept.save" novalidate>
