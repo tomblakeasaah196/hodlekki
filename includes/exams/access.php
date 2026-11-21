@@ -58,13 +58,48 @@ function exams_banks(PDO $pdo): array
     return $out;
 }
 
-/** May this person sit the exam? Their enrolment id, or null. */
+/**
+ * May this person sit the exam? Their enrolment id, or null. A standalone test (training kind 'test',
+ * includes/trainings/tests.php) is open to every member while published: opening it enrols them.
+ */
 function exams_learner_enrolment(PDO $pdo, array $item, int $userId): ?int
 {
     if (($item['training_status'] ?? 'published') !== 'published' || !can('trainings', 'view', perm_person($userId))) {
         return null;
     }
-    return exam_enrolment_id($pdo, (int) $item['training_id'], $userId);
+    $id = exam_enrolment_id($pdo, (int) $item['training_id'], $userId);
+    if ($id === null && exams_item_is_test($item)) {
+        exams_load_trainings();
+        $id = function_exists('trainings_test_enrol') ? trainings_test_enrol($pdo, (int) $item['training_id'], $userId) : null;
+    }
+    return $id;
+}
+
+/** Is this exam item a standalone test's? */
+function exams_item_is_test(array $item): bool
+{
+    return ($item['training_kind'] ?? '') === 'test';
+}
+
+/** PR 1's library (Trainings core), loaded on first use, as exam_progress_hook() does. */
+function exams_load_trainings(): void
+{
+    $core = dirname(__DIR__) . '/trainings/bootstrap.php';
+    if (!function_exists('trainings_get') && is_file($core)) {
+        require_once $core;
+    }
+}
+
+/** The learner's certificate link for this item's training, when one is held. */
+function exams_certificate_url(PDO $pdo, array $item, int $userId): ?string
+{
+    exams_load_trainings();
+    $enrolment = exam_enrolment_id($pdo, (int) $item['training_id'], $userId);
+    if ($enrolment === null || !function_exists('trainings_certs_ready') || !trainings_certs_ready($pdo)
+        || trainings_certificate_current($pdo, $enrolment) === null) {
+        return null;
+    }
+    return '/api/trainings_certificate.php?e=' . $enrolment;
 }
 
 /** A question as the tutor's screen shows it. */
@@ -106,7 +141,23 @@ function exams_setup_view(PDO $pdo, array $item): array
         'window' => $exam !== null ? exam_window($exam, $now) : 'not_set',
         'review' => $exam !== null ? exam_review_state($pdo, $exam, $now) : null,
         'pool' => array_map(static fn ($q) => exams_question_row($q) + ['shared' => $q['training_id'] === null], $pool),
+        'test' => exams_test_setup($pdo, $item),
     ];
+}
+
+/** A standalone test's own settings for its set-up page (null for a course exam). */
+function exams_test_setup(PDO $pdo, array $item): ?array
+{
+    if (!exams_item_is_test($item)) {
+        return null;
+    }
+    exams_load_trainings();
+    $t = function_exists('trainings_get') ? trainings_get($pdo, (int) $item['training_id']) : null;
+    if ($t === null) {
+        return null;
+    }
+    return ['title' => (string) $t['title'], 'status' => (string) $t['status'], 'gives_certificate' => (bool) $t['gives_certificate'],
+            'url' => trainings_test_url((int) $item['id'])];
 }
 
 /** What the learner's page shows before, during and after. */
@@ -124,6 +175,7 @@ function exams_take_view(PDO $pdo, array $item, int $userId): array
     $best = $st['best'];
     $view = [
         'item' => ['title' => $item['title'], 'training' => $item['training_title']],
+        'test' => exams_item_is_test($item),
         'window' => exam_window($exam, $now),
         'opens' => $exam['window_open'], 'closes' => $exam['window_close'],
         'minutes' => $exam['minutes'], 'questions' => count($exam['question_ids']), 'pass_percent' => $exam['pass_percent'],
@@ -144,7 +196,8 @@ function exams_take_view(PDO $pdo, array $item, int $userId): array
     if ($attempt['status'] === 'started') {
         return $view + ['state' => 'started', 'paper' => exam_paper($pdo, $attempt, $now)];
     }
-    return $view + ['state' => 'done', 'result' => exam_result_for_learner($pdo, $exam, $attempt, $now)];
+    return $view + ['state' => 'done', 'result' => exam_result_for_learner($pdo, $exam, $attempt, $now),
+                    'certificate' => exams_certificate_url($pdo, $item, $userId)];
 }
 
 /**
@@ -320,7 +373,7 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
     if ($item === null) {
         return $fail('That exam no longer exists.', [], 'NOT_FOUND');
     }
-    $tutor = in_array($do, ['setup', 'exam_save', 'answers', 'results', 'attempt', 'end_attempt'], true);
+    $tutor = in_array($do, ['setup', 'exam_save', 'answers', 'results', 'attempt', 'end_attempt', 'test_save', 'test_publish', 'test_delete'], true);
     if ($tutor && !exams_may_manage($pdo, (int) $item['training_id'])) {
         return $forbidden();
     }
@@ -332,6 +385,31 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
             $r = exam_save($pdo, $item, $in, $me);
             return $r['ok'] ? ['status' => 'success', 'message' => 'Exam saved.'] + exams_setup_view($pdo, $item)
                             : $fail(implode(' ', array_slice($r['errors'], 0, 3)), $r['errors']);
+
+        case 'test_delete':
+            exams_load_trainings();
+            $t = exams_item_is_test($item) && function_exists('trainings_get') ? trainings_get($pdo, (int) $item['training_id']) : null;
+            if ($t === null) {
+                return $fail('That is not a test.', [], 'NOT_FOUND');
+            }
+            if (!can('trainings', 'delete', 'church')) {
+                return $forbidden();
+            }
+            $r = trainings_test_delete($pdo, $t);
+            return !empty($r['ok']) ? ['status' => 'success', 'message' => $r['message'], 'redirect' => '/modules/academy/#tab=tests']
+                : $fail((string) $r['message'], [], $r['code'] ?? null);
+
+        case 'test_save':
+        case 'test_publish':
+            // A standalone test's name, certificate switch and status (includes/trainings/tests.php).
+            exams_load_trainings();
+            $t = exams_item_is_test($item) && function_exists('trainings_get') ? trainings_get($pdo, (int) $item['training_id']) : null;
+            if ($t === null) {
+                return $fail('That is not a test.', [], 'NOT_FOUND');
+            }
+            $r = $do === 'test_save' ? trainings_test_save($pdo, $t, $in) : trainings_test_publish($pdo, $t, !empty($in['publish']));
+            return !empty($r['ok']) ? ['status' => 'success', 'message' => $r['message']] + exams_setup_view($pdo, exam_item($pdo, (int) $item['id']) ?? $item)
+                : $fail((string) $r['message'], isset($r['field']) ? [$r['field'] => $r['message']] : [], $r['code'] ?? null);
 
         case 'answers':
             $exam = exam_get($pdo, (int) $item['id']);
@@ -361,7 +439,7 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
     // ---- The learner ------------------------------------------------------
     $enrolment = exams_learner_enrolment($pdo, $item, $me);
     if ($enrolment === null) {
-        return $fail('This exam is for people enrolled in ' . $item['training_title'] . '.', [], 'NOT_ENROLLED');
+        return $fail(exams_item_is_test($item) ? 'This test is not open.' : 'This exam is for people enrolled in ' . $item['training_title'] . '.', [], 'NOT_ENROLLED');
     }
     $exam = exam_get($pdo, (int) $item['id']);
     if ($exam === null && $do !== 'take') {

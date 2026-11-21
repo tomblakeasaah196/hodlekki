@@ -94,6 +94,16 @@
             .finally(function () { HOD.busy(button, false); });
     });
 
+    // A standalone test (includes/trainings/tests.php): straight on to its set-up page for the questions.
+    HOD.actions.on('acd.test-create', function (form) {
+        var button = document.querySelector('button[form="acd-test-form"]');
+        HOD.busy(button, true);
+        HOD.api(API, { action: 'test_create', data: values(form), quiet: false })
+            .then(function (res) { flash('Test created. Add its questions next.', res.setup_url); })
+            .catch(function (err) { fieldError(form, err); })
+            .finally(function () { HOD.busy(button, false); });
+    });
+
     /* ----------------------------------------------------------- marking */
 
     function el(tag, cls, text) {

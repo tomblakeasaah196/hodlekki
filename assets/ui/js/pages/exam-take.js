@@ -112,6 +112,44 @@
         view.innerHTML = resultHtml(v.result, v);
         animateIn(view.firstElementChild, 'xt-rise');
         scoreIn(v.result);
+        celebrate(v);
+    }
+
+    /* ---------- the moment: confetti on a pass, a gentle sway on a miss ---------- */
+
+    var CONFETTI = ['#0B1B3F', '#C9A227', '#E8C766', '#2BB3A3', '#E4572E', '#7C5CFF'];
+    var celebrated = {};
+
+    /** Right after handing in (v.fresh), once per attempt; never under reduced motion. A result opened later stays calm. */
+    function celebrate(v) {
+        var r = v.result || {};
+        var key = cfg.item + ':' + r.attempt_no;
+        if (!motionOk() || celebrated[key] || !v.fresh) return;
+        celebrated[key] = true;
+        if (r.passed) {
+            confetti();
+        } else {
+            animateIn(one('.xt-result__icon'), 'xt-sway');
+        }
+    }
+
+    function confetti() {
+        var box = document.createElement('div');
+        box.className = 'xt-confetti';
+        box.setAttribute('aria-hidden', 'true');
+        for (var i = 0; i < 90; i++) {
+            var p = document.createElement('i');
+            p.style.left = (Math.random() * 100).toFixed(2) + '%';
+            p.style.background = CONFETTI[i % CONFETTI.length];
+            p.style.setProperty('--x', ((Math.random() - 0.5) * 220).toFixed(0) + 'px');
+            p.style.setProperty('--r', ((Math.random() - 0.5) * 1440).toFixed(0) + 'deg');
+            p.style.animationDelay = (Math.random() * 0.6).toFixed(2) + 's';
+            p.style.animationDuration = (2.4 + Math.random() * 1.6).toFixed(2) + 's';
+            if (i % 3 === 0) p.className = 'is-round';
+            box.appendChild(p);
+        }
+        document.body.appendChild(box);
+        window.setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 4800);
     }
 
     function fact(label, value) {
@@ -123,7 +161,7 @@
         return '<section class="xt-card xt-warm" aria-labelledby="xt-intro-title">' +
             '<h2 class="xt-title" id="xt-intro-title">Ready when you are</h2>' +
             '<dl class="xt-facts">' + fact('Questions', v.questions) + fact('Minutes', v.minutes) + fact('To pass', v.pass_percent + '%') + '</dl>' +
-            '<p>' + esc(line) + ' One attempt; the clock starts when you press Start.</p>' +
+            '<p>' + esc(line + ' ' + (Number(v.attempts_allowed) > 1 ? v.attempts_allowed + ' tries, until you pass' : 'One attempt') + '; the clock starts when you press Start.') + '</p>' +
             (v.review ? '<p class="xt-note">' + esc(v.review.open ? 'Answers to any you get wrong show right after.'
                 : 'Answers to any you get wrong show ' + reviewWhen(v.review.when, v.review.at) + '.') + '</p>' : '') +
             (v.window === 'open' ? '<div class="xt-start"><button type="button" class="ui-btn ui-btn--primary ui-btn--lg" data-action="xt.start"><span>Start</span>' + HOD.icon('arrow-right') + '</button></div>' : '') +
@@ -148,22 +186,38 @@
     }
 
     function resultHtml(r, v) {
+        v = v || {};
         var pct = Math.round(Number(r.percent) || 0);
         var passed = !!r.passed;
-        var html = '<section class="xt-card xt-warm xt-result' + (passed ? ' xt-result--pass' : '') + '" aria-labelledby="xt-result-title">' +
+        var right = Math.max(0, (Number(r.questions) || 0) - (Number(r.wrong_count) || 0));
+        var html = '<section class="xt-card xt-warm xt-result' + (passed ? ' xt-result--pass' : ' xt-result--miss') + '" aria-labelledby="xt-result-title">' +
             '<span class="xt-result__icon">' + HOD.icon(passed ? 'party-popper' : 'book-open') + '</span>' +
             '<h2 class="xt-title" id="xt-result-title">' + (passed ? 'You passed. Well done!' : 'Not this time') + '</h2>' +
-            '<p class="xt-result__line">' + esc(passed ? 'Thank you for learning with us. Keep going.' : 'Thank you for sitting it. Keep learning; your tutor can help.') + '</p>' +
+            '<p class="xt-result__line">' + esc(passed ? 'Thank you for learning with us. Keep going.'
+                : (v.can_retake ? 'Look over the ones you missed, then try again.' : 'Thank you for sitting it. Keep learning; your tutor can help.')) + '</p>' +
             '<div class="xt-score"><p class="xt-score__pct"><span data-xt-pct>' + pct + '</span>%</p>' +
             '<div class="xt-score__bar" role="img" aria-label="' + esc(pct + '%, and ' + r.pass_percent + '% to pass') + '">' +
             '<span class="xt-score__fill" data-xt-score></span><span class="xt-score__pass" data-xt-passmark></span></div>' +
-            '<p class="ui-meta">' + esc(r.score + ' of ' + plural(r.max, 'mark', 'marks') + ' · ' + r.pass_percent + '% to pass') + '</p></div>' +
-            attemptsHtml(v || {}) + '</section>';
+            '<p class="ui-meta">' + esc(r.pass_percent + '% to pass') + '</p></div>' +
+            '<dl class="xt-tally">' +
+            '<div class="xt-tally__item xt-tally__item--right"><dt>Right</dt><dd>' + right + '</dd></div>' +
+            '<div class="xt-tally__item xt-tally__item--miss"><dt>Missed</dt><dd>' + (Number(r.wrong_count) || 0) + '</dd></div>' +
+            '<div class="xt-tally__item"><dt>Marks</dt><dd>' + esc(r.score + ' / ' + r.max) + '</dd></div></dl>' +
+            attemptsHtml(v) +
+            (v.certificate ? '<div class="xt-cert"><a class="ui-btn ui-btn--secondary" href="' + esc(v.certificate) + '">' + HOD.icon('file-down') + '<span>Download certificate</span></a></div>' : '') +
+            '</section>';
+        var back = v.test ? '<p class="xt-after"><a class="ui-link" href="/modules/trainings/#tab=tests">Back to Trainings</a></p>' : '';
         if (r.wrong_count === 0) {
-            return html + '<p class="xt-after">Every answer right. Well done.</p>';
+            return html + '<p class="xt-after">Every answer right. Well done.</p>' + back;
+        }
+        if (!r.review_open && r.missed && r.missed.length) {
+            // A test with another try left: the questions they missed, without the answers.
+            return html + '<h2 class="ui-h3 xt-learn-title">You missed</h2><ol class="xt-learn">' + r.missed.map(function (w) {
+                return '<li class="xt-card xt-missed"><p class="ui-meta">Question ' + w.n + '</p><p class="xt-learn__q">' + esc(w.text) + '</p></li>';
+            }).join('') + '</ol><p class="xt-after">The right answers show after your last try, or once you pass.</p>' + back;
         }
         if (!r.review_open) {
-            return html + '<p class="xt-after">' + esc(plural(r.wrong_count, 'answer was', 'answers were') + ' not right. The right answers and why show here ' + reviewWhen(r.review_when, r.review_at) + '.') + '</p>';
+            return html + '<p class="xt-after">' + esc(plural(r.wrong_count, 'answer was', 'answers were') + ' not right. The right answers and why show here ' + reviewWhen(r.review_when, r.review_at) + '.') + '</p>' + back;
         }
         return html + '<h2 class="ui-h3 xt-learn-title">To learn from</h2><ol class="xt-learn">' + r.wrong.map(function (w) {
             return '<li class="xt-card"><p class="ui-meta">Question ' + w.n + (w.part ? ' · ' + w.part + ' of ' + w.marks + ' marks' : '') + '</p>' +
@@ -171,7 +225,7 @@
                 '<p class="xt-ans xt-ans--yours">' + HOD.icon('circle-x') + '<span><strong>Your answer:</strong> ' + esc(w.yours || 'none') + '</span></p>' +
                 '<p class="xt-ans xt-ans--right">' + HOD.icon('circle-check') + '<span><strong>Right answer:</strong> ' + esc(w.right) + '</span></p>' +
                 (w.explanation ? '<p class="xt-why">' + HOD.icon('book-open') + '<span>' + esc(w.explanation) + '</span></p>' : '') + '</li>';
-        }).join('') + '</ol>';
+        }).join('') + '</ol>' + back;
     }
 
     /** The score bar fills and the percentage counts up, once. */
@@ -485,6 +539,7 @@
         stopClock();
         call('submit', { item: cfg.item }, { quiet: true }).then(function (res) {
             if (auto) HOD.toast('Time is up. Your answers were handed in.', 'info');
+            res.fresh = true;   // just handed in: the result gets its moment (celebrate())
             render(res);
         }).catch(function () {
             // The server hands it in at the deadline anyway; show where things stand.

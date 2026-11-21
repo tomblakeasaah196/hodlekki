@@ -36,7 +36,13 @@ $isStaff = can('trainings', 'view', 'church');
     $e = $t !== null ? trainings_enrolment_for($pdo, $tid, $me) : null;
     $enrolled = $e !== null && $e['status'] !== 'withdrawn';
     $open = $t !== null && $t['status'] === 'published' && ($enrolled || $t['catalogue']);
-    if ($t === null || (!$open && !$isStaff)): ?>
+    // A standalone test (includes/trainings/tests.php) has no course page: it opens on its exam page.
+    $testItem = $t !== null && trainings_is_test($t) ? trainings_test_item_id($pdo, (int) $t['id']) : null;
+    if ($testItem !== null): ?>
+    <?= ui_page_header(['title' => $t['title'], 'back' => ['href' => '/modules/trainings/#tab=tests', 'label' => 'Trainings']]) ?>
+    <?= ui_empty(['icon' => 'clipboard-list', 'title' => 'This is a test', 'text' => 'It opens on its own page.',
+        'actions' => ui_button('Open test', ['variant' => 'primary', 'href' => exam_url_take($testItem)])]) ?>
+<?php elseif ($t === null || (!$open && !$isStaff)): ?>
     <?= ui_page_header(['title' => 'Not found', 'back' => ['href' => '/modules/trainings/', 'label' => 'Trainings']]) ?>
     <?= ui_empty(['icon' => 'graduation-cap', 'title' => 'Training not open', 'text' => 'It may have ended or moved.',
         'actions' => ui_button('My trainings', ['variant' => 'primary', 'href' => '/modules/trainings/'])]) ?>
@@ -208,6 +214,22 @@ $isStaff = can('trainings', 'view', 'church');
 <?php else:
     $mine = trainings_mine($pdo, $me);
     $catalogue = array_values(array_filter(trainings_catalogue($pdo, $me), static fn ($c) => !$c['joined']));
+    // Standalone tests (includes/trainings/tests.php): open to every member; the tab leads when one is waiting.
+    $tests = trainings_tests_for_learner($pdo, $me);
+    $waiting = trainings_tests_waiting($tests);
+    $active = $waiting > 0 ? 'tests' : 'mine';
+    $testWhen = static function (array $x): string {
+        $at = static fn (?string $v): string => $v ? trainings_view_when($v, null) : '';
+        if ($x['state'] === 'soon') {
+            return 'Opens ' . $at($x['opens']);
+        }
+        if ($x['state'] === 'closed') {
+            return 'Closed';
+        }
+        return $x['closes'] ? 'Open until ' . $at($x['closes']) : 'Open now';
+    };
+    $testButton = ['start' => ['Start', 'primary', 'arrow-right'], 'continue' => ['Continue', 'primary', 'arrow-right'],
+        'retake' => ['Try again', 'primary', 'refresh-cw'], 'result' => ['See result', 'secondary', null]];
 ?>
     <?= ui_page_header([
         'title' => 'Trainings',
@@ -215,9 +237,10 @@ $isStaff = can('trainings', 'view', 'church');
         'info' => 'Your classes, live sessions, exams and certificates in one place. Trainings the HOD Academy gives you appear here; join others from the catalogue.',
         'actions' => $isStaff ? ui_button('HOD Academy', ['variant' => 'secondary', 'icon' => 'graduation-cap', 'href' => '/modules/academy/']) : '',
     ]) ?>
-    <?= ui_tabs(['mine' => ['label' => 'My trainings', 'count' => count($mine)], 'catalogue' => ['label' => 'Catalogue', 'count' => count($catalogue)]], 'mine') ?>
+    <?= ui_tabs(['mine' => ['label' => 'My trainings', 'count' => count($mine)], 'tests' => ['label' => 'Tests', 'count' => $waiting],
+        'catalogue' => ['label' => 'Catalogue', 'count' => count($catalogue)]], $active) ?>
 
-    <section data-tab-panel="mine" id="panel-mine" role="tabpanel" aria-labelledby="tab-mine" class="ui-tab-panel ui-stack ui-stack--md">
+    <section data-tab-panel="mine" id="panel-mine" role="tabpanel" aria-labelledby="tab-mine" class="ui-tab-panel ui-stack ui-stack--md"<?= $active === 'mine' ? '' : ' hidden' ?>>
 <?php if ($mine === []): ?>
         <?= ui_empty(['icon' => 'graduation-cap', 'title' => 'No trainings yet', 'text' => 'Join one from the catalogue.',
             'actions' => $catalogue !== [] ? ui_button('Open catalogue', ['variant' => 'primary', 'href' => '#tab=catalogue']) : '']) ?>
@@ -241,6 +264,38 @@ $isStaff = can('trainings', 'view', 'church');
                         ? ' · Next: ' . ui_e($next['title']) : '' ?></p>
                 </div>
             </a>
+<?php endforeach; ?>
+        </div>
+<?php endif; ?>
+    </section>
+
+    <section data-tab-panel="tests" id="panel-tests" role="tabpanel" aria-labelledby="tab-tests" class="ui-tab-panel ui-stack ui-stack--md"<?= $active === 'tests' ? '' : ' hidden' ?>>
+<?php if ($tests === []): ?>
+        <?= ui_empty(['icon' => 'clipboard-list', 'title' => 'No tests open', 'text' => 'Tests show here when they open.']) ?>
+<?php else: ?>
+        <div class="ui-grid ui-grid--2">
+<?php foreach ($tests as $x):
+        $b = $testButton[$x['action']] ?? null; ?>
+            <div class="ui-card">
+                <div class="ui-card__body ui-stack ui-stack--sm">
+                    <div class="flex items-start justify-between gap-3">
+                        <h2 class="ui-card__title"><a href="<?= ui_e($x['url']) ?>"><?= ui_e($x['title']) ?></a></h2>
+                        <?= $x['best_percent'] !== null ? ui_badge($x['best_percent'] . '%' . ($x['passed'] ? ' · Passed' : ''), $x['passed'] ? 'success' : 'warning', ['dot' => true])
+                            : ($x['state'] === 'open' ? ui_badge('Open', 'info', ['dot' => true]) : '') ?>
+                    </div>
+                    <p class="ui-meta"><?= ui_e($testWhen($x)) ?></p>
+                    <p class="text-sm text-ink-muted"><?= ui_e($x['questions'] . ' questions · ' . $x['minutes'] . ' min · ' . $x['pass_percent'] . '% to pass'
+                        . ($x['attempts_allowed'] > 1 ? ' · ' . $x['attempts_allowed'] . ' tries' : '')) ?></p>
+                    <div class="flex flex-wrap gap-2">
+<?php if ($b !== null): ?>
+                        <?= ui_button($b[0], ['variant' => $b[1], 'icon' => $b[2], 'href' => $x['url']]) ?>
+<?php endif; ?>
+<?php if ($x['certificate'] !== null): ?>
+                        <?= ui_button('Certificate', ['variant' => 'ghost', 'icon' => 'file-down', 'href' => $x['certificate']]) ?>
+<?php endif; ?>
+                    </div>
+                </div>
+            </div>
 <?php endforeach; ?>
         </div>
 <?php endif; ?>

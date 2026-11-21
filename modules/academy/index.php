@@ -25,16 +25,19 @@ $canCreate = can('trainings', 'create', 'church');
 $canMark = can('trainings', 'edit', 'church');
 $canApprove = can('trainings', 'approve', 'church');
 $list = [];
+$tests = [];
 $toMark = [];
 $toConfirm = [];
 if ($ready) {
     trainings_sync_newcomers($pdo);
     $list = trainings_overview($pdo);
+    // Standalone tests (includes/trainings/tests.php): the School of the Word's monthly test and the like.
+    $tests = trainings_tests_overview($pdo);
     $toMark = $canMark ? trainings_to_mark($pdo) : [];
     $toConfirm = $canApprove ? trainings_to_confirm($pdo) : [];
 }
 $statusTone = ['published' => 'success', 'draft' => 'neutral', 'archived' => 'warning'];
-$tabs = ['trainings' => ['label' => 'Trainings', 'count' => count($list)]];
+$tabs = ['trainings' => ['label' => 'Trainings', 'count' => count($list)], 'tests' => ['label' => 'Tests', 'count' => count($tests)]];
 if ($canMark) {
     $tabs['mark'] = ['label' => 'To mark', 'count' => count($toMark)];
 }
@@ -55,7 +58,8 @@ if ($canManage) {
         'info' => 'A training is a list of items (live classes, videos, audio, readings, assignments) in days, weeks or self-paced modules. '
             . 'Assign it to groups or named people with a due date; visitors without a sign-in get an invite link. '
             . 'When someone finishes Membership Class or Maturity Class, confirm them here: Membership makes them a Member, Maturity marks them ready to serve.',
-        'actions' => ($canCreate && $ready ? ui_button('New training', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-dialog-open' => 'acd-new']]) : '')
+        'actions' => ($canCreate && $ready ? ui_button('New training', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-dialog-open' => 'acd-new']])
+                . ui_button('New test', ['variant' => 'secondary', 'icon' => 'clipboard-list', 'attrs' => ['data-dialog-open' => 'acd-test']]) : '')
             . ($canMark && $ready && function_exists('exam_url_bank') ? ui_button('Question bank', ['variant' => 'secondary', 'icon' => 'clipboard-list', 'href' => exam_url_bank()]) : '')   // docs/EXAMS.md
             . ui_button('My trainings', ['variant' => 'secondary', 'icon' => 'graduation-cap', 'href' => '/modules/trainings/']),
     ]) ?>
@@ -91,6 +95,42 @@ if ($canManage) {
                             <td data-label="Learners" class="is-num"><?= (int) $t['learners'] ?></td>
                             <td data-label="Completed" class="is-num"><?= (int) $t['completed'] ?></td>
                             <td data-label="To mark" class="is-num"><?= (int) $t['to_mark'] ?></td>
+                        </tr>
+<?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+<?php endif; ?>
+    </section>
+
+    <section data-tab-panel="tests" id="panel-tests" role="tabpanel" aria-labelledby="tab-tests" class="ui-tab-panel ui-stack ui-stack--md" hidden>
+<?php if ($tests === []): ?>
+        <?= ui_empty(['icon' => 'clipboard-list', 'title' => 'No tests yet', 'text' => 'A test stands on its own: questions, a timer and instant results.',
+            'actions' => $canCreate ? ui_button('New test', ['variant' => 'primary', 'icon' => 'plus', 'attrs' => ['data-dialog-open' => 'acd-test']]) : '']) ?>
+<?php else: ?>
+        <div class="ui-card">
+            <div class="ui-table-wrap border-0">
+                <table class="ui-table ui-table--stack">
+                    <thead><tr><th scope="col">Test</th><th scope="col">Status</th><th scope="col">Open</th>
+                        <th scope="col" class="is-num">Questions</th><th scope="col" class="is-num">Took it</th><th scope="col" class="is-num">Passed</th></tr></thead>
+                    <tbody>
+<?php foreach ($tests as $x):
+        $range = trim(($x['opens'] ? trainings_view_date(substr((string) $x['opens'], 0, 10)) : '')
+            . ($x['closes'] ? ' – ' . trainings_view_date(substr((string) $x['closes'], 0, 10)) : ''));
+        $open = $x['window'] === 'not_set' ? 'Not set up' : ($x['window'] === 'closed' ? 'Closed' : ($range !== '' ? $range : 'Any time')); ?>
+                        <tr>
+                            <td data-label="Test">
+                                <a class="ui-table__primary" href="<?= ui_e($x['setup_url']) ?>"><?= ui_e($x['title']) ?></a>
+<?php if ($x['gives_certificate']): ?>
+                                <span class="ui-table__secondary">Certificate on a pass</span>
+<?php endif; ?>
+                            </td>
+                            <td data-label="Status"><?= ui_badge($x['status_label'], $statusTone[$x['status']] ?? 'neutral', ['dot' => true]) ?></td>
+                            <td data-label="Open"><?= ui_e($open) ?></td>
+                            <td data-label="Questions" class="is-num"><?= (int) $x['questions'] ?></td>
+                            <td data-label="Took it" class="is-num"><?= (int) $x['took'] ?></td>
+                            <td data-label="Passed" class="is-num"><?= (int) $x['passed'] ?></td>
                         </tr>
 <?php endforeach; ?>
                     </tbody>
@@ -208,6 +248,16 @@ if ($canManage) {
 </form>
 <?= ui_dialog_end(ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
     . ui_button('Create training', ['variant' => 'primary', 'type' => 'submit', 'attrs' => ['form' => 'acd-new-form']])) ?>
+<?php endif; ?>
+
+<?php if ($ready && $canCreate): ?>
+<?= ui_dialog_start('acd-test', ['title' => 'New test', 'description' => 'You add the questions next.']) ?>
+<form id="acd-test-form" class="ui-form" data-action="acd.test-create" data-ui-validate novalidate>
+    <?= ui_field('text', ['name' => 'title', 'id' => 'acd-test-name', 'label' => 'Name', 'required' => true, 'placeholder' => 'School of the Word, November test', 'attrs' => ['maxlength' => 160]]) ?>
+    <label class="ui-check"><input type="checkbox" name="gives_certificate" value="1"><span>Certificate for those who pass</span></label>
+</form>
+<?= ui_dialog_end(ui_button('Cancel', ['variant' => 'ghost', 'attrs' => ['data-dialog-close' => true]])
+    . ui_button('Create test', ['variant' => 'primary', 'type' => 'submit', 'attrs' => ['form' => 'acd-test-form']])) ?>
 <?php endif; ?>
 
 <?php if ($ready && $canMark): ?>

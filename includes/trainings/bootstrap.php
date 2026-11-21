@@ -11,6 +11,7 @@
 //   people.php    enrolment, the catalogue, Assign (groups + named people), invites
 //   progress.php  a learner's progress, handing in work, marking, completion, confirming
 //   notes.php     My notes: the learner's own running note on a training, and its Word copy
+//   tests.php     standalone tests (no course): a training of kind 'test' with one exam item (docs/EXAMS.md §8)
 //   actions.php   the one entry point api/trainings_api.php calls (every can() check)
 //
 // Access is the 'trainings' row of the permission matrix: Create builds and
@@ -39,6 +40,7 @@ require_once __DIR__ . '/progress.php';
 require_once __DIR__ . '/certificates.php';
 require_once __DIR__ . '/reminders.php';
 require_once __DIR__ . '/notes.php';
+require_once __DIR__ . '/tests.php';
 require_once __DIR__ . '/actions.php';
 
 const TRAININGS_TZ = 'Africa/Lagos';
