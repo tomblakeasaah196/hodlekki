@@ -199,7 +199,9 @@ if (!defined('PWA_HEAD_RENDERED')) {
         (function () {
             var meta = document.querySelector('meta[name="viewport"]');
             if (meta) {
-                meta.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
+                // A page that asked for the keyboard to resize it (the test QR conversation) keeps that.
+                var widget = (meta.getAttribute('content') || '').match(/interactive-widget=[a-z-]+/);
+                meta.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover' + (widget ? ', ' + widget[0] : ''));
             }
 
             var root = document.documentElement;

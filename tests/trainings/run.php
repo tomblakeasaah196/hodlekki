@@ -1593,6 +1593,20 @@ ok('…with the quiet credit linking to jbspraxis.com', str_contains($entryPage,
 $entryJs = (string) file_get_contents($root . '/assets/ui/js/pages/test-entry.js');
 ok('passwords show as dots in the conversation, and motion follows reduced motion', str_contains($entryJs, "'•'") && str_contains($entryJs, 'prefers-reduced-motion'));
 ok('the script never writes a style attribute (strict CSP)', !preg_match('/style="/', $entryJs));
+// The keyboard (owner, 22 Nov: "I can't see where I am nor what I am typing"), on Chrome, Edge and Safari.
+ok('Chrome and Edge are asked to shrink the page for the keyboard', str_contains($entryPage, "'keyboard_resizes' => true")
+    && str_contains((string) file_get_contents($root . '/includes/ui/standalone.php'), 'interactive-widget=resizes-content'));
+ok('…and the app\'s start-up script keeps that when it rewrites the viewport', str_contains((string) file_get_contents($root . '/includes/pwa_head.php'), 'interactive-widget='));
+ok('Safari: the conversation follows the visual viewport (the height above the keyboard, how far it slid)',
+    str_contains($entryJs, 'window.visualViewport') && str_contains($entryJs, "'--tq-h'") && str_contains($entryJs, "'--tq-top'")
+    && str_contains((string) file_get_contents($root . '/assets/ui/src/app.css'), 'height: var(--tq-h, 100dvh)'));
+ok('the keyboard stays up: Send and the eye never take the focus, the box is never locked, focus is never told not to scroll',
+    str_contains($entryJs, "b.addEventListener('mousedown', function (e) { e.preventDefault(); });")
+    && !str_contains($entryJs, 'readOnly') && !str_contains($entryJs, 'preventScroll'));
+ok('the header shrinks to the rail while the keyboard is up', str_contains($entryJs, "classList.toggle('is-kb'")
+    && str_contains((string) file_get_contents($root . '/assets/ui/src/app.css'), '.tq.is-kb .tq-head__row { display: none; }'));
+ok('a real password box, so Chrome, Edge and Safari offer the saved password; the number is its username',
+    str_contains($entryJs, "password: { type: 'password'") && str_contains($entryPage, 'autocomplete="username"') && str_contains($entryJs, 'PasswordCredential'));
 $entryApi = (string) file_get_contents($root . '/api/test_entry_api.php');
 ok('the endpoint takes POST only and checks the CSRF token first', str_contains($entryApi, "!== 'POST'") && strpos($entryApi, 'csrf_require();') < strpos($entryApi, 'trainings_entry_action('));
 ok('signing in from the page keeps them signed in for 30 days', str_contains((string) file_get_contents($root . '/includes/trainings/entry.php'), 'auth_remember_issue(')

@@ -5018,9 +5018,26 @@
         margin: 0 auto;
         background: var(--ui-surface);
     }
+    /* On a phone the conversation is pinned to the part of the screen above the keyboard (owner, 22 Nov: the box went
+       under the keyboard and nothing scrolled). test-entry.js fit() sets --tq-h (the height left by the keyboard) and
+       --tq-top (how far Safari slid the page), from window.visualViewport; the page itself never scrolls, only the
+       messages do. Chrome and Edge also shrink the page for the keyboard (interactive-widget=resizes-content). */
+    html.tq-lock,
+    html.tq-lock body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+    @media (max-width: 639px) {
+        .tq { position: fixed; top: 0; left: 0; right: 0; max-width: none; height: var(--tq-h, 100dvh); transform: translate3d(0, var(--tq-top, 0px), 0); }
+    }
     @media (min-width: 640px) {
         .tq { height: min(100dvh - 48px, 820px); margin: 24px auto; border: 1px solid var(--ui-border); border-radius: 20px; box-shadow: var(--ui-shadow-lg); overflow: hidden; }
     }
+    /* Keyboard up: the header shrinks to the progress rail, the credit line steps aside (owner). */
+    .tq.is-kb .tq-head { padding-top: 8px; padding-bottom: 8px; }
+    .tq.is-kb .tq-head__row { display: none; }
+    .tq.is-kb .tq-rail { margin-top: 0; }
+    .tq.is-kb .tq-credit { display: none; }
+    .tq.is-kb .tq-foot { padding-bottom: 8px; }
+    .tq.is-kb .tq-log { padding-top: 10px; }
+    .tq-send.is-busy { opacity: .5; }
     .tq-head { flex: none; padding: 14px 16px 12px; border-bottom: 1px solid var(--ui-border); background: var(--ui-surface); }
     .tq-head__row { display: flex; align-items: center; gap: 12px; }
     .tq-logo { flex: none; width: 36px; height: 36px; border-radius: 10px; }

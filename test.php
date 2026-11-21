@@ -31,7 +31,7 @@ $signIn = '/auth/login?next=' . rawurlencode($target);
 // The same quiet line as the sign-in page (owner: subtle, linking to the website).
 $credit = 'Engineered by <a href="https://jbspraxis.com" target="_blank" rel="noopener">JBS Praxis</a>';
 
-ui_standalone_open($test !== null ? (string) $test['title'] : 'Test', ['bare' => true, 'scripts' => ['/assets/ui/js/pages/test-entry.js']]);
+ui_standalone_open($test !== null ? (string) $test['title'] : 'Test', ['bare' => true, 'keyboard_resizes' => true, 'scripts' => ['/assets/ui/js/pages/test-entry.js']]);
 if ($test === null): ?>
 <div class="tq tq--closed">
     <div class="tq-closed">
@@ -76,8 +76,10 @@ echo ui_json_script('tq-config', [
     <footer class="tq-foot">
         <div class="tq-pills" data-tq-pills role="group" aria-label="Quick answers" hidden></div>
         <form class="tq-composer" data-action="tq.send" novalidate>
+            <?php // The number typed, as the "username" Chrome, Edge and Safari file a saved password under (never shown). ?>
+            <input class="sr-only" type="text" name="username" autocomplete="username" data-tq-user tabindex="-1" aria-hidden="true">
             <label class="sr-only" for="tq-input" data-tq-label>Your answer</label>
-            <input class="tq-input" id="tq-input" data-tq-input type="tel" inputmode="tel" autocomplete="tel" maxlength="190" placeholder="0803 123 4567">
+            <input class="tq-input" id="tq-input" name="phone" data-tq-input type="tel" inputmode="tel" autocomplete="tel" maxlength="190" placeholder="0803 123 4567">
             <button type="button" class="tq-eye" data-action="tq.eye" data-tq-eye aria-label="Hide password" aria-pressed="false" hidden><?= ui_icon('eye-off') ?></button>
             <button type="submit" class="tq-send" data-tq-send aria-label="Send"><?= ui_icon('send') ?></button>
         </form>
