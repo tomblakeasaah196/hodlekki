@@ -2,8 +2,16 @@
 // The way into a test from its QR code (test.php), as a short conversation: messages arrive one at a time with a
 // moment of "typing", answers go in the box at the bottom or by tapping a pill, and a rail shows how far along they
 // are. Every step is decided on the server (includes/trainings/entry.php through /api/test_entry_api.php): it answers
-// with the next step, and this page only says it in words and asks for what it needs. Passwords show as they are
-// typed (owner) and as dots in the conversation. Motion only when the person has not asked for less.
+// with the next step, and this page only says it in words and asks for what it needs. Passwords are a real password
+// box (owner, 22 Nov: so Chrome, Edge and Safari offer the saved one; the eye shows it) and dots in the conversation.
+// Motion only when the person has not asked for less.
+//
+// The keyboard (owner, 22 Nov: "I can't see where I am nor what I am typing"): the conversation always fits the part
+// of the screen above the on-screen keyboard, on Chrome, Edge and Safari alike. The page asks Chrome and Edge to shrink
+// for the keyboard (test.php, interactive-widget=resizes-content); for Safari, which slides the page under the keyboard
+// instead, fit() follows window.visualViewport: the height left and how far it slid. The keyboard stays open from one
+// answer to the next (Send never takes the focus from the box); it closes only when the next step is a tap. While it is
+// open the header shrinks to the progress rail.
 (function () {
     'use strict';
 
@@ -24,9 +32,39 @@
         eye: root.querySelector('[data-tq-eye]'),
         send: root.querySelector('[data-tq-send]'),
         hint: root.querySelector('[data-tq-hint]'),
+        user: root.querySelector('[data-tq-user]'),
         restart: root.querySelector('[data-action="tq.restart"]')
     };
     var st = { ask: null, busy: false, name: '', newpass: '', last: '', typed: '', run: 0 };
+
+    /* ---------- the screen above the keyboard ---------- */
+
+    var tallest = 0;
+
+    /** Fit the conversation to what is visible: the height above the keyboard, and where Safari slid it to. */
+    function fit() {
+        var vv = window.visualViewport;
+        var h = vv ? vv.height : window.innerHeight;
+        var top = vv ? Math.max(0, vv.offsetTop) : 0;
+        tallest = Math.max(tallest, h);
+        root.style.setProperty('--tq-h', Math.round(h) + 'px');
+        root.style.setProperty('--tq-top', Math.round(top) + 'px');
+        // The keyboard is up when a good part of the screen went: the header shrinks to the rail.
+        root.classList.toggle('is-kb', tallest - h > 120 && document.activeElement === el.input);
+        el.log.scrollTop = el.log.scrollHeight;
+    }
+
+    document.documentElement.classList.add('tq-lock');
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', fit);
+        window.visualViewport.addEventListener('scroll', fit);
+    }
+    window.addEventListener('resize', function () { fit(); });
+    window.addEventListener('orientationchange', function () { tallest = 0; window.setTimeout(fit, 300); });
+    // Safari may still scroll the page itself to reach the box: put it back, the conversation is already in view.
+    window.addEventListener('scroll', function () { if (window.scrollY !== 0) window.scrollTo(0, 0); fit(); }, { passive: true });
+    el.input.addEventListener('focus', function () { window.setTimeout(fit, 50); window.setTimeout(fit, 350); });
+    el.input.addEventListener('blur', function () { window.setTimeout(fit, 50); window.setTimeout(fit, 350); });
 
     function calm() { return !!(reduced && reduced.matches); }
     function wait(ms) { return new Promise(function (ok) { window.setTimeout(ok, calm() ? 0 : ms); }); }
@@ -97,9 +135,9 @@
     var ASKS = {
         phone: { type: 'tel', mode: 'tel', auto: 'tel', ph: '0803 123 4567', label: 'Your phone number' },
         email: { type: 'email', mode: 'email', auto: 'email', ph: 'you@gmail.com', label: 'Your email address' },
-        password: { type: 'text', mode: 'text', auto: 'current-password', ph: 'Your password', label: 'Your password', secret: true },
-        newpass: { type: 'text', mode: 'text', auto: 'new-password', ph: 'Choose a password', label: 'Your new password', secret: true, rules: true },
-        confirm: { type: 'text', mode: 'text', auto: 'new-password', ph: 'The same password again', label: 'Your new password again', secret: true },
+        password: { type: 'password', mode: 'text', auto: 'current-password', ph: 'Your password', label: 'Your password', secret: true },
+        newpass: { type: 'password', mode: 'text', auto: 'new-password', ph: 'Choose a password', label: 'Your new password', secret: true, rules: true },
+        confirm: { type: 'password', mode: 'text', auto: 'new-password', ph: 'The same password again', label: 'Your new password again', secret: true },
         code: { type: 'text', mode: 'numeric', auto: 'one-time-code', ph: '6-digit code', label: 'The 6-digit code', max: 7 },
         birthday: { type: 'text', mode: 'text', auto: 'off', ph: 'e.g. 12 March', label: 'Your birthday (day and month)' }
     };
@@ -112,6 +150,7 @@
         el.hint.hidden = true;
         if (a) {
             el.input.value = '';
+            el.input.name = a.secret ? (kind === 'confirm' ? 'confirm-password' : 'password') : kind;   // what password managers look for
             el.input.type = a.type;
             el.input.setAttribute('inputmode', a.mode);
             el.input.setAttribute('autocomplete', a.auto);
@@ -121,7 +160,7 @@
             el.input.setAttribute('spellcheck', 'false');
             el.label.textContent = a.label;
             el.eye.hidden = !a.secret;
-            setEye(false);
+            setEye(true);   // a real password box: dots, the saved password offered; the eye shows it
             if (a.rules && cfg.rules && cfg.rules.length) {
                 el.hint.textContent = 'It needs: ' + cfg.rules.join(' · ') + '.';
                 el.hint.hidden = false;
@@ -129,13 +168,14 @@
         }
         setPills(pills || []);
         busy(false);
-        scroll();   // the pills and the box may have grown: keep the last message in view
-        if (a && !st.busy) {
-            window.setTimeout(function () { el.input.focus({ preventScroll: true }); }, calm() ? 0 : 60);
-        } else if (!a) {
-            var first = el.pills.querySelector('button');
-            if (first) first.focus({ preventScroll: true });
+        if (a) {
+            // Typing next: the box keeps (or takes) the focus, so the keyboard stays up.
+            if (document.activeElement !== el.input) el.input.focus();
+        } else if (document.activeElement === el.input) {
+            el.input.blur();   // a tap next (pills): the keyboard goes so the choices show
         }
+        fit();
+        scroll();   // the pills and the box may have grown: keep the last message in view
     }
 
     function setPills(list) {
@@ -157,10 +197,11 @@
         el.eye.innerHTML = HOD.icon(hidden ? 'eye' : 'eye-off');
     }
 
+    // The box is never locked while we wait (a locked box drops the keyboard): a second Send is simply ignored.
     function busy(on) {
         st.busy = on;
-        el.send.disabled = on;
-        el.input.readOnly = on;
+        el.send.setAttribute('aria-disabled', on ? 'true' : 'false');
+        el.send.classList.toggle('is-busy', on);
         Array.prototype.forEach.call(el.pills.querySelectorAll('button'), function (b) { b.disabled = on; });
     }
 
@@ -283,7 +324,7 @@
             ask(null, []);
             el.form.hidden = true;
             return say(['You\'re in, ' + (res.name || st.name) + '! 🎉', 'Opening your test…']).then(function () {
-                return wait(500).then(function () { window.location.href = res.go; });
+                return Promise.all([wait(500), savePassword()]).then(function () { window.location.href = res.go; });
             });
         }
         return say(['Something went wrong. Please try again.']).then(function () { begin(false); });
@@ -303,7 +344,9 @@
         you(secret ? new Array(Math.min(12, Math.max(6, value.length)) + 1).join('•') : value);
         el.input.value = '';
         switch (kind) {
-        case 'phone': return call('lookup', { phone: value });
+        case 'phone':
+            if (el.user) el.user.value = value;   // the "username" the browser files the password under
+            return call('lookup', { phone: value });
         case 'email': return call('email', { email: value });
         case 'password': return call('signin', { password: value });
         case 'birthday': return call('birthday', { birthday: value });
@@ -316,7 +359,24 @@
                 st.newpass = '';
                 return say(['Those two aren\'t the same. Let\'s try again: please choose your password.']).then(function () { ask('newpass'); });
             }
+            st.saved = st.newpass;
             return call('new_password', { password: st.newpass, confirm: value });
+        }
+    }
+
+    /**
+     * A new password: Chrome and Edge offer to save it (the Credential Management API; Safari offers from the box
+     * itself). Never holds the way in for more than a moment, and never fails it.
+     */
+    function savePassword() {
+        var password = st.saved;
+        st.saved = '';
+        if (!password || !window.PasswordCredential || !navigator.credentials || !el.user || !el.user.value) return Promise.resolve();
+        try {
+            var cred = new window.PasswordCredential({ id: el.user.value, password: password, name: st.name || el.user.value });
+            return Promise.race([navigator.credentials.store(cred).catch(function () {}), wait(2500)]);
+        } catch (e) {
+            return Promise.resolve();
         }
     }
 
@@ -361,6 +421,16 @@
     HOD.actions.on('tq.pill', pill);
     HOD.actions.on('tq.restart', function () { if (!st.busy) begin(true); });
     HOD.actions.on('tq.eye', function () { setEye(el.input.type !== 'password'); el.input.focus(); });
+
+    // Send and the eye never take the focus from the box, so the keyboard stays up between answers.
+    [el.send, el.eye].forEach(function (b) {
+        b.addEventListener('mousedown', function (e) { e.preventDefault(); });
+        b.addEventListener('touchend', function (e) {
+            if (document.activeElement !== el.input) return;
+            e.preventDefault();   // keeps the keyboard; the tap still counts:
+            if (b === el.send) submit(); else { setEye(el.input.type !== 'password'); }
+        });
+    });
 
     // The code sends itself once the sixth digit is in (pasted, typed or filled by the phone).
     el.input.addEventListener('input', function () {

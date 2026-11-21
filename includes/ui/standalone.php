@@ -24,7 +24,10 @@ require_once dirname(__DIR__) . '/security_headers.php';
  * $o: scripts (extra /assets/… files), footer (HTML under the card), wide
  * (bool), bare (bool, see above), csp (extra sources per directive), boot
  * (bool: the PWA launch screen, for pages the installed app can open on),
- * quiet (default true: no install banner or push sheet; false on sign-in).
+ * quiet (default true: no install banner or push sheet; false on sign-in),
+ * keyboard_resizes (bool: on Chrome and Edge for Android the on-screen
+ * keyboard shrinks the page instead of covering it, interactive-widget=
+ * resizes-content; the test QR conversation, whose box must sit on the keyboard).
  */
 function ui_standalone_open(string $title, array $o = []): void
 {
@@ -43,7 +46,7 @@ function ui_standalone_open(string $title, array $o = []): void
 <html lang="en" class="ui-html" data-ui-mode="strict">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover<?= !empty($o['keyboard_resizes']) ? ', interactive-widget=resizes-content' : '' ?>">
     <meta name="theme-color" content="#FFFFFF">
 <?php require dirname(__DIR__) . '/pwa_head.php'; ?>
     <title><?= ui_e($title) ?> · HOD Lekki</title>

@@ -172,10 +172,19 @@ IDI has to intervene for anyone then we have failed, unless they don't have thei
 scan the test's QR code (or open its link) and a short **conversation** signs them in, in the JBS Praxis forms' manner:
 one message at a time after a moment of typing, answers typed in the box or tapped as pills, a rail (Phone · Email ·
 Password · Test) that only moves forward. Messages rise in, pills pop in one after another; nothing moves with reduced
-motion. Passwords show as they are typed (an eye hides them) and as dots in the conversation. Signed in for 30 days
+motion. The password box is a real one (dots, an eye to show it) so Chrome, Edge and Safari offer the saved HOD password
+and offer to save a new one (owner, 22 Nov); the conversation shows dots. Signed in for 30 days
 (`auth_remember_issue()`, as "keep me signed in"). A quiet "Engineered by JBS Praxis" line, as on the sign-in page.
 
 The server decides every step (`trainings_entry_action()`); the page (`assets/ui/js/pages/test-entry.js`) only says it.
+
+**The keyboard** (owner, 22 Nov: "I can't see where I am nor what I am typing"; Edge, Chrome and Safari must all be
+perfect). The conversation always fits the part of the screen above the on-screen keyboard: test.php asks Chrome and
+Edge to shrink for it (`interactive-widget=resizes-content`, kept by `pwa_head.php`), and for Safari, which slides the
+page under the keyboard instead, `fit()` follows `window.visualViewport` (`--tq-h`, `--tq-top`; the page never
+scrolls, only the messages). The keyboard stays up between answers: Send and the eye never take the focus from the
+box, and the box is never locked while waiting. It closes when the next step is a tap. While it is up the header
+shrinks to the progress rail.
 
 | Who | The way in |
 | --- | ---------- |
