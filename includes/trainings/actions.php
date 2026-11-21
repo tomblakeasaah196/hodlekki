@@ -5,9 +5,9 @@
 // against the permission matrix (can('trainings', …)). Kept out of the
 // endpoint so tests/trainings/run.php runs the same decisions on SQLite.
 //
-//   Learner (own records):  mine, catalogue, view, join, leave, item_done, submit_work,
+//   Learner (own records):  mine (with the open tests), catalogue, view, join, leave, item_done, submit_work,
 //                           note_get, note_save (My notes: the learner's alone, never the Academy's)
-//   The Academy (church):   overview, create, builder, settings, publish, unpublish,
+//   The Academy (church):   overview, create, test_create, builder, settings, publish, unpublish,
 //                           archive, delete, section_*, item_*, learners,
 //                           people_search, audience_options, assign, remove_learner,
 //                           set_due, invite, invite_prefill, learner_progress,
@@ -55,7 +55,8 @@ function trainings_action(PDO $pdo, string $action, array $in, array $files, int
             if (!trainings_self_can($uid, 'view')) {
                 return trainings_forbidden();
             }
-            return trainings_ok(['mine' => trainings_mine($pdo, $uid), 'catalogue' => trainings_catalogue($pdo, $uid)]);
+            return trainings_ok(['mine' => trainings_mine($pdo, $uid), 'catalogue' => trainings_catalogue($pdo, $uid),
+                                 'tests' => trainings_tests_for_learner($pdo, $uid)]);
 
         case 'view':
             if ($err = $needTraining()) {
@@ -156,6 +157,13 @@ function trainings_action(PDO $pdo, string $action, array $in, array $files, int
                 return trainings_forbidden();
             }
             return $reply(trainings_create($pdo, $in, $uid));
+
+        case 'test_create':
+            // A standalone test (includes/trainings/tests.php): its questions and rules are set on the exam set-up page next.
+            if (!trainings_staff_can('create')) {
+                return trainings_forbidden();
+            }
+            return $reply(trainings_test_create($pdo, $in, $uid));
 
         case 'people_search':
             if (!trainings_staff_can('create')) {
@@ -461,6 +469,7 @@ function trainings_overview(PDO $pdo): array
             (SELECT COUNT(*) FROM training_progress p JOIN training_enrolments e ON e.id = p.enrolment_id
               WHERE e.training_id = t.id AND p.status = 'submitted' AND e.status <> 'withdrawn') AS to_mark
           FROM trainings t
+         WHERE t.kind <> 'test'
          ORDER BY CASE t.status WHEN 'published' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END,
                   CASE WHEN t.starts_on IS NULL THEN 1 ELSE 0 END, t.starts_on DESC, t.id DESC")->fetchAll(PDO::FETCH_ASSOC);
     return array_map(static fn ($r) => trainings_staff_training(null, trainings_shape($r)) + [

@@ -29,6 +29,7 @@
 const EXAM_GRACE_SECONDS = 20;     // network slack after the deadline
 const EXAM_MINUTES_MAX   = 300;
 const EXAM_ATTEMPTS_MAX  = 3;
+const EXAM_TEST_ATTEMPTS_MAX = 5;   // a standalone test (docs/EXAMS.md §8): "up till a number of times we set"
 
 // ---------------------------------------------------------------------------
 // Items and settings
@@ -40,7 +41,7 @@ function exam_item(PDO $pdo, int $itemId): ?array
     if ($itemId <= 0 || !exams_table_exists($pdo, 'training_items') || !exams_table_exists($pdo, 'trainings')) {
         return null;
     }
-    $stmt = $pdo->prepare("SELECT i.id, i.training_id, i.title, i.type, t.title AS training_title, t.department_id, t.status AS training_status
+    $stmt = $pdo->prepare("SELECT i.id, i.training_id, i.title, i.type, t.title AS training_title, t.department_id, t.status AS training_status, t.kind AS training_kind
                              FROM training_items i JOIN trainings t ON t.id = i.training_id
                             WHERE i.id = ? AND i.type = 'exam'");
     $stmt->execute([$itemId]);
@@ -65,7 +66,7 @@ function exam_decode(array $row): array
     $row['question_ids'] = array_values(array_map('intval', json_decode((string) $row['question_ids_json'], true) ?: []));
     unset($row['question_ids_json']);
     // Retakes (migration 20261209090200; one attempt before it runs).
-    $row['attempts_allowed'] = max(1, min(EXAM_ATTEMPTS_MAX, (int) ($row['attempts_allowed'] ?? 1)));
+    $row['attempts_allowed'] = max(1, min(EXAM_TEST_ATTEMPTS_MAX, (int) ($row['attempts_allowed'] ?? 1)));
     return $row;
 }
 
@@ -111,7 +112,7 @@ function exam_parse_time($v)
 /**
  * Set up (or change) the exam on an item.
  * $in: window_open, window_close, minutes, pass_percent, shuffle, part_marks, leave_alert, question_ids,
- * attempts_allowed (1-3; left out: as saved, else 1).
+ * attempts_allowed (1-EXAM_ATTEMPTS_MAX, a standalone test 1-EXAM_TEST_ATTEMPTS_MAX; left out: as saved, else 1).
  * Once anyone has started, the questions, the time, the pass mark and the
  * marking rules are fixed; the window can still move, the alert change, and
  * the attempts go up (never down: nobody loses a chance they were given).
@@ -175,8 +176,9 @@ function exam_save(PDO $pdo, array $item, array $in, int $actor, bool $addAfterS
     $old = exam_get($pdo, (int) $item['id']);
     $retakes = exams_retakes_ready($pdo);
     $attempts = (int) ($in['attempts_allowed'] ?? ($old['attempts_allowed'] ?? 1));
-    if ($attempts < 1 || $attempts > EXAM_ATTEMPTS_MAX) {
-        $errors[] = 'Attempts allowed: 1, 2 or 3.';
+    $isTest = ($item['training_kind'] ?? '') === 'test';
+    if ($attempts < 1 || $attempts > ($isTest ? EXAM_TEST_ATTEMPTS_MAX : EXAM_ATTEMPTS_MAX)) {
+        $errors[] = $isTest ? 'Attempts allowed: 1 to ' . EXAM_TEST_ATTEMPTS_MAX . '.' : 'Attempts allowed: 1, 2 or 3.';
     } elseif ($attempts > 1 && !$retakes) {
         $errors[] = 'Retakes open after the next update. Keep 1 attempt for now.';
     }
@@ -291,7 +293,8 @@ function exam_window(array $exam, DateTimeImmutable $now): string
  *   shown  a tutor pressed Show answers (answers_shown_at), at any time;
  *   close  the exam has a closing time: from then;
  *   end    no closing time, but the training has an end date: the day after it;
- *   tutor  neither (self-paced): only when a tutor shows them.
+ *   tutor  neither (self-paced): only when a tutor shows them;
+ *   test   a standalone test (includes/trainings/tests.php): at once.
  * ("Once everyone enrolled has sat it" was left out: someone enrolling later
  * would reopen the leak.)
  *
@@ -303,15 +306,21 @@ function exam_review_state(PDO $pdo, array $exam, ?DateTimeImmutable $now = null
     if (!empty($exam['answers_shown_at'])) {
         return ['open' => true, 'when' => 'shown', 'at' => (string) $exam['answers_shown_at']];
     }
+    $t = [];
+    if (exams_table_exists($pdo, 'trainings')) {
+        $stmt = $pdo->prepare('SELECT ends_on, kind FROM trainings WHERE id = ?');
+        $stmt->execute([(int) $exam['training_id']]);
+        $t = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    }
+    if (($t['kind'] ?? '') === 'test') {
+        // A standalone test (owner, 21 Nov 2026: "everyone sees their results immediately"): open at once.
+        // exam_result_for_learner() still holds them back while the person has another try.
+        return ['open' => true, 'when' => 'test', 'at' => null];
+    }
     if ($exam['window_close'] !== null) {
         return ['open' => $now >= exams_dt((string) $exam['window_close']), 'when' => 'close', 'at' => (string) $exam['window_close']];
     }
-    $ends = null;
-    if (exams_table_exists($pdo, 'trainings')) {
-        $stmt = $pdo->prepare('SELECT ends_on FROM trainings WHERE id = ?');
-        $stmt->execute([(int) $exam['training_id']]);
-        $ends = $stmt->fetchColumn() ?: null;
-    }
+    $ends = $t['ends_on'] ?? null;
     if ($ends !== null && preg_match('/^\d{4}-\d{2}-\d{2}/', (string) $ends)) {
         $from = exams_dt(substr((string) $ends, 0, 10) . ' 00:00:00')->modify('+1 day');
         return ['open' => $now >= $from, 'when' => 'end', 'at' => exams_sql_dt($from)];
@@ -794,6 +803,8 @@ function exam_tell_tutors(PDO $pdo, array $exam, array $attempt, int $leaves): v
  *     closed): never while another attempt is still theirs to take; and
  *   - exam_review_state() opens the review (#181's rule).
  * Until then, when that will be (review_when 'attempts': after their attempts).
+ * A standalone test (test true) also lists, while another try is left, the
+ * questions they missed (`missed`: the question only, never the answer).
  */
 function exam_result_for_learner(PDO $pdo, array $exam, array $attempt, ?DateTimeImmutable $now = null): array
 {
@@ -801,10 +812,12 @@ function exam_result_for_learner(PDO $pdo, array $exam, array $attempt, ?DateTim
     $review = exam_review_state($pdo, $exam, $now);
     $st = exam_attempts_state($exam, exam_attempts_of($pdo, (int) $exam['id'], (int) $attempt['user_id']), $now);
     $open = $review['open'] && !$st['more'];
+    $test = $review['when'] === 'test';
     if ($st['more']) {
         $review = ['open' => false, 'when' => 'attempts', 'at' => null];
     }
     $wrong = [];
+    $missed = [];
     $count = 0;
     foreach (exam_attempt_rows($pdo, (int) $attempt['id']) as $r) {
         $count++;
@@ -820,6 +833,10 @@ function exam_result_for_learner(PDO $pdo, array $exam, array $attempt, ?DateTim
             'part' => (float) $r['score'] > 0 ? (float) $r['score'] : null,
             'marks' => (int) $r['marks'],
         ] : ['n' => (int) $r['position']];
+        if (!$open && $test) {
+            // A test with another try left: which questions they missed (the question, never the answer).
+            $missed[] = ['n' => (int) $r['position'], 'text' => (string) $r['body']];
+        }
     }
     return [
         'attempt_no' => (int) $attempt['attempt_no'],
@@ -827,6 +844,7 @@ function exam_result_for_learner(PDO $pdo, array $exam, array $attempt, ?DateTim
         'passed' => (bool) $attempt['passed'], 'pass_percent' => (int) $exam['pass_percent'],
         'questions' => $count, 'wrong_count' => count($wrong), 'review_open' => $open,
         'review_when' => $review['when'], 'review_at' => $open ? null : $review['at'], 'wrong' => $open ? $wrong : [],
+        'missed' => $missed, 'test' => $test,
     ];
 }
 

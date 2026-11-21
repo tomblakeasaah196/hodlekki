@@ -141,8 +141,12 @@ function trainings_check_completion(PDO $pdo, array $t, array $enrolment): bool
     $upd = $pdo->prepare("UPDATE training_enrolments SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ? AND status = 'active'");
     $upd->execute([$now, $now, $enrolment['id']]);
     if ($upd->rowCount() === 1) {
-        trainings_notify($pdo, [$enrolment['user_id']], 'Training complete', (string) $t['title'],
-            '/modules/trainings/?t=' . (int) $t['id']);
+        // A standalone test (tests.php): one bell, linking to the test; with a certificate, "Certificate ready" is that bell.
+        $testItem = trainings_is_test($t) ? trainings_test_item_id($pdo, (int) $t['id']) : null;
+        if ($testItem === null || !$t['gives_certificate']) {
+            trainings_notify($pdo, [$enrolment['user_id']], $testItem !== null ? 'Test passed' : 'Training complete', (string) $t['title'],
+                $testItem !== null && function_exists('exam_url_take') ? exam_url_take($testItem) : '/modules/trainings/?t=' . (int) $t['id']);
+        }
         // Its certificate, if it gives one (an official class waits for the Academy's confirm).
         trainings_certificate_auto($pdo, (int) $enrolment['id']);
         return true;
@@ -378,7 +382,7 @@ function trainings_mine(PDO $pdo, int $userId): array
     $stmt = $pdo->prepare("SELECT e.*, t.title, t.summary, t.length, t.starts_on, t.ends_on, t.status AS training_status, t.official_key,
                                   t.gives_certificate, t.pass_rule, t.kind, t.catalogue, t.department_id, t.created_by, t.created_at AS t_created
                              FROM training_enrolments e JOIN trainings t ON t.id = e.training_id
-                            WHERE e.user_id = ? AND e.status <> 'withdrawn' AND t.status = 'published'
+                            WHERE e.user_id = ? AND e.status <> 'withdrawn' AND t.status = 'published' AND t.kind <> 'test'
                             ORDER BY CASE WHEN e.status = 'active' THEN 0 ELSE 1 END,
                                      CASE WHEN e.due_on IS NULL THEN 1 ELSE 0 END, e.due_on, t.starts_on, e.id DESC");
     $stmt->execute([$userId]);

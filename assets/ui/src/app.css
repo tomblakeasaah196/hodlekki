@@ -3942,6 +3942,10 @@
     .xt-allset { display: flex; align-items: center; gap: 8px; color: var(--ui-success-text); font-weight: 600; }
     .xt-allset .ui-icon { width: 18px; height: 18px; }
 
+    /* A standalone test's QR code on its set-up page (modules/exams/setup.php). */
+    .ex-qr { width: 100%; max-width: 200px; padding: 6px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: #fff; }
+    .ex-qr svg { display: block; width: 100%; height: auto; }
+
     /* The result. */
     .xt-result { text-align: center; }
     .xt-result__icon {
@@ -3991,6 +3995,22 @@
     }
     .xt-attempts { margin: 14px 0 0; font-weight: 600; color: var(--ui-text); font-variant-numeric: tabular-nums; }
     .xt-retake { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 18px; }
+    /* Right / Missed / Marks under the score, and the certificate (standalone tests, docs/EXAMS.md §8). */
+    .xt-tally {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        max-width: 420px;
+        margin: 18px auto 0;
+    }
+    .xt-tally__item { padding: 10px 8px; border-radius: var(--ui-radius); background: rgba(29, 53, 106, .06); }
+    .xt-tally__item dt { font-size: var(--ui-text-xs); font-weight: 600; color: var(--ui-text-muted); }
+    .xt-tally__item dd { margin: 2px 0 0; font-size: 1.375rem; font-weight: 700; color: var(--ui-heading); font-variant-numeric: tabular-nums; }
+    .xt-tally__item--right dd { color: var(--ui-success-text); }
+    .xt-tally__item--miss dd { color: var(--ui-danger); }
+    .xt-cert { display: flex; justify-content: center; margin-top: 18px; }
+    .xt-missed { border-left: 3px solid var(--ui-danger); }
+    .xt-result--miss .xt-result__icon { background: var(--ui-warning-soft); color: var(--ui-warning); }
     .xt-learn-title { margin: 28px 0 12px; }
     .xt-learn { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
     .xt-learn__q { margin-top: 4px; font-weight: 600; color: var(--ui-heading); white-space: pre-line; overflow-wrap: anywhere; }
@@ -4032,7 +4052,36 @@
     @keyframes xt-in-next { from { opacity: 0; transform: translate3d(32px, 0, 0); } to { opacity: 1; transform: none; } }
     @keyframes xt-in-back { from { opacity: 0; transform: translate3d(-32px, 0, 0); } to { opacity: 1; transform: none; } }
     @keyframes xt-rise { from { opacity: 0; transform: translate3d(0, 16px, 0); } to { opacity: 1; transform: none; } }
+    /* Not this time: the icon sways and settles, once (only under .xt-motion, so never with reduced motion). */
+    .xt-motion .xt-sway { animation: xt-sway 1100ms var(--xt-ease) 300ms both; }
+    @keyframes xt-sway {
+        0% { transform: rotate(0); }
+        20% { transform: rotate(-14deg); }
+        40% { transform: rotate(10deg); }
+        60% { transform: rotate(-6deg); }
+        80% { transform: rotate(3deg); }
+        100% { transform: rotate(0); }
+    }
+    /* A pass: confetti falls over the page, once (exam-take.js confetti(); never under reduced motion). */
+    .xt-confetti { position: fixed; inset: 0; z-index: 60; overflow: hidden; pointer-events: none; }
+    .xt-confetti i {
+        position: absolute;
+        top: -16px;
+        width: 8px;
+        height: 14px;
+        border-radius: 2px;
+        animation-name: xt-confetti;
+        animation-timing-function: cubic-bezier(.25, .6, .35, 1);
+        animation-fill-mode: forwards;
+    }
+    .xt-confetti i.is-round { width: 9px; height: 9px; border-radius: 999px; }
+    @keyframes xt-confetti {
+        0% { opacity: 1; transform: translate3d(0, 0, 0) rotate(0); }
+        85% { opacity: 1; }
+        100% { opacity: 0; transform: translate3d(var(--x, 0), 105vh, 0) rotate(var(--r, 360deg)); }
+    }
     @media (prefers-reduced-motion: reduce) {
+        .xt-confetti { display: none; }
         .xt .xt-in-next,
         .xt .xt-in-back,
         .xt .xt-rise { animation: none !important; }

@@ -374,6 +374,7 @@
     function reviewSetup(r) {
         var line = one('[data-ex-review]');
         var btn = one('[data-ex-answers]');
+        if (!line || !btn) return;   // a standalone test: its answers show by themselves (docs/EXAMS.md §8)
         if (!r) {
             line.textContent = 'Save the exam first.';
             btn.hidden = true;
@@ -470,6 +471,66 @@
         }).catch(function (err) {
             HOD.toast(err.message, 'danger');
         }).finally(function () { HOD.busy(button, false); });
+    }
+
+    /* ---------- a standalone test: its name, certificate, status and link ---------- */
+
+    function testStatus(t) {
+        if (!t) return;
+        var published = t.status === 'published';
+        var pub = one('[data-ex-test-pub]');
+        var unpub = one('[data-ex-test-unpub]');
+        if (pub) pub.hidden = published;
+        if (unpub) unpub.hidden = !published;
+        var badge = one('[data-ex-test-status]');
+        if (badge) {
+            badge.innerHTML = '<span class="ui-badge ui-badge--dot' + (published ? ' ui-badge--success' : '') + '">' + (published ? 'Published' : 'Draft') + '</span>';
+        }
+    }
+
+    function testSave(form) {
+        var button = form.querySelector('[type="submit"]');
+        HOD.busy(button, true);
+        var box = form.querySelector('[name="gives_certificate"]');
+        call('test_save', { item: cfg.item, title: form.querySelector('[name="title"]').value, gives_certificate: box && box.checked ? 1 : 0 }, { quiet: true })
+            .then(function (res) { testStatus(res.test); HOD.toast(res.message, 'success'); })
+            .catch(function (err) { HOD.toast(err.message, 'danger'); })
+            .finally(function () { HOD.busy(button, false); });
+    }
+
+    function testPublish(btn) {
+        var on = btn.getAttribute('data-publish') === '1';
+        var go = function () {
+            HOD.busy(btn, true);
+            call('test_publish', { item: cfg.item, publish: on ? 1 : 0 }, { quiet: true })
+                .then(function (res) { testStatus(res.test); HOD.toast(res.message, 'success'); })
+                .catch(function (err) { HOD.toast(err.message, 'danger'); })
+                .finally(function () { HOD.busy(btn, false); });
+        };
+        if (on) { go(); return; }
+        HOD.confirm({ title: 'Unpublish this test?', message: 'Members stop seeing it. Results so far are kept.', confirmLabel: 'Unpublish' })
+            .then(function (yes) { if (yes) go(); });
+    }
+
+    function testDelete(btn) {
+        HOD.confirm({ title: 'Delete this test?', message: 'Its questions go too. This cannot be undone.', confirmLabel: 'Delete test', tone: 'danger' })
+            .then(function (yes) {
+                if (!yes) return;
+                HOD.busy(btn, true);
+                call('test_delete', { item: cfg.item }, { quiet: true })
+                    .then(function (res) { window.location.href = res.redirect || '/modules/academy/#tab=tests'; })
+                    .catch(function (err) { HOD.toast(err.message, 'danger'); HOD.busy(btn, false); });
+            });
+    }
+
+    function testCopy(btn) {
+        var url = btn.getAttribute('data-url') || '';
+        var done = function () { HOD.toast('Link copied.', 'success'); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(done).catch(function () { window.prompt('Copy the link', url); });
+        } else {
+            window.prompt('Copy the link', url);
+        }
     }
 
     var ENDED = { learner: 'Handed in', timer: 'Time ran out', closed: 'Exam closed', tutor: 'Handed in by a tutor' };
@@ -576,6 +637,10 @@
             HOD.actions.on('ex.attempt', attempt);
             HOD.actions.on('ex.end', endAttempt);
             HOD.actions.on('ex.answers', answers);
+            HOD.actions.on('ex.test-save', testSave);
+            HOD.actions.on('ex.test-publish', testPublish);
+            HOD.actions.on('ex.test-copy', testCopy);
+            HOD.actions.on('ex.test-delete', testDelete);
             loadSetup().then(function () { results(); }).catch(function () {});
             document.addEventListener('ui:tab', function (e) { if (e.detail && e.detail.tab === 'results') results(); });
         }

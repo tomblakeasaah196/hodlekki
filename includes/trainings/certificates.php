@@ -473,7 +473,10 @@ function trainings_certificate_issue(PDO $pdo, array $enrolment, ?int $by = null
         }
         throw $ex;
     }
-    trainings_notify($pdo, [(int) $e['user_id']], 'Certificate ready', (string) $t['title'], '/modules/trainings/?t=' . (int) $t['id']);
+    // A standalone test has no course page: the bell opens the test's result, where the certificate is (tests.php).
+    $testItem = trainings_is_test($t) ? trainings_test_item_id($pdo, (int) $t['id']) : null;
+    trainings_notify($pdo, [(int) $e['user_id']], 'Certificate ready', (string) $t['title'],
+        $testItem !== null && function_exists('exam_url_take') ? exam_url_take($testItem) : '/modules/trainings/?t=' . (int) $t['id']);
     return ['ok' => true, 'code' => $code, 'reissued' => $old !== null];
 }
 

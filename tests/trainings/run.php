@@ -1162,5 +1162,233 @@ ok('the daily job is CLI only and sets DOCUMENT_ROOT first', strpos($cron, "PHP_
 ok('the crontab line is in the README', str_contains((string) file_get_contents($root . '/README.md'), 'cron/trainings_daily.php'));
 ok('AGENTS.md documents Trainings', str_contains((string) file_get_contents($root . '/AGENTS.md'), '## Trainings'));
 
+// ===========================================================================
+section('Standalone tests (includes/trainings/tests.php, docs/EXAMS.md §8)');
+// ===========================================================================
+require_once $root . '/includes/exams/access.php';
+
+/** PR 2's exam tables, from their migrations (named unique indexes, so the retakes migration can drop one). */
+function trn_exam_tables(PDO $pdo): void
+{
+    $sql = (string) preg_replace('/^\s*--.*$/m', '', (string) file_get_contents(dirname(__DIR__, 2) . '/db/migrations/20261209090000_trainings_exams.sql'));
+    preg_match_all('/CREATE TABLE IF NOT EXISTS (\w+) \((.*?)\)\s*ENGINE=[^;]*;/s', $sql, $tables, PREG_SET_ORDER);
+    foreach ($tables as [, $name, $body]) {
+        $cols = $indexes = [];
+        $autoId = false;
+        foreach (preg_split('/,\s*\n/', trim($body)) as $line) {
+            $line = trim($line);
+            if ($autoId && preg_match('/^PRIMARY KEY \((\w+)\)$/', $line)) {
+                continue;
+            }
+            if (preg_match('/^UNIQUE KEY (\w+) \((.+)\)$/', $line, $m)) {
+                $indexes[] = "CREATE UNIQUE INDEX {$m[1]} ON {$name} ({$m[2]})";
+                continue;
+            }
+            if (preg_match('/^KEY (\w+) \((.+)\)$/', $line, $m)) {
+                $indexes[] = "CREATE INDEX {$m[1]} ON {$name} ({$m[2]})";
+                continue;
+            }
+            if (str_contains($line, 'AUTO_INCREMENT')) {
+                $cols[] = strtok($line, ' ') . ' INTEGER PRIMARY KEY AUTOINCREMENT';
+                $autoId = true;
+                continue;
+            }
+            $line = (string) preg_replace('/\b(TINYINT|INT)\b/', 'INTEGER', $line);
+            $line = (string) preg_replace('/\b(VARCHAR|CHAR)\(\d+\)|\bDECIMAL\(\d+,\d+\)/', 'TEXT', $line);
+            $line = (string) preg_replace('/\b(MEDIUMTEXT|LONGTEXT|DATETIME|DATE)\b/', 'TEXT', $line);
+            $cols[] = $line;
+        }
+        $pdo->exec("CREATE TABLE {$name} (" . implode(', ', $cols) . ')');
+        foreach ($indexes as $ix) {
+            $pdo->exec($ix);
+        }
+    }
+    foreach (['20261209090100_trainings_exams_review.sql', '20261209090200_trainings_exams_retakes.sql'] as $file) {
+        $alters = (string) file_get_contents(dirname(__DIR__, 2) . '/db/migrations/' . $file);
+        preg_match_all("/'ALTER TABLE (\\w+) (ADD COLUMN|ADD UNIQUE KEY|DROP INDEX) ([^']+)'/", $alters, $am, PREG_SET_ORDER);
+        foreach ($am as [, $table, $op, $rest]) {
+            if ($op === 'ADD COLUMN') {
+                $rest = (string) preg_replace('/\\b(TINYINT|INT)\\b/', 'INTEGER', $rest);
+                $pdo->exec("ALTER TABLE {$table} ADD COLUMN " . preg_replace('/\\bDATETIME\\b/', 'TEXT', $rest));
+            } elseif ($op === 'ADD UNIQUE KEY' && preg_match('/^(\\w+) \\((.+)\\)$/', $rest, $m)) {
+                $pdo->exec("CREATE UNIQUE INDEX {$m[1]} ON {$table} ({$m[2]})");
+            } elseif ($op === 'DROP INDEX') {
+                $pdo->exec('DROP INDEX ' . trim($rest));
+            }
+        }
+    }
+}
+
+$pdo = trn_db();
+trn_exam_tables($pdo);
+ok('the exam tables are there for the tests', exams_ready($pdo) && exams_retakes_ready($pdo));
+$GLOBALS['trainings_now'] = new DateTimeImmutable('2026-11-24 18:00:00', new DateTimeZone('Africa/Lagos'));
+exams_set_clock(exams_dt('2026-11-24 18:00:00'));
+$sotw = trainings_tests_overview($pdo);
+eq('no tests yet', [], $sotw);
+
+eq('a member cannot create a test', 'FORBIDDEN', act($pdo, 904, 'test_create', ['title' => 'Mine'])['code'] ?? null);
+eq('a test needs a name', 'title', act($pdo, 901, 'test_create', ['title' => '  '])['field'] ?? null);
+$made = act($pdo, 901, 'test_create', ['title' => 'School of the Word, November test', 'gives_certificate' => '1']);
+ok('the Academy creates a test', ($made['status'] ?? '') === 'success' && (int) ($made['item_id'] ?? 0) > 0, json_encode($made));
+$tid = (int) $made['id'];
+$itemId = (int) $made['item_id'];
+eq('…and goes straight on to its set-up page', '/modules/exams/setup?item=' . $itemId, $made['setup_url'] ?? null);
+$t = trainings_get($pdo, $tid);
+ok('…a draft training of kind test, out of the catalogue, with a certificate', trainings_is_test($t) && $t['status'] === 'draft' && !$t['catalogue'] && $t['gives_certificate']);
+eq('…one card and one required exam item with its name', [['exam', 'School of the Word, November test', 1]],
+    array_map(static fn ($i) => [$i['type'], $i['title'], (int) $i['required']], trainings_items_flat($pdo, $tid)));
+$item = exam_item($pdo, $itemId);
+eq('the exam item knows it is a test', 'test', $item['training_kind'] ?? null);
+ok('its link is /test?t=<item>', str_ends_with(trainings_test_url($itemId), '/test?t=' . $itemId));
+ok('…and its QR code reads as an image (SVG and PNG)', str_starts_with(trainings_test_qr_svg(trainings_test_url($itemId)), '<svg')
+    && str_starts_with(trainings_test_qr_png_uri(trainings_test_url($itemId)), 'data:image/png;base64,'));
+
+// Not in the course lists.
+eq('a test is not in the Academy\'s training list', [], array_values(array_filter(trainings_overview($pdo), static fn ($r) => $r['id'] === $tid)));
+eq('…it is in the Tests list', [$tid], array_column(trainings_tests_overview($pdo), 'id'));
+
+// Publishing needs questions.
+trn_as(901);
+eq('publishing with no questions is refused', 'NOT_READY', exams_action($pdo, 'test_publish', ['item' => $itemId, 'publish' => 1], 901)['code'] ?? null);
+eq('a draft test is not open to members', null, exams_learner_enrolment($pdo, $item, 904));
+$qs = [];
+foreach ([['Who wrote Romans?', ['Paul', 'Peter', 'John'], [0]], ['Which are fruits of the Spirit?', ['Love', 'Anger', 'Joy'], [0, 2]],
+          ['How many books are in the Bible?', ['66', '72', '39'], [0]], ['Jesus was born in Bethlehem.', null, null]] as [$body, $opts, $right]) {
+    $q = $opts === null
+        ? exam_question_save($pdo, null, $tid, ['qtype' => 'true_false', 'body' => $body, 'correct_text' => 'True', 'status' => 'approved',
+            'explanation' => 'Matthew 2:1.'], 901)
+        : exam_question_save($pdo, null, $tid, ['qtype' => count($right) > 1 ? 'multiple' : 'single', 'body' => $body, 'options' => $opts,
+            'correct' => $right, 'status' => 'approved', 'explanation' => 'From the class notes.'], 901);
+    ok("question saved: {$body}", !empty($q['ok']), json_encode($q['errors'] ?? null));
+    $qs[] = (int) $q['id'];
+}
+$saved = exams_action($pdo, 'exam_save', ['item' => $itemId, 'window_open' => '2026-11-24T18:00', 'window_close' => '2026-11-24T21:00', 'minutes' => 20,
+    'pass_percent' => 75, 'attempts_allowed' => 5, 'shuffle' => 1, 'leave_alert' => 3, 'question_ids' => $qs], 901);
+eq('a test may allow up to 5 tries', 5, $saved['exam']['attempts_allowed'] ?? null);
+eq('…but not 6', 'error', exams_action($pdo, 'exam_save', ['item' => $itemId, 'attempts_allowed' => 6, 'minutes' => 20, 'pass_percent' => 75, 'question_ids' => $qs], 901)['status'] ?? null);
+exams_action($pdo, 'exam_save', ['item' => $itemId, 'window_open' => '2026-11-24T18:00', 'window_close' => '2026-11-24T21:00', 'minutes' => 20,
+    'pass_percent' => 75, 'attempts_allowed' => 2, 'shuffle' => 1, 'leave_alert' => 3, 'question_ids' => $qs], 901);
+eq('a member cannot publish it', 'FORBIDDEN', (function () use ($pdo, $itemId) { trn_as(904); return exams_action($pdo, 'test_publish', ['item' => $itemId, 'publish' => 1], 904)['code'] ?? null; })());
+trn_as(901);
+$pub = exams_action($pdo, 'test_publish', ['item' => $itemId, 'publish' => 1], 901);
+ok('the Academy publishes it', ($pub['status'] ?? '') === 'success' && ($pub['test']['status'] ?? '') === 'published', json_encode($pub));
+eq('…the set-up view says it is a test, with its link', trainings_test_url($itemId), $pub['test']['url'] ?? null);
+$renamed = exams_action($pdo, 'test_save', ['item' => $itemId, 'title' => 'SOTW November', 'gives_certificate' => 1], 901);
+eq('renaming the test renames its exam item too', ['SOTW November', 'SOTW November'],
+    [$renamed['test']['title'] ?? null, exam_item($pdo, $itemId)['title'] ?? null]);
+$item = exam_item($pdo, $itemId);
+
+// Every member, by opening it.
+eq('the review opens at once for a test', ['open' => true, 'when' => 'test', 'at' => null], exam_review_state($pdo, exam_get($pdo, $itemId)));
+$forDayo = trainings_tests_for_learner($pdo, 904);
+eq('a member sees it under Trainings › Tests, ready to start', [[$tid, 'open', 'start']], array_map(static fn ($x) => [$x['id'], $x['state'], $x['action']], $forDayo));
+eq('…and it counts as waiting', 1, trainings_tests_waiting($forDayo));
+trn_as(904);
+$enrol = exams_learner_enrolment($pdo, $item, 904);
+ok('opening it enrols the member (source self)', $enrol !== null && trainings_enrolment_get($pdo, $enrol)['source'] === 'self');
+eq('…once', $enrol, exams_learner_enrolment($pdo, $item, 904));
+eq('it never shows in My trainings', [], array_values(array_filter(trainings_mine($pdo, 904), static fn ($m) => $m['id'] === $tid)));
+eq('…nor in the catalogue', [], array_values(array_filter(trainings_catalogue($pdo, 904), static fn ($c) => $c['id'] === $tid)));
+
+// Try 1: everything wrong. Another try left: which ones they missed, never the answers.
+$view = exams_action($pdo, 'start', ['item' => $itemId], 904);
+eq('the member starts', 'started', $view['state'] ?? null);
+$att = exam_attempt_get($pdo, (int) exam_get($pdo, $itemId)['id'], 904);
+$rows = exam_attempt_rows($pdo, $att['id']);
+$shownFor = static function (array $r, array $originals): array {
+    $pos = array_flip($r['order']);
+    return array_map(static fn ($i) => $pos[$i], $originals);
+};
+foreach ($rows as $r) {
+    $wrongPick = array_values(array_diff(array_keys($r['options']), $r['correct']))[0];
+    exam_answer($pdo, $att, (int) $r['position'], $shownFor($r, [$wrongPick]));
+}
+$done = exams_action($pdo, 'submit', ['item' => $itemId], 904);
+$res = $done['result'] ?? [];
+ok('try 1: not passed, a test, and the questions missed listed', ($res['passed'] ?? true) === false && ($res['test'] ?? false) === true
+    && count($res['missed'] ?? []) === 4 && ($res['wrong'] ?? null) === [], json_encode($res));
+ok('…with the questions but never the right answers', str_contains(json_encode($res['missed']), 'Who wrote Romans?')
+    && !str_contains(json_encode($res), 'From the class notes') && !str_contains(json_encode($res), 'Matthew 2:1'));
+eq('…and a try left', [true, 'attempts'], [$done['can_retake'] ?? null, $res['review_when'] ?? null]);
+eq('…Trainings › Tests offers Try again', 'retake', trainings_tests_for_learner($pdo, 904)[0]['action']);
+
+// Try 2: all right. Passed: the review opens (nothing wrong to show), the training completes, the certificate is issued.
+exams_action($pdo, 'start', ['item' => $itemId], 904);
+$att2 = exam_attempt_get($pdo, (int) exam_get($pdo, $itemId)['id'], 904);
+foreach (exam_attempt_rows($pdo, $att2['id']) as $r) {
+    exam_answer($pdo, $att2, (int) $r['position'], $shownFor($r, $r['correct']));
+}
+$done2 = exams_action($pdo, 'submit', ['item' => $itemId], 904);
+ok('try 2: passed with 100%', ($done2['result']['passed'] ?? false) === true && (float) ($done2['result']['percent'] ?? 0) === 100.0, json_encode($done2['result'] ?? null));
+eq('…the test is complete', 'completed', trainings_enrolment_get($pdo, $enrol)['status']);
+ok('…the certificate is issued at once and offered on the result', trainings_certificate_current($pdo, $enrol) !== null
+    && ($done2['certificate'] ?? '') === '/api/trainings_certificate.php?e=' . $enrol);
+$after = trainings_tests_for_learner($pdo, 904)[0];
+eq('…Trainings › Tests shows the result, the best score and the certificate', ['result', 100, true],
+    [$after['action'], $after['best_percent'], $after['certificate'] !== null]);
+eq('…the bell links to the test, not a course page', exam_url_take($itemId),
+    $pdo->query("SELECT link_url FROM system_notifications WHERE user_id = 904 ORDER BY id DESC LIMIT 1")->fetchColumn());
+
+// A second member fails on the last try: the right answers show at once.
+trn_as(906);
+exams_learner_enrolment($pdo, $item, 906);
+foreach ([1, 2] as $try) {
+    exams_action($pdo, 'start', ['item' => $itemId], 906);
+    $a = exam_attempt_get($pdo, (int) exam_get($pdo, $itemId)['id'], 906);
+    foreach (exam_attempt_rows($pdo, $a['id']) as $r) {
+        exam_answer($pdo, $a, (int) $r['position'], $shownFor($r, [array_values(array_diff(array_keys($r['options']), $r['correct']))[0]]));
+    }
+    $last = exams_action($pdo, 'submit', ['item' => $itemId], 906);
+}
+ok('the last try: the right answers and explanations show at once', ($last['result']['review_open'] ?? false) === true
+    && count($last['result']['wrong'] ?? []) === 4 && ($last['result']['missed'] ?? null) === []
+    && str_contains(json_encode($last['result']['wrong']), 'From the class notes'), json_encode($last['result'] ?? null));
+eq('…no certificate without a pass', null, $last['certificate'] ?? null);
+$ov = trainings_tests_overview($pdo)[0];
+eq('the Academy sees who took it and who passed', [2, 1, 4], [$ov['took'], $ov['passed'], $ov['questions']]);
+
+// After it closes: only the people who sat it still see it.
+exams_set_clock(exams_dt('2026-11-24 21:30:00'));
+eq('closed: a member who never started no longer sees it', [], trainings_tests_for_learner($pdo, 902));
+eq('…one who sat it still sees the result', 'result', trainings_tests_for_learner($pdo, 904)[0]['action'] ?? null);
+exams_set_clock(exams_dt('2026-11-24 18:30:00'));
+trn_as(901);
+exams_action($pdo, 'test_publish', ['item' => $itemId, 'publish' => 0], 901);
+eq('unpublished: closed to members again', null, exams_learner_enrolment($pdo, exam_item($pdo, $itemId), 902));
+eq('…the attempts are kept', 4, trn_count($pdo, 'training_attempts', 'item_id = ?', [$itemId]));
+
+// Deleting: only while nobody has started.
+eq('a test people have taken cannot be deleted', 'STARTED', exams_action($pdo, 'test_delete', ['item' => $itemId], 901)['code'] ?? null);
+$spare = act($pdo, 901, 'test_create', ['title' => 'Try-out']);
+trn_as(901);
+$gone = exams_action($pdo, 'test_delete', ['item' => (int) $spare['item_id']], 901);
+ok('a test nobody started is deleted with its exam item', ($gone['status'] ?? '') === 'success' && trainings_get($pdo, (int) $spare['id']) === null
+    && exam_item($pdo, (int) $spare['item_id']) === null, json_encode($gone));
+$spare = act($pdo, 901, 'test_create', ['title' => 'Try-out 2']);
+trn_as(904);
+eq('a member cannot delete one', 'FORBIDDEN', exams_action($pdo, 'test_delete', ['item' => (int) $spare['item_id']], 904)['code'] ?? null);
+trn_as(901);
+
+// A course exam is untouched.
+$course = trainings_create($pdo, ['title' => 'Workers class', 'length' => 'self_paced'], 901);
+$pdo->prepare("UPDATE trainings SET status = 'published' WHERE id = ?")->execute([$course['id']]);
+$pdo->prepare("INSERT INTO training_items (training_id, section_id, position, type, title, required, details, created_at) VALUES (?, ?, 1, 'exam', 'Final', 1, '{}', '2026-11-24 10:00:00')")
+    ->execute([$course['id'], (int) trainings_outline($pdo, $course['id'])[0]['id']]);
+$cItem = exam_item($pdo, (int) $pdo->lastInsertId());
+ok('a course exam is not a test', $cItem !== null && !exams_item_is_test($cItem));
+ok('…a member is not enrolled by opening it', $cItem !== null && exams_learner_enrolment($pdo, $cItem, 904) === null);
+unset($GLOBALS['trainings_now']);
+exams_set_clock(false);
+
+// The pages.
+$setupSrc = (string) file_get_contents($root . '/modules/exams/setup.php');
+ok('the set-up page shows a test\'s name, certificate, publish and QR', str_contains($setupSrc, 'exams_test_setup(') && str_contains($setupSrc, 'trainings_test_qr_svg(')
+    && str_contains($setupSrc, "'ex.test-publish'"));
+$learnerSrc = (string) file_get_contents($root . '/modules/trainings/index.php');
+ok('Trainings has a Tests tab for every member', str_contains($learnerSrc, 'trainings_tests_for_learner(') && str_contains($learnerSrc, "'tests' => ['label' => 'Tests'"));
+$entry = (string) file_get_contents($root . '/test.php');
+ok('/test signs people in first, then opens the test', str_contains($entry, "/auth/login?next=") && str_contains($entry, '/modules/exams/take?item='));
+
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed > 0 ? 1 : 0);

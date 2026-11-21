@@ -140,3 +140,27 @@ US$1–4 a day at Gemini 2.5 Flash prices), with a clear message when it is reac
 (questions 8,192 tokens, explanations 4,096, outline 4,096, summary 1,500, prompts 1,024); 30 calls per person per
 hour; 60,000 characters of source text per call. `training_ai_requests` logs every call: who, the task, the training,
 the model, the tokens, ok or why not, and never the text. The page shows today's meter.
+
+## 8. Standalone tests (`includes/trainings/tests.php`)
+
+Owner, 21 Nov 2026: the School of the Word (Sunday morning and the Rhema evening, a class every Tuesday evening) sets a
+test each month, until now on Google Forms. A **test** stands on its own: no course, questions uploaded for it alone,
+open to every member, instant results, a certificate if the Academy wants one.
+
+**One engine.** A test is a training of kind `test` with one card and one required exam item, so everything above
+applies unchanged: the bank and the Excel import, the window, the countdown, shuffling, marking at hand-in, retakes,
+the tutor's results. Nothing new in the schema.
+
+| What | How |
+| ---- | --- |
+| Create | Academy › **New test** (`test_create` in `trainings_action()`, Trainings Create): a draft (self-paced, out of the catalogue), then straight to the exam set-up page for the questions and rules. |
+| Set up | The set-up page shows a **Test** card for a test: the name, **Certificate for those who pass**, **Publish** / **Unpublish** (`test_save`, `test_publish` in `exams_action()`, the tutors' check), the link and its QR code (inline SVG; **Download QR** as PNG). Publishing needs the exam saved with questions. Unpublishing keeps every attempt. |
+| Who | Every member while it is published: opening it enrols them (`exams_learner_enrolment()` → `trainings_test_enrol()`, source `self`). Nothing to assign. |
+| Where | Trainings › **Tests** (`trainings_tests_for_learner()`): open, coming and taken tests, with Start / Continue / Try again / See result and the certificate. The tab leads when one is waiting. Tests never show in My trainings, the catalogue or the Academy's training list; the Academy has its own **Tests** tab (`trainings_tests_overview()`: window, questions, took it, passed). |
+| Link | `trainings_test_url()` → `/test?t=<item>` (`test.php`): signed in, straight to the test; otherwise the sign-in page, then the test. |
+| Tries | 1 to `EXAM_TEST_ATTEMPTS_MAX` (5) per test; course exams keep 1–3. |
+| Answers | `exam_review_state()` says `test`: open at once. `exam_result_for_learner()` still holds the right answers back while the person has another try; meanwhile `missed` lists the questions they got wrong (the question only). Once they pass or use their last try, they see their answer, the right one and the explanation. |
+| Certificate | On a pass, when switched on: the pass completes the training (`trainings_check_completion()`), which issues it (`trainings_certificate_auto()`). The result offers **Download certificate**. One bell, linking to the test ("Certificate ready", else "Test passed"). |
+| The result | `modules/exams/take.php` + `exam-take.js`: the score, Right / Missed / Marks, tries left, Try again, the certificate. Confetti on a pass and a short sway on a miss, right after handing in only, never with reduced motion. |
+
+Tests: the "Standalone tests" section of `tests/trainings/run.php`.

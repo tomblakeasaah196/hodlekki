@@ -22,19 +22,23 @@ if ($item === null) {
     exit;
 }
 // Access: Trainings on their own records and an enrolment in the training (PR 1); the API checks every action again.
+// A standalone test (docs/EXAMS.md §8) is open to every member while published: this enrols them.
+$isTest = exams_item_is_test($item);
 if (exams_learner_enrolment($pdo, $item, (int) $_SESSION['user_id']) === null) {
-    echo ui_no_access('This exam is for people enrolled in ' . $item['training_title'] . '.', 'Not enrolled');
+    echo $isTest ? ui_no_access('It may have closed, or not opened yet.', 'This test is not open')
+        : ui_no_access('This exam is for people enrolled in ' . $item['training_title'] . '.', 'Not enrolled');
     require_once '../../includes/footer.php';
     exit;
 }
-echo ui_json_script('exams-config', ['page' => 'take', 'item' => (int) $item['id']]);
+echo ui_json_script('exams-config', ['page' => 'take', 'item' => (int) $item['id'], 'test' => $isTest]);
 // Retakes: attempts are set per exam (docs/EXAMS.md §3).
 $tries = (int) (exam_get($pdo, (int) $item['id'])['attempts_allowed'] ?? 1);
 ?>
 <div class="ui-page ui-page--narrow xt" data-exam-take>
     <?= ui_page_header([
-        'title' => 'Your exam',
-        'description' => $item['title'] . ' · ' . $item['training_title'],
+        'title' => $isTest ? $item['title'] : 'Your exam',
+        'description' => $isTest ? 'Test' : $item['title'] . ' · ' . $item['training_title'],
+        'back' => $isTest ? ['href' => '/modules/trainings/#tab=tests', 'label' => 'Trainings'] : null,
         'info' => ($tries > 1 ? 'You have ' . $tries . ' attempts, until you pass; your best score counts.' : 'You have one attempt.') . ' Once you start, the clock runs even if you close the page, and at zero your answers are handed in by themselves. Each answer is saved as you choose it. Stay on this tab: leaving it is noted for your tutor.',
     ]) ?>
 

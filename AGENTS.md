@@ -1098,6 +1098,10 @@ Guide and contracts: `docs/EXAMS.md`. Code: `includes/exams/` (entry
   `trainings_progress_put()` and then calls `trainings_recheck_enrolment()`.
 - The Excel reader (`xlsx.php`) treats every upload as hostile (size caps
   before inflating, no DOCTYPE, no network); keep it that way.
+- **Standalone tests** (added 2026-11-21, `includes/trainings/tests.php`,
+  docs/EXAMS.md §8): a training of kind `test` with one exam item, open to
+  every member while published (opening it enrols them). Keep tests out of
+  the course lists (`kind <> 'test'`); reuse the engine, never fork it.
 
 ## Trainings: My notes (added 2026-11-13)
 

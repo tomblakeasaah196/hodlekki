@@ -87,7 +87,7 @@ function trainings_catalogue(PDO $pdo, int $userId): array
     $stmt = $pdo->prepare("SELECT t.*, e.id AS enrolment_id, e.status AS enrolment_status
                              FROM trainings t
                              LEFT JOIN training_enrolments e ON e.training_id = t.id AND e.user_id = ?
-                            WHERE t.status = 'published' AND t.catalogue = 1
+                            WHERE t.status = 'published' AND t.catalogue = 1 AND t.kind <> 'test'
                               AND (t.ends_on IS NULL OR t.ends_on >= ?)
                             ORDER BY CASE WHEN t.starts_on IS NULL THEN 1 ELSE 0 END, t.starts_on, t.id DESC LIMIT 100");
     $stmt->execute([$userId, trainings_today()]);
