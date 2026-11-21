@@ -37,7 +37,7 @@ if ($result !== null && !empty($result['ok'])): ?>
     <?= ui_banner('success', ['title' => 'Email confirmed', 'info' => 'Password reset links and church messages will come to ' . (string) $result['email'] . '.']) ?>
     <?= $continue ?>
 <?php elseif ($result !== null && ($result['code'] ?? '') === 'TAKEN'): ?>
-    <?= ui_banner('danger', ['title' => 'Email already in use', 'text' => 'Ask the church office for help.']) ?>
+    <?= ui_banner('danger', ['title' => 'Email already in use', 'text' => 'Ask Information and Data Insights (IDI) for help.']) ?>
 <?php elseif ($result !== null && ($result['code'] ?? '') === 'STALE'): ?>
     <?= ui_banner('warning', ['title' => 'Please try again', 'text' => 'Tap the link in your email again.']) ?>
 <?php elseif ($peek !== null && $peek['state'] === 'pending'): ?>

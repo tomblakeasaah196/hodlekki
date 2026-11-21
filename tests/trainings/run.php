@@ -1395,11 +1395,24 @@ section('QR entry to a test (includes/trainings/entry.php, docs/EXAMS.md §9)');
 // ===========================================================================
 require_once $root . '/includes/trainings/entry.php';
 
+// The readers first: birthdays however they are typed, the masked email, the mailbox button.
+$bday = static fn (string $s) => ($b = trainings_entry_parse_birthday($s)) === null ? null : $b['day'] . '/' . $b['month'];
+eq('birthdays: "12 March", "march 12th", "12/03", "12-3-1990", "Mrach 12", "the 12th of sept", "29 Feb"',
+    ['12/3', '12/3', '12/3', '12/3', '12/3', '12/9', '29/2'],
+    array_map($bday, ['12 March', 'march 12th', '12/03', '12-3-1990', 'Mrach 12', 'the 12th of sept', '29 Feb']));
+eq('…month first when the day is over 12 ("03/25"), and nonsense or impossible dates are refused', ['25/3', null, null, null],
+    array_map($bday, ['03/25', 'banana', '31 April', '']));
+eq('the email masked as the owner asked: tom…h@gmail.com', ['tom…h@gmail.com', 'a…@yahoo.com', 'day…r@gmail.com'],
+    array_map('trainings_entry_mask', ['tomblakeh@gmail.com', 'abc@yahoo.com', 'dayo.learner@gmail.com']));
+eq('the mailbox button for the usual providers', ['Open Gmail', 'Open Yahoo Mail', 'Open Outlook', null],
+    array_map(static fn ($e) => trainings_entry_mail_link($e)['label'] ?? null, ['a@gmail.com', 'b@yahoo.co.uk', 'c@hotmail.com', 'd@company.ng']));
+
 $pdo = trn_db();
 trn_exam_tables($pdo);
 foreach (trn_schema_sql('20261223090000_auth_email_codes.sql') as $stmt) {
     $pdo->exec($stmt);
 }
+$pdo->exec('ALTER TABLE users ADD COLUMN dob TEXT');
 ok('the codes table is there', auth_codes_ready($pdo));
 $GLOBALS['trainings_now'] = new DateTimeImmutable('2026-11-24 18:00:00', new DateTimeZone('Africa/Lagos'));
 exams_set_clock(exams_dt('2026-11-24 18:00:00'));
@@ -1420,6 +1433,7 @@ function trn_entry_test(PDO $pdo): int
     return (int) $made['item_id'];
 }
 $entryItem = trn_entry_test($pdo);
+$go = exam_url_take($entryItem);
 $signedIn = [];
 $stub = static function (array $user, string $how) use (&$signedIn): void {
     $_SESSION['user_id'] = (int) $user['id'];
@@ -1428,129 +1442,165 @@ $stub = static function (array $user, string $how) use (&$signedIn): void {
 $entry = static function (string $do, array $in = []) use ($pdo, $entryItem, $stub): array {
     return trainings_entry_action($pdo, $do, $in + ['t' => $entryItem], '10.0.0.1', $stub);
 };
+$fresh = static function (string $phone) use ($entry): array {
+    $_SESSION = [];
+    return $entry('lookup', ['phone' => $phone]);
+};
 /** The six digits in the last code email to $to. */
 $lastCode = static function (string $to) use ($pdo): string {
     $stmt = $pdo->prepare("SELECT text_body FROM email_outbox WHERE to_email = ? AND flow IN ('reset_code', 'confirm_code') ORDER BY id DESC LIMIT 1");
     $stmt->execute([$to]);
     return preg_match('/\b(\d{3}) (\d{3})\b/', (string) $stmt->fetchColumn(), $m) ? $m[1] . $m[2] : '';
 };
+$wrong = static fn (string $code): string => $code === '000000' ? '111111' : '000000';
+$confirmed = static fn (int $uid) => member_confirmed_email($pdo, $uid);
 
-// The people: Dayo has a password and a confirmed email; Chi (a first timer) has neither; Gbenga holds a staff role
-// and no password; Efe and Femi share a number; Bola has a password and no email.
-$pdo->exec("UPDATE users SET phone = '0803 111 2222' WHERE id = 904");
-$pdo->exec("UPDATE users SET phone = '08031113333' WHERE id = 903");
-$pdo->exec("UPDATE users SET phone = '+234 803 111 4444' WHERE id = 907");
+// The people.
+//   904 Dayo   password, confirmed email            902 Bola  password, a real users.email nobody confirmed
+//   906 Femi   password, no email, no birthday      908 Hana  password, no email, a birthday on record
+//   903 Chi    never signed in, no email            907 Gbenga never signed in, staff role, no email
+//   900 Rita   password, staff role, no email       901 Ade + 905 Efe share a number (Efe never signed in)
+$pdo->exec("INSERT INTO users (id, first_name, last_name, spiritual_status, attendance_status, password_hash, account_status, created_at, dob)
+            VALUES (908, 'Hana', 'Test', 'Member', 'Active', '" . password_hash('Old-pass-123!', PASSWORD_BCRYPT) . "', 'active', '2026-01-01 10:00:00', '1990-07-04')");
+foreach ([904 => '0803 111 2222', 902 => '0803 111 6666', 906 => '0803 111 7777', 908 => '0803 111 8888', 903 => '08031113333',
+          907 => '+234 803 111 4444', 900 => '0803 111 9999', 901 => '0803 111 5555', 905 => '0803 111 5555'] as $uid => $phone) {
+    $pdo->prepare('UPDATE users SET phone = ? WHERE id = ?')->execute([$phone, $uid]);
+}
 $pdo->exec("INSERT INTO user_roles (user_id, role_id) VALUES (907, 3)");
-$pdo->exec("UPDATE users SET phone = '0803 111 5555' WHERE id IN (905, 906)");
-$pdo->exec("UPDATE users SET phone = '0803 111 6666' WHERE id = 902");
+$pdo->exec("UPDATE users SET email = 'bola.worker@gmail.com' WHERE id = 902");
 $dayoMail = email_capture_start($pdo, 904, 'dayo.learner@gmail.com', 'staff', 901, ['send' => false]);
 email_capture_confirm($pdo, (string) $dayoMail['token']);
-eq('Dayo\'s email is confirmed', 'dayo.learner@gmail.com', member_confirmed_email($pdo, 904));
 
+// The doors that stay shut.
 $_SESSION = [];
 eq('a test that is not open: refused', 'CLOSED', trainings_entry_action($pdo, 'lookup', ['t' => 999999, 'phone' => '08031112222'], '10.0.0.1', $stub)['code'] ?? null);
-eq('not a phone number: the field says so', 'phone', $entry('lookup', ['phone' => 'abc'])['field'] ?? null);
-$office = $entry('lookup', ['phone' => '0809 999 9999']);
-ok('a number HOD does not know: the church office', ($office['step'] ?? '') === 'office' && str_contains((string) $office['message'], 'church office'));
+eq('not a phone number: said so, kindly', 'phone', $entry('lookup', ['phone' => 'abc'])['field'] ?? null);
+$r = $fresh('0809 999 9999');
+ok('a number HOD does not know: Information and Data Insights (IDI), the one dead end', ($r['step'] ?? '') === 'idi'
+    && str_contains((string) $r['message'], 'Information and Data Insights (IDI)') && !str_contains((string) $r['message'], 'church office'));
 
-// Dayo: the password, then straight to the test (her email is confirmed).
-$r = $entry('lookup', ['phone' => '+234 803 111 2222']);
-eq('Dayo\'s number (written another way): "Welcome, Dayo Test" and her password', ['password', 'Dayo Test'], [$r['step'] ?? null, $r['name'] ?? null]);
+// Dayo: her password, and straight in (her email is confirmed).
+$r = $fresh('+234 803 111 2222');
+eq('Dayo\'s number, written another way: her first name and her password', ['password', 'Dayo'], [$r['step'] ?? null, $r['name'] ?? null]);
 eq('a wrong password: told so, not signed in', ['WRONG', null], [$entry('signin', ['password' => 'nope'])['code'] ?? null, $_SESSION['user_id'] ?? null]);
-$r = $entry('signin', ['password' => 'Old-pass-123!']);
-eq('the right password: signed in and on to the test', ['go', exam_url_take($entryItem), 904], [$r['step'] ?? null, $r['go'] ?? null, $_SESSION['user_id'] ?? null]);
+eq('the right password: in, and on to the test', ['go', $go, 904], array_values(array_intersect_key($entry('signin', ['password' => 'Old-pass-123!']) + ['u' => $_SESSION['user_id'] ?? null], ['step' => 1, 'go' => 1, 'u' => 1])));
 
-// Dayo forgot: a code to her confirmed email first, then the new password signs her in.
-$_SESSION = [];
-$entry('lookup', ['phone' => '08031112222']);
+// Dayo forgot: a code to her email, the new password, in.
+$fresh('08031112222');
 $r = $entry('forgot');
-eq('forgot: a code to her confirmed email, masked', ['code', 'd•••@gmail.com'], [$r['step'] ?? null, $r['to'] ?? null]);
+eq('"I can\'t remember": a code to her email, masked, with the Gmail button', ['code', 'day…r@gmail.com', 'Open Gmail'], [$r['step'] ?? null, $r['to'] ?? null, $r['mail']['label'] ?? null]);
 $code = $lastCode('dayo.learner@gmail.com');
-ok('…the code email is account mail with six digits', strlen($code) === 6
-    && trn_count($pdo, 'email_outbox', "flow = 'reset_code' AND purpose = 'account' AND to_email = 'dayo.learner@gmail.com'") === 1);
-ok('…the code itself is never stored', trn_count($pdo, 'auth_email_codes', 'code_hash = ?', [$code]) === 0);
-eq('asking again at once: wait a minute', 'TOO_SOON', $entry('forgot')['code'] ?? null);
-eq('a weak new password is refused before the code is used', 'password', $entry('reset', ['code' => $code, 'password' => 'short', 'confirm' => 'short'])['field'] ?? null);
-eq('a wrong code is refused', 'code', $entry('reset', ['code' => $code === '000000' ? '111111' : '000000', 'password' => 'New-pass-456!', 'confirm' => 'New-pass-456!'])['field'] ?? null);
-$r = $entry('reset', ['code' => $code, 'password' => 'New-pass-456!', 'confirm' => 'New-pass-456!']);
-ok('the right code: the new password is saved and she is signed in, on to the test', ($r['step'] ?? '') === 'go' && ($_SESSION['user_id'] ?? 0) === 904
+ok('…account mail with six digits, never stored as they are', strlen($code) === 6 && trn_count($pdo, 'auth_email_codes', 'code_hash = ?', [$code]) === 0);
+eq('a wrong code: try again', 'code', $entry('code', ['code' => $wrong($code)])['field'] ?? null);
+eq('new_password before a right code: start again', 'EXPIRED', $entry('new_password', ['password' => 'New-pass-456!', 'confirm' => 'New-pass-456!'])['code'] ?? null);
+eq('the right code: choose a new password', ['new_password', false], [($r = $entry('code', ['code' => $code]))['step'] ?? null, $r['first'] ?? null]);
+eq('…the two must match', 'confirm', $entry('new_password', ['password' => 'New-pass-456!', 'confirm' => 'New-pass-457!'])['field'] ?? null);
+eq('…and pass the policy', 'password', $entry('new_password', ['password' => 'short', 'confirm' => 'short'])['field'] ?? null);
+$r = $entry('new_password', ['password' => 'New-pass-456!', 'confirm' => 'New-pass-456!']);
+ok('…saved, signed in, on to the test', ($r['step'] ?? '') === 'go' && ($_SESSION['user_id'] ?? 0) === 904
     && password_verify('New-pass-456!', (string) trainings_entry_user($pdo, 904)['password_hash']));
-eq('…she is told by email that the password changed', 1, trn_count($pdo, 'email_outbox', "flow = 'password_changed' AND to_email = 'dayo.learner@gmail.com'"));
-$_SESSION = [];
-$entry('lookup', ['phone' => '08031112222']);
-eq('…the code works once', 'code', $entry('reset', ['code' => $code, 'password' => 'Other-pass-789!', 'confirm' => 'Other-pass-789!'])['field'] ?? null);
+eq('…and told by email that the password changed', 1, trn_count($pdo, 'email_outbox', "flow = 'password_changed' AND to_email = 'dayo.learner@gmail.com'"));
 
-// Bola: a password but no email, and no confirmed email to reset with.
-$_SESSION = [];
-$entry('lookup', ['phone' => '08031116666']);
-$r = $entry('forgot');
-ok('no confirmed email to send a code to: the church office resets it', ($r['step'] ?? '') === 'office' && str_contains((string) $r['message'], 'church office'));
+// Bola: a real email on file nobody confirmed. Signed in, the email is confirmed once with a code; never again.
+$fresh('08031116666');
 $r = $entry('signin', ['password' => 'Old-pass-123!']);
-eq('signed in with no email at all: asked for it', 'email', $r['step'] ?? null);
-$r = $entry('email_skip');
-eq('"I don\'t have an email": on to the test, and not asked again for now', ['go', 'none'], [$r['step'] ?? null, email_prompt_state($pdo, 902)]);
+eq('signed in with an unconfirmed email on file: a code to it, once', ['code', 'bol…r@gmail.com'], [$r['step'] ?? null, $r['to'] ?? null]);
+$r = $entry('code', ['code' => $lastCode('bola.worker@gmail.com')]);
+eq('…the right code confirms it and opens the test', ['go', 'bola.worker@gmail.com'], [$r['step'] ?? null, $confirmed(902)]);
+$fresh('08031116666');
+eq('next time: the password, and straight in', 'go', $entry('signin', ['password' => 'Old-pass-123!'])['step'] ?? null);
 
-// Chi: never had a password. Set one, give the email, take the test.
-$_SESSION = [];
-$r = $entry('lookup', ['phone' => '0803 111 3333']);
-eq('never signed in: "Welcome, Chi Test" and a new password', ['set_password', 'Chi Test'], [$r['step'] ?? null, $r['name'] ?? null]);
-eq('the two passwords must match', 'confirm', $entry('set_password', ['password' => 'Chi-pass-123!', 'confirm' => 'Chi-pass-124!'])['field'] ?? null);
-$r = $entry('set_password', ['password' => 'Chi-pass-123!', 'confirm' => 'Chi-pass-123!']);
-eq('set: signed in, then asked for the email (HOD has none)', ['email', 903], [$r['step'] ?? null, $_SESSION['user_id'] ?? null]);
-eq('…with the first-password record', 'first password', end($signedIn)[1]);
-eq('a bad email is refused', 'email', $entry('email', ['email' => 'chi@'])['field'] ?? null);
-$r = $entry('email', ['email' => 'chi.learner@gmail.com']);
-ok('a good one waits to be confirmed (no email sent yet), on to the test', ($r['step'] ?? '') === 'go'
-    && email_address_state($pdo, 903)['pending'] === 'chi.learner@gmail.com'
-    && trn_count($pdo, 'email_outbox', "to_email = 'chi.learner@gmail.com'") === 0);
-eq('…so the app\'s email prompt lets her through (a banner, not a stop)', 'banner', email_prompt_state($pdo, 903));
-$_SESSION = [];
-eq('her number now asks for the password she set', 'password', $entry('lookup', ['phone' => '08031113333'])['step'] ?? null);
+// Femi: forgot, and no email at all. He types one (a slip is caught), gives his birthday (saved), gets the code.
+$fresh('08031117777');
+eq('no email and "I can\'t remember": asked for his email', ['email', true], [($r = $entry('forgot'))['step'] ?? null, $r['reset'] ?? null]);
+eq('a slip in the address: "Did you mean…?"', ['typo', 'femi.worker@gmail.com'], [($r = $entry('email', ['email' => 'femi.worker@gmial.com']))['step'] ?? null, $r['suggest'] ?? null]);
+eq('taking the suggestion: his birthday next', 'birthday', $entry('email', ['email' => 'femi.worker@gmail.com'])['step'] ?? null);
+eq('the code cannot be sent before the birthday', 'EXPIRED', $entry('resend')['code'] ?? null);
+eq('a date that cannot be read: asked again', 'birthday', $entry('birthday', ['birthday' => 'whenever'])['field'] ?? null);
+$r = $entry('birthday', ['birthday' => '12/03']);
+eq('no birthday on record: this one is saved (year 2000) and the code goes to the new email', ['code', 'fem…r@gmail.com', true, '2000-03-12'],
+    [$r['step'] ?? null, $r['to'] ?? null, $r['typed'] ?? null, trainings_entry_user($pdo, 906)['dob']]);
+$entry('code', ['code' => $lastCode('femi.worker@gmail.com')]);
+$r = $entry('new_password', ['password' => 'Grace-walk-246!', 'confirm' => 'Grace-walk-246!']);
+eq('…the right code makes it his email; a new password; in', ['go', 'femi.worker@gmail.com', 906], [$r['step'] ?? null, $confirmed(906), $_SESSION['user_id'] ?? null]);
 
-// After the test: confirm the email with a code.
-$_SESSION = ['user_id' => 903];
-eq('the result asks Chi to confirm her email', ['state' => 'confirm', 'to' => 'c•••@gmail.com'], trainings_entry_email_prompt($pdo, 903));
-$r = trainings_entry_action($pdo, 'confirm_send', [], '10.0.0.1', $stub);
-eq('Send code: to the waiting address', 'c•••@gmail.com', $r['to'] ?? null);
-$code = $lastCode('chi.learner@gmail.com');
-for ($i = 0; $i < AUTH_CODE_MAX_TRIES - 1; $i++) {
-    trainings_entry_action($pdo, 'confirm_check', ['code' => '000000' === $code ? '111111' : '000000'], '10.0.0.1', $stub);
+// Hana: a birthday on record, and a different one typed. Offered to update it (owner: replace freely).
+$fresh('08031118888');
+$entry('forgot');
+$entry('email', ['email' => 'hana.member@gmail.com']);
+eq('a different birthday: "Shall we update it to 12 March?"', ['birthday_mismatch', '12 March'],
+    [($r = $entry('birthday', ['birthday' => 'march 12th']))['step'] ?? null, $r['said'] ?? null]);
+eq('…yes: updated (the year kept) and the code sent', ['code', '1990-03-12'],
+    [$entry('birthday_update')['step'] ?? null, trainings_entry_user($pdo, 908)['dob']]);
+
+// Chi: never signed in. Email, code, a password: in. Next time just the password.
+$r = $fresh('0803 111 3333');
+eq('never signed in, no email: "This is your first time…" and the email', ['email', true, 'Chi'], [$r['step'] ?? null, $r['first'] ?? null, $r['name'] ?? null]);
+eq('a code to the email she types', ['code', 'chi…r@gmail.com'], [($r = $entry('email', ['email' => 'chi.learner@gmail.com']))['step'] ?? null, $r['to'] ?? null]);
+eq('the right code: choose a password', ['new_password', true], [($r = $entry('code', ['code' => $lastCode('chi.learner@gmail.com')]))['step'] ?? null, $r['first'] ?? null]);
+$r = $entry('new_password', ['password' => 'Chi-pass-123!', 'confirm' => 'Chi-pass-123!']);
+eq('…set: in, her email confirmed', ['go', 'chi.learner@gmail.com', 'first password'], [$r['step'] ?? null, $confirmed(903), end($signedIn)[1]]);
+eq('next time her number asks for the password, nothing else', 'password', $fresh('08031113333')['step'] ?? null);
+
+// "I don't use this email": Dayo gives the one she uses now; her birthday first; it replaces the old one.
+$fresh('08031112222');
+$entry('forgot');
+eq('"I don\'t use this email": asked for the one she uses', ['email', true], [($r = $entry('old_email'))['step'] ?? null, $r['replace'] ?? null]);
+eq('…her birthday first (a password is at stake)', 'birthday', $entry('email', ['email' => 'dayo.new@gmail.com'])['step'] ?? null);
+$entry('birthday', ['birthday' => '5 June']);
+$entry('code', ['code' => $lastCode('dayo.new@gmail.com')]);
+$r = $entry('new_password', ['password' => 'Mercy-road-579!', 'confirm' => 'Mercy-road-579!']);
+eq('…the new email is hers now, in place of the old one', ['go', 'dayo.new@gmail.com', 'dayo.new@gmail.com'],
+    [$r['step'] ?? null, $confirmed(904), (string) trainings_entry_user($pdo, 904)['email']]);
+
+// A shared number; "I don't have an email"; a first password on the number alone; staff stay with IDI.
+$r = $fresh('0803 111 5555');
+eq('a shared number: "Which one is you?"', ['choose', ['Ade T.', 'Efe T.']], [$r['step'] ?? null, array_column($r['people'] ?? [], 'name')]);
+eq('Efe (never signed in, no email) is asked for her email', 'email', $entry('choose', ['i' => 1])['step'] ?? null);
+eq('"I don\'t have an email": she chooses a password all the same', ['new_password', true], [($r = $entry('no_email'))['step'] ?? null, $r['first'] ?? null]);
+eq('…and is in', 'go', $entry('new_password', ['password' => 'Efe-pass-123!', 'confirm' => 'Efe-pass-123!'])['step'] ?? null);
+$fresh('0803 111 5555');
+$entry('choose', ['i' => 0]);
+eq('Ade signs in with no email: asked for one once', ['email', true], [($r = $entry('signin', ['password' => 'Old-pass-123!']))['step'] ?? null, $r['activate'] ?? null]);
+eq('…"I don\'t have an email": on to the test, not asked again for now', ['go', 'none'], [$entry('no_email')['step'] ?? null, email_prompt_state($pdo, 901)]);
+$fresh('08031119999');
+eq('Rita (staff) cannot be reset through a typed email: IDI', 'idi', $entry('forgot')['step'] ?? null);
+eq('…nor say she has no email to skip the code', 'email', $entry('no_email')['field'] ?? null);
+eq('Gbenga (staff, never signed in, no email): IDI', 'idi', $fresh('08031114444')['step'] ?? null);
+eq('…his password stays unset', '', (string) trainings_entry_user($pdo, 907)['password_hash']);
+$fresh('08031112222');
+$_SESSION['test_entry']['at'] = time() - TRAININGS_ENTRY_TTL - 5;
+eq('twenty minutes on: start again', 'EXPIRED', $entry('signin', ['password' => 'Mercy-road-579!'])['code'] ?? null);
+
+// After the test: anyone still without a confirmed email gets the card.
+$pdo->exec("UPDATE users SET email = 'rita.worker@gmail.com' WHERE id = 900");
+eq('the result\'s card names the waiting email, masked the same way', ['state' => 'confirm', 'to' => 'rit…r@gmail.com'], trainings_entry_email_prompt($pdo, 900));
+$_SESSION = ['user_id' => 900];
+eq('Send code: to it', 'rit…r@gmail.com', trainings_entry_action($pdo, 'confirm_send', [], '10.0.0.1', $stub)['to'] ?? null);
+$rita = $lastCode('rita.worker@gmail.com');
+for ($i = 0; $i < AUTH_CODE_MAX_TRIES; $i++) {
+    trainings_entry_action($pdo, 'confirm_check', ['code' => $wrong($rita)], '10.0.0.1', $stub);
 }
-eq('four wrong tries leave one', 'success', trainings_entry_action($pdo, 'confirm_check', ['code' => substr($code, 0, 3) . ' ' . substr($code, 3)], '10.0.0.1', $stub)['status'] ?? null);
-eq('the right code (typed with a space) confirms it', 'chi.learner@gmail.com', member_confirmed_email($pdo, 903));
-eq('…and the card is gone', null, trainings_entry_email_prompt($pdo, 903));
+eq('five wrong tries kill a code', 'DEAD', trainings_entry_action($pdo, 'confirm_check', ['code' => $rita], '10.0.0.1', $stub)['code'] ?? null);
 $_SESSION = [];
 eq('signed out: Send code is refused', 'SIGNED_OUT', trainings_entry_action($pdo, 'confirm_send', [], '10.0.0.1', $stub)['code'] ?? null);
 
-// Five wrong tries kill a code.
-$pdo->exec("UPDATE users SET phone = '0803 111 7777' WHERE id = 900");
-$_SESSION = ['user_id' => 906];
-trainings_entry_action($pdo, 'confirm_send', ['email' => 'femi.worker@gmail.com'], '10.0.0.1', $stub);
-$femi = $lastCode('femi.worker@gmail.com');
-for ($i = 0; $i < AUTH_CODE_MAX_TRIES; $i++) {
-    trainings_entry_action($pdo, 'confirm_check', ['code' => $femi === '000000' ? '111111' : '000000'], '10.0.0.1', $stub);
-}
-eq('after five wrong tries even the right code is refused', 'DEAD', trainings_entry_action($pdo, 'confirm_check', ['code' => $femi], '10.0.0.1', $stub)['code'] ?? null);
-
-// A staff account, a shared number, an old session.
-$_SESSION = [];
-$r = $entry('lookup', ['phone' => '08031114444']);
-ok('a staff account with no password sets it at the office, never from a QR code', ($r['step'] ?? '') === 'office' && str_contains((string) $r['message'], 'office'));
-eq('…its password stays unset', '', (string) trainings_entry_user($pdo, 907)['password_hash']);
-$_SESSION = [];
-$r = $entry('lookup', ['phone' => '08031115555']);
-eq('a shared number: "Which one is you?" with first names', ['choose', ['Efe T.', 'Femi T.']], [$r['step'] ?? null, array_column($r['people'] ?? [], 'name')]);
-eq('…picking one goes on as them', ['password', 'Femi Test'], array_values(array_intersect_key($entry('choose', ['i' => 1]), ['step' => 1, 'name' => 1])));
-$_SESSION['test_entry']['at'] = time() - TRAININGS_ENTRY_TTL - 5;
-eq('twenty minutes on: start again', 'EXPIRED', $entry('signin', ['password' => 'Old-pass-123!'])['code'] ?? null);
-
-// The pages.
+// The page, the endpoint, the wording.
 $entryPage = (string) file_get_contents($root . '/test.php');
-ok('the QR page is a strict standalone page with every step', str_contains($entryPage, 'ui_standalone_open(')
-    && count(array_filter(['phone', 'choose', 'password', 'set_password', 'email', 'code', 'office', 'go'],
-        static fn ($s) => str_contains($entryPage, 'data-te-step="' . $s . '"'))) === 8);
+ok('the page is a strict standalone conversation with the rail', str_contains($entryPage, 'ui_standalone_open(') && str_contains($entryPage, "'tq-config'")
+    && count(array_filter(['phone', 'email', 'password', 'test'], static fn ($s) => str_contains($entryPage, 'data-rail="' . $s . '"'))) === 4);
+ok('…with the quiet credit linking to jbspraxis.com', str_contains($entryPage, 'href="https://jbspraxis.com"'));
+$entryJs = (string) file_get_contents($root . '/assets/ui/js/pages/test-entry.js');
+ok('passwords show as dots in the conversation, and motion follows reduced motion', str_contains($entryJs, "'•'") && str_contains($entryJs, 'prefers-reduced-motion'));
+ok('the script never writes a style attribute (strict CSP)', !preg_match('/style="/', $entryJs));
 $entryApi = (string) file_get_contents($root . '/api/test_entry_api.php');
-ok('its endpoint takes POST only and checks the CSRF token first', str_contains($entryApi, "!== 'POST'") && strpos($entryApi, 'csrf_require();') < strpos($entryApi, 'trainings_entry_action('));
+ok('the endpoint takes POST only and checks the CSRF token first', str_contains($entryApi, "!== 'POST'") && strpos($entryApi, 'csrf_require();') < strpos($entryApi, 'trainings_entry_action('));
+ok('signing in from the page keeps them signed in for 30 days', str_contains((string) file_get_contents($root . '/includes/trainings/entry.php'), 'auth_remember_issue(')
+    && AUTH_REMEMBER_DAYS === 30);
+$stillOffice = array_filter(['api/auth_api.php', 'auth/forgot_password.php', 'includes/campaigns/addresses.php', 'includes/campaigns/identity.php',
+    'includes/security_helpers.php', 'includes/auth_helpers.php', 'includes/trainings/entry.php', 'test.php', 'assets/ui/js/pages/test-entry.js'],
+    static fn ($f) => stripos((string) file_get_contents($root . '/' . $f), 'church office') !== false);
+eq('sign-in, password and email messages send people to IDI, never "the church office"', [], array_values($stillOffice));
 unset($GLOBALS['trainings_now']);
 exams_set_clock(false);
 $_SESSION = [];

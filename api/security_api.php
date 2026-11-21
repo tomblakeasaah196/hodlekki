@@ -504,7 +504,7 @@ try {
                 'Password Reset by Administrator',
                 'An administrator set a new password on your account'
                 . ($requireChange ? ' and you will be asked to choose your own at next sign-in.' : '.')
-                . ' If you did not request this, contact the church office immediately.'
+                . ' If you did not request this, contact Information and Data Insights (IDI) immediately.'
             );
 
             echo json_encode([

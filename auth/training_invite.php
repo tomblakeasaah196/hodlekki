@@ -55,7 +55,7 @@ if ($result !== null && empty($result['ok'])) {
     [$formError, $formInfo] = match ($result['code'] ?? '') {
         'MISMATCH' => ['The two passwords differ.', null],
         'WEAK'     => [(string) ($problems[0] ?? 'Choose a stronger password.'), count($problems) > 1 ? implode(' ', $problems) : null],
-        'TAKEN'    => ['That email is in use. Ask the church office.', 'Another account already uses this email address.'],
+        'TAKEN'    => ['That email is in use. Ask Information and Data Insights (IDI).', 'Another account already uses this email address.'],
         'STALE'    => ['Please try again.', null],
         default    => [null, null],
     };
@@ -89,7 +89,7 @@ if ($peek['state'] === 'valid'):
     <?= ui_banner('info', ['title' => 'You can sign in', 'text' => 'Your training is waiting in Trainings.']) ?>
     <?= $signIn ?>
 <?php elseif ($peek['state'] === 'staff'): ?>
-    <?= ui_banner('warning', ['title' => 'Ask the church office', 'text' => 'An admin sets up sign-in for this account.', 'info' => 'People who serve in a role get their sign-in from an admin, not from a link.']) ?>
+    <?= ui_banner('warning', ['title' => 'Ask IDI', 'text' => 'An admin sets up sign-in for this account.', 'info' => 'People who serve in a role get their sign-in from an admin, not from a link.']) ?>
 <?php elseif ($peek['state'] === 'expired'): ?>
     <?= ui_banner('warning', ['title' => 'Link expired', 'text' => 'Ask the HOD Academy for a new one.', 'info' => 'Invite links work for 7 days.']) ?>
 <?php else: ?>

@@ -6,7 +6,7 @@
 //   confirm  after a test: to the email they gave us, which it confirms.
 // Table: auth_email_codes (db/migrations/20261223090000_auth_email_codes.sql). The code is never stored, only its
 // password_hash(). A code works once, for AUTH_CODE_TTL_MINUTES, and dies after AUTH_CODE_MAX_TRIES wrong tries; a new
-// one replaces the last. Sends: one a minute per person and purpose, AUTH_CODE_PER_HOUR an hour per person,
+// one replaces the last. Sends: one a minute per person, purpose and address, AUTH_CODE_PER_HOUR an hour per person,
 // AUTH_CODE_PER_IP_HOUR an hour per IP. The email goes through the transactional lane (includes/campaigns/outbox.php).
 // Needs includes/campaigns/bootstrap.php. Tests: tests/trainings/run.php, "QR entry".
 
@@ -38,12 +38,13 @@ function auth_code_send(PDO $pdo, array $user, string $purpose, string $email, s
         throw new InvalidArgumentException('Unknown code purpose: ' . $purpose);
     }
     if (!auth_codes_ready($pdo)) {
-        return ['ok' => false, 'code' => 'NOT_READY', 'message' => 'This opens after the next update. Ask the church office.'];
+        return ['ok' => false, 'code' => 'NOT_READY', 'message' => 'This opens after the next update. Ask Information and Data Insights (IDI).'];
     }
     $uid = (int) $user['id'];
     $now = campaigns_now();
-    $stmt = $pdo->prepare('SELECT MAX(created_at) FROM auth_email_codes WHERE user_id = ? AND purpose = ?');
-    $stmt->execute([$uid, $purpose]);
+    // One a minute to the same address (a new address, after "I don't use this email", gets its code at once).
+    $stmt = $pdo->prepare('SELECT MAX(created_at) FROM auth_email_codes WHERE user_id = ? AND purpose = ? AND email = ?');
+    $stmt->execute([$uid, $purpose, $email]);
     $last = $stmt->fetchColumn();
     if ($last && $now->getTimestamp() - campaigns_dt((string) $last)->getTimestamp() < AUTH_CODE_GAP_SECONDS) {
         return ['ok' => false, 'code' => 'TOO_SOON', 'message' => 'A code is on its way. Wait a minute.'];

@@ -5001,6 +5001,150 @@
     .ui-dialog--full .ui-dialog__close { color: #FFFFFF; }
     .ui-dialog--full .ui-dialog__body { flex: 1 1 auto; padding: 0; overflow: hidden; }
     .ui-dialog--full[open]::before { content: none; }
+
+    /* ---------- Test entry (test.php, assets/ui/js/pages/test-entry.js) ---------- */
+    /* The way into a test from its QR code, as a conversation (owner, 22 Nov 2026: "slight animations and
+       transitions as messages go… really wonderful"). One column the height of the screen: the header with the
+       rail, the messages, the box at the bottom. Messages rise in, a typing moment comes before each, pills pop in
+       one after another, the rail fills. With reduced motion everything simply appears. */
+    .tq {
+        --tq-ease: cubic-bezier(.2, .8, .2, 1);
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        max-width: 560px;
+        height: 100vh;
+        height: 100dvh;
+        margin: 0 auto;
+        background: var(--ui-surface);
+    }
+    @media (min-width: 640px) {
+        .tq { height: min(100dvh - 48px, 820px); margin: 24px auto; border: 1px solid var(--ui-border); border-radius: 20px; box-shadow: var(--ui-shadow-lg); overflow: hidden; }
+    }
+    .tq-head { flex: none; padding: 14px 16px 12px; border-bottom: 1px solid var(--ui-border); background: var(--ui-surface); }
+    .tq-head__row { display: flex; align-items: center; gap: 12px; }
+    .tq-logo { flex: none; width: 36px; height: 36px; border-radius: 10px; }
+    .tq-head__text { flex: 1; min-width: 0; }
+    .tq-kicker { margin: 0; font-size: var(--ui-text-xs); font-weight: 600; color: var(--ui-text-muted); }
+    .tq-title { margin: 1px 0 0; overflow: hidden; font-size: 1rem; font-weight: 700; line-height: 1.3; color: var(--ui-heading); white-space: nowrap; text-overflow: ellipsis; }
+    .tq-restart {
+        display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 36px; padding: 0 10px;
+        border: 0; border-radius: 999px; background: transparent; color: var(--ui-text-muted); font: inherit; font-size: var(--ui-text-sm); cursor: pointer;
+    }
+    .tq-restart:hover { background: var(--navy-50); color: var(--ui-heading); }
+    .tq-restart .ui-icon { width: 16px; height: 16px; }
+    .tq-restart[hidden] { display: none; }
+
+    /* The rail: four segments that fill as they go. */
+    .tq-rail { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+    .tq-rail__step { position: relative; padding-top: 9px; font-size: .6875rem; font-weight: 600; color: var(--ui-text-muted); }
+    .tq-rail__step::before,
+    .tq-rail__step::after { content: ''; position: absolute; top: 0; left: 0; height: 4px; border-radius: 4px; }
+    .tq-rail__step::before { right: 0; background: var(--navy-100); }
+    .tq-rail__step::after { width: 100%; background: var(--navy-800); transform: scaleX(0); transform-origin: left center; transition: transform 520ms var(--tq-ease); }
+    .tq-rail__step.is-here { color: var(--ui-heading); }
+    .tq-rail__step.is-here::after { transform: scaleX(.5); }
+    .tq-rail__step.is-done { color: var(--navy-800); }
+    .tq-rail__step.is-done::after { transform: scaleX(1); }
+
+    /* The messages. */
+    .tq-log {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin: 0;
+        padding: 18px 16px 12px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        list-style: none;
+        background: linear-gradient(180deg, var(--navy-50), var(--ui-surface) 240px);
+    }
+    .tq-msg {
+        max-width: 86%;
+        padding: 10px 14px;
+        border-radius: 18px;
+        font-size: .9375rem;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+        opacity: 0;
+        transform: translate3d(0, 10px, 0) scale(.98);
+        transition: opacity 280ms var(--tq-ease), transform 320ms var(--tq-ease);
+    }
+    .tq-msg.is-in { opacity: 1; transform: none; }
+    .tq-msg--bot { align-self: flex-start; border-bottom-left-radius: 6px; background: var(--ui-surface); color: var(--ui-text); box-shadow: 0 1px 2px rgba(16, 24, 40, .08), 0 0 0 1px rgba(16, 24, 40, .05); transform-origin: left bottom; }
+    .tq-msg--you { align-self: flex-end; border-bottom-right-radius: 6px; background: var(--navy-800); color: #fff; transform-origin: right bottom; }
+    .tq-msg p { margin: 0; }
+    .tq-msg p + p, .tq-msg p + a, .tq-msg a + p { margin-top: 8px; }
+    .tq-small { font-size: var(--ui-text-sm); color: var(--ui-text-muted); }
+    .tq-mail {
+        display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px;
+        border-radius: 999px; background: var(--navy-800); color: #fff; font-weight: 600; text-decoration: none;
+        transition: transform 160ms var(--tq-ease), background-color 160ms ease;
+    }
+    .tq-mail:hover { background: var(--navy-900); }
+    .tq-mail:active { transform: scale(.97); }
+    .tq-mail .ui-icon { width: 16px; height: 16px; }
+    .tq-mail .ui-icon:last-child { width: 14px; height: 14px; opacity: .7; }
+
+    /* A moment of typing before each message. */
+    .tq-typing { display: inline-flex; align-items: center; gap: 4px; padding: 13px 14px; }
+    .tq-typing i { width: 7px; height: 7px; border-radius: 999px; background: var(--grey-400, #98A2B3); animation: tq-dot 1s ease-in-out infinite; }
+    .tq-typing i:nth-child(3) { animation-delay: .15s; }
+    .tq-typing i:nth-child(4) { animation-delay: .3s; }
+    @keyframes tq-dot { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+    /* The answers: pills to tap, the box to type in. */
+    .tq-foot { flex: none; padding: 10px 12px calc(10px + var(--ui-safe-bottom)); border-top: 1px solid var(--ui-border); background: var(--ui-surface); }
+    .tq-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    .tq-pills[hidden] { display: none; }
+    .tq-pill {
+        min-height: 40px; padding: 0 16px; border: 1.5px solid var(--navy-800); border-radius: 999px;
+        background: var(--ui-surface); color: var(--navy-800); font: inherit; font-size: .875rem; font-weight: 600; cursor: pointer;
+        animation: tq-pop 360ms var(--tq-ease) both; animation-delay: calc(var(--i, 0) * 70ms);
+        transition: background-color 160ms ease, color 160ms ease, transform 160ms var(--tq-ease);
+    }
+    .tq-pill:hover { background: var(--navy-800); color: #fff; }
+    .tq-pill:active { transform: scale(.96); }
+    .tq-pill:disabled { opacity: .5; cursor: default; }
+    @keyframes tq-pop { from { opacity: 0; transform: translate3d(0, 6px, 0) scale(.94); } to { opacity: 1; transform: none; } }
+    .tq-composer { display: flex; align-items: center; gap: 8px; }
+    .tq-composer[hidden] { display: none; }
+    .tq-input {
+        flex: 1; min-width: 0; height: 48px; padding: 0 16px;
+        border: 1.5px solid var(--ui-border); border-radius: 999px; background: var(--ui-canvas);
+        color: var(--ui-text); font: inherit; font-size: 1rem;
+        transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+    }
+    .tq-input:focus { outline: none; border-color: var(--navy-800); background: var(--ui-surface); box-shadow: 0 0 0 4px rgba(29, 53, 106, .12); }
+    .tq-input[inputmode="numeric"]:not(:placeholder-shown) { letter-spacing: .3em; font-variant-numeric: tabular-nums; }
+    .tq-nowrap { white-space: nowrap; }
+    .tq-eye, .tq-send {
+        display: inline-flex; align-items: center; justify-content: center; flex: none; width: 48px; height: 48px;
+        border: 0; border-radius: 999px; cursor: pointer; transition: transform 160ms var(--tq-ease), background-color 160ms ease, opacity 160ms ease;
+    }
+    .tq-eye { background: var(--navy-50); color: var(--ui-heading); }
+    .tq-eye[hidden] { display: none; }
+    .tq-send { background: var(--navy-800); color: #fff; }
+    .tq-send:hover { background: var(--navy-900); }
+    .tq-send:active, .tq-eye:active { transform: scale(.94); }
+    .tq-send:disabled { opacity: .5; cursor: default; }
+    .tq-eye .ui-icon, .tq-send .ui-icon { width: 20px; height: 20px; }
+    .tq-hint { margin: 8px 6px 0; font-size: var(--ui-text-xs); color: var(--ui-text-muted); }
+    .tq-hint[hidden] { display: none; }
+    .tq-credit { margin: 10px 0 0; text-align: center; font-size: .6875rem; color: var(--ui-text-muted); opacity: .8; }
+    .tq-credit a { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+    .tq-noscript { padding: 16px; text-align: center; }
+    .tq--closed { justify-content: center; align-items: center; padding: 24px 16px; text-align: center; }
+    .tq-closed { display: grid; justify-items: center; gap: 8px; }
+    .tq-closed img { margin-bottom: 8px; }
+    @media (prefers-reduced-motion: reduce) {
+        .tq-msg { opacity: 1; transform: none; transition: none; }
+        .tq-typing i { animation: none; opacity: .6; }
+        .tq-pill { animation: none; }
+        .tq-rail__step::after, .tq-input, .tq-pill, .tq-mail, .tq-send, .tq-eye { transition: none; }
+    }
+
     .ui-sidebar__iconbtn {
         display: grid;
         flex: none;

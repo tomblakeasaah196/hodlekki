@@ -39,6 +39,7 @@ module.exports = {
             '../../../connect.php',
             '../../../register.php',
             '../../../checkin.php',
+            '../../../test.php',          // a standalone test's QR entry (the conversation)
             // Every staff screen, including the Bible and the Hymnary, which
             // sit inside the shell even though their design is their own.
             '../../../modules/**/*.php',

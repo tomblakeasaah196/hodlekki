@@ -424,7 +424,7 @@ function bible_api_cache_row(?PDO $pdo, string $code, int $book, int $chapter): 
 function bible_api_chapter(?PDO $pdo, string $code, int $book, int $chapter): array
 {
     if (bible_api_key() === '') {
-        return ['ok' => false, 'code' => 'TRANSLATION_OFF', 'message' => BIBLE_TRANSLATIONS[$code]['name'] . ' is not switched on yet. The church office needs to add its API.Bible key.'];
+        return ['ok' => false, 'code' => 'TRANSLATION_OFF', 'message' => BIBLE_TRANSLATIONS[$code]['name'] . ' is not switched on yet. Information and Data Insights (IDI) needs to add its API.Bible key.'];
     }
     if ($pdo === null || !bible_table_exists($pdo, 'bible_chapter_cache')) {
         return ['ok' => false, 'code' => 'FEATURE_NOT_READY', 'message' => 'This translation is still being set up. Please read in the KJV for now.'];

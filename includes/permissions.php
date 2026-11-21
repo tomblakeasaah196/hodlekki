@@ -1018,7 +1018,7 @@ function api_require_can(string $module, string $level = 'view', $target = null)
         http_response_code(403);
         header('Content-Type: application/json');
         echo json_encode(['status' => 'error', 'code' => 'FORBIDDEN',
-            'message' => 'You do not have access to this. Ask the church office if you think you should.']);
+            'message' => 'You do not have access to this. Ask Information and Data Insights (IDI) if you think you should.']);
         exit;
     }
 }

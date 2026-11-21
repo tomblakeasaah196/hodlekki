@@ -708,7 +708,7 @@ function email_password_changed_doc(): array
             email_doc_paragraphs(
                 'Hi {{first_name}},',
                 'The password of your Household of David Lekki account was just changed with a reset link, and every device was signed out.',
-                'If this was not you, contact the church office straight away so they can lock the account.'
+                'If this was not you, contact Information and Data Insights (IDI) straight away so they can lock the account.'
             ),
             ['type' => 'footer'],
         ],

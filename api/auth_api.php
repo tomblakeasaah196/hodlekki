@@ -73,7 +73,7 @@ try {
                 'status'  => 'error',
                 'message' => 'Your account is currently suspended.'
                            . ($reason !== '' ? ' Reason: ' . $reason . '.' : '')
-                           . ' Please contact the church office.',
+                           . ' Please contact Information and Data Insights (IDI).',
             ]);
             exit;
         }
@@ -82,7 +82,7 @@ try {
             security_record_attempt($pdo, (int) $user['id'], $email, false, 'account_revoked');
             echo json_encode([
                 'status'  => 'error',
-                'message' => 'Access for this account has been revoked. Please contact the church office.',
+                'message' => 'Access for this account has been revoked. Please contact Information and Data Insights (IDI).',
             ]);
             exit;
         }

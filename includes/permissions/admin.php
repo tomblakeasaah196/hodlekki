@@ -847,7 +847,7 @@ function perm_user_role_remove(PDO $pdo, array $ctx, int $uid, int $roleId, stri
     perm_history_add($pdo, ['via' => $via, 'change_type' => 'user_role.remove', 'actor_user_id' => perm_actor_id($ctx),
         'subject_user_id' => $uid, 'role_id' => $roleId, 'before' => $rows[0], 'reason' => $reason !== '' ? $reason : null]);
     perm_notify($pdo, [$uid], 'Role removed: ' . $rows[0]['label'],
-        "Your {$rows[0]['label']} role has been removed. Ask the church office if this looks wrong.");
+        "Your {$rows[0]['label']} role has been removed. Ask Information and Data Insights (IDI) if this looks wrong.");
     perm_reset();
 }
 

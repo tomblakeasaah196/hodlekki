@@ -386,7 +386,7 @@ function auth_remember_resume(PDO $pdo, string $cookie): ?int
     }
     if ($status === 'revoked' || $status === 'disabled') {
         $pdo->prepare("DELETE FROM auth_remember_tokens WHERE user_id = ?")->execute([$userId]);
-        return $drop('Your account access has been revoked. Please contact the church office.');
+        return $drop('Your account access has been revoked. Please contact Information and Data Insights (IDI).');
     }
     $validFrom = auth_time($user['sessions_valid_from'] ?? null);
     if ($validFrom > 0 && $validFrom > auth_time($token['auth_at'])) {
