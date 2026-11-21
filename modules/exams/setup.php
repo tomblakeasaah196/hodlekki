@@ -10,8 +10,14 @@ $ui = [
     'mode' => 'strict',
     'scripts' => ['/assets/ui/js/pages/exams.js'],
 ];
-require_once '../../includes/header.php';
+// A standalone test's page is called that in the tab too (docs/EXAMS.md §8).
+require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/exams/access.php';
+$peek = exams_ready($pdo) ? exam_item($pdo, (int) ($_GET['item'] ?? 0)) : null;
+if ($peek !== null && exams_item_is_test($peek)) {
+    $ui['title'] = 'Test set-up';
+}
+require_once '../../includes/header.php';
 
 $item = exams_ready($pdo) ? exam_item($pdo, (int) ($_GET['item'] ?? 0)) : null;
 // Access: Trainings, Edit, church-wide (the Academy's staff check, Roles & permissions).

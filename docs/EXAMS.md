@@ -164,3 +164,29 @@ the tutor's results. Nothing new in the schema.
 | The result | `modules/exams/take.php` + `exam-take.js`: the score, Right / Missed / Marks, tries left, Try again, the certificate. Confetti on a pass and a short sway on a miss, right after handing in only, never with reduced motion. |
 
 Tests: the "Standalone tests" section of `tests/trainings/run.php`.
+
+## 9. The QR entry (`test.php`, `includes/trainings/entry.php`)
+
+Owner, 21 Nov 2026: "very lean and seamless… less writing on screens". People scan the test's QR code (or open its
+link) and are in the test in a few taps, signed in, so the result is theirs and they see it later in the app too.
+
+| Step | What happens |
+| ---- | ------------ |
+| Phone | `lookup`: the number is matched as sign-in matches it (`signin_phone_users()`, any way it is written). Not in HOD: "We could not find this number. Please see the church office." Nobody new is added here (owner). A shared number: "Which one is you?" with first names and an initial (`choose`). |
+| Welcome | "Welcome, Tom Blake", then their password (`signin`, through `signin_check_password()`: the same lockout and records as the sign-in page). |
+| First password | No password yet: "First time here? Set a password." (`set_password`, the one password policy; claimed with a conditional UPDATE so two presses cannot both set one). Never for an account with a staff role (`user_roles`): those set theirs at the office. |
+| Email | Only when HOD has none for them and they have not said they have none: "Your email" or "I don't have an email" (`email_prompt_skip()`). The address waits to be confirmed; no email is sent before the test (owner: "we don't want people struggling with OTP when they want to take a test"). An address already on file starts waiting the same way. Either way the app's email prompt shows a banner, not a stop. |
+| Forgot | `forgot`: a six-digit code to their CONFIRMED email (`auth_code_send()`, purpose `reset`), then `reset`: the code, the new password (policy checked before the code is used), every other session signed out, the "password changed" email, signed in. No confirmed email: the church office resets it. Resetting on the number alone was refused: anyone who knows a member's number could take the account. |
+| In | Signed in as the sign-in page does (`trainings_entry_sign_in()`: session, Security Centre session and record, "keep me signed in"), then the test's page. |
+| After | The result shows **Confirm your email** (`trainings_entry_email_prompt()`) until it is: **Send code** (`confirm_send`, purpose `confirm`, to the address waiting, or one typed there), then the code (`confirm_check`), which confirms it through the email identity flow, as its link would. |
+
+**Codes** (`includes/auth_codes.php`, table `auth_email_codes`): six digits, only their `password_hash()` stored, one
+use, 15 minutes, dead after 5 wrong tries, a new one replaces the last; one a minute per person and purpose, 5 an hour
+per person, 20 an hour per IP. Sent through the transactional lane (flows `reset_code`, `confirm_code`).
+
+**Guards:** the endpoint (`api/test_entry_api.php`) takes POST only and checks the CSRF token; the state between steps
+lives in the session (`$_SESSION['test_entry']`, 20 minutes); numbers HOD does not know are recorded
+(`login_attempts`, context `test_entry`) and more than 20 in 15 minutes from one IP are refused for a while. The page
+starts fresh every time the link is opened, and offers "Sign in with email instead".
+
+Tests: the "QR entry to a test" section of `tests/trainings/run.php`.

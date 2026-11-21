@@ -205,7 +205,7 @@
             '<div class="xt-tally__item"><dt>Marks</dt><dd>' + esc(r.score + ' / ' + r.max) + '</dd></div></dl>' +
             attemptsHtml(v) +
             (v.certificate ? '<div class="xt-cert"><a class="ui-btn ui-btn--secondary" href="' + esc(v.certificate) + '">' + HOD.icon('file-down') + '<span>Download certificate</span></a></div>' : '') +
-            '</section>';
+            '</section>' + emailHtml(v.email);
         var back = v.test ? '<p class="xt-after"><a class="ui-link" href="/modules/trainings/#tab=tests">Back to Trainings</a></p>' : '';
         if (r.wrong_count === 0) {
             return html + '<p class="xt-after">Every answer right. Well done.</p>' + back;
@@ -226,6 +226,71 @@
                 '<p class="xt-ans xt-ans--right">' + HOD.icon('circle-check') + '<span><strong>Right answer:</strong> ' + esc(w.right) + '</span></p>' +
                 (w.explanation ? '<p class="xt-why">' + HOD.icon('book-open') + '<span>' + esc(w.explanation) + '</span></p>' : '') + '</li>';
         }).join('') + '</ol>' + back;
+    }
+
+    /* ---------- after a test: confirm the email with a code (api/test_entry_api.php) ---------- */
+
+    var ENTRY_API = '/api/test_entry_api.php';
+
+    /** The card: send a code to the address waiting (or the one typed), then type it. Nothing once confirmed. */
+    function emailHtml(e) {
+        if (!e) return '';
+        var add = e.state === 'add';
+        return '<section class="xt-card xt-email" data-xt-email aria-labelledby="xt-email-title">' +
+            '<h2 class="ui-h3" id="xt-email-title">Confirm your email</h2>' +
+            '<form class="ui-form xt-email__form" data-action="xt.email-send" novalidate>' +
+            (add ? '<div class="ui-field"><label class="ui-label" for="xt-email-addr">Email</label>' +
+                '<input class="ui-input" type="email" id="xt-email-addr" name="email" autocomplete="email" inputmode="email" maxlength="190" required></div>'
+                : '<p class="ui-meta">We will send a code to <strong>' + esc(e.to) + '</strong>.</p>') +
+            '<div><button type="submit" class="ui-btn ui-btn--primary">' + HOD.icon('send') + '<span>Send code</span></button></div></form>' +
+            '<form class="ui-form xt-email__form" data-action="xt.email-check" hidden novalidate>' +
+            '<p class="ui-meta">Code sent to <strong data-xt-email-to></strong>.</p>' +
+            '<div class="ui-field"><label class="ui-label" for="xt-email-code">Code</label>' +
+            '<input class="ui-input" type="text" id="xt-email-code" name="code" autocomplete="one-time-code" inputmode="numeric" maxlength="7" required></div>' +
+            '<div class="flex flex-wrap gap-2"><button type="submit" class="ui-btn ui-btn--primary">' + HOD.icon('check') + '<span>Confirm</span></button>' +
+            '<button type="button" class="ui-btn ui-btn--ghost" data-action="xt.email-again">Send again</button></div></form>' +
+            '<p class="xt-email__done" data-xt-email-done hidden>' + HOD.icon('circle-check') + '<span>Email confirmed.</span></p>' +
+            '</section>';
+    }
+
+    function emailCall(action, data, btn) {
+        if (btn) HOD.busy(btn, true);
+        return HOD.api(ENTRY_API, { action: action, json: true, data: data, quiet: true })
+            .catch(function (err) { HOD.toast(err.message || 'That did not work. Try again.', 'danger'); throw err; })
+            .finally(function () { if (btn) HOD.busy(btn, false); });
+    }
+
+    function emailDone(card) {
+        all('form', card).forEach(function (f) { f.hidden = true; });
+        one('[data-xt-email-done]', card).hidden = false;
+        HOD.toast('Email confirmed.', 'success');
+    }
+
+    function emailSend(form, event) {
+        var card = form.closest('[data-xt-email]');
+        var addr = form.querySelector('[name="email"]');
+        emailCall('confirm_send', addr ? { email: addr.value } : {}, (event && event.submitter) || form.querySelector('[type="submit"]')).then(function (res) {
+            if (res.done) { emailDone(card); return; }
+            var check = one('[data-action="xt.email-check"]', card);
+            one('[data-xt-email-to]', card).textContent = res.to || '';
+            form.hidden = true;
+            check.hidden = false;
+            check.querySelector('[name="code"]').focus();
+        }).catch(function () {});
+    }
+
+    function emailCheck(form, event) {
+        var card = form.closest('[data-xt-email]');
+        emailCall('confirm_check', { code: form.querySelector('[name="code"]').value }, (event && event.submitter) || form.querySelector('[type="submit"]'))
+            .then(function () { emailDone(card); }).catch(function () {});
+    }
+
+    function emailAgain(btn) {
+        var card = btn.closest('[data-xt-email]');
+        emailCall('confirm_send', {}, btn).then(function (res) {
+            if (res.done) { emailDone(card); return; }
+            HOD.toast('A new code is on its way.', 'success');
+        }).catch(function () {});
     }
 
     /** The score bar fills and the percentage counts up, once. */
@@ -608,6 +673,9 @@
         HOD.actions.on('xt.map', toggleMap);
         HOD.actions.on('xt.flag', flag);
         HOD.actions.on('xt.retake', retake);
+        HOD.actions.on('xt.email-send', emailSend);
+        HOD.actions.on('xt.email-check', emailCheck);
+        HOD.actions.on('xt.email-again', emailAgain);
         document.addEventListener('keydown', onKey);
         document.addEventListener('visibilitychange', focusNote);
         call('take', { item: cfg.item }).then(render).catch(function () {});

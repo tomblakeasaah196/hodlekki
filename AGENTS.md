@@ -1102,6 +1102,11 @@ Guide and contracts: `docs/EXAMS.md`. Code: `includes/exams/` (entry
   docs/EXAMS.md §8): a training of kind `test` with one exam item, open to
   every member while published (opening it enrols them). Keep tests out of
   the course lists (`kind <> 'test'`); reuse the engine, never fork it.
+- **The QR entry** (`test.php`, `includes/trainings/entry.php`, docs/EXAMS.md
+  §9): phone → welcome → password (or a first one) → email if none → the
+  test. A forgotten password needs the emailed code first (`auth_codes.php`);
+  never reset or sign anyone in on a phone number alone. No first password
+  from a QR code for an account with a staff role.
 
 ## Trainings: My notes (added 2026-11-13)
 
