@@ -4009,6 +4009,11 @@
     .xt-tally__item--right dd { color: var(--ui-success-text); }
     .xt-tally__item--miss dd { color: var(--ui-danger); }
     .xt-cert { display: flex; justify-content: center; margin-top: 18px; }
+    /* After a test: confirm the email with a code (test-entry flow, docs/EXAMS.md §9). */
+    .xt-email { margin-top: 16px; }
+    .xt-email__form { margin-top: 10px; }
+    .xt-email__done { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--ui-success-text); font-weight: 600; }
+    .xt-email__done .ui-icon { width: 18px; height: 18px; }
     .xt-missed { border-left: 3px solid var(--ui-danger); }
     .xt-result--miss .xt-result__icon { background: var(--ui-warning-soft); color: var(--ui-warning); }
     .xt-learn-title { margin: 28px 0 12px; }

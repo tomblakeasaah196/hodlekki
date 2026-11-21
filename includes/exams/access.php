@@ -90,6 +90,29 @@ function exams_load_trainings(): void
     }
 }
 
+/**
+ * After a standalone test: the "Confirm your email" card (owner, 21 Nov 2026: the code comes after the test, never
+ * before it). Null when their email is confirmed; see trainings_entry_email_prompt(). Never breaks the result.
+ */
+function exams_email_prompt(PDO $pdo, int $userId): ?array
+{
+    try {
+        $root = dirname(__DIR__);
+        if (!function_exists('trainings_entry_email_prompt')) {
+            foreach (['/campaigns/bootstrap.php', '/trainings/bootstrap.php', '/trainings/entry.php'] as $f) {
+                if (!is_file($root . $f)) {
+                    return null;
+                }
+                require_once $root . $f;
+            }
+        }
+        return trainings_entry_email_prompt($pdo, $userId);
+    } catch (Throwable $e) {
+        error_log('[exams] email prompt: ' . $e->getMessage());
+        return null;
+    }
+}
+
 /** The learner's certificate link for this item's training, when one is held. */
 function exams_certificate_url(PDO $pdo, array $item, int $userId): ?string
 {
@@ -197,7 +220,8 @@ function exams_take_view(PDO $pdo, array $item, int $userId): array
         return $view + ['state' => 'started', 'paper' => exam_paper($pdo, $attempt, $now)];
     }
     return $view + ['state' => 'done', 'result' => exam_result_for_learner($pdo, $exam, $attempt, $now),
-                    'certificate' => exams_certificate_url($pdo, $item, $userId)];
+                    'certificate' => exams_certificate_url($pdo, $item, $userId),
+                    'email' => exams_item_is_test($item) ? exams_email_prompt($pdo, $userId) : null];
 }
 
 /**
