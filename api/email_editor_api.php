@@ -26,7 +26,7 @@ if (empty($_SESSION['user_id'])) {
 // Automation tabs), or Email Campaigns create — Roles & permissions.
 if (!email_editor_allowed()) {
     http_response_code(403);
-    echo json_encode(['status' => 'error', 'code' => 'FORBIDDEN', 'message' => 'You do not have access to this. Ask the church office if you think you should.']);
+    echo json_encode(['status' => 'error', 'code' => 'FORBIDDEN', 'message' => 'You do not have access to this. Ask Information and Data Insights (IDI) if you think you should.']);
     exit;
 }
 // Writes (every POST) must carry the session's CSRF token (includes/csrf.php).

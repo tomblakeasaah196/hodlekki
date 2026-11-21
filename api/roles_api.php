@@ -210,5 +210,5 @@ try {
     roles_fail($e->getMessage(), $e->errorCode, 200, $e->link);
 } catch (Throwable $e) {
     error_log('roles_api ' . $action . ': ' . $e->getMessage());
-    roles_fail('That did not save. Try again; if it keeps failing, tell the church office.', 'server', 500);
+    roles_fail('That did not save. Try again; if it keeps failing, tell Information and Data Insights (IDI).', 'server', 500);
 }

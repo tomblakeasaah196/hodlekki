@@ -395,7 +395,7 @@ try {
                 (int) $user_id,
                 'Password Changed',
                 'Your HOD Lekki workspace password was changed on ' . date('d M Y \a\t g:ia')
-                . '. If this was not you, contact the church office immediately.'
+                . '. If this was not you, contact Information and Data Insights (IDI) immediately.'
             );
 
             echo json_encode([

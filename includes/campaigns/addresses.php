@@ -96,7 +96,7 @@ function email_address_problem(string $raw, ?PDO $pdo = null, ?int $userId = nul
         return 'Use your own email, not a church one.';
     }
     if ($pdo !== null && ($owner = member_by_confirmed_email($pdo, $email)) !== null && $owner !== $userId) {
-        return 'This email is on another account. Ask the church office.';
+        return 'This email is on another account. Ask Information and Data Insights (IDI).';
     }
     return null;
 }
@@ -480,13 +480,13 @@ function email_changed_doc(string $maskedNew, DateTimeImmutable $at): array
     return [
         'v' => 1,
         'subject' => 'Your email was changed',
-        'preheader' => 'Not you? Contact the church office.',
+        'preheader' => 'Not you? Contact Information and Data Insights (IDI).',
         'blocks' => [
             ['type' => 'heading', 'level' => 1, 'align' => 'left', 'text' => 'Your email was changed'],
             email_doc_paragraphs(
                 'Hi {{first_name}},',
                 'Your HOD Lekki email was changed to ' . $maskedNew . ' on ' . $at->format('j M Y \a\t g:i a') . '. Password reset links now go there.',
-                'Not you? Contact the church office straight away.'
+                'Not you? Contact Information and Data Insights (IDI) straight away.'
             ),
             ['type' => 'footer'],
         ],

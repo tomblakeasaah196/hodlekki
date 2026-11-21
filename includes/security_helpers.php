@@ -774,7 +774,7 @@ if (!function_exists('security_enforce_session')) {
         }
 
         if (!$row) {
-            security_destroy_current_session('Your account no longer exists. Please contact the church office.');
+            security_destroy_current_session('Your account no longer exists. Please contact Information and Data Insights (IDI).');
             return;
         }
 
@@ -784,7 +784,7 @@ if (!function_exists('security_enforce_session')) {
             return;
         }
         if ($status === 'revoked' || $status === 'disabled') {
-            security_destroy_current_session('Your account access has been revoked. Please contact the church office.');
+            security_destroy_current_session('Your account access has been revoked. Please contact Information and Data Insights (IDI).');
             return;
         }
 

@@ -167,26 +167,47 @@ Tests: the "Standalone tests" section of `tests/trainings/run.php`.
 
 ## 9. The QR entry (`test.php`, `includes/trainings/entry.php`)
 
-Owner, 21 Nov 2026: "very lean and seamless… less writing on screens". People scan the test's QR code (or open its
-link) and are in the test in a few taps, signed in, so the result is theirs and they see it later in the app too.
+Owner, 21-22 Nov 2026: "very very short, punchy and lean… everything should not take anyone more than 2 minutes… if
+IDI has to intervene for anyone then we have failed, unless they don't have their numbers on the system at all." People
+scan the test's QR code (or open its link) and a short **conversation** signs them in, in the JBS Praxis forms' manner:
+one message at a time after a moment of typing, answers typed in the box or tapped as pills, a rail (Phone · Email ·
+Password · Test) that only moves forward. Messages rise in, pills pop in one after another; nothing moves with reduced
+motion. Passwords show as they are typed (an eye hides them) and as dots in the conversation. Signed in for 30 days
+(`auth_remember_issue()`, as "keep me signed in"). A quiet "Engineered by JBS Praxis" line, as on the sign-in page.
 
-| Step | What happens |
-| ---- | ------------ |
-| Phone | `lookup`: the number is matched as sign-in matches it (`signin_phone_users()`, any way it is written). Not in HOD: "We could not find this number. Please see the church office." Nobody new is added here (owner). A shared number: "Which one is you?" with first names and an initial (`choose`). |
-| Welcome | "Welcome, Tom Blake", then their password (`signin`, through `signin_check_password()`: the same lockout and records as the sign-in page). |
-| First password | No password yet: "First time here? Set a password." (`set_password`, the one password policy; claimed with a conditional UPDATE so two presses cannot both set one). Never for an account with a staff role (`user_roles`): those set theirs at the office. |
-| Email | Only when HOD has none for them and they have not said they have none: "Your email" or "I don't have an email" (`email_prompt_skip()`). The address waits to be confirmed; no email is sent before the test (owner: "we don't want people struggling with OTP when they want to take a test"). An address already on file starts waiting the same way. Either way the app's email prompt shows a banner, not a stop. |
-| Forgot | `forgot`: a six-digit code to their CONFIRMED email (`auth_code_send()`, purpose `reset`), then `reset`: the code, the new password (policy checked before the code is used), every other session signed out, the "password changed" email, signed in. No confirmed email: the church office resets it. Resetting on the number alone was refused: anyone who knows a member's number could take the account. |
-| In | Signed in as the sign-in page does (`trainings_entry_sign_in()`: session, Security Centre session and record, "keep me signed in"), then the test's page. |
-| After | The result shows **Confirm your email** (`trainings_entry_email_prompt()`) until it is: **Send code** (`confirm_send`, purpose `confirm`, to the address waiting, or one typed there), then the code (`confirm_check`), which confirms it through the email identity flow, as its link would. |
+The server decides every step (`trainings_entry_action()`); the page (`assets/ui/js/pages/test-entry.js`) only says it.
+
+| Who | The way in |
+| --- | ---------- |
+| Not on HOD | "We couldn't find this number… Please contact Information and Data Insights (IDI)." The one dead end. |
+| A shared number | "Which one is you?" (first names and an initial). |
+| Has a password | "Welcome back! Please type the password you use to sign in to HOD Lekki." Then, once, their email is confirmed with a code if it is not yet (or asked for, if HOD has none). |
+| "I can't remember" | A code to their email (masked `tom…h@gmail.com`, with **Open Gmail** / Yahoo / Outlook and "check Spam or Junk"), then a new password typed twice, then in. No email on record: they type one, give their **birthday** (day and month), and the code goes there. |
+| Never signed in | A code to the email on record, or to one they type, then they choose a password. "I don't have an email": they choose a password on the number alone (as the first-time set-up page allows). |
+| "I don't use this email" | They give the one they use (with the birthday when a password is at stake); the right code makes it theirs and it replaces the old one in `users.email`. |
+| Staff (`user_roles`) | Never the typed-email way: their reset goes to the email on record, else IDI. |
+
+**One email, once.** A "real" email is a confirmed one, one waiting, or `users.email` when it is not an @hodlc.com
+sign-in name. The right code confirms the address it went to through the email identity flow (as its link would) and
+puts it in `users.email`; next time there is nothing to type but the password. Slips are caught ("Did you mean
+tom@gmail.com?", `email_typo_hint()`); an address on another account goes to IDI.
+
+**Birthdays** (`trainings_entry_parse_birthday()`): no AI (personal data stays here); a forgiving reader instead: "12
+March", "march 12th", "12/03" (day first), "12-3-1990", "Mrach 12", "the 12th of sept". The year is ignored (it is often
+a stand-in); a missing birthday is saved with the year 2000. A different one than on record: "Shall we update it to 12
+March?", and yes replaces it (owner: replace freely, so the check captures birthdays more than it guards; logged).
 
 **Codes** (`includes/auth_codes.php`, table `auth_email_codes`): six digits, only their `password_hash()` stored, one
-use, 15 minutes, dead after 5 wrong tries, a new one replaces the last; one a minute per person and purpose, 5 an hour
-per person, 20 an hour per IP. Sent through the transactional lane (flows `reset_code`, `confirm_code`).
+use, 15 minutes, dead after 5 wrong tries, a new one replaces the last; one a minute per person, purpose and address
+(a new address gets its code at once), 5 an hour per person, 20 an hour per IP. The page sends the code by itself at
+the sixth digit. A right code allows a new password for 15 minutes; a reset signs out every other session and sends the
+"password changed" email.
 
 **Guards:** the endpoint (`api/test_entry_api.php`) takes POST only and checks the CSRF token; the state between steps
-lives in the session (`$_SESSION['test_entry']`, 20 minutes); numbers HOD does not know are recorded
-(`login_attempts`, context `test_entry`) and more than 20 in 15 minutes from one IP are refused for a while. The page
-starts fresh every time the link is opened, and offers "Sign in with email instead".
+lives in the session (`$_SESSION['test_entry']`, 20 minutes); numbers HOD does not know are recorded (`login_attempts`,
+context `test_entry`) and more than 20 in 15 minutes from one IP are refused for a while.
+
+**After the test:** anyone still without a confirmed email sees **Confirm your email** on the result
+(`trainings_entry_email_prompt()`, `confirm_send`, `confirm_check`).
 
 Tests: the "QR entry to a test" section of `tests/trainings/run.php`.

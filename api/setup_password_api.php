@@ -51,7 +51,7 @@ try {
     if (setup_password_rate_limited($pdo)) {
         echo json_encode([
             'status'  => 'error',
-            'message' => 'Too many attempts from this connection. Please wait 15 minutes, or contact the church office.',
+            'message' => 'Too many attempts from this connection. Please wait 15 minutes, or contact Information and Data Insights (IDI).',
         ]);
         exit;
     }

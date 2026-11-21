@@ -892,7 +892,7 @@ function our_sermon_listen_action(PDO $pdo, string $action, array $in, int $user
         return ['status' => 'error', 'code' => 'FEATURE_NOT_READY', 'message' => 'Notes are being set up. Try again after the next update.'];
     }
     if (!our_sermon_can_view()) {
-        return ['status' => 'error', 'code' => 'FORBIDDEN', 'message' => 'You do not have access to this. Ask the church office if you think you should.'];
+        return ['status' => 'error', 'code' => 'FORBIDDEN', 'message' => 'You do not have access to this. Ask Information and Data Insights (IDI) if you think you should.'];
     }
     $sermon = static function () use ($pdo, $in): ?array {
         return our_sermon_visible($pdo, (int) ($in['sermon_id'] ?? 0));

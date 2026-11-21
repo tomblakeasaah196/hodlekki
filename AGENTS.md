@@ -1103,10 +1103,10 @@ Guide and contracts: `docs/EXAMS.md`. Code: `includes/exams/` (entry
   every member while published (opening it enrols them). Keep tests out of
   the course lists (`kind <> 'test'`); reuse the engine, never fork it.
 - **The QR entry** (`test.php`, `includes/trainings/entry.php`, docs/EXAMS.md
-  §9): phone → welcome → password (or a first one) → email if none → the
-  test. A forgotten password needs the emailed code first (`auth_codes.php`);
-  never reset or sign anyone in on a phone number alone. No first password
-  from a QR code for an account with a staff role.
+  §9): a conversation; the server decides every step. A password is only set
+  after a right emailed code (or, for someone who never had one and has no
+  email, on the number alone). Staff never take the typed-email way. Send
+  people to Information and Data Insights (IDI), never "the church office".
 
 ## Trainings: My notes (added 2026-11-13)
 

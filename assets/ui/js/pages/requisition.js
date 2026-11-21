@@ -844,7 +844,7 @@
         newForm.querySelector('[data-req-files]').textContent = '';
         var dept = newForm.elements.department_id;
         dept.textContent = '';
-        [['', state.depts.length ? 'Choose…' : 'No department: ask the church office']].concat(state.depts.map(function (d) {
+        [['', state.depts.length ? 'Choose…' : 'No department: ask IDI']].concat(state.depts.map(function (d) {
             return [String(d.id), d.name];
         })).forEach(function (o) { var opt = el('option', '', o[1]); opt.value = o[0]; dept.appendChild(opt); });
         if (state.depts.length === 1) dept.value = String(state.depts[0].id);

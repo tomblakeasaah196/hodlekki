@@ -36,7 +36,7 @@ ui_standalone_open('Reset password', ['footer' => '<a class="ui-link" href="/aut
 if ($done): ?>
     <h1 class="ui-h2">Check your email</h1>
     <p class="text-ink-muted">If we know this account, a link is on its way.
-        <?= ui_info('It goes to the confirmed personal email and works once, for 30 minutes. Look in Spam too. No email on your account yet? Ask the church office to reset your password.', 'About the link') ?></p>
+        <?= ui_info('It goes to the confirmed personal email and works once, for 30 minutes. Look in Spam too. No email on your account yet? Ask Information and Data Insights (IDI) to reset your password.', 'About the link') ?></p>
 <?php else: ?>
     <h1 class="ui-h2">Forgot your password?</h1>
     <p class="text-ink-muted">We will email you a reset link.</p>

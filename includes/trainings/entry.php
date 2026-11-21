@@ -1,29 +1,40 @@
 <?php
 // /includes/trainings/entry.php
 //
-// The QR entry to a standalone test (owner, 21 Nov 2026: "very lean and seamless… straight to the point"):
+// The way into a standalone test from its QR code, as a short conversation (owner, 21-22 Nov 2026: "very very short,
+// punchy and lean… everything should not take anyone more than 2 minutes… if IDI has to intervene for anyone then we
+// have failed, unless they don't have their numbers on the system at all").
 //
-//   phone → "Welcome, Tom Blake" → their password, or "Set a password" if they never had one
-//         → their email, only if we have none → signed in → the test (My trainings' test page).
-//   Forgot the password → a six-digit code to their CONFIRMED email (includes/auth_codes.php) → a new password → in.
-//   No confirmed email to send it to, a number HOD does not know, or an account that is not open → the church office.
-//   After the test, the result asks them to confirm their email with a code (trainings_entry_email_prompt()).
+//   phone ─┬─ not on HOD ............................. Information and Data Insights (IDI), the one dead end
+//          ├─ a shared number ........................ "Which one is you?"
+//          ├─ has a password ......................... password ─ in (their email checked once, if not yet)
+//          │                                            └─ "I can't remember": a code to their email → new password → in
+//          └─ never had one .......................... a code to their email → choose a password → in
+//   No email on record (or "I don't use this email"): they type one; when it is to reset a password, their birthday
+//   (day and month) first; then the code goes there. The right code confirms that email and makes it theirs, once:
+//   next time there is nothing to type but the password.
 //
-// Why a reset needs the code: resetting on a phone number alone would let anyone who knows a member's number take
-// over the account (owner chose "Email code first"). A FIRST password is set on the number alone, as the first-time
-// set-up page already allows, but never for an account with a staff role (those go to the office).
+// A "real" email is a confirmed one, one waiting to be confirmed, or users.email when it is not a church sign-in name
+// (@hodlc.com, email_looks_personal()). Codes: includes/auth_codes.php. The birthday check captures birthdays more
+// than it guards (owner: a different answer may replace the one on record); staff accounts never take the typed-email
+// way (their reset goes to the email on record, else IDI). Signed in for 30 days (trainings_entry_sign_in()).
 //
-// Page: test.php (public, strict CSP), script assets/ui/js/pages/test-entry.js, endpoint api/test_entry_api.php
-// (CSRF checked). State between steps: $_SESSION['test_entry'] (the test, the accounts on the number, the one chosen,
-// the number typed, when; TRAININGS_ENTRY_TTL seconds). Needs includes/campaigns/bootstrap.php (signin_*, email_*),
-// includes/auth_helpers.php and includes/security_helpers.php. Guide: docs/EXAMS.md §9. Tests: tests/trainings/run.php,
-// "QR entry".
+// Page: test.php (public, strict CSP), script assets/ui/js/pages/test-entry.js, endpoint api/test_entry_api.php (CSRF
+// checked). The server decides every step; the page only says it. State: $_SESSION['test_entry'], TRAININGS_ENTRY_TTL.
+// Guide: docs/EXAMS.md §9. Tests: tests/trainings/run.php, "QR entry to a test".
 
 require_once dirname(__DIR__) . '/auth_codes.php';
 
 const TRAININGS_ENTRY_TTL = 1200;            // 20 minutes from the number to the last step
 const TRAININGS_ENTRY_LOOKUPS_PER_IP = 20;   // numbers HOD does not know, per IP per 15 minutes
-const TRAININGS_ENTRY_OFFICE = 'Please see the church office.';
+const TRAININGS_ENTRY_VERIFIED_TTL = 900;    // a right code allows a new password for 15 minutes
+const TRAININGS_ENTRY_IDI = 'Please contact Information and Data Insights (IDI).';
+const TRAININGS_ENTRY_MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september',
+    'october', 'november', 'december'];
+
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
 
 /** The published standalone test behind an item id, or null. */
 function trainings_entry_test(PDO $pdo, int $itemId): ?array
@@ -49,13 +60,18 @@ function trainings_entry_name(array $u): string
     return trim((string) ($u['first_name'] ?? '') . ' ' . (string) ($u['last_name'] ?? '')) ?: 'friend';
 }
 
+function trainings_entry_first(array $u): string
+{
+    return trim((string) ($u['first_name'] ?? '')) ?: 'friend';
+}
+
 /** Is the account open (not suspended, revoked or disabled)? */
 function trainings_entry_open_account(array $u): bool
 {
     return !in_array(strtolower((string) ($u['account_status'] ?? 'active')), ['suspended', 'revoked', 'disabled'], true);
 }
 
-/** Does the account hold a staff role (user_roles)? Its first password is set at the office, never from a QR code. */
+/** Does the account hold a staff role (user_roles)? It never takes the typed-email way in. */
 function trainings_entry_is_staff(PDO $pdo, int $userId): bool
 {
     try {
@@ -67,6 +83,150 @@ function trainings_entry_is_staff(PDO $pdo, int $userId): bool
     }
 }
 
+/** "tom…h@gmail.com": the first three characters and the last one before the @ (owner's choice). */
+function trainings_entry_mask(string $email): string
+{
+    $at = strrpos($email, '@');
+    if ($at === false || $at === 0) {
+        return '…';
+    }
+    $local = substr($email, 0, $at);
+    $len = mb_strlen($local, 'UTF-8');
+    $shown = $len <= 4 ? mb_substr($local, 0, 1, 'UTF-8') . '…' : mb_substr($local, 0, 3, 'UTF-8') . '…' . mb_substr($local, -1, 1, 'UTF-8');
+    return $shown . substr($email, $at);
+}
+
+/** The button that opens their mailbox ("Open Gmail"), for the providers people here use; null for others. */
+function trainings_entry_mail_link(string $email): ?array
+{
+    $domain = strtolower((string) substr(strrchr($email, '@') ?: '', 1));
+    return match (true) {
+        in_array($domain, ['gmail.com', 'googlemail.com'], true) => ['label' => 'Open Gmail', 'href' => 'https://mail.google.com/mail/'],
+        str_starts_with($domain, 'yahoo.') || $domain === 'ymail.com' => ['label' => 'Open Yahoo Mail', 'href' => 'https://mail.yahoo.com/'],
+        in_array($domain, ['outlook.com', 'hotmail.com', 'live.com', 'msn.com'], true) => ['label' => 'Open Outlook', 'href' => 'https://outlook.live.com/mail/'],
+        in_array($domain, ['icloud.com', 'me.com', 'mac.com'], true) => ['label' => 'Open iCloud Mail', 'href' => 'https://www.icloud.com/mail'],
+        default => null,
+    };
+}
+
+/** The email a code can go to: confirmed, else waiting to be confirmed, else a real one on file. Null when none. */
+function trainings_entry_real_email(PDO $pdo, int $userId): ?string
+{
+    if (!email_identity_ready($pdo)) {
+        $stmt = $pdo->prepare('SELECT email FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $e = email_normalize((string) ($stmt->fetchColumn() ?: ''));
+        return email_looks_personal($e) ? $e : null;
+    }
+    $st = email_address_state($pdo, $userId);
+    return $st['confirmed'] ?? $st['pending'] ?? $st['on_file'];
+}
+
+// ---------------------------------------------------------------------------
+// Birthdays: day and month (owner: the year on record is often a stand-in, 2000)
+// ---------------------------------------------------------------------------
+
+/**
+ * A birthday however it is typed: "12 March", "march 12th", "12/03" (day first, as here), "12-3-1990", "Mrach 12",
+ * "the 12th of sept". The year is ignored. Null when it cannot be read.
+ * @return array{month:int, day:int}|null
+ */
+function trainings_entry_parse_birthday(string $raw): ?array
+{
+    $s = mb_strtolower(trim($raw), 'UTF-8');
+    $s = (string) preg_replace('/(\d+)\s*(st|nd|rd|th)\b/u', '$1', $s);
+    $s = (string) preg_replace('/[^a-z0-9]+/u', ' ', $s);
+    $words = $nums = [];
+    foreach (preg_split('/\s+/', trim($s)) ?: [] as $tok) {
+        if ($tok === '' || in_array($tok, ['of', 'the', 'on', 'my', 'birthday', 'is', 'born', 'day', 'in'], true)) {
+            continue;
+        }
+        if (ctype_digit($tok)) {
+            if (strlen($tok) <= 2) {
+                $nums[] = (int) $tok;
+            }
+            continue;   // a year (four digits) or noise
+        }
+        $words[] = $tok;
+    }
+    $month = null;
+    foreach ($words as $w) {
+        $month = trainings_entry_month_word($w);
+        if ($month !== null) {
+            break;
+        }
+    }
+    if ($month !== null) {
+        $day = $nums[0] ?? null;
+    } elseif (count($nums) >= 2) {
+        [$day, $month] = [$nums[0], $nums[1]];
+        if ($month > 12 && $day <= 12) {
+            [$day, $month] = [$month, $day];   // written month first
+        }
+    } else {
+        return null;
+    }
+    if ($day === null || $month < 1 || $month > 12 || $day < 1 || $day > trainings_entry_days_in_month($month)) {
+        return null;
+    }
+    return ['month' => $month, 'day' => $day];
+}
+
+/** Days in a month, February allowing the 29th. */
+function trainings_entry_days_in_month(int $month): int
+{
+    return [1 => 31, 2 => 29, 3 => 31, 4 => 30, 5 => 31, 6 => 30, 7 => 31, 8 => 31, 9 => 30, 10 => 31, 11 => 30, 12 => 31][$month] ?? 0;
+}
+
+/** A month from a word, forgiving: "march", "mar", "sept", "Mrach", "febuary". Null when nothing is close. */
+function trainings_entry_month_word(string $w): ?int
+{
+    if (strlen($w) < 3) {
+        return null;
+    }
+    foreach (TRAININGS_ENTRY_MONTHS as $i => $name) {
+        if ($w === $name || (strlen($w) >= 3 && str_starts_with($name, $w))) {
+            return $i + 1;
+        }
+    }
+    $best = null;
+    $bestScore = 99;
+    foreach (TRAININGS_ENTRY_MONTHS as $i => $name) {
+        $score = levenshtein($w, $name);
+        if ($score < $bestScore) {
+            [$best, $bestScore] = [$i + 1, $score];
+        }
+    }
+    return $bestScore <= (strlen($w) >= 5 ? 2 : 1) ? $best : null;   // "Mrach", "febuary", "agust"
+}
+
+/** "12 March". */
+function trainings_entry_birthday_text(array $b): string
+{
+    return $b['day'] . ' ' . ucfirst(TRAININGS_ENTRY_MONTHS[$b['month'] - 1]);
+}
+
+/** The birthday on record (day and month), or null when there is none. */
+function trainings_entry_birthday_on_record(array $u): ?array
+{
+    $dob = (string) ($u['dob'] ?? '');
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $dob, $m) || $m[2] === '00' || $m[3] === '00') {
+        return null;
+    }
+    return ['month' => (int) $m[2], 'day' => (int) $m[3]];
+}
+
+/** Save a birthday: the day and month given, the year kept when there is one, else 2000 (owner). */
+function trainings_entry_save_birthday(PDO $pdo, array $u, array $b): void
+{
+    $year = preg_match('/^(\d{4})-\d{2}-\d{2}/', (string) ($u['dob'] ?? ''), $m) && $m[1] !== '0000' ? $m[1] : '2000';
+    $pdo->prepare('UPDATE users SET dob = ? WHERE id = ?')->execute([sprintf('%s-%02d-%02d', $year, $b['month'], $b['day']), (int) $u['id']]);
+}
+
+// ---------------------------------------------------------------------------
+// The state between steps
+// ---------------------------------------------------------------------------
+
 /** The steps' memory, or null when there is none or it is too old. */
 function trainings_entry_state(): ?array
 {
@@ -77,55 +237,14 @@ function trainings_entry_state(): ?array
     return $s;
 }
 
-/** What comes after the number for one account: password | set_password | office. */
-function trainings_entry_step_for(PDO $pdo, array $u): array
+function trainings_entry_put(array $values): void
 {
-    if (!trainings_entry_open_account($u)) {
-        return ['step' => 'office', 'message' => TRAININGS_ENTRY_OFFICE];
-    }
-    $name = trainings_entry_name($u);
-    if (!empty($u['password_hash'])) {
-        return ['step' => 'password', 'name' => $name];
-    }
-    if (trainings_entry_is_staff($pdo, (int) $u['id'])) {
-        return ['step' => 'office', 'name' => $name, 'message' => 'Set your first password at the church office.'];
-    }
-    return ['step' => 'set_password', 'name' => $name];
-}
-
-/**
- * After signing in: do we still need their email? Only when HOD has none for them (none confirmed, none waiting,
- * none on file) and they have not said "I don't have one" lately. An address on file starts waiting to be confirmed
- * here (no email sent), so the app's email prompt lets them through to the test and the result asks for the code.
- */
-function trainings_entry_needs_email(PDO $pdo, int $userId): bool
-{
-    if (!email_identity_ready($pdo)) {
-        return false;
-    }
-    $st = email_address_state($pdo, $userId);
-    if ($st['confirmed'] !== null || $st['pending'] !== null) {
-        return false;
-    }
-    if ($st['on_file'] !== null) {
-        email_capture_start($pdo, $userId, (string) $st['on_file'], 'signin_prompt', $userId, ['send' => false]);
-        email_prompt_forget();
-        return false;
-    }
-    return email_prompt_state($pdo, $userId) === 'required';
-}
-
-/** Where a signed-in person goes next: the email step, or the test. */
-function trainings_entry_next(PDO $pdo, int $userId, int $itemId): array
-{
-    return trainings_entry_needs_email($pdo, $userId)
-        ? ['status' => 'success', 'step' => 'email']
-        : ['status' => 'success', 'step' => 'go', 'go' => exam_url_take($itemId)];
+    $_SESSION['test_entry'] = array_merge((array) ($_SESSION['test_entry'] ?? []), $values);
 }
 
 /**
  * Sign them in as a password sign-in does (api/auth_api.php steps 10-14): the session, the Security Centre's session
- * row and sign-in record, "keep me signed in". $how names the way in for the records.
+ * row and sign-in record, and "keep me signed in" (30 days, AUTH_REMEMBER_DAYS).
  */
 function trainings_entry_sign_in(PDO $pdo, array $user, string $how): void
 {
@@ -175,18 +294,141 @@ function trainings_entry_set_password(PDO $pdo, int $userId, string $password): 
 function trainings_entry_password_problem(string $password, string $confirm, array $user): ?array
 {
     if ($password === '') {
-        return ['status' => 'error', 'message' => 'Choose a password.', 'field' => 'password'];
+        return ['status' => 'error', 'message' => 'Please type a password.', 'field' => 'password'];
     }
     if ($password !== $confirm) {
-        return ['status' => 'error', 'message' => 'The two passwords differ.', 'field' => 'confirm'];
+        return ['status' => 'error', 'message' => 'Those two are not the same. Let\'s try again.', 'field' => 'confirm'];
     }
     $problems = function_exists('security_password_problems') ? security_password_problems($password, $user) : [];
     return $problems !== [] ? ['status' => 'error', 'message' => (string) $problems[0], 'field' => 'password', 'problems' => $problems] : null;
 }
 
 /**
+ * Make $email this person's confirmed address now (a right code proved they read it): a waiting row for it if there
+ * is none, then the same confirmation as its emailed link (email_capture_confirm()), which also puts it in
+ * users.email and replaces an older one. False when the address belongs to someone else.
+ */
+function trainings_entry_activate_email(PDO $pdo, int $userId, string $email): bool
+{
+    if (!email_identity_ready($pdo)) {
+        return true;
+    }
+    $email = email_normalize($email);
+    if (email_address_state($pdo, $userId)['confirmed'] === $email) {
+        return true;
+    }
+    $stmt = $pdo->prepare("SELECT id FROM email_addresses WHERE user_id = ? AND email = ? AND status = 'pending' ORDER BY id DESC LIMIT 1");
+    $stmt->execute([$userId, $email]);
+    $id = $stmt->fetchColumn();
+    if ($id === false) {
+        $r = email_capture_start($pdo, $userId, $email, 'signin_prompt', $userId, ['send' => false]);
+        if (empty($r['ok'])) {
+            return false;
+        }
+        if (!empty($r['already_confirmed'])) {
+            return true;
+        }
+        $id = (int) $r['address_id'];
+    }
+    $token = campaigns_token(32);
+    $pdo->prepare('UPDATE email_addresses SET token_hash = ?, token_expires_at = ? WHERE id = ?')
+        ->execute([hash('sha256', $token), campaigns_sql_dt(campaigns_now()->modify('+1 hour')), (int) $id]);
+    $r = email_capture_confirm($pdo, $token);
+    email_prompt_forget();
+    return !empty($r['ok']);
+}
+
+/**
+ * "I don't use this email": the new address replaces the old one in users.email too (the confirmed address already
+ * replaced the old confirmed one). Kept as it is when another account has that address.
+ */
+function trainings_entry_replace_on_file(PDO $pdo, int $userId, string $email): void
+{
+    $email = email_normalize($email);
+    try {
+        $stmt = $pdo->prepare('SELECT 1 FROM users WHERE LOWER(email) = ? AND id <> ?');
+        $stmt->execute([$email, $userId]);
+        if (!$stmt->fetchColumn()) {
+            $pdo->prepare('UPDATE users SET email = ? WHERE id = ?')->execute([$email, $userId]);
+        }
+    } catch (PDOException $e) {
+        error_log('[test entry] users.email not replaced for user ' . $userId . ': ' . $e->getMessage());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The conversation
+// ---------------------------------------------------------------------------
+
+/** A reply: the next step and what the page needs to say it. */
+function trainings_entry_reply(string $step, array $data = []): array
+{
+    return ['status' => 'success', 'step' => $step] + $data;
+}
+
+function trainings_entry_idi(string $why): array
+{
+    return trainings_entry_reply('idi', ['message' => $why . ' ' . TRAININGS_ENTRY_IDI]);
+}
+
+/** Send the code for the current way in, to $email; the code step, or an error. */
+function trainings_entry_send(PDO $pdo, array $user, string $email, string $ip, bool $typed = false): array
+{
+    $s = trainings_entry_state() ?? [];
+    $purpose = ($s['mode'] ?? '') === 'activate' ? 'confirm' : 'reset';
+    $r = auth_code_send($pdo, $user, $purpose, email_normalize($email), $ip);
+    if (empty($r['ok']) && ($r['code'] ?? '') !== 'TOO_SOON') {
+        return ['status' => 'error', 'message' => (string) $r['message'], 'code' => (string) $r['code']];
+    }
+    trainings_entry_put(['target' => email_normalize($email), 'typed' => $typed, 'purpose' => $purpose]);
+    return trainings_entry_reply('code', ['to' => trainings_entry_mask(email_normalize($email)), 'mail' => trainings_entry_mail_link($email),
+        'typed' => $typed, 'note' => ($r['code'] ?? '') === 'TOO_SOON' ? 'already' : null]);
+}
+
+/** Where someone goes once we know who they are. */
+function trainings_entry_route(PDO $pdo, array $u, string $ip): array
+{
+    $first = trainings_entry_first($u);
+    if (!trainings_entry_open_account($u)) {
+        return trainings_entry_idi('This account is on hold.');
+    }
+    if (!empty($u['password_hash'])) {
+        trainings_entry_put(['mode' => 'password']);
+        return trainings_entry_reply('password', ['name' => $first]);
+    }
+    // Never had a password: a code to their email first, then they choose one.
+    trainings_entry_put(['mode' => 'first']);
+    $real = trainings_entry_real_email($pdo, (int) $u['id']);
+    if ($real !== null) {
+        return ['name' => $first, 'first' => true] + trainings_entry_send($pdo, $u, $real, $ip);
+    }
+    if (trainings_entry_is_staff($pdo, (int) $u['id'])) {
+        return trainings_entry_idi('Your account needs its first password set by IDI.');
+    }
+    return trainings_entry_reply('email', ['name' => $first, 'first' => true]);
+}
+
+/** After signing in: confirm their email once (a code), or ask for one; else straight to the test. */
+function trainings_entry_after_sign_in(PDO $pdo, array $u, int $itemId, string $ip): array
+{
+    $uid = (int) $u['id'];
+    if (!email_identity_ready($pdo) || email_address_state($pdo, $uid)['confirmed'] !== null) {
+        return trainings_entry_reply('go', ['go' => exam_url_take($itemId), 'name' => trainings_entry_first($u)]);
+    }
+    trainings_entry_put(['mode' => 'activate']);
+    $real = trainings_entry_real_email($pdo, $uid);
+    if ($real !== null) {
+        return trainings_entry_send($pdo, $u, $real, $ip);
+    }
+    if (email_prompt_state($pdo, $uid) === 'none') {
+        return trainings_entry_reply('go', ['go' => exam_url_take($itemId), 'name' => trainings_entry_first($u)]);
+    }
+    return trainings_entry_reply('email', ['name' => trainings_entry_first($u), 'activate' => true]);
+}
+
+/**
  * One step. $in: the request; $ip: the client's address; $signIn: how to sign someone in (tests pass their own).
- * @return array the JSON reply: status, and step (choose | password | set_password | email | code | office | go)
+ * Steps: choose | password | email | typo | birthday | birthday_mismatch | code | new_password | idi | go.
  */
 function trainings_entry_action(PDO $pdo, string $do, array $in, string $ip, ?callable $signIn = null): array
 {
@@ -195,7 +437,7 @@ function trainings_entry_action(PDO $pdo, string $do, array $in, string $ip, ?ca
     };
     $fail = static fn (string $message, ?string $code = null, ?string $field = null): array =>
         ['status' => 'error', 'message' => $message] + ($code ? ['code' => $code] : []) + ($field ? ['field' => $field] : []);
-    $expired = $fail('Start again with your phone number.', 'EXPIRED');
+    $expired = $fail('That took a while, so let\'s start again with your phone number.', 'EXPIRED');
 
     // ---- After the test (signed in): confirm the email with a code. ----
     if ($do === 'confirm_send' || $do === 'confirm_check') {
@@ -207,18 +449,17 @@ function trainings_entry_action(PDO $pdo, string $do, array $in, string $ip, ?ca
         return $do === 'confirm_send' ? trainings_entry_confirm_send($pdo, $user, $in, $ip) : trainings_entry_confirm_check($pdo, $user, (string) ($in['code'] ?? ''));
     }
 
-    // ---- The way in. ----
     if ($do === 'lookup') {
         $itemId = (int) ($in['t'] ?? 0);
         if (trainings_entry_test($pdo, $itemId) === null) {
-            return $fail('This test is not open.', 'CLOSED');
+            return $fail('This test is not open right now.', 'CLOSED');
         }
         $phone = trim((string) ($in['phone'] ?? ''));
         if (!signin_is_phone($phone)) {
-            return $fail('Enter your phone number.', 'INVALID', 'phone');
+            return $fail('That doesn\'t look like a phone number. Try it like 0803 123 4567.', 'INVALID', 'phone');
         }
         if (trainings_entry_throttled($pdo, $ip)) {
-            return $fail('Too many tries. Wait a few minutes.', 'THROTTLED');
+            return $fail('Too many tries from here. Please wait a few minutes.', 'THROTTLED');
         }
         $people = signin_phone_users($pdo, $phone);
         if ($people === []) {
@@ -226,17 +467,17 @@ function trainings_entry_action(PDO $pdo, string $do, array $in, string $ip, ?ca
                 security_record_attempt($pdo, null, $phone, false, 'unknown_number', 'test_entry');
             }
             unset($_SESSION['test_entry']);
-            return ['status' => 'success', 'step' => 'office', 'message' => 'We could not find this number. ' . TRAININGS_ENTRY_OFFICE];
+            return trainings_entry_idi('We couldn\'t find this number on HOD Lekki.');
         }
         $_SESSION['test_entry'] = ['item' => $itemId, 'uids' => array_map(static fn ($u) => (int) $u['id'], $people),
                                    'uid' => null, 'phone' => $phone, 'at' => time()];
         if (count($people) === 1) {
             $_SESSION['test_entry']['uid'] = (int) $people[0]['id'];
-            return ['status' => 'success'] + trainings_entry_step_for($pdo, $people[0]);
+            return trainings_entry_route($pdo, $people[0], $ip);
         }
-        return ['status' => 'success', 'step' => 'choose', 'people' => array_map(static fn ($u, $i) => ['i' => $i,
+        return trainings_entry_reply('choose', ['people' => array_map(static fn ($u, $i) => ['i' => $i,
             'name' => trim((string) $u['first_name'] . ' ' . mb_substr((string) $u['last_name'], 0, 1) . ((string) $u['last_name'] !== '' ? '.' : ''))],
-            $people, array_keys($people))];
+            $people, array_keys($people))]);
     }
 
     $s = trainings_entry_state();
@@ -246,14 +487,13 @@ function trainings_entry_action(PDO $pdo, string $do, array $in, string $ip, ?ca
     $itemId = (int) $s['item'];
 
     if ($do === 'choose') {
-        $i = (int) ($in['i'] ?? -1);
-        $uid = $s['uids'][$i] ?? null;
+        $uid = $s['uids'][(int) ($in['i'] ?? -1)] ?? null;
         $user = $uid !== null ? trainings_entry_user($pdo, (int) $uid) : null;
         if ($user === null) {
             return $expired;
         }
-        $_SESSION['test_entry']['uid'] = (int) $uid;
-        return ['status' => 'success'] + trainings_entry_step_for($pdo, $user);
+        trainings_entry_put(['uid' => (int) $uid]);
+        return trainings_entry_route($pdo, $user, $ip);
     }
 
     $user = !empty($s['uid']) ? trainings_entry_user($pdo, (int) $s['uid']) : null;
@@ -261,99 +501,168 @@ function trainings_entry_action(PDO $pdo, string $do, array $in, string $ip, ?ca
         return $expired;
     }
     $uid = (int) $user['id'];
+    $first = trainings_entry_first($user);
+    $mode = (string) ($s['mode'] ?? '');
 
     switch ($do) {
         case 'signin':
             $password = (string) ($in['password'] ?? '');
             if ($password === '') {
-                return $fail('Enter your password.', 'INVALID', 'password');
+                return $fail('Please type your password.', 'INVALID', 'password');
             }
             $security = function_exists('security_schema_ready') && security_schema_ready($pdo);
             $check = signin_check_password($pdo, [$user], $password, (string) $s['phone'], $security);
             if (empty($check['ok'])) {
-                return $fail((string) ($check['message'] ?? 'Wrong password.') === SIGNIN_WRONG ? 'Wrong password. Try again.' : (string) $check['message'], 'WRONG', 'password');
+                return $fail((string) ($check['message'] ?? '') === SIGNIN_WRONG ? 'That password isn\'t right. Try again, or tap "I can\'t remember".'
+                    : (string) $check['message'], 'WRONG', 'password');
             }
             if (!trainings_entry_open_account($check['user'])) {
-                return ['status' => 'success', 'step' => 'office', 'message' => TRAININGS_ENTRY_OFFICE];
+                return trainings_entry_idi('This account is on hold.');
             }
             $signIn($check['user'], 'password');
-            return trainings_entry_next($pdo, $uid, $itemId);
-
-        case 'set_password':
-            $step = trainings_entry_step_for($pdo, $user);
-            if ($step['step'] !== 'set_password') {
-                return ['status' => 'success'] + $step;   // a password was set meanwhile, or the office
-            }
-            if ($bad = trainings_entry_password_problem((string) ($in['password'] ?? ''), (string) ($in['confirm'] ?? ''), $user)) {
-                return $bad;
-            }
-            // Only an account that still has no password: two presses at once cannot both set one.
-            $claim = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ? AND (password_hash IS NULL OR password_hash = '')");
-            $claim->execute([password_hash((string) $in['password'], PASSWORD_BCRYPT), $uid]);
-            if ($claim->rowCount() !== 1) {
-                return ['status' => 'success', 'step' => 'password', 'name' => trainings_entry_name($user)];
-            }
-            trainings_entry_set_password($pdo, $uid, (string) $in['password']);
-            if (function_exists('security_log')) {
-                security_log($pdo, 'password_first_set', $uid, 'First password set from a test QR code.', $uid, trainings_entry_name($user));
-            }
-            $signIn(trainings_entry_user($pdo, $uid) ?? $user, 'first password');
-            return trainings_entry_next($pdo, $uid, $itemId);
-
-        case 'email':
-        case 'email_skip':
-            if ((int) ($_SESSION['user_id'] ?? 0) !== $uid) {
-                return $expired;
-            }
-            if ($do === 'email_skip') {
-                email_prompt_skip($pdo, $uid);
-            } else {
-                $r = email_capture_start($pdo, $uid, (string) ($in['email'] ?? ''), 'signin_prompt', $uid, ['send' => false]);
-                if (empty($r['ok'])) {
-                    return $fail((string) ($r['message'] ?? 'Check the email address.'), (string) ($r['code'] ?? 'INVALID'), 'email');
-                }
-            }
-            email_prompt_forget();
-            return ['status' => 'success', 'step' => 'go', 'go' => exam_url_take($itemId)];
+            return trainings_entry_after_sign_in($pdo, $check['user'], $itemId, $ip);
 
         case 'forgot':
-            $to = email_identity_ready($pdo) ? member_confirmed_email($pdo, $uid) : null;
-            if ($to === null) {
-                return ['status' => 'success', 'step' => 'office', 'message' => 'The church office can reset your password.'];
+            // "I can't remember": a code to their email; none on record, they type one (with their birthday).
+            trainings_entry_put(['mode' => 'reset', 'bday' => false]);
+            $real = trainings_entry_real_email($pdo, $uid);
+            if ($real !== null) {
+                return trainings_entry_send($pdo, $user, $real, $ip);
             }
-            $r = auth_code_send($pdo, $user, 'reset', $to, $ip);
-            return !empty($r['ok']) ? ['status' => 'success', 'step' => 'code', 'to' => $r['to']] : $fail((string) $r['message'], (string) $r['code']);
+            return trainings_entry_is_staff($pdo, $uid) ? trainings_entry_idi('Staff passwords are reset by IDI.')
+                : trainings_entry_reply('email', ['name' => $first, 'reset' => true]);
 
-        case 'reset':
-            if ($bad = trainings_entry_password_problem((string) ($in['password'] ?? ''), (string) ($in['confirm'] ?? ''), $user)) {
-                return $bad;
+        case 'old_email':
+            // "I don't use this email": they give the one they use. With a password at stake, their birthday too.
+            if (!empty($user['password_hash']) && $mode !== 'activate' && trainings_entry_is_staff($pdo, $uid)) {
+                return trainings_entry_idi('Staff emails are changed by IDI.');
             }
-            $check = auth_code_check($pdo, $uid, 'reset', (string) ($in['code'] ?? ''));
+            trainings_entry_put(['bday' => false, 'target' => null, 'replace' => true]);
+            return trainings_entry_reply('email', ['name' => $first, 'replace' => true, 'activate' => $mode === 'activate']);
+
+        case 'email':
+            $raw = trim((string) ($in['email'] ?? ''));
+            $email = email_normalize($raw);
+            if (($problem = email_address_problem($email, $pdo, $uid)) !== null) {
+                return $fail($problem, 'INVALID', 'email');
+            }
+            if (empty($in['as_typed']) && ($hint = email_typo_hint($email)) !== null) {
+                return trainings_entry_reply('typo', ['typed' => $email, 'suggest' => $hint]);
+            }
+            trainings_entry_put(['typed_email' => $email]);
+            // Resetting a password through an address not on record: their birthday first.
+            if (!empty($user['password_hash']) && $mode === 'reset') {
+                return trainings_entry_reply('birthday', ['name' => $first]);
+            }
+            return trainings_entry_send($pdo, $user, $email, $ip, true);
+
+        case 'birthday':
+        case 'birthday_update':
+            if ($mode !== 'reset' || empty($s['typed_email'])) {
+                return $expired;
+            }
+            $b = $do === 'birthday' ? trainings_entry_parse_birthday((string) ($in['birthday'] ?? '')) : ($s['said_birthday'] ?? null);
+            if ($b === null) {
+                return $fail('I couldn\'t read that date. Try it like 12 March.', 'INVALID', 'birthday');
+            }
+            $onRecord = trainings_entry_birthday_on_record($user);
+            if ($do === 'birthday' && $onRecord !== null && $onRecord !== $b) {
+                trainings_entry_put(['said_birthday' => $b]);
+                return trainings_entry_reply('birthday_mismatch', ['said' => trainings_entry_birthday_text($b)]);
+            }
+            if ($onRecord !== $b) {
+                trainings_entry_save_birthday($pdo, $user, $b);   // captured, or replaced (owner: replace freely)
+                if (function_exists('security_log')) {
+                    security_log($pdo, 'birthday_set_test_entry', $uid, 'Birthday ' . ($onRecord === null ? 'added' : 'changed') . ' while resetting a password from a test QR code.', $uid, trainings_entry_name($user));
+                }
+            }
+            trainings_entry_put(['bday' => true]);
+            return trainings_entry_send($pdo, $user, (string) $s['typed_email'], $ip, true);
+
+        case 'resend':
+            if (empty($s['target'])) {
+                return $expired;
+            }
+            if ($mode === 'reset' && !empty($s['typed']) && empty($s['bday']) && !empty($user['password_hash'])) {
+                return $expired;
+            }
+            $r = trainings_entry_send($pdo, $user, (string) $s['target'], $ip, !empty($s['typed']));
+            return ($r['note'] ?? null) === 'already' ? $fail('A code is already on its way. Give it a minute.', 'TOO_SOON') : $r;
+
+        case 'code':
+            if (empty($s['target'])) {
+                return $expired;
+            }
+            $check = auth_code_check($pdo, $uid, (string) ($s['purpose'] ?? 'reset'), (string) ($in['code'] ?? ''));
             if (empty($check['ok'])) {
                 return $fail((string) $check['message'], (string) $check['code'], 'code');
             }
-            if (!trainings_entry_open_account($user)) {
-                return ['status' => 'success', 'step' => 'office', 'message' => TRAININGS_ENTRY_OFFICE];
+            if (!trainings_entry_activate_email($pdo, $uid, (string) $check['email'])) {
+                return trainings_entry_idi('That email is on another account.');
             }
+            if (!empty($s['replace'])) {
+                trainings_entry_replace_on_file($pdo, $uid, (string) $check['email']);   // "I don't use this email": the new one is theirs
+            }
+            if ($mode === 'activate') {
+                return trainings_entry_reply('go', ['go' => exam_url_take($itemId), 'name' => $first]);
+            }
+            trainings_entry_put(['verified' => $uid, 'verified_at' => time()]);
+            return trainings_entry_reply('new_password', ['name' => $first, 'first' => empty($user['password_hash'])]);
+
+        case 'no_email':
+            // "I don't have an email": a first-timer chooses a password on the number alone (as the first-time set-up
+            // page allows); a signed-in person goes on to the test. Never for a reset.
+            if ($mode === 'activate' && (int) ($_SESSION['user_id'] ?? 0) === $uid) {
+                email_prompt_skip($pdo, $uid);
+                email_prompt_forget();
+                return trainings_entry_reply('go', ['go' => exam_url_take($itemId), 'name' => $first]);
+            }
+            if ($mode === 'first' && empty($user['password_hash']) && !trainings_entry_is_staff($pdo, $uid)) {
+                trainings_entry_put(['verified' => $uid, 'verified_at' => time(), 'no_email' => true]);
+                return trainings_entry_reply('new_password', ['name' => $first, 'first' => true]);
+            }
+            return $fail('We need your email to send you a code.', 'INVALID', 'email');
+
+        case 'new_password':
+            if ((int) ($s['verified'] ?? 0) !== $uid || (int) ($s['verified_at'] ?? 0) < time() - TRAININGS_ENTRY_VERIFIED_TTL) {
+                return $expired;
+            }
+            if ($bad = trainings_entry_password_problem((string) ($in['password'] ?? ''), (string) ($in['confirm'] ?? ''), $user)) {
+                return $bad;
+            }
+            if (!trainings_entry_open_account($user)) {
+                return trainings_entry_idi('This account is on hold.');
+            }
+            $hadPassword = !empty($user['password_hash']);
             trainings_entry_set_password($pdo, $uid, (string) $in['password']);
-            if (function_exists('security_revoke_sessions')) {
+            if ($hadPassword && function_exists('security_revoke_sessions')) {
                 security_revoke_sessions($pdo, $uid, $uid, 'Password reset by email code');
             }
             if (function_exists('security_log')) {
-                security_log($pdo, 'password_reset_by_code', $uid, 'Password changed with an emailed code (test QR); every other session signed out.', $uid, trainings_entry_name($user));
+                security_log($pdo, $hadPassword ? 'password_reset_by_code' : 'password_first_set', $uid,
+                    ($hadPassword ? 'Password changed with an emailed code' : 'First password set') . ' from a test QR code'
+                    . (!empty($s['no_email']) ? ' (no email)' : '') . '.', $uid, trainings_entry_name($user));
             }
-            email_send_doc($pdo, email_password_changed_doc(), $user + ['email' => $check['email']], [
-                'lane' => 'transactional', 'purpose' => 'account', 'flow' => 'password_changed', 'to_email' => $check['email'], 'now' => true,
-            ]);
-            $signIn(trainings_entry_user($pdo, $uid) ?? $user, 'password reset');
-            return trainings_entry_next($pdo, $uid, $itemId);
+            $to = email_identity_ready($pdo) ? member_confirmed_email($pdo, $uid) : null;
+            if ($hadPassword && $to !== null) {
+                email_send_doc($pdo, email_password_changed_doc(), $user + ['email' => $to], [
+                    'lane' => 'transactional', 'purpose' => 'account', 'flow' => 'password_changed', 'to_email' => $to, 'now' => true,
+                ]);
+            }
+            unset($_SESSION['test_entry']['verified']);
+            $signIn(trainings_entry_user($pdo, $uid) ?? $user, $hadPassword ? 'password reset' : 'first password');
+            return trainings_entry_reply('go', ['go' => exam_url_take($itemId), 'name' => $first]);
     }
     return $fail('Unknown action.');
 }
 
+// ---------------------------------------------------------------------------
+// After the test: the result's "Confirm your email" card (for anyone still without a confirmed email)
+// ---------------------------------------------------------------------------
+
 /**
- * The result's card after a test: null when their email is confirmed (or they said they have none);
- * ['state' => 'confirm', 'to' => masked] when one waits; ['state' => 'add'] when HOD has none.
+ * Null when their email is confirmed (or they said they have none); ['state' => 'confirm', 'to' => masked] when one
+ * waits; ['state' => 'add'] when HOD has none.
  */
 function trainings_entry_email_prompt(PDO $pdo, int $userId): ?array
 {
@@ -366,7 +675,7 @@ function trainings_entry_email_prompt(PDO $pdo, int $userId): ?array
     }
     $waiting = $st['pending'] ?? $st['on_file'];
     if ($waiting !== null) {
-        return ['state' => 'confirm', 'to' => email_mask((string) $waiting)];
+        return ['state' => 'confirm', 'to' => trainings_entry_mask((string) $waiting)];
     }
     return email_prompt_state($pdo, $userId) === 'none' ? null : ['state' => 'add'];
 }
@@ -379,27 +688,21 @@ function trainings_entry_confirm_send(PDO $pdo, array $user, array $in, string $
         return ['status' => 'error', 'message' => 'Email is being set up. Try again later.'];
     }
     $st = email_address_state($pdo, $uid);
-    if ($st['confirmed'] !== null && trim((string) ($in['email'] ?? '')) === '') {
+    $typed = trim((string) ($in['email'] ?? ''));
+    if ($st['confirmed'] !== null && $typed === '') {
         return ['status' => 'success', 'done' => true, 'message' => 'Your email is confirmed.'];
     }
-    $typed = trim((string) ($in['email'] ?? ''));
     $to = $typed !== '' ? $typed : ($st['pending'] ?? $st['on_file']);
     if ($to === null || $to === '') {
-        return ['status' => 'error', 'message' => 'Enter your email.', 'field' => 'email'];
+        return ['status' => 'error', 'message' => 'Please type your email.', 'field' => 'email'];
     }
-    if ($typed !== '' || $st['pending'] === null || email_normalize($to) !== $st['pending']) {
-        $r = email_capture_start($pdo, $uid, $to, 'signin_prompt', $uid, ['send' => false]);
-        if (empty($r['ok'])) {
-            return ['status' => 'error', 'message' => (string) ($r['message'] ?? 'Check the email address.'), 'field' => 'email'];
-        }
-        if (!empty($r['already_confirmed'])) {
-            return ['status' => 'success', 'done' => true, 'message' => 'Your email is confirmed.'];
-        }
-        $to = (string) $r['email'];
-        email_prompt_forget();
+    $to = email_normalize($to);
+    if (($problem = email_address_problem($to, $pdo, $uid)) !== null) {
+        return ['status' => 'error', 'message' => $problem, 'field' => 'email'];
     }
-    $r = auth_code_send($pdo, $user, 'confirm', email_normalize($to), $ip);
-    return !empty($r['ok']) ? ['status' => 'success', 'to' => $r['to']] : ['status' => 'error', 'message' => (string) $r['message'], 'code' => $r['code']];
+    $r = auth_code_send($pdo, $user, 'confirm', $to, $ip);
+    return !empty($r['ok']) ? ['status' => 'success', 'to' => trainings_entry_mask($to), 'mail' => trainings_entry_mail_link($to)]
+        : ['status' => 'error', 'message' => (string) $r['message'], 'code' => $r['code']];
 }
 
 /** The code is right: confirm the address it went to (through the email identity flow, as its link would). */
@@ -410,20 +713,7 @@ function trainings_entry_confirm_check(PDO $pdo, array $user, string $code): arr
     if (empty($check['ok'])) {
         return ['status' => 'error', 'message' => (string) $check['message'], 'code' => $check['code'], 'field' => 'code'];
     }
-    $stmt = $pdo->prepare("SELECT id FROM email_addresses WHERE user_id = ? AND email = ? AND status = 'pending' ORDER BY id DESC LIMIT 1");
-    $stmt->execute([$uid, email_normalize((string) $check['email'])]);
-    $id = $stmt->fetchColumn();
-    if ($id === false) {
-        return email_address_state($pdo, $uid)['confirmed'] === email_normalize((string) $check['email'])
-            ? ['status' => 'success', 'done' => true, 'message' => 'Your email is confirmed.']
-            : ['status' => 'error', 'message' => 'Ask for a new code.', 'code' => 'NONE'];
-    }
-    // A fresh link token for that row, used at once: the same confirmation as the emailed link (includes/campaigns/addresses.php).
-    $token = campaigns_token(32);
-    $pdo->prepare('UPDATE email_addresses SET token_hash = ?, token_expires_at = ? WHERE id = ?')
-        ->execute([hash('sha256', $token), campaigns_sql_dt(campaigns_now()->modify('+1 hour')), (int) $id]);
-    $r = email_capture_confirm($pdo, $token);
-    email_prompt_forget();
-    return !empty($r['ok']) ? ['status' => 'success', 'done' => true, 'message' => 'Your email is confirmed.']
-        : ['status' => 'error', 'message' => $r['code'] === 'REFUSED' ? 'That email is in use. Ask the church office.' : 'Ask for a new code.', 'code' => (string) $r['code']];
+    return trainings_entry_activate_email($pdo, $uid, (string) $check['email'])
+        ? ['status' => 'success', 'done' => true, 'message' => 'Your email is confirmed.']
+        : ['status' => 'error', 'message' => 'That email is on another account. ' . TRAININGS_ENTRY_IDI, 'code' => 'REFUSED'];
 }
