@@ -96,15 +96,23 @@ function trainings_entry_mask(string $email): string
     return $shown . substr($email, $at);
 }
 
-/** The button that opens their mailbox ("Open Gmail"), for the providers people here use; null for others. */
+/**
+ * The button that opens their mailbox ("Open Gmail"), for the providers people here use; null for others.
+ * href is the web inbox; android (the app's package) and ios (the app's own address) let the page open the APP
+ * itself on a phone (owner, 22 Nov: "Is there any way to open the app directly?"): test-entry.js mailHtml().
+ */
 function trainings_entry_mail_link(string $email): ?array
 {
     $domain = strtolower((string) substr(strrchr($email, '@') ?: '', 1));
     return match (true) {
-        in_array($domain, ['gmail.com', 'googlemail.com'], true) => ['label' => 'Open Gmail', 'href' => 'https://mail.google.com/mail/'],
-        str_starts_with($domain, 'yahoo.') || $domain === 'ymail.com' => ['label' => 'Open Yahoo Mail', 'href' => 'https://mail.yahoo.com/'],
-        in_array($domain, ['outlook.com', 'hotmail.com', 'live.com', 'msn.com'], true) => ['label' => 'Open Outlook', 'href' => 'https://outlook.live.com/mail/'],
-        in_array($domain, ['icloud.com', 'me.com', 'mac.com'], true) => ['label' => 'Open iCloud Mail', 'href' => 'https://www.icloud.com/mail'],
+        in_array($domain, ['gmail.com', 'googlemail.com'], true) => ['label' => 'Open Gmail', 'href' => 'https://mail.google.com/mail/',
+            'android' => 'com.google.android.gm', 'ios' => 'googlegmail://'],
+        str_starts_with($domain, 'yahoo.') || $domain === 'ymail.com' => ['label' => 'Open Yahoo Mail', 'href' => 'https://mail.yahoo.com/',
+            'android' => 'com.yahoo.mobile.client.android.mail', 'ios' => 'ymail://'],
+        in_array($domain, ['outlook.com', 'hotmail.com', 'live.com', 'msn.com'], true) => ['label' => 'Open Outlook', 'href' => 'https://outlook.live.com/mail/',
+            'android' => 'com.microsoft.office.outlook', 'ios' => 'ms-outlook://'],
+        in_array($domain, ['icloud.com', 'me.com', 'mac.com'], true) => ['label' => 'Open Mail', 'href' => 'https://www.icloud.com/mail',
+            'android' => null, 'ios' => 'message://'],
         default => null,
     };
 }

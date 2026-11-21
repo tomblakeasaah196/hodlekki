@@ -1406,6 +1406,8 @@ eq('the email masked as the owner asked: tom…h@gmail.com', ['tom…h@gmail.com
     array_map('trainings_entry_mask', ['tomblakeh@gmail.com', 'abc@yahoo.com', 'dayo.learner@gmail.com']));
 eq('the mailbox button for the usual providers', ['Open Gmail', 'Open Yahoo Mail', 'Open Outlook', null],
     array_map(static fn ($e) => trainings_entry_mail_link($e)['label'] ?? null, ['a@gmail.com', 'b@yahoo.co.uk', 'c@hotmail.com', 'd@company.ng']));
+eq('…with the app to open on a phone: the Android package and the iPhone address', ['com.google.android.gm', 'googlegmail://'],
+    array_values(array_intersect_key(trainings_entry_mail_link('a@gmail.com'), ['android' => 1, 'ios' => 1])));
 
 $pdo = trn_db();
 trn_exam_tables($pdo);
@@ -1605,6 +1607,8 @@ ok('the keyboard stays up: Send and the eye never take the focus, the box is nev
     && !str_contains($entryJs, 'readOnly') && !str_contains($entryJs, 'preventScroll'));
 ok('the header shrinks to the rail while the keyboard is up', str_contains($entryJs, "classList.toggle('is-kb'")
     && str_contains((string) file_get_contents($root . '/assets/ui/src/app.css'), '.tq.is-kb .tq-head__row { display: none; }'));
+ok('the mailbox button opens the app: an Android intent (the web inbox if the app is missing), the iPhone app address with a browser link',
+    str_contains($entryJs, "'intent://#Intent;") && str_contains($entryJs, 'S.browser_fallback_url=') && str_contains($entryJs, 'or open it in the browser'));
 ok('a real password box, so Chrome, Edge and Safari offer the saved password; the number is its username',
     str_contains($entryJs, "password: { type: 'password'") && str_contains($entryPage, 'autocomplete="username"') && str_contains($entryJs, 'PasswordCredential'));
 $entryApi = (string) file_get_contents($root . '/api/test_entry_api.php');
