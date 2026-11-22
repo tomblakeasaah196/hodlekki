@@ -1568,8 +1568,13 @@ $entry('choose', ['i' => 0]);
 eq('Ade signs in with no email: asked for one once', ['email', true], [($r = $entry('signin', ['password' => 'Old-pass-123!']))['step'] ?? null, $r['activate'] ?? null]);
 eq('…"I don\'t have an email": on to the test, not asked again for now', ['go', 'none'], [$entry('no_email')['step'] ?? null, email_prompt_state($pdo, 901)]);
 // Staff take the same way in as everyone (owner, 22 Nov: "if IDI has to intervene… we have failed"), and IDI is alerted.
-$pdo->exec("INSERT INTO departments (id, name) VALUES (40, 'IDI')");
-$pdo->exec("INSERT INTO user_departments (user_id, department_id, is_active, role_in_dept) VALUES (902, 40, 1, 'Worker')");
+// Who hears: whoever can open the Security Centre (perm_holders()): here the two Resident Pastors, never the person
+// themselves (with nobody else, the break-glass Super Admins).
+$pdo->exec("INSERT INTO user_roles (user_id, role_id) VALUES (902, 2)");   // a second Security Centre holder
+perm_reset();
+$alerted = trainings_entry_idi_people($pdo);
+ok('the alert goes to whoever can open the Security Centre, through the permission engine', $alerted !== [] && !str_contains(
+    (string) file_get_contents($root . '/includes/trainings/entry.php'), "d.name = 'IDI'"), json_encode($alerted));
 $fresh('08031119999');
 eq('Rita (staff, no email) forgot: asked for her email, as anyone is', ['email', true], [($r = $entry('forgot'))['step'] ?? null, $r['reset'] ?? null]);
 eq('an email already on another account: "please type another one", never IDI', [TRAININGS_ENTRY_TAKEN, 'TAKEN', 'email'],
@@ -1580,12 +1585,14 @@ $entry('code', ['code' => $lastCode('rita.pastor@gmail.com')]);
 $r = $entry('new_password', ['password' => 'grace2026', 'confirm' => 'grace2026']);
 eq('…birthday, code, a new password: she is in', ['go', 900], [$r['step'] ?? null, $_SESSION['user_id'] ?? null]);
 $bell = static fn (int $uid): string => (string) $pdo->query("SELECT title FROM system_notifications WHERE user_id = {$uid} ORDER BY id DESC LIMIT 1")->fetchColumn();
-eq('…IDI is alerted, and so is she', ['Staff password reset', 'Your password was reset'], [$bell(902), $bell(900)]);
+$alertedOthers = static fn (string $title, int $not): int => trn_count($pdo, 'system_notifications', 'title = ? AND user_id <> ?', [$title, $not]);
+ok('…the other Security Centre holder is alerted, and so is she',
+    $alertedOthers('Staff password reset', 900) >= 1 && $bell(900) === 'Your password was reset');
 $r = $fresh('08031114444');
 eq('Gbenga (staff, never signed in, no email): asked for his email, as anyone is', ['email', true], [$r['step'] ?? null, $r['first'] ?? null]);
 $entry('no_email');
-eq('…"I don\'t have an email": he chooses a password and is in; IDI is alerted', ['go', 'Staff password set'],
-    [$entry('new_password', ['password' => 'mercy2026', 'confirm' => 'mercy2026'])['step'] ?? null, $bell(902)]);
+eq('…"I don\'t have an email": he chooses a password and is in; the Security Centre\'s people are alerted', ['go', true],
+    [$entry('new_password', ['password' => 'mercy2026', 'confirm' => 'mercy2026'])['step'] ?? null, $alertedOthers('Staff password set', 907) >= 1]);
 $fresh('08031112222');
 $_SESSION['test_entry']['at'] = time() - TRAININGS_ENTRY_TTL - 5;
 eq('twenty minutes on: start again', 'EXPIRED', $entry('signin', ['password' => 'Mercy-road-579!'])['code'] ?? null);

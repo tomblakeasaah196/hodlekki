@@ -97,19 +97,20 @@ function trainings_entry_email_taken(PDO $pdo, string $email, int $userId): bool
     return $owner !== null && $owner !== $userId;
 }
 
-/** The people of Information and Data Insights (the IDI department's active seats); Super Admins when there are none. */
+/**
+ * Who hears about an account-security event: everyone who can open the Security Centre ("who can act is who is
+ * told", perm_holders(); IDI's people are given it in Roles & permissions), else the Super Admins (break-glass).
+ */
 function trainings_entry_idi_people(PDO $pdo): array
 {
+    if (!function_exists('perm_holders')) {
+        return [];
+    }
     try {
-        $ids = $pdo->query("SELECT DISTINCT ud.user_id FROM user_departments ud JOIN departments d ON d.id = ud.department_id
-                             WHERE ud.is_active = 1 AND (d.name = 'IDI' OR d.name LIKE '%Information and Data%')")->fetchAll(PDO::FETCH_COLUMN);
-        if ($ids === []) {
-            $ids = $pdo->query("SELECT DISTINCT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.role_name = 'Super_Admin'")
-                ->fetchAll(PDO::FETCH_COLUMN);
-        }
-        return array_values(array_unique(array_map('intval', $ids)));
+        $ids = perm_holders($pdo, 'security', 'view');
+        return $ids !== [] ? $ids : perm_holders($pdo, 'security', 'view', null, true);
     } catch (Throwable $e) {
-        error_log('[test entry] IDI people: ' . $e->getMessage());
+        error_log('[test entry] security alert people: ' . $e->getMessage());
         return [];
     }
 }
@@ -129,7 +130,11 @@ function trainings_entry_staff_alert(PDO $pdo, array $user, bool $reset): void
                 $stmt->execute([(int) $id, $title, $message, $link]);
             }
         };
-        $idi = array_values(array_filter(trainings_entry_idi_people($pdo), static fn ($id) => $id !== (int) $user['id']));
+        $others = static fn (array $ids): array => array_values(array_filter($ids, static fn ($id) => (int) $id !== (int) $user['id']));
+        $idi = $others(trainings_entry_idi_people($pdo));
+        if ($idi === [] && function_exists('perm_holders')) {
+            $idi = $others(perm_holders($pdo, 'security', 'view', null, true));   // they were the only one: the Super Admins too
+        }
         $notify($idi, 'Staff password ' . ($reset ? 'reset' : 'set'), $name . '\'s password was ' . $what . ' from a test QR code. Check it was them.',
             '/modules/security/');
         $notify([(int) $user['id']], 'Your password was ' . ($reset ? 'reset' : 'set'), 'From a test QR code just now. Not you? Contact IDI straight away.',

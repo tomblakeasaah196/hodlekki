@@ -194,7 +194,7 @@ shrinks to the progress rail.
 | "I can't remember" | A code to their email (masked `tom…h@gmail.com`, with **Open Gmail** / Yahoo / Outlook and "check Spam or Junk"), then a new password typed twice, then in. No email on record: they type one, give their **birthday** (day and month), and the code goes there. |
 | Never signed in | A code to the email on record, or to one they type, then they choose a password. "I don't have an email": they choose a password on the number alone (as the first-time set-up page allows). |
 | "I don't use this email" | They give the one they use (with the birthday when a password is at stake); the right code makes it theirs and it replaces the old one in `users.email`. |
-| Staff (`user_roles`) | The same way in as everyone (owner, 22 Nov: no dead ends). A staff password set or reset here alerts IDI (the IDI department's members; Super Admins if none) and the person, in the app and by push (`trainings_entry_staff_alert()`). |
+| Staff (`user_roles`) | The same way in as everyone (owner, 22 Nov: no dead ends). A staff password set or reset here alerts everyone who can open the Security Centre (IDI's people, through Roles & permissions; the Super Admins when nobody else can) and the person, in the app and by push (`trainings_entry_staff_alert()`). |
 | A shared number, not listed | "None of these": their own number is not on HOD, so IDI. |
 
 **One email, once.** A "real" email is a confirmed one, one waiting, or `users.email` when it is not an @hodlc.com
