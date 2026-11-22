@@ -1105,8 +1105,9 @@ Guide and contracts: `docs/EXAMS.md`. Code: `includes/exams/` (entry
 - **The QR entry** (`test.php`, `includes/trainings/entry.php`, docs/EXAMS.md
   §9): a conversation; the server decides every step. A password is only set
   after a right emailed code (or, for someone who never had one and has no
-  email, on the number alone). Staff never take the typed-email way. Send
-  people to Information and Data Insights (IDI), never "the church office".
+  email, on the number alone). Staff take the same way in, with an alert to
+  IDI (owner: no dead ends). Send people to Information and Data Insights
+  (IDI), never "the church office", and only when their number is not on HOD.
 
 ## Trainings: My notes (added 2026-11-13)
 
