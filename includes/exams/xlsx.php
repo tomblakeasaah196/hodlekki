@@ -59,10 +59,15 @@ function xlsx_xml_text(string $s): string
 /**
  * Build a workbook. Each sheet:
  *   name     (31 characters at most)
- *   rows     list of rows, each a list of cells: a string, an int, or
- *            ['v' => value, 's' => style] with style 'head' | 'note' | 'example' | 'wrap'
+ *   rows     list of rows, each a list of cells: a string, an int, a float, or
+ *            ['v' => value, 's' => style] with style 'head' | 'headc' | 'note' | 'example' | 'wrap' | 'title'
+ *            | 'label' | 'center' | 'pct' (a fraction shown as 12.5%) | 'time' (seconds / 86400, shown h:mm:ss)
+ *            | 'pass' | 'fail'
  *   widths   column widths (characters), optional
  *   freeze   true: keep the first row in view
+ *   freeze_cols  with freeze: also keep this many columns on the left in view
+ *   filter   true: filter buttons on the first row, over every row and column given
+ *   fit      true: print landscape, one page wide
  *   lists    data validations: [['range' => 'A2:A501', 'values' => [...], 'prompt' => '…']]
  *   numbers  whole-number validations: [['range' => 'I2:I501', 'min' => 1, 'max' => 100, 'prompt' => '…']]
  *   hidden   true: a hidden sheet
@@ -76,7 +81,7 @@ function xlsx_write(array $sheets): string
     if ($zip->open($tmp, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
         throw new RuntimeException('xlsx_write: cannot create the file');
     }
-    $sheetEntries = $relEntries = $overrides = '';
+    $sheetEntries = $relEntries = $overrides = $definedNames = '';
     // Text goes in a shared-strings table, as Excel itself writes it: the form
     // every reader (Excel, Google Sheets, LibreOffice, Numbers) handles.
     $sst = ['index' => [], 'list' => [], 'uses' => 0];
@@ -88,6 +93,13 @@ function xlsx_write(array $sheets): string
         $relEntries .= '<Relationship Id="rId' . $n . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' . $n . '.xml"/>';
         $overrides .= '<Override PartName="/xl/worksheets/sheet' . $n . '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
         $zip->addFromString('xl/worksheets/sheet' . $n . '.xml', xlsx_sheet_xml($sheet, $sst));
+        if (!empty($sheet['filter'])) {
+            // Excel keeps a filter's range as a hidden name as well; files without it open, but it is what Excel itself writes.
+            [$from, $to] = xlsx_filter_cells($sheet);
+            $definedNames .= '<definedName name="_xlnm._FilterDatabase" localSheetId="' . $i . '" hidden="1">'
+                . xlsx_xml_text("'" . str_replace("'", "''", $name) . "'!" . xlsx_abs_cell($from) . ':' . xlsx_abs_cell($to))
+                . '</definedName>';
+        }
     }
     $count = count($sheets);
     $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -104,7 +116,8 @@ function xlsx_write(array $sheets): string
         . '</Relationships>');
     $zip->addFromString('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         . '<workbook xmlns="' . XLSX_NS_MAIN . '" xmlns:r="' . XLSX_NS_REL . '">'
-        . '<bookViews><workbookView activeTab="0"/></bookViews><sheets>' . $sheetEntries . '</sheets></workbook>');
+        . '<bookViews><workbookView activeTab="0"/></bookViews><sheets>' . $sheetEntries . '</sheets>'
+        . ($definedNames !== '' ? '<definedNames>' . $definedNames . '</definedNames>' : '') . '</workbook>');
     $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' . $relEntries
         . '<Relationship Id="rId' . ($count + 1) . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
@@ -123,29 +136,58 @@ function xlsx_write(array $sheets): string
     return $bytes;
 }
 
+/** "C7" -> "$C$7" (a defined name's range is absolute). */
+function xlsx_abs_cell(string $cell): string
+{
+    return preg_match('/^([A-Z]+)(\d+)$/', $cell, $m) ? '$' . $m[1] . '$' . $m[2] : $cell;
+}
+
+/** The first and last cell a sheet's filter covers: row 1 down to the last row, across the first row's columns. */
+function xlsx_filter_cells(array $sheet): array
+{
+    $rows = array_values($sheet['rows'] ?? []);
+    $cols = max(1, count($rows[0] ?? []));
+    return ['A1', xlsx_col_letter($cols - 1) . max(1, count($rows))];
+}
+
 /** Style ids in xl/styles.xml (cellXfs order). */
-const XLSX_STYLES = ['plain' => 0, 'head' => 1, 'note' => 2, 'example' => 3, 'wrap' => 4];
+const XLSX_STYLES = ['plain' => 0, 'head' => 1, 'note' => 2, 'example' => 3, 'wrap' => 4,
+                     'title' => 5, 'label' => 6, 'center' => 7, 'pct' => 8, 'time' => 9, 'pass' => 10, 'fail' => 11, 'headc' => 12];
 
 function xlsx_styles_xml(): string
 {
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         . '<styleSheet xmlns="' . XLSX_NS_MAIN . '">'
-        . '<fonts count="4">'
+        . '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.0%"/></numFmts>'
+        . '<fonts count="8">'
         . '<font><sz val="11"/><name val="Calibri"/></font>'
         . '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>'
         . '<font><sz val="10"/><color rgb="FF4B5563"/><name val="Calibri"/></font>'
         . '<font><i/><sz val="11"/><color rgb="FF6B7280"/><name val="Calibri"/></font>'
+        . '<font><b/><sz val="14"/><color rgb="FF1D356A"/><name val="Calibri"/></font>'
+        . '<font><b/><sz val="11"/><name val="Calibri"/></font>'
+        . '<font><b/><sz val="11"/><color rgb="FF166534"/><name val="Calibri"/></font>'
+        . '<font><b/><sz val="11"/><color rgb="FFB91C1C"/><name val="Calibri"/></font>'
         . '</fonts>'
         . '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'
         . '<fill><patternFill patternType="solid"><fgColor rgb="FF1D356A"/><bgColor indexed="64"/></patternFill></fill></fills>'
         . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
         . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-        . '<cellXfs count="5">'
+        . '<cellXfs count="13">'
         . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
         . '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>'
         . '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>'
         . '<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>'
         . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>'
+        // 5 title, 6 label, 7 center, 8 pct (0.0%), 9 time ([h]:mm:ss, built in as 46), 10 pass, 11 fail, 12 headc
+        . '<xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf>'
+        . '<xf numFmtId="0" fontId="5" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf>'
+        . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+        . '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+        . '<xf numFmtId="46" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+        . '<xf numFmtId="0" fontId="6" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+        . '<xf numFmtId="0" fontId="7" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+        . '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'
         . '</cellXfs>'
         . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
         . '</styleSheet>';
@@ -154,9 +196,18 @@ function xlsx_styles_xml(): string
 function xlsx_sheet_xml(array $sheet, array &$sst): string
 {
     $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="' . XLSX_NS_MAIN . '" xmlns:r="' . XLSX_NS_REL . '">';
-    $xml .= '<sheetViews><sheetView workbookViewId="0">'
-        . (!empty($sheet['freeze']) ? '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' : '')
-        . '</sheetView></sheetViews>';
+    if (!empty($sheet['fit'])) {
+        $xml .= '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>';
+    }
+    $keepCols = !empty($sheet['freeze']) ? max(0, (int) ($sheet['freeze_cols'] ?? 0)) : 0;
+    $pane = '';
+    if (!empty($sheet['freeze'])) {
+        $pane = $keepCols > 0
+            ? '<pane xSplit="' . $keepCols . '" ySplit="1" topLeftCell="' . xlsx_col_letter($keepCols) . '2" activePane="bottomRight" state="frozen"/>'
+                . '<selection pane="topRight"/><selection pane="bottomLeft"/><selection pane="bottomRight"/>'
+            : '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>';
+    }
+    $xml .= '<sheetViews><sheetView workbookViewId="0">' . $pane . '</sheetView></sheetViews>';
     if (!empty($sheet['widths'])) {
         $xml .= '<cols>';
         foreach (array_values($sheet['widths']) as $i => $w) {
@@ -172,8 +223,12 @@ function xlsx_sheet_xml(array $sheet, array &$sst): string
             $style = is_array($cell) ? (XLSX_STYLES[$cell['s'] ?? 'plain'] ?? 0) : 0;
             $ref = xlsx_col_letter($c) . ($r + 1);
             $s = $style ? ' s="' . $style . '"' : '';
-            if (is_int($value)) {
-                $xml .= '<c r="' . $ref . '"' . $s . '><v>' . $value . '</v></c>';
+            if (is_float($value) && !is_finite($value)) {
+                $value = '';   // NaN and infinity are not numbers a sheet can hold
+            }
+            if (is_int($value) || is_float($value)) {
+                // var_export() writes a float the same way in every locale ("0.76", "1.0E-5"), as the file needs.
+                $xml .= '<c r="' . $ref . '"' . $s . '><v>' . (is_int($value) ? $value : var_export($value, true)) . '</v></c>';
             } elseif ((string) $value !== '') {
                 $text = (string) $value;
                 if (!isset($sst['index'][$text])) {
@@ -189,6 +244,10 @@ function xlsx_sheet_xml(array $sheet, array &$sst): string
         $xml .= '</row>';
     }
     $xml .= '</sheetData>';
+    if (!empty($sheet['filter'])) {
+        [$from, $to] = xlsx_filter_cells($sheet);
+        $xml .= '<autoFilter ref="' . $from . ':' . $to . '"/>';   // after sheetData, before dataValidations: the schema's order
+    }
     $validations = [];
     foreach ($sheet['lists'] ?? [] as $v) {
         // An inline list: "One answer,Several answers,True/False" (255 characters at most).
@@ -206,6 +265,10 @@ function xlsx_sheet_xml(array $sheet, array &$sst): string
     }
     if ($validations !== []) {
         $xml .= '<dataValidations count="' . count($validations) . '">' . implode('', $validations) . '</dataValidations>';
+    }
+    if (!empty($sheet['fit'])) {
+        $xml .= '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>'
+            . '<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>';
     }
     return $xml . '</worksheet>';
 }

@@ -1,7 +1,7 @@
 # Trainings: exams and the question bank (PR 2)
 
 Plan: `TRAININGS-PLAN.md` (owner's answers 9, 10, 11 and 12c). Code: `includes/exams/` (entry `bootstrap.php`, after
-`includes/db.php`), `api/exams_api.php`, `modules/exams/`, `assets/ui/js/pages/exams.js` (the bank, set-up and results) and
+`includes/db.php`), `api/exams_api.php`, `modules/exams/`, `assets/ui/js/pages/exams.js` (the bank, set-up and results), `includes/exams/export.php` (the results workbook) and
 `assets/ui/js/pages/exam-take.js` (taking an exam: one question per screen). Schema:
 `db/migrations/20261209090000_trainings_exams.sql`. Tests: `php tests/exams/run.php` (SQLite + zip, CI step "Trainings
 exams and question import tests").
@@ -90,6 +90,30 @@ The take view (`take`, `start`, `submit`) carries `attempts_allowed`, `attempts_
 the AI: explanations are written once per question (by the tutor, or by PR 4's AI with approval). Tutors see every
 attempt, numbered, with the best one marked (and the enrolled people who have not started; the summary counts people), each attempt in full with its timeline, and can hand in an
 attempt that is still running.
+
+**The tutor's ranking** (owner, 22 Nov 2026). The Results tab shows ONE row per person, on the attempt that counts
+(their best; with none handed in, the latest). `results` returns `rows` (every attempt, as before) and `people`
+(`exam_rank_people()`, pure and tested): one row each, with `position` and `seconds` taken. Order: higher percentage,
+then the faster finisher, then name A-Z, so positions run 1, 2, 3 … with no ties. People still writing, then people who
+have not started, follow with no position (A-Z). The table shows the position as 1st, 2nd, 3rd, and under the score the
+attempt that gave it: nothing for a first try, "Attempt 2" or "Attempt 3" for a retake. The Find box and the Sort
+choice (By position, By name A-Z) work in the browser on those rows: a person keeps their real position while a
+search or the A-Z sort is on. **View** opens the counting attempt, and the drawer has a button for each of that
+person's other attempts. All of this is in `assets/ui/js/pages/exams.js` (`drawResults()`).
+
+**The Excel export** (owner, 22 Nov 2026). **Export Excel** on the Results tab (shown once someone is on the list)
+downloads `<test-name>-results-<date>.xlsx` from `GET /api/exams_api.php?action=results_xlsx&item=<id>`. Same gate as the
+tab: Trainings, Edit, church-wide, decided in `exams_action()` (`results_xlsx`); the file is never JSON, so the API
+streams it from a GET only and refuses the action from a POST. Layout is `includes/exams/export.php` (pure, tested by
+reading the file back); the writer is `xlsx_write()`, which gained float cells, a few styles (title, centred, percent,
+duration, pass/fail), filter buttons, frozen columns and fit-to-width printing without changing what it wrote before.
+Two sheets. **Results**: one row per person in rank order (Position, Person, Status, Score, Out of, Percent, Result,
+Attempt, Attempts taken, Time taken, Left tab), filter buttons on the headings, headings and the first two columns kept in
+view, prints one page wide. Score, percent and time are real numbers (percent a fraction shown as 90.0%, time a duration),
+so a tutor can sort and add them. People still writing or not started are listed last with the score cells empty.
+**Summary**: the exam's name, when it was exported, the counts (enrolled, started, not started, handed in, passed, not
+passed, attempts), the pass rate and pass mark, and the average, highest and lowest score of those who handed in. Names
+only: no phone or email goes in the file.
 
 ## 4. Access (`access.php`)
 

@@ -397,7 +397,7 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
     if ($item === null) {
         return $fail('That exam no longer exists.', [], 'NOT_FOUND');
     }
-    $tutor = in_array($do, ['setup', 'exam_save', 'answers', 'results', 'attempt', 'end_attempt', 'test_save', 'test_publish', 'test_delete'], true);
+    $tutor = in_array($do, ['setup', 'exam_save', 'answers', 'results', 'results_xlsx', 'attempt', 'end_attempt', 'test_save', 'test_publish', 'test_delete'], true);
     if ($tutor && !exams_may_manage($pdo, (int) $item['training_id'])) {
         return $forbidden();
     }
@@ -445,8 +445,17 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
 
         case 'results':
             $exam = exam_get($pdo, (int) $item['id']);
-            return $exam === null ? ['status' => 'success', 'rows' => [], 'summary' => null]
+            return $exam === null ? ['status' => 'success', 'rows' => [], 'people' => [], 'summary' => null]
                 : ['status' => 'success'] + exam_results($pdo, $exam);
+
+        case 'results_xlsx':
+            // The Results tab as a workbook: the same people, in the same order. It carries the file's bytes, so it is
+            // never sent as JSON: api/exams_api.php streams it from a GET and refuses it from anything else.
+            $exam = exam_get($pdo, (int) $item['id']);
+            if ($exam === null) {
+                return $fail('Set the exam up first.');
+            }
+            return ['status' => 'success'] + exam_results_file($item, $exam, exam_results($pdo, $exam));
 
         case 'attempt':
         case 'end_attempt':

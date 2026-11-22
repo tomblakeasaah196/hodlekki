@@ -1048,6 +1048,128 @@ et_eq('the tutor\'s results: every attempt, numbered, the best marked', [[1, 2, 
 et_eq('…the summary counts people (passed by their best), and the attempts', ['enrolled' => 4, 'started' => 3, 'finished' => 3, 'passed' => 1, 'attempts' => 7],
     $res['summary']);
 et_eq('…"people have started" counts people, not attempts', 3, exam_attempt_count($t, (int) exam_get($t, 100)['id']));
+et_eq('the ranking: one row per person, the attempt that counts, positions 1, 2, 3, and the one who never started unranked',
+    [[3, 2, 1], [2, 1, 2], [5, 1, 3], [4, null, null]],
+    array_map(static fn ($p) => [$p['user_id'], $p['attempt_no'], $p['position']], $res['people']));
+
+// The ranking on its own (exam_rank_people is pure): percentage, then the faster finisher, then name A-Z.
+$rk = static function (int $uid, string $name, int $no, ?float $pct, ?int $secs, bool $best, string $status = 'submitted') {
+    return ['id' => $uid * 10 + $no, 'user_id' => $uid, 'name' => $name, 'attempt_no' => $no, 'best' => $best, 'attempts' => 1, 'status' => $status,
+            'percent' => $pct, 'score' => $pct, 'max_score' => 100, 'passed' => $pct === null ? null : (int) ($pct >= 50), 'leaves' => 0, 'ended_by' => null,
+            'started_at' => $secs === null ? null : '2026-11-22 10:00:00',
+            'submitted_at' => $secs === null ? null : date('Y-m-d H:i:s', strtotime('2026-11-22 10:00:00') + $secs)];
+};
+$ranked = exam_rank_people([
+    $rk(1, 'Zed Zulu', 1, 76, 1200, true),
+    $rk(2, 'Ada Ade', 1, 40, 300, false), $rk(2, 'Ada Ade', 2, 76, 600, true),   // a retake that beat the first try
+    $rk(3, 'Ben Bello', 1, 76, 600, true),                                        // same score, same time as Ada
+    $rk(4, 'Cy Cole', 1, 90, 3000, true),
+    $rk(5, 'Dee Dare', 1, null, null, false, 'started'),                          // still writing
+    $rk(6, 'Eve Eze', 1, null, null, false, 'not_started'),
+    $rk(7, 'Abe Ade', 1, null, null, false, 'not_started'),
+    $rk(9, 'Gus Gold', 1, 76, null, true),                                        // no times on record: last among equals
+]);
+et_eq('exam_rank_people: best score first; ties go to the faster finisher, then A-Z; a retake counts as the attempt that gave the result',
+    [['Cy Cole', 1, 1], ['Ada Ade', 2, 2], ['Ben Bello', 1, 3], ['Zed Zulu', 1, 4], ['Gus Gold', 1, 5]],
+    array_map(static fn ($p) => [$p['name'], $p['attempt_no'], $p['position']], array_slice($ranked, 0, 5)));
+et_eq('…then anyone still writing, then anyone who never started (A-Z), neither with a position',
+    [['Dee Dare', null], ['Abe Ade', null], ['Eve Eze', null]],
+    array_map(static fn ($p) => [$p['name'], $p['position']], array_slice($ranked, 5)));
+et_eq('…the seconds that attempt took are carried along', [3000, 600, 600, 1200, null], array_column(array_slice($ranked, 0, 5), 'seconds'));
+et_eq('…a person with no attempt handed in is shown by their latest attempt', [52],
+    array_column(exam_rank_people([$rk(5, 'Dee Dare', 1, null, null, false, 'started'), $rk(5, 'Dee Dare', 2, null, null, false, 'started')]), 'id'));
+
+// The Excel export of the results (includes/exams/export.php), read back through the same reader tutors' uploads go through.
+$xl = static function (string $bytes, string $sheet): array {
+    $f = tempnam(sys_get_temp_dir(), 'etr') . '.xlsx';
+    file_put_contents($f, $bytes);
+    $r = xlsx_read($f, $sheet);
+    @unlink($f);
+    return $r['ok'] ? $r['rows'] : [];
+};
+$exAt = new DateTimeImmutable('2026-11-22 10:41:00', new DateTimeZone('Africa/Lagos'));
+$exItem = ['title' => 'Final exam', 'training_title' => 'Discipleship', 'training_kind' => 'course'];
+$exRes = ['people' => $ranked, 'summary' => ['enrolled' => 9, 'started' => 7, 'finished' => 5, 'passed' => 5, 'attempts' => 10]];
+$exFile = exam_results_file($exItem, ['pass_percent' => 50], $exRes, $exAt);
+et_eq('the export is named after the exam and the day, in letters, digits and hyphens only', 'final-exam-results-2026-11-22.xlsx', $exFile['filename']);
+et_eq('…a test is named by its own title; a title with no Latin letters still gets a name',
+    ['school-of-the-word-november-results-2026-11-22.xlsx', 'exam-results-2026-11-22.xlsx'],
+    [exam_results_filename(['training_kind' => 'test', 'training_title' => 'School of the Word — November!', 'title' => 'x'], $exAt),
+     exam_results_filename(['training_kind' => 'test', 'training_title' => 'ᏣᎳ', 'title' => 'x'], $exAt)]);
+et_ok('…it is a zip', str_starts_with($exFile['bytes'], 'PK'));
+
+$tab = $xl($exFile['bytes'], 'Results');
+et_eq('Results: the headings, in the first row', ['Position', 'Person', 'Status', 'Score', 'Out of', 'Percent', 'Result', 'Attempt', 'Attempts taken', 'Time taken', 'Left tab'],
+    array_values($tab[1] ?? []));
+et_eq('…then one row per person in rank order: position, name, status, score, result',
+    [['1', 'Cy Cole', 'Handed in', '90', 'Passed'], ['2', 'Ada Ade', 'Handed in', '76', 'Passed'], ['3', 'Ben Bello', 'Handed in', '76', 'Passed'],
+     ['4', 'Zed Zulu', 'Handed in', '76', 'Passed'], ['5', 'Gus Gold', 'Handed in', '76', 'Passed'],
+     ['', 'Dee Dare', 'Writing', '', ''], ['', 'Abe Ade', 'Not started', '', ''], ['', 'Eve Eze', 'Not started', '', '']],
+    array_map(static fn ($r) => [$r[0] ?? '', $r[1] ?? '', $r[2] ?? '', $r[3] ?? '', $r[6] ?? ''], array_values(array_slice($tab, 1, null, true))));
+et_eq('…the attempt that counts is its own column (a retake that won is attempt 2)', ['1', '2', '1', '1', '1'],
+    array_map(static fn ($n) => $tab[$n][7] ?? '', [2, 3, 4, 5, 6]));
+et_eq('…the percent is a real fraction (shown as 90.0%), the time a real duration (a fraction of a day)', [true, true, true],
+    [($tab[2][5] ?? '') === '0.9', ($tab[3][5] ?? '') === '0.76', abs((float) ($tab[2][9] ?? 0) - 3000 / 86400) < 1e-9]);
+et_eq('…a person with no time on record has an empty time, not a zero', [false, true], [isset($tab[6][9]), isset($tab[2][9])]);
+
+$sumTab = $xl($exFile['bytes'], 'Summary');
+$m = [];
+foreach (array_filter($sumTab, static fn ($n) => $n >= 5, ARRAY_FILTER_USE_KEY) as $row) {
+    $m[$row[0] ?? ''] = $row[1] ?? '';
+}
+et_eq('Summary: the title, then the course and when it was exported', ['Final exam', 'Discipleship · Exported 22 Nov 2026, 10:41'], [$sumTab[1][0] ?? '', $sumTab[2][0] ?? '']);
+et_eq('…the counts, from the same summary the tab shows (not started and not passed worked out)',
+    ['Enrolled' => '9', 'Started' => '7', 'Not started' => '2', 'Handed in' => '5', 'Passed' => '5', 'Not passed' => '0', 'Pass rate' => '1', 'Pass mark' => '0.5', 'Attempts' => '10'],
+    array_intersect_key($m, array_flip(['Enrolled', 'Started', 'Not started', 'Handed in', 'Passed', 'Not passed', 'Pass rate', 'Pass mark', 'Attempts'])));
+et_eq('…the average, highest and lowest score of those who handed in (as fractions)', [true, true, true],
+    [abs((float) ($m['Average score'] ?? 0) - 0.788) < 1e-9, ($m['Highest score'] ?? '') === '0.9', ($m['Lowest score'] ?? '') === '0.76']);
+et_eq('…with nobody handed in, the rate and the spread are empty rather than zero or an error', ['', '', '', ''],
+    (function () use ($exItem, $xl, $exAt) {
+        $none = exam_results_file($exItem, ['pass_percent' => 50], ['people' => [], 'summary' => ['enrolled' => 0, 'started' => 0, 'finished' => 0, 'passed' => 0, 'attempts' => 0]], $exAt);
+        $t = $xl($none['bytes'], 'Summary');
+        $k = [];
+        foreach (array_filter($t, static fn ($n) => $n >= 5, ARRAY_FILTER_USE_KEY) as $row) {
+            $k[$row[0] ?? ''] = $row[1] ?? '';
+        }
+        return [$k['Pass rate'] ?? 'x', $k['Average score'] ?? 'x', $k['Highest score'] ?? 'x', $k['Lowest score'] ?? 'x'];
+    })());
+
+// The file itself: well-formed parts, the filter, the frozen headings and first two columns, the percent format.
+$exZip = tempnam(sys_get_temp_dir(), 'etz') . '.xlsx';
+file_put_contents($exZip, $exFile['bytes']);
+$z = new ZipArchive();
+$z->open($exZip);
+$badParts = [];
+for ($i = 0; $i < $z->numFiles; $i++) {
+    if (@simplexml_load_string((string) $z->getFromIndex($i)) === false) {
+        $badParts[] = (string) $z->getNameIndex($i);
+    }
+}
+$sheet1 = (string) $z->getFromName('xl/worksheets/sheet1.xml');
+$book = simplexml_load_string((string) $z->getFromName('xl/workbook.xml'));
+$styles = (string) $z->getFromName('xl/styles.xml');
+$z->close();
+@unlink($exZip);
+et_eq('the export: every part is well-formed XML', [], $badParts);
+et_eq('…filter buttons over the whole table, kept as the hidden name Excel itself writes', [true, true],
+    [str_contains($sheet1, '<autoFilter ref="A1:K9"/>'), (string) $book->children(XLSX_NS_MAIN)->definedNames->definedName === "'Results'!\$A\$1:\$K\$9"]);
+et_eq('…the headings and the first two columns stay in view, and it prints one page wide', [true, true],
+    [str_contains($sheet1, '<pane xSplit="2" ySplit="1" topLeftCell="C2" activePane="bottomRight" state="frozen"/>'), str_contains($sheet1, 'fitToWidth="1"')]);
+et_eq('…a real percent format, 0.0%', true, str_contains($styles, 'formatCode="0.0%"'));
+et_eq('…the filter sits after the data and before the print setup, as the schema orders them', true,
+    strpos($sheet1, '</sheetData>') < strpos($sheet1, '<autoFilter') && strpos($sheet1, '<autoFilter') < strpos($sheet1, '<pageSetup'));
+
+// Who may have it: the same gate as the Results tab, decided in exams_action().
+$grBefore = $GLOBALS['et_grants'];
+$GLOBALS['et_grants'] = ['trainings:view:"church"'];
+et_eq('the export is for tutors: View alone is refused', 'FORBIDDEN', exams_action($t, 'results_xlsx', ['item' => 100], 1)['code'] ?? null);
+$GLOBALS['et_grants'] = $grBefore;
+et_eq('…an exam that does not exist is not found', 'NOT_FOUND', exams_action($t, 'results_xlsx', ['item' => 999999], 1)['code'] ?? null);
+$dl = exams_action($t, 'results_xlsx', ['item' => 100], 1);
+et_eq('…with Edit it returns the workbook, named after the day', [true, true],
+    [$dl['status'] === 'success' && str_starts_with($dl['bytes'], 'PK'), preg_match('/^[a-z0-9-]+-results-\d{4}-\d{2}-\d{2}\.xlsx$/', (string) $dl['filename']) === 1]);
+et_eq('…the same people, in the same order, as the Results tab', array_column($res['people'], 'name'),
+    array_column(array_slice($xl($dl['bytes'], 'Results'), 1, null, true), 1));
 
 // Two tabs press Start (or Try again) at once: the UNIQUE (exam_id, user_id, attempt_no) key decides, never a check first.
 final class EtRacePdo extends PDO

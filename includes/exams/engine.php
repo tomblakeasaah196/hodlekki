@@ -905,7 +905,52 @@ function exam_results(PDO $pdo, array $exam, ?DateTimeImmutable $now = null): ar
         $best = isset($byUser[$uid]) ? exam_best_attempt($byUser[$uid]) : null;
         $sum['passed'] += $best !== null && !empty($best['passed']) ? 1 : 0;
     }
-    return ['rows' => $rows, 'summary' => $sum];
+    return ['rows' => $rows, 'people' => exam_rank_people($rows), 'summary' => $sum];
+}
+
+/**
+ * The tutor's ranking: ONE row per person, the attempt that counts (their
+ * best; with none handed in, the latest), each with a `position` and the
+ * `seconds` that attempt took. Handed-in people come first, ordered by
+ * percentage, then the faster finisher, then name A-Z, so positions are
+ * always 1, 2, 3 … with no ties (owner, 22 Nov 2026). Anyone still writing,
+ * then anyone who has not started, follow unranked (`position` null), A-Z.
+ * Pure: it only reorders what exam_results() already read.
+ *
+ * @param list<array<string,mixed>> $rows every attempt row plus the not-started rows
+ * @return list<array<string,mixed>>
+ */
+function exam_rank_people(array $rows): array
+{
+    $pick = [];
+    foreach ($rows as $r) {
+        $uid = (int) $r['user_id'];
+        $cur = $pick[$uid] ?? null;
+        if ($cur === null || (!$cur['best'] && ($r['best'] || (int) $r['id'] > (int) $cur['id']))) {
+            $pick[$uid] = $r;
+        }
+    }
+    $took = static function (array $r): ?int {
+        $from = $r['started_at'] === null ? false : strtotime((string) $r['started_at']);
+        $to = $r['submitted_at'] === null ? false : strtotime((string) $r['submitted_at']);
+        return $from === false || $to === false ? null : max(0, $to - $from);
+    };
+    $name = static fn (array $r): string => function_exists('mb_strtolower') ? mb_strtolower((string) $r['name'], 'UTF-8') : strtolower((string) $r['name']);
+    $people = [];
+    foreach ($pick as $r) {
+        $people[] = $r + ['seconds' => $took($r), 'position' => null];
+    }
+    usort($people, static function (array $a, array $b) use ($name): int {
+        // 0 handed in with a score, 1 writing, 2 not started.
+        $group = static fn (array $r): int => $r['best'] ? 0 : ($r['status'] === 'started' ? 1 : 2);
+        return [$group($a), $a['best'] ? -$a['percent'] : 0, $a['best'] ? ($a['seconds'] ?? PHP_INT_MAX) : 0, $name($a), $a['user_id']]
+            <=> [$group($b), $b['best'] ? -$b['percent'] : 0, $b['best'] ? ($b['seconds'] ?? PHP_INT_MAX) : 0, $name($b), $b['user_id']];
+    });
+    $n = 0;
+    foreach ($people as $i => $r) {
+        $people[$i]['position'] = $r['best'] ? ++$n : null;
+    }
+    return $people;
 }
 
 /** One attempt in full, for the tutor: every question, the answer, the marks, the tab notes. */

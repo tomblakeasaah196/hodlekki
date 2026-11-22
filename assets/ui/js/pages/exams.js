@@ -535,32 +535,75 @@
 
     var ENDED = { learner: 'Handed in', timer: 'Time ran out', closed: 'Exam closed', tutor: 'Handed in by a tutor' };
 
+    /* The results: the server sends ONE row per person (their best attempt, already ranked: the higher
+       score, then whoever handed in faster, then A-Z). Searching and sorting happen here, on those rows;
+       a person's position is theirs whatever is on screen. */
+    var board = { rows: [], people: [], summary: null };
+
+    function ordinal(n) {
+        var t = n % 100;
+        if (t >= 11 && t <= 13) return n + 'th';
+        return n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
+    }
+
+    // Lower case, no accents, single spaces: "Adéola  KOLAWOLE" is found by "adeola kolawole".
+    function plain(v) {
+        var t = String(v == null ? '' : v);
+        if (t.normalize) t = t.normalize('NFD').replace(/[̀-ͯ]/g, '');
+        return t.toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+
+    function drawResults() {
+        var box = one('[data-ex-results]');
+        var tools = one('[data-ex-tools]');
+        var exportLink = one('[data-ex-export]');
+        // Nothing to find, sort or export until someone is on the list.
+        tools.hidden = exportLink.hidden = !board.people.length;
+        if (!board.people.length) {
+            box.innerHTML = '<p class="ui-meta">Nobody yet.</p>';
+            return;
+        }
+        var words = plain(one('#ex-find').value).split(' ').filter(Boolean);
+        var list = board.people.filter(function (r) {
+            var name = plain(r.name);
+            return words.every(function (w) { return name.indexOf(w) !== -1; });
+        });
+        if (one('#ex-sort').value === 'name') {
+            list = list.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }) || a.user_id - b.user_id; });
+        }
+        if (!list.length) {
+            box.innerHTML = '<p class="ui-meta">No one matches.</p>';
+            return;
+        }
+        var alert = setup.view && setup.view.exam ? setup.view.exam.leave_alert : 3;
+        box.innerHTML = '<div class="ui-table-wrap"><table class="ui-table"><thead><tr>' +
+            '<th scope="col"><span aria-hidden="true">#</span><span class="sr-only">Position</span></th><th scope="col">Person</th><th scope="col">Status</th>' +
+            '<th scope="col" class="text-right">Score</th><th scope="col">Result</th><th scope="col" class="text-right">Left tab</th><th scope="col"><span class="sr-only">Open</span></th></tr></thead><tbody>' +
+            list.map(function (r) {
+                var status = r.status === 'not_started' ? 'Not started' : (r.status === 'started' ? 'Writing' : (ENDED[r.ended_by] || 'Handed in'));
+                var score = r.score === null ? '—' : r.score + ' / ' + r.max_score + ' (' + Math.round(r.percent) + '%)';
+                // Under the score, the attempt that gave it: nothing for the first try, "Attempt 2", "Attempt 3" for a retake.
+                var tried = r.attempt_no > 1 ? '<span class="ui-table__secondary whitespace-nowrap text-xs">Attempt ' + esc(r.attempt_no) + '</span>' : '';
+                var result = r.passed === null ? '' : (r.passed ? badge('Passed', 'success') : badge('Not passed', 'danger'));
+                return '<tr><td class="ui-table__primary tabular-nums">' + (r.position ? esc(ordinal(r.position)) : '—') + '</td><td>' + esc(r.name) + '</td><td>' + esc(status) + '</td>' +
+                    '<td class="is-num">' + esc(score) + tried + '</td><td>' + result + '</td>' +
+                    '<td class="text-right">' + (r.leaves >= alert ? badge(String(r.leaves), 'warning') : esc(String(r.leaves || 0))) + '</td>' +
+                    '<td class="text-right">' + (r.id ? '<button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-action="ex.attempt" data-id="' + r.id + '"><span>View</span></button>' : '') + '</td></tr>';
+            }).join('') + '</tbody></table></div>';
+    }
+
     function results(btn) {
         if (btn) HOD.busy(btn, true);
         call('results', { item: cfg.item }, { quiet: !btn }).then(function (res) {
             var s = res.summary;
-            var allowed = setup.view && setup.view.exam ? setup.view.exam.attempts_allowed || 1 : 1;
+            board.rows = res.rows || [];
+            board.people = res.people || [];
+            board.summary = s;
             one('[data-ex-summary]').textContent = s
                 ? s.enrolled + ' enrolled · ' + s.started + ' started · ' + s.finished + ' handed in · ' + s.passed + ' passed' +
                   (s.attempts > s.started ? ' · ' + plural(s.attempts, 'attempt', 'attempts') : '')
                 : 'Set the exam up first.';
-            var alert = setup.view && setup.view.exam ? setup.view.exam.leave_alert : 3;
-            // Retakes: one row per attempt; with more than one, the attempt that counts (the best) is marked.
-            one('[data-ex-results]').innerHTML = (res.rows || []).length
-                ? '<div class="ui-table-wrap"><table class="ui-table"><thead><tr><th scope="col">Person</th>' +
-                  (allowed > 1 || s.attempts > s.started ? '<th scope="col">Attempt</th>' : '') + '<th scope="col">Status</th>' +
-                  '<th scope="col" class="text-right">Score</th><th scope="col">Result</th><th scope="col" class="text-right">Left tab</th><th scope="col"><span class="sr-only">Open</span></th></tr></thead><tbody>' +
-                  res.rows.map(function (r) {
-                      var status = r.status === 'not_started' ? 'Not started' : (r.status === 'started' ? 'Writing' : (ENDED[r.ended_by] || 'Handed in'));
-                      var score = r.score === null ? '—' : r.score + ' / ' + r.max_score + ' (' + Math.round(r.percent) + '%)';
-                      var result = (r.passed === null ? '' : (r.passed ? badge('Passed', 'success') : badge('Not passed', 'danger'))) +
-                          (r.best && r.attempts > 1 ? ' ' + badge('Best', 'info') : '');
-                      var attemptCell = allowed > 1 || s.attempts > s.started ? '<td class="tabular-nums">' + (r.attempt_no ? esc(r.attempt_no + ' of ' + allowed) : '—') + '</td>' : '';
-                      return '<tr><td>' + esc(r.name) + '</td>' + attemptCell + '<td>' + esc(status) + '</td><td class="text-right tabular-nums">' + esc(score) + '</td><td>' + result + '</td>' +
-                          '<td class="text-right">' + (r.leaves >= alert ? badge(String(r.leaves), 'warning') : esc(String(r.leaves || 0))) + '</td>' +
-                          '<td class="text-right">' + (r.id ? '<button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-action="ex.attempt" data-id="' + r.id + '"><span>View</span></button>' : '') + '</td></tr>';
-                  }).join('') + '</tbody></table></div>'
-                : '<p class="ui-meta">Nobody yet.</p>';
+            drawResults();
         }).catch(function () {}).finally(function () { if (btn) HOD.busy(btn, false); });
     }
 
@@ -571,7 +614,13 @@
         var a = res.attempt;
         one('#ex-attempt-title').textContent = (a.attempt_no > 1 ? 'Attempt ' + a.attempt_no + ' · ' : '') +
             (a.status === 'started' ? 'Writing now' : 'Score ' + a.score + ' / ' + a.max_score);
-        one('[data-ex-attempt]').innerHTML =
+        // The person's other attempts, one tap away (the table shows the one that counts).
+        var mine = board.rows.filter(function (x) { return x.id && x.user_id === a.user_id; });
+        var others = mine.length > 1 ? '<div class="mb-3 flex flex-wrap gap-2">' + mine.map(function (x) {
+            return '<button type="button" class="ui-btn ui-btn--sm ' + (x.id === a.id ? 'ui-btn--secondary' : 'ui-btn--ghost') + '" data-action="ex.attempt-show" data-id="' + x.id + '"' +
+                (x.id === a.id ? ' aria-current="true"' : '') + '><span>Attempt ' + esc(x.attempt_no) + '</span></button>';
+        }).join('') + '</div>' : '';
+        one('[data-ex-attempt]').innerHTML = others +
             '<ol class="ui-stack">' + res.questions.map(function (q) {
                 return '<li class="rounded-ui-lg border border-line p-3"><p class="ui-meta">Question ' + q.n + ' · ' + plural(q.marks, 'mark', 'marks') + '</p>' +
                     '<p class="whitespace-pre-line">' + esc(q.text) + '</p>' +
@@ -590,6 +639,13 @@
             showAttempt(res);
             HOD.dialog.open('ex-attempt', btn);
         }).catch(function () {}).finally(function () { HOD.busy(btn, false); });
+    }
+
+    // Another attempt of the same person, inside the drawer that is already open.
+    function attemptShow(btn) {
+        HOD.busy(btn, true);
+        call('attempt', { item: cfg.item, attempt_id: Number(btn.getAttribute('data-id')) }).then(showAttempt)
+            .catch(function () {}).finally(function () { HOD.busy(btn, false); });
     }
 
     function endAttempt(btn) {
@@ -635,6 +691,8 @@
             HOD.actions.on('ex.pick-none', pickNone);
             HOD.actions.on('ex.results', results);
             HOD.actions.on('ex.attempt', attempt);
+            HOD.actions.on('ex.attempt-show', attemptShow);
+            HOD.actions.on('ex.find', function () { drawResults(); });
             HOD.actions.on('ex.end', endAttempt);
             HOD.actions.on('ex.answers', answers);
             HOD.actions.on('ex.test-save', testSave);
