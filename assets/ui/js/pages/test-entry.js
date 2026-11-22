@@ -290,28 +290,36 @@
 
     /**
      * The mailbox button (owner, 22 Nov: open the app, and NEVER in the chat's own tab).
-     *   Android: Gmail's own link handler, named by package (the server's m.android). Chrome, Edge and Samsung
-     *            Internet hand it straight to the Gmail app; there is no in-tab fallback.
-     *   iPhone:  the app's own address (googlegmail://).
+     *   Android: Gmail's home screen, named by package (the server's m.android). Chrome, Edge and Samsung Internet
+     *            hand it straight to the Gmail app; there is no in-tab fallback. An app's built-in browser (a QR
+     *            scanner, WhatsApp: "wv" in its name) cannot follow such a link and would show an error page in place
+     *            of the chat, so it gets the web inbox.
+     *   iPhone:  the app's own address (googlegmail://), with Apple's Mail beside it (owner, 22 Nov: m.ios_also),
+     *            because a page cannot ask an iPhone which app is installed.
      *   Elsewhere (a computer): the web inbox in a NEW tab.
-     * If the app does not open within ~2 s, watchApp() offers the web inbox in a new tab.
+     * On Android, if the app does not open within ~2 s, watchApp() offers the web inbox in a new tab.
      */
     function mailHtml(m) {
         if (!m) return '';
         var ua = navigator.userAgent || '';
-        var android = /Android/i.test(ua);
+        var android = /Android/i.test(ua) && !/\bwv\b/.test(ua);
         var ios = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         var label = HOD.icon('mail') + '<span>' + esc(m.label) + '</span>';
-        var app = android ? m.android : (ios ? m.ios : null);
-        if (app) {
-            return '<a class="tq-mail" href="' + esc(app) + '" data-tq-app data-web="' + esc(m.href) + '" data-name="' + esc(m.name || 'your email') + '">' + label + '</a>';
+        if (android && m.android) {
+            return '<a class="tq-mail" href="' + esc(m.android) + '" data-tq-app data-web="' + esc(m.href) + '" data-name="' + esc(m.name || 'your email') + '">' + label + '</a>';
+        }
+        if (ios && m.ios) {
+            // No watchApp() here: the iPhone asks "Open in Gmail?" first, and the page cannot see that question, so a
+            // timer would say "Couldn't open" to anyone who took a moment to answer it.
+            var also = m.ios_also ? '<a class="tq-mail tq-mail--alt" href="' + esc(m.ios_also.href) + '">' + HOD.icon('mail') + '<span>' + esc(m.ios_also.label) + '</span></a>' : '';
+            return '<div class="tq-mails"><a class="tq-mail" href="' + esc(m.ios) + '">' + label + '</a>' + also + '</div>';
         }
         return '<a class="tq-mail" href="' + esc(m.href) + '" target="_blank" rel="noopener">' + label + HOD.icon('external-link') + '</a>';
     }
 
     /**
-     * After a tap on the app button: if the page is still in front ~2 s later, the app did not open (not installed,
-     * or the browser refused). Say so, with the web inbox in a NEW tab (owner's choice), and keep the chat as it is.
+     * Android, after a tap on the app button: if the page is still in front ~2 s later, the app did not open (the
+     * browser refused). Say so, with the web inbox in a NEW tab (owner's choice), and keep the chat as it is.
      */
     function watchApp(a) {
         var left = false;

@@ -163,20 +163,27 @@ function trainings_entry_mask(string $email): string
 /**
  * The button that opens their mailbox ("Open Gmail"), for the providers people here use; null for others.
  *   href     the web inbox: a computer opens it in a NEW tab (never the chat's own tab);
- *   android  the link that opens the APP on Android (owner, 22 Nov): Chrome and Edge only hand a web page's link to an
- *            app screen that accepts browser links, so it names Gmail's own mail.google.com link handler and its
- *            package, with no in-tab fallback (the first try named Gmail's home screen, which the browsers refuse, and
- *            fell back to the web inbox in the chat's tab);
- *   ios      the app's own address on an iPhone.
- * When the app does not open within ~2 s, the chat offers the web inbox in a new tab (test-entry.js watchApp()).
- * Gmail only: the other providers' apps do not take such links reliably, so they get the web inbox in a new tab.
+ *   android  the link that opens the APP on Android (owner, 22 Nov): Gmail's home screen, named by package. It must be
+ *            `intent:#Intent;…` with NO `//`: Android reads `intent://#Intent` as a link that carries an (empty)
+ *            address, and a home screen only answers a link with no address at all, so the first try never matched and
+ *            fell back to the web inbox in the chat's tab. The second try named https://mail.google.com/mail/, which no
+ *            screen in the Gmail app accepts, so Chrome and Edge opened Gmail's Play Store page instead. No in-tab
+ *            fallback;
+ *   ios      the app's own address on an iPhone (Google lists no Gmail app for mail.google.com links, so this is the
+ *            only way in);
+ *   ios_also a second button on an iPhone (owner, 22 Nov: "Gmail and Mail"): many people read a gmail.com address in
+ *            Apple's Mail, and a page cannot ask an iPhone which app is installed.
+ * On Android, when the app does not open within ~2 s, the chat offers the web inbox in a new tab (test-entry.js
+ * watchApp()). Gmail only: the other providers' apps do not take such links reliably, so they get the web inbox in a
+ * new tab.
  */
 function trainings_entry_mail_link(string $email): ?array
 {
     $domain = strtolower((string) substr(strrchr($email, '@') ?: '', 1));
     return match (true) {
         in_array($domain, ['gmail.com', 'googlemail.com'], true) => ['label' => 'Open Gmail', 'name' => 'Gmail', 'href' => 'https://mail.google.com/mail/',
-            'android' => 'intent://mail.google.com/mail/#Intent;scheme=https;package=com.google.android.gm;end', 'ios' => 'googlegmail://'],
+            'android' => 'intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.google.android.gm;end',
+            'ios' => 'googlegmail://', 'ios_also' => ['label' => 'Open Mail', 'href' => 'message://']],
         str_starts_with($domain, 'yahoo.') || $domain === 'ymail.com' => ['label' => 'Open Yahoo Mail', 'name' => 'Yahoo Mail', 'href' => 'https://mail.yahoo.com/',
             'android' => null, 'ios' => null],
         in_array($domain, ['outlook.com', 'hotmail.com', 'live.com', 'msn.com'], true) => ['label' => 'Open Outlook', 'name' => 'Outlook', 'href' => 'https://outlook.live.com/mail/',
