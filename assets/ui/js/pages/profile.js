@@ -8,11 +8,12 @@
 
     var HOD = window.HOD;
     var API = '/api/profile_api.php';
-    var PW_MIN = 10;
+    // The one password policy (includes/security_helpers.php; owner, 22 Nov 2026): 8 characters, letters and a
+    // number. Capitals and symbols are welcome, never required.
+    var PW_MIN = 8;
     var RULES = [
         { id: 'len', label: 'At least ' + PW_MIN + ' characters', test: function (v) { return v.length >= PW_MIN; } },
-        { id: 'upper', label: 'An uppercase letter', test: function (v) { return /[A-Z]/.test(v); } },
-        { id: 'lower', label: 'A lowercase letter', test: function (v) { return /[a-z]/.test(v); } },
+        { id: 'letter', label: 'Letters', test: function (v) { return /[A-Za-z]/.test(v); } },
         { id: 'digit', label: 'A number', test: function (v) { return /[0-9]/.test(v); } },
         { id: 'sym', label: 'A symbol (optional, stronger)', test: function (v) { return /[^A-Za-z0-9]/.test(v); }, optional: true }
     ];

@@ -28,7 +28,7 @@ const SECURITY_MAX_FAILED_LOGINS = 5;
 const SECURITY_LOCK_MINUTES = 15;
 
 /** Minimum password length enforced on every new/changed password. */
-const SECURITY_MIN_PASSWORD_LENGTH = 10;
+const SECURITY_MIN_PASSWORD_LENGTH = 8;   // owner, 22 Nov 2026 (was 10)
 
 /** Don't hammer the DB updating last_seen_at on every single request. */
 const SECURITY_SESSION_TOUCH_SECONDS = 60;
@@ -205,11 +205,12 @@ if (!function_exists('security_password_rules')) {
     /** Human-readable rules, mirrored by the strength meter in the UI. */
     function security_password_rules(): array
     {
+        // Owner, 22 Nov 2026: "8 characters… just numbers and words. Special character makes it stronger but not a
+        // must… let us relax a little." Capitals and symbols are welcome, never required.
         return [
-            'At least ' . SECURITY_MIN_PASSWORD_LENGTH . ' characters long',
-            'At least one UPPERCASE letter',
-            'At least one lowercase letter',
-            'At least one number',
+            'At least ' . SECURITY_MIN_PASSWORD_LENGTH . ' characters',
+            'Letters and at least one number',
+            'A symbol makes it stronger (optional)',
             'Not your name, email or an obvious word',
         ];
     }
@@ -233,11 +234,9 @@ if (!function_exists('security_password_problems')) {
         if (strlen($password) > 200) {
             $problems[] = 'It must be shorter than 200 characters.';
         }
-        if (!preg_match('/[A-Z]/', $password)) {
-            $problems[] = 'It must contain at least one uppercase letter.';
-        }
-        if (!preg_match('/[a-z]/', $password)) {
-            $problems[] = 'It must contain at least one lowercase letter.';
+        // Letters and a number (owner, 22 Nov 2026): capitals and symbols are welcome, never required.
+        if (!preg_match('/[A-Za-z]/', $password)) {
+            $problems[] = 'It must contain letters, not only numbers.';
         }
         if (!preg_match('/[0-9]/', $password)) {
             $problems[] = 'It must contain at least one number.';
@@ -248,9 +247,10 @@ if (!function_exists('security_password_problems')) {
 
         $lower = strtolower($password);
 
+        // Words only (owner, 22 Nov 2026): a run of numbers like 12345 is fine when it is blended with letters, and
+        // numbers alone are already refused above.
         $banned = [
-            'password', 'passw0rd', 'password1', 'qwerty', 'letmein', 'welcome',
-            'iloveyou', 'admin123', 'abc12345', '12345678', '123456789', '1234567890',
+            'password', 'passw0rd', 'qwerty', 'letmein', 'welcome', 'iloveyou',
             'hodlekki', 'hodlagos', 'household', 'jesuschrist', 'changeme',
         ];
         foreach ($banned as $bad) {

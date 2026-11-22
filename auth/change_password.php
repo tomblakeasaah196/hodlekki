@@ -68,7 +68,7 @@ echo ui_json_script('pw-config', [
         <?= ui_field('password', ['name' => 'current_password', 'id' => 'pw-current', 'label' => 'Current Password', 'required' => true,
             'autocomplete' => 'current-password', 'placeholder' => $forced ? 'The temporary password you were given' : '••••••••']) ?>
         <?= ui_field('password', ['name' => 'new_password', 'id' => 'pw-new', 'label' => 'New Password', 'required' => true,
-            'autocomplete' => 'new-password', 'placeholder' => 'At least ' . (int) $minLength . ' characters', 'info' => 'Your new password needs: ' . $rules . '.']) ?>
+            'autocomplete' => 'new-password', 'placeholder' => 'At least ' . (int) $minLength . ' characters', 'info' => 'Your new password: ' . $rules . '.']) ?>
         <?= ui_field('password', ['name' => 'confirm_password', 'id' => 'pw-confirm', 'label' => 'Confirm New Password', 'required' => true,
             'autocomplete' => 'new-password', 'placeholder' => 'Type it once more']) ?>
         <label class="ui-check"><input type="checkbox" id="pw-show" data-action-change="pw.show"><span>Show passwords</span></label>

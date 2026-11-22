@@ -54,7 +54,7 @@ if ($result !== null && !empty($result['ok'])): ?>
         <?= ui_csrf_field() ?>
         <input type="hidden" name="t" value="<?= ui_e($token) ?>">
         <?= ui_field('password', ['name' => 'password', 'label' => 'New password', 'required' => true,
-            'autocomplete' => 'new-password', 'info' => 'It needs: ' . $rules . '.']) ?>
+            'autocomplete' => 'new-password', 'info' => 'Your password: ' . $rules . '.']) ?>
         <?= ui_field('password', ['name' => 'confirm', 'label' => 'Type it again', 'required' => true, 'autocomplete' => 'new-password']) ?>
         <?= ui_button('Save password', ['variant' => 'primary', 'type' => 'submit', 'block' => true]) ?>
     </form>
