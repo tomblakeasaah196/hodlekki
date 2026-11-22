@@ -548,6 +548,19 @@ $pdo->exec("UPDATE email_addresses SET confirmed_email = 'ngozi.home@example.tes
 $line = \HOD\Mail\Team\DailySummary::line($hod);
 check('the daily summary counts, in one line', $line !== null && str_contains($line, 'embrace@hodlekki.org:') && str_contains($line, 'unread'), (string) $line);
 check('nothing to say, no summary', \HOD\Mail\Team\DailySummary::line($member) === null);
+// Owner, 22 Nov 2026: Inbox only, and a quiet morning stays quiet.
+$sentFolder = Store::folderByRole((int) $embrace['id'], 'sent');
+$pdo->prepare("INSERT INTO mail_threads (account_id, subject, subject_key, status, last_message_at, created_at) VALUES (?, 'Blessings', 'blessings', 'waiting', ?, ?)")
+    ->execute([$embrace['id'], Clock::sql(-3 * 86400), Clock::sql(-3 * 86400)]);
+$sentOnly = (int) $pdo->lastInsertId();
+$pdo->prepare("INSERT INTO mail_messages (account_id, folder_id, thread_id, uid, subject, is_outbound, is_seen, received_at, created_at) VALUES (?, ?, ?, 990001, 'Blessings', 1, 1, ?, ?)")
+    ->execute([$embrace['id'], $sentFolder['id'], $sentOnly, Clock::sql(-3 * 86400), Clock::sql(-3 * 86400)]);
+check('a conversation only in Sent is never counted as waiting or open', \HOD\Mail\Team\DailySummary::line($hod) === $line, (string) \HOD\Mail\Team\DailySummary::line($hod));
+$pdo->prepare('DELETE FROM mail_messages WHERE thread_id = ?')->execute([$sentOnly]);
+$pdo->prepare('DELETE FROM mail_threads WHERE id = ?')->execute([$sentOnly]);
+Clock::freeze(Clock::now()->modify('+3 days'));
+check('no new mail in the Inbox since yesterday: no summary at all, even with mail still unread', \HOD\Mail\Team\DailySummary::line($hod) === null);
+Clock::freeze(null);
 $before = $bells($hod);
 $run = \HOD\Mail\Team\DailySummary::run();
 check('it rings once per person with something to say, and reaches the personal email when ticked', $bells($hod) === $before + 1 && $queued() === $n0 + 2 && $run['bells'] >= 1);

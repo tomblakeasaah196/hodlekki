@@ -16,6 +16,13 @@ use Throwable;
  *
  * One bell (which also pushes), unless the person turned the summary off; and to their personal email when they
  * ticked it (PersonalAlerts). Counts only: never a subject or a sender.
+ *
+ * Owner, 22 Nov 2026: "notification of unread and waiting should come from inbox only… if no mail entered info we
+ * don't need to receive a notification in the morning". So:
+ *   - nothing at all unless new mail reached the Inbox of one of the person's mailboxes in the last day (since the
+ *     last summary): a quiet morning stays quiet;
+ *   - every count is of conversations with mail in the Inbox (a thread we started, still only in Sent, is not
+ *     "open" or "waiting" for the summary).
  */
 final class DailySummary
 {
@@ -49,25 +56,47 @@ final class DailySummary
         return ['people' => count($people), 'bells' => $bells];
     }
 
-    /** The person's line, or null when there is nothing to say */
+    /** "Has mail in the Inbox": the condition every count shares (owner: Inbox only, never Sent). */
+    private const IN_INBOX = 'EXISTS (SELECT 1 FROM mail_messages m WHERE m.thread_id = t.id AND m.folder_id IN (%s))';
+
+    /**
+     * The person's line, or null when there is nothing to say: no new mail reached any of their Inboxes in the last
+     * day (owner: a quiet morning stays quiet), or nothing to count.
+     */
     public static function line(int $userId): ?string
     {
         $parts = [];
         $openSince = Clock::sql(-3600 * (int) MailTeam::config('summary_open_hours', 24));
+        $newSince = Clock::sql(-86400);   // since the last summary (it runs once a day)
+        $fresh = false;
         $shared = [];
+        $sharedInboxes = [];
         foreach (MailAccess::accounts($userId, 'read') as $a) {
             $inbox = Store::folderByRole((int) $a['id'], 'inbox');
-            $unread = $inbox ? (int) Db::value(
+            if (!$inbox) {
+                continue;
+            }
+            $inboxId = (int) $inbox['id'];
+            $fresh = $fresh || (int) Db::value(
+                'SELECT COUNT(*) FROM mail_messages WHERE folder_id = ? AND is_outbound = 0 AND received_at >= ?',
+                [$inboxId, $newSince],
+            ) > 0;
+            $unread = (int) Db::value(
                 'SELECT COUNT(DISTINCT thread_id) FROM mail_messages WHERE folder_id = ? AND is_seen = 0 AND thread_id IS NOT NULL',
-                [$inbox['id']],
-            ) : 0;
+                [$inboxId],
+            );
             $bits = [];
             if ($unread > 0) {
                 $bits[] = "{$unread} unread";
             }
             if (Store::isShared($a)) {
                 $shared[] = (int) $a['id'];
-                $old = (int) Db::value("SELECT COUNT(*) FROM mail_threads WHERE account_id = ? AND status = 'open' AND last_message_at < ?", [$a['id'], $openSince]);
+                $sharedInboxes[] = $inboxId;
+                $old = (int) Db::value(
+                    "SELECT COUNT(*) FROM mail_threads t WHERE t.account_id = ? AND t.status = 'open' AND t.last_message_at < ? AND "
+                    . sprintf(self::IN_INBOX, '?'),
+                    [$a['id'], $openSince, $inboxId],
+                );
                 if ($old > 0) {
                     $bits[] = "{$old} open over a day";
                 }
@@ -76,17 +105,25 @@ final class DailySummary
                 $parts[] = $a['email'] . ': ' . implode(', ', $bits);
             }
         }
+        if (!$fresh) {
+            return null;   // no new mail since yesterday: no summary, however much is still open
+        }
         if ($shared) {
             $marks = Db::marks(count($shared));
+            $inInbox = sprintf(self::IN_INBOX, Db::marks(count($sharedInboxes)));
             $mine = Db::one(
-                "SELECT COUNT(*) AS n, MIN(assigned_at) AS oldest FROM mail_threads WHERE assigned_to = ? AND status = 'open' AND account_id IN ({$marks})",
-                array_merge([$userId], $shared),
+                "SELECT COUNT(*) AS n, MIN(t.assigned_at) AS oldest FROM mail_threads t
+                  WHERE t.assigned_to = ? AND t.status = 'open' AND t.account_id IN ({$marks}) AND {$inInbox}",
+                array_merge([$userId], $shared, $sharedInboxes),
             );
             if ((int) ($mine['n'] ?? 0) > 0) {
                 $days = (int) floor((Clock::ageSeconds($mine['oldest']) ?? 0) / 86400);
                 $parts[] = 'Assigned to you: ' . (int) $mine['n'] . ' open' . ($days >= 1 ? ' (oldest ' . $days . ' day' . ($days === 1 ? '' : 's') . ')' : '');
             }
-            $waiting = (int) Db::value("SELECT COUNT(*) FROM mail_threads WHERE status = 'waiting' AND account_id IN ({$marks})", $shared);
+            $waiting = (int) Db::value(
+                "SELECT COUNT(*) FROM mail_threads t WHERE t.status = 'waiting' AND t.account_id IN ({$marks}) AND {$inInbox}",
+                array_merge($shared, $sharedInboxes),
+            );
             if ($waiting > 0) {
                 $parts[] = "Waiting for replies: {$waiting}";
             }
