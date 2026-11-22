@@ -445,7 +445,7 @@ function exams_action(PDO $pdo, string $do, array $in, int $me, array $files = [
 
         case 'results':
             $exam = exam_get($pdo, (int) $item['id']);
-            return $exam === null ? ['status' => 'success', 'rows' => [], 'summary' => null]
+            return $exam === null ? ['status' => 'success', 'rows' => [], 'people' => [], 'summary' => null]
                 : ['status' => 'success'] + exam_results($pdo, $exam);
 
         case 'attempt':

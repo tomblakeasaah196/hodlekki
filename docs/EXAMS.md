@@ -91,6 +91,16 @@ the AI: explanations are written once per question (by the tutor, or by PR 4's A
 attempt, numbered, with the best one marked (and the enrolled people who have not started; the summary counts people), each attempt in full with its timeline, and can hand in an
 attempt that is still running.
 
+**The tutor's ranking** (owner, 22 Nov 2026). The Results tab shows ONE row per person, on the attempt that counts
+(their best; with none handed in, the latest). `results` returns `rows` (every attempt, as before) and `people`
+(`exam_rank_people()`, pure and tested): one row each, with `position` and `seconds` taken. Order: higher percentage,
+then the faster finisher, then name A-Z, so positions run 1, 2, 3 … with no ties. People still writing, then people who
+have not started, follow with no position (A-Z). The table shows the position as 1st, 2nd, 3rd, and under the score the
+attempt that gave it: nothing for a first try, "Attempt 2" or "Attempt 3" for a retake. The Find box and the Sort
+choice (By position, By name A-Z) work in the browser on those rows: a person keeps their real position while a
+search or the A-Z sort is on. **View** opens the counting attempt, and the drawer has a button for each of that
+person's other attempts. All of this is in `assets/ui/js/pages/exams.js` (`drawResults()`).
+
 ## 4. Access (`access.php`)
 
 - Tutors: `can('trainings', 'edit', 'church')`, PR 1's staff check (`trainings_staff_can()`: Edit = any training,

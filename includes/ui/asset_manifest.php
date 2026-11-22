@@ -44,7 +44,7 @@ return [
     '/assets/ui/js/pages/events.js' => '097f7e57f656',
     '/assets/ui/js/pages/exam-take.js' => 'b15142f6e2d0',
     '/assets/ui/js/pages/exams-ai.js' => 'a304cb73c451',
-    '/assets/ui/js/pages/exams.js' => 'f84e05370894',
+    '/assets/ui/js/pages/exams.js' => 'd3b8e2f5c2d5',
     '/assets/ui/js/pages/finance.js' => '6bbb26309031',
     '/assets/ui/js/pages/idi-mobilization.js' => 'd5fd7e1c5bc4',
     '/assets/ui/js/pages/idi.js' => '6e14ed9ed252',

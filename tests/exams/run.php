@@ -1048,6 +1048,36 @@ et_eq('the tutor\'s results: every attempt, numbered, the best marked', [[1, 2, 
 et_eq('…the summary counts people (passed by their best), and the attempts', ['enrolled' => 4, 'started' => 3, 'finished' => 3, 'passed' => 1, 'attempts' => 7],
     $res['summary']);
 et_eq('…"people have started" counts people, not attempts', 3, exam_attempt_count($t, (int) exam_get($t, 100)['id']));
+et_eq('the ranking: one row per person, the attempt that counts, positions 1, 2, 3, and the one who never started unranked',
+    [[3, 2, 1], [2, 1, 2], [5, 1, 3], [4, null, null]],
+    array_map(static fn ($p) => [$p['user_id'], $p['attempt_no'], $p['position']], $res['people']));
+
+// The ranking on its own (exam_rank_people is pure): percentage, then the faster finisher, then name A-Z.
+$rk = static function (int $uid, string $name, int $no, ?float $pct, ?int $secs, bool $best, string $status = 'submitted') {
+    return ['id' => $uid * 10 + $no, 'user_id' => $uid, 'name' => $name, 'attempt_no' => $no, 'best' => $best, 'attempts' => 1, 'status' => $status,
+            'percent' => $pct, 'score' => $pct, 'max_score' => 100, 'passed' => $pct === null ? null : (int) ($pct >= 50), 'leaves' => 0, 'ended_by' => null,
+            'started_at' => $secs === null ? null : '2026-11-22 10:00:00',
+            'submitted_at' => $secs === null ? null : date('Y-m-d H:i:s', strtotime('2026-11-22 10:00:00') + $secs)];
+};
+$ranked = exam_rank_people([
+    $rk(1, 'Zed Zulu', 1, 76, 1200, true),
+    $rk(2, 'Ada Ade', 1, 40, 300, false), $rk(2, 'Ada Ade', 2, 76, 600, true),   // a retake that beat the first try
+    $rk(3, 'Ben Bello', 1, 76, 600, true),                                        // same score, same time as Ada
+    $rk(4, 'Cy Cole', 1, 90, 3000, true),
+    $rk(5, 'Dee Dare', 1, null, null, false, 'started'),                          // still writing
+    $rk(6, 'Eve Eze', 1, null, null, false, 'not_started'),
+    $rk(7, 'Abe Ade', 1, null, null, false, 'not_started'),
+    $rk(9, 'Gus Gold', 1, 76, null, true),                                        // no times on record: last among equals
+]);
+et_eq('exam_rank_people: best score first; ties go to the faster finisher, then A-Z; a retake counts as the attempt that gave the result',
+    [['Cy Cole', 1, 1], ['Ada Ade', 2, 2], ['Ben Bello', 1, 3], ['Zed Zulu', 1, 4], ['Gus Gold', 1, 5]],
+    array_map(static fn ($p) => [$p['name'], $p['attempt_no'], $p['position']], array_slice($ranked, 0, 5)));
+et_eq('…then anyone still writing, then anyone who never started (A-Z), neither with a position',
+    [['Dee Dare', null], ['Abe Ade', null], ['Eve Eze', null]],
+    array_map(static fn ($p) => [$p['name'], $p['position']], array_slice($ranked, 5)));
+et_eq('…the seconds that attempt took are carried along', [3000, 600, 600, 1200, null], array_column(array_slice($ranked, 0, 5), 'seconds'));
+et_eq('…a person with no attempt handed in is shown by their latest attempt', [52],
+    array_column(exam_rank_people([$rk(5, 'Dee Dare', 1, null, null, false, 'started'), $rk(5, 'Dee Dare', 2, null, null, false, 'started')]), 'id'));
 
 // Two tabs press Start (or Try again) at once: the UNIQUE (exam_id, user_id, attempt_no) key decides, never a check first.
 final class EtRacePdo extends PDO
