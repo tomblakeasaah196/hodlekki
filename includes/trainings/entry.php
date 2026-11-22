@@ -162,20 +162,26 @@ function trainings_entry_mask(string $email): string
 
 /**
  * The button that opens their mailbox ("Open Gmail"), for the providers people here use; null for others.
- * href is the web inbox; android (the app's package) and ios (the app's own address) let the page open the APP
- * itself on a phone (owner, 22 Nov: "Is there any way to open the app directly?"): test-entry.js mailHtml().
+ *   href     the web inbox: a computer opens it in a NEW tab (never the chat's own tab);
+ *   android  the link that opens the APP on Android (owner, 22 Nov): Chrome and Edge only hand a web page's link to an
+ *            app screen that accepts browser links, so it names Gmail's own mail.google.com link handler and its
+ *            package, with no in-tab fallback (the first try named Gmail's home screen, which the browsers refuse, and
+ *            fell back to the web inbox in the chat's tab);
+ *   ios      the app's own address on an iPhone.
+ * When the app does not open within ~2 s, the chat offers the web inbox in a new tab (test-entry.js watchApp()).
+ * Gmail only: the other providers' apps do not take such links reliably, so they get the web inbox in a new tab.
  */
 function trainings_entry_mail_link(string $email): ?array
 {
     $domain = strtolower((string) substr(strrchr($email, '@') ?: '', 1));
     return match (true) {
-        in_array($domain, ['gmail.com', 'googlemail.com'], true) => ['label' => 'Open Gmail', 'href' => 'https://mail.google.com/mail/',
-            'android' => 'com.google.android.gm', 'ios' => 'googlegmail://'],
-        str_starts_with($domain, 'yahoo.') || $domain === 'ymail.com' => ['label' => 'Open Yahoo Mail', 'href' => 'https://mail.yahoo.com/',
-            'android' => 'com.yahoo.mobile.client.android.mail', 'ios' => 'ymail://'],
-        in_array($domain, ['outlook.com', 'hotmail.com', 'live.com', 'msn.com'], true) => ['label' => 'Open Outlook', 'href' => 'https://outlook.live.com/mail/',
-            'android' => 'com.microsoft.office.outlook', 'ios' => 'ms-outlook://'],
-        in_array($domain, ['icloud.com', 'me.com', 'mac.com'], true) => ['label' => 'Open Mail', 'href' => 'https://www.icloud.com/mail',
+        in_array($domain, ['gmail.com', 'googlemail.com'], true) => ['label' => 'Open Gmail', 'name' => 'Gmail', 'href' => 'https://mail.google.com/mail/',
+            'android' => 'intent://mail.google.com/mail/#Intent;scheme=https;package=com.google.android.gm;end', 'ios' => 'googlegmail://'],
+        str_starts_with($domain, 'yahoo.') || $domain === 'ymail.com' => ['label' => 'Open Yahoo Mail', 'name' => 'Yahoo Mail', 'href' => 'https://mail.yahoo.com/',
+            'android' => null, 'ios' => null],
+        in_array($domain, ['outlook.com', 'hotmail.com', 'live.com', 'msn.com'], true) => ['label' => 'Open Outlook', 'name' => 'Outlook', 'href' => 'https://outlook.live.com/mail/',
+            'android' => null, 'ios' => null],
+        in_array($domain, ['icloud.com', 'me.com', 'mac.com'], true) => ['label' => 'Open Mail', 'name' => 'Mail', 'href' => 'https://www.icloud.com/mail',
             'android' => null, 'ios' => 'message://'],
         default => null,
     };

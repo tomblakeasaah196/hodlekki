@@ -176,9 +176,55 @@
         }
         fit();
         scroll();   // the pills and the box may have grown: keep the last message in view
+        save();     // every question asked is a place to come back to
+    }
+
+    /* ---------- coming back (owner, 22 Nov: "we lose everything… it starts all over") ---------- */
+    // The conversation is kept in this tab (sessionStorage) after every question: a reload, Back, or the phone
+    // putting the tab to sleep while they read their email brings them back to the same step for 20 minutes. The
+    // server keeps its side in the session for as long (TRAININGS_ENTRY_TTL); test.php no longer clears it on load.
+
+    var STORE = 'hod.tq.' + cfg.item;
+    var KEEP_MS = 20 * 60 * 1000;
+
+    function save() {
+        try {
+            window.sessionStorage.setItem(STORE, JSON.stringify({
+                v: 1, at: Date.now(), log: el.log.innerHTML, ask: st.ask, pills: st.pills || [], railAt: st.railAt || 0,
+                name: st.name, typed: st.typed, emailNoneOk: !!st.emailNoneOk, thanked: !!st.thanked, last: st.last,
+                user: el.user ? el.user.value : ''
+            }));
+        } catch (e) { /* private mode: no coming back, nothing breaks */ }
+    }
+
+    function forget() {
+        try { window.sessionStorage.removeItem(STORE); } catch (e) { /* nothing kept */ }
+    }
+
+    /** Back where they were, if this tab has a conversation from the last 20 minutes. */
+    function restore() {
+        var s = null;
+        try { s = JSON.parse(window.sessionStorage.getItem(STORE) || 'null'); } catch (e) { s = null; }
+        if (!s || s.v !== 1 || !s.log || Date.now() - s.at > KEEP_MS) return false;
+        el.log.innerHTML = s.log;
+        Array.prototype.forEach.call(el.log.querySelectorAll('.tq-typing'), function (t) { t.remove(); });
+        Array.prototype.forEach.call(el.log.children, function (li) { li.classList.add('is-in'); });
+        st.name = s.name || '';
+        st.typed = s.typed || '';
+        st.emailNoneOk = !!s.emailNoneOk;
+        st.thanked = !!s.thanked;
+        st.last = s.last || '';
+        if (el.user) el.user.value = s.user || '';
+        st.railAt = 0;
+        rail(RAIL[s.railAt] || 'phone');
+        if (el.restart) el.restart.hidden = false;
+        ask(s.ask || null, s.pills || []);
+        el.log.scrollTop = el.log.scrollHeight;
+        return true;
     }
 
     function setPills(list) {
+        st.pills = list;
         el.pills.innerHTML = list.map(function (p) {
             return '<button type="button" class="tq-pill" data-action="tq.pill" data-do="' + esc(p.do) + '"' +
                 (p.value != null ? ' data-value="' + esc(p.value) + '"' : '') + '>' + esc(p.label) + '</button>';
@@ -243,10 +289,12 @@
     }
 
     /**
-     * The mailbox button, opening the APP on a phone (owner, 22 Nov): on Android an intent link names the app's
-     * package (Chrome, Edge and Samsung Internet open it; without the app, the web inbox); on an iPhone the app's own
-     * address, with "or open it in the browser" beneath (iOS cannot tell us whether the app is there). Elsewhere, the
-     * web inbox in a new tab.
+     * The mailbox button (owner, 22 Nov: open the app, and NEVER in the chat's own tab).
+     *   Android: Gmail's own link handler, named by package (the server's m.android). Chrome, Edge and Samsung
+     *            Internet hand it straight to the Gmail app; there is no in-tab fallback.
+     *   iPhone:  the app's own address (googlegmail://).
+     *   Elsewhere (a computer): the web inbox in a NEW tab.
+     * If the app does not open within ~2 s, watchApp() offers the web inbox in a new tab.
      */
     function mailHtml(m) {
         if (!m) return '';
@@ -254,16 +302,34 @@
         var android = /Android/i.test(ua);
         var ios = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         var label = HOD.icon('mail') + '<span>' + esc(m.label) + '</span>';
-        if (android && m.android) {
-            var intent = 'intent://#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=' + m.android +
-                ';S.browser_fallback_url=' + encodeURIComponent(m.href) + ';end';
-            return '<a class="tq-mail" href="' + esc(intent) + '">' + label + '</a>';
-        }
-        if (ios && m.ios) {
-            return '<a class="tq-mail" href="' + esc(m.ios) + '">' + label + '</a>' +
-                '<p class="tq-small"><a class="tq-link" href="' + esc(m.href) + '" target="_blank" rel="noopener">or open it in the browser</a></p>';
+        var app = android ? m.android : (ios ? m.ios : null);
+        if (app) {
+            return '<a class="tq-mail" href="' + esc(app) + '" data-tq-app data-web="' + esc(m.href) + '" data-name="' + esc(m.name || 'your email') + '">' + label + '</a>';
         }
         return '<a class="tq-mail" href="' + esc(m.href) + '" target="_blank" rel="noopener">' + label + HOD.icon('external-link') + '</a>';
+    }
+
+    /**
+     * After a tap on the app button: if the page is still in front ~2 s later, the app did not open (not installed,
+     * or the browser refused). Say so, with the web inbox in a NEW tab (owner's choice), and keep the chat as it is.
+     */
+    function watchApp(a) {
+        var left = false;
+        var gone = function () { left = true; };
+        var hidden = function () { if (document.hidden) left = true; };
+        document.addEventListener('visibilitychange', hidden);
+        window.addEventListener('pagehide', gone);
+        window.addEventListener('blur', gone);
+        window.setTimeout(function () {
+            document.removeEventListener('visibilitychange', hidden);
+            window.removeEventListener('pagehide', gone);
+            window.removeEventListener('blur', gone);
+            if (left || document.hidden) return;
+            var name = a.getAttribute('data-name') || 'your email';
+            bubble('bot', '<p>Couldn\'t open the ' + esc(name) + ' app.</p><a class="tq-mail" href="' + esc(a.getAttribute('data-web')) +
+                '" target="_blank" rel="noopener">' + HOD.icon('mail') + '<span>Open ' + esc(name) + ' in a new tab</span>' + HOD.icon('external-link') + '</a>');
+            save();
+        }, 2000);
     }
 
     function thanks() {
@@ -347,6 +413,7 @@
         case 'go':
             rail('test');
             ask(null, []);
+            forget();   // in: nothing to come back to (test.php sends a signed-in person straight to the test)
             el.form.hidden = true;
             return say(['You\'re in, ' + (res.name || st.name) + '! 🎉', 'Opening your test…']).then(function () {
                 return Promise.all([wait(500), savePassword()]).then(function () { window.location.href = res.go; });
@@ -437,6 +504,7 @@
     function begin(again) {
         st.run++;
         st = { ask: null, busy: false, name: '', newpass: '', last: '', typed: '', run: st.run, railAt: 0 };
+        forget();
         if (again) el.log.innerHTML = '';
         if (el.restart) el.restart.hidden = true;
         rail('phone');
@@ -466,5 +534,11 @@
         if (st.ask === 'code' && el.input.value.replace(/\D/g, '').length === 6 && !st.busy) submit();
     });
 
-    begin(false);
+    // The app button: watch whether the app really opened (watchApp()).
+    el.log.addEventListener('click', function (e) {
+        var a = e.target && e.target.closest ? e.target.closest('a[data-tq-app]') : null;
+        if (a) watchApp(a);
+    });
+
+    if (!restore()) begin(false);
 })();
