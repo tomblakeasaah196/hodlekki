@@ -5,6 +5,7 @@
 // Every action and access decision is exams_action() in includes/exams/access.php.
 //
 //   GET  action=template                         the Excel template (.xlsx)
+//   GET  action=results_xlsx&item=<id>           a test's results as Excel (.xlsx; tutors)
 //   POST questions · question_save · question_status · import_check (multipart) · import_confirm
 //        setup · exam_save · results · attempt · end_attempt         (tutors)
 //        take · start · answer · focus · submit                      (enrolled learners)
@@ -41,6 +42,36 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && ($_GET['action'] ?? '') =
     echo $bytes;
     exit;
 }
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && ($_GET['action'] ?? '') === 'results_xlsx') {
+    // A test's results as a workbook. Who may have it is decided in exams_action() (Trainings, Edit, church-wide).
+    $refuse = static function (int $code, string $text): never {
+        http_response_code($code);
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Cache-Control: no-store');
+        echo $text;
+        exit;
+    };
+    $out = [];
+    try {
+        if (!exams_ready($pdo)) {
+            $refuse(503, 'Exams are being set up. Try again later.');
+        }
+        $out = exams_action($pdo, 'results_xlsx', $_GET, $me);
+    } catch (Throwable $e) {
+        error_log('[exams] results export failed: ' . $e->getMessage());
+        $refuse(500, 'Something went wrong. Please try again.');
+    }
+    if (($out['status'] ?? '') !== 'success') {
+        $refuse(['FORBIDDEN' => 403, 'NOT_FOUND' => 404][$out['code'] ?? ''] ?? 400, (string) ($out['message'] ?? 'This is not available.'));
+    }
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="' . $out['filename'] . '"');
+    header('Content-Length: ' . strlen($out['bytes']));
+    header('Cache-Control: no-store');
+    header('X-Content-Type-Options: nosniff');
+    echo $out['bytes'];
+    exit;
+}
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -57,6 +88,12 @@ if (stripos((string) ($_SERVER['CONTENT_TYPE'] ?? ''), 'application/json') === 0
 try {
     if (!exams_ready($pdo)) {
         echo json_encode(['status' => 'error', 'code' => 'FEATURE_NOT_READY', 'message' => 'Exams are being set up. Try again later.']);
+        exit;
+    }
+    if (($in['action'] ?? '') === 'results_xlsx') {
+        // The workbook is a file, not JSON: it is only ever served by the GET above.
+        http_response_code(405);
+        echo json_encode(['status' => 'error', 'message' => 'Use the Export Excel button.']);
         exit;
     }
     // Access: Trainings Edit church-wide (tutors) or own records + an enrolment (learners), decided per action.

@@ -556,12 +556,13 @@
     function drawResults() {
         var box = one('[data-ex-results]');
         var tools = one('[data-ex-tools]');
+        var exportLink = one('[data-ex-export]');
+        // Nothing to find, sort or export until someone is on the list.
+        tools.hidden = exportLink.hidden = !board.people.length;
         if (!board.people.length) {
-            tools.hidden = true;
             box.innerHTML = '<p class="ui-meta">Nobody yet.</p>';
             return;
         }
-        tools.hidden = false;
         var words = plain(one('#ex-find').value).split(' ').filter(Boolean);
         var list = board.people.filter(function (r) {
             var name = plain(r.name);

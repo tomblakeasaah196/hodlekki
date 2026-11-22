@@ -135,7 +135,11 @@ echo ui_json_script('exams-config', ['page' => 'setup', 'item' => (int) $item['i
     <section id="panel-results" data-tab-panel="results" class="ui-tab-panel" hidden>
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p data-ex-summary aria-live="polite"></p>
-            <?= ui_button('Refresh', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'refresh-cw', 'attrs' => ['data-action' => 'ex.results']]) ?>
+            <div class="flex gap-2">
+                <?= ui_button('Export Excel', ['variant' => 'secondary', 'size' => 'sm', 'icon' => 'download',
+                    'href' => '/api/exams_api.php?action=results_xlsx&item=' . (int) $item['id'], 'attrs' => ['data-ex-export' => true, 'hidden' => true]]) ?>
+                <?= ui_button('Refresh', ['variant' => 'ghost', 'size' => 'sm', 'icon' => 'refresh-cw', 'attrs' => ['data-action' => 'ex.results']]) ?>
+            </div>
         </div>
         <div class="ui-toolbar mb-3" data-ex-tools hidden>
             <div class="ui-search ui-toolbar__grow">

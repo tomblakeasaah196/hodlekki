@@ -7,6 +7,7 @@
 //   bank.php    questions: check, save, approve; the Excel template and import
 //   engine.php  exams: settings, the one attempt, the paper, answers, marking,
 //               tab-leave notes, results
+//   export.php  the results as an Excel workbook (pure layout)
 //   access.php  who may do what (Roles & permissions + enrolment), the API's actions
 //
 // Exams hang off PR 1's training items (type 'exam'). Everything asks
@@ -137,3 +138,4 @@ function exams_text($v, int $len): string
 
 require_once __DIR__ . '/bank.php';
 require_once __DIR__ . '/engine.php';
+require_once __DIR__ . '/export.php';

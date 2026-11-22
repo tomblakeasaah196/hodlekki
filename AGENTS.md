@@ -1098,6 +1098,14 @@ Guide and contracts: `docs/EXAMS.md`. Code: `includes/exams/` (entry
   `trainings_progress_put()` and then calls `trainings_recheck_enrolment()`.
 - The Excel reader (`xlsx.php`) treats every upload as hostile (size caps
   before inflating, no DOCTYPE, no network); keep it that way.
+- **Results are ranked and exported from one place** (22 Nov 2026, docs/EXAMS.md
+  "The tutor's ranking"): `exam_rank_people()` (one row per person on the attempt
+  that counts; higher score, then the faster finisher, then A-Z, so positions are
+  unique) feeds both the Results tab and `exam_results_file()`
+  (`includes/exams/export.php`, the Excel download). Do not rank in the browser
+  or in a second place. The workbook goes out only through the GET
+  `results_xlsx` in `api/exams_api.php`, behind the `exams_action()` tutor gate;
+  names only, no phone or email.
 - **Standalone tests** (added 2026-11-21, `includes/trainings/tests.php`,
   docs/EXAMS.md §8): a training of kind `test` with one exam item, open to
   every member while published (opening it enrols them). Keep tests out of
