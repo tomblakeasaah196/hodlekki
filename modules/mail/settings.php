@@ -78,7 +78,7 @@ if (!mail_can('admin')) {
 
     <section class="ui-card">
         <div class="ui-card__header ui-card__header--divided"><h2 class="ui-h3">Daily summary</h2>
-            <?= mail_info('At 06:45, only when there is something: unread mail, conversations open over a day, what is assigned to you.') ?></div>
+            <?= mail_info('At 06:45, only when new mail reached the Inbox since yesterday: unread mail, conversations open over a day, what is assigned to you. Inbox only.') ?></div>
         <div class="ui-card__body">
             <label class="ui-check"><input type="checkbox" data-general="summary"<?= $general['summary'] ? ' checked' : '' ?>> Show it in the app</label>
         </div>

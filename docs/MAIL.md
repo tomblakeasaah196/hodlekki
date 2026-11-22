@@ -253,7 +253,9 @@ Rules:
 - **Bells** only for things addressed to a person: an assignment, a send that failed, a mailbox needing a reset or
   nearly full, an admin job that failed, an export request.
 - **Daily summary** at 06:45 (`Nightly::summary`), only when there is something to say: unread per mailbox, open over
-  a day, assigned to you (oldest), waiting for replies. Counts only. One bell, unless turned off.
+  a day, assigned to you (oldest), waiting for replies. Counts only. One bell, unless turned off. Owner, 22 Nov 2026:
+  nothing at all unless new mail reached the Inbox of one of the person's mailboxes in the last day, and every count is
+  of conversations with mail in the Inbox (a conversation we started that is still only in Sent never counts).
 - **Key alerts to a personal email**, for anyone who ticks them on My mail settings: new mail in my personal mailbox,
   a conversation assigned to me, the daily summary, a mailbox I manage needs attention. The address is the personal
   email the person confirmed for the church (`member_confirmed_email`; the mailbox never confirms addresses). Sent in
