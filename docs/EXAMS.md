@@ -194,12 +194,14 @@ shrinks to the progress rail.
 | "I can't remember" | A code to their email (masked `tom…h@gmail.com`, with **Open Gmail** / Yahoo / Outlook and "check Spam or Junk"), then a new password typed twice, then in. No email on record: they type one, give their **birthday** (day and month), and the code goes there. |
 | Never signed in | A code to the email on record, or to one they type, then they choose a password. "I don't have an email": they choose a password on the number alone (as the first-time set-up page allows). |
 | "I don't use this email" | They give the one they use (with the birthday when a password is at stake); the right code makes it theirs and it replaces the old one in `users.email`. |
-| Staff (`user_roles`) | Never the typed-email way: their reset goes to the email on record, else IDI. |
+| Staff (`user_roles`) | The same way in as everyone (owner, 22 Nov: no dead ends). A staff password set or reset here alerts IDI (the IDI department's members; Super Admins if none) and the person, in the app and by push (`trainings_entry_staff_alert()`). |
+| A shared number, not listed | "None of these": their own number is not on HOD, so IDI. |
 
 **One email, once.** A "real" email is a confirmed one, one waiting, or `users.email` when it is not an @hodlc.com
 sign-in name. The right code confirms the address it went to through the email identity flow (as its link would) and
 puts it in `users.email`; next time there is nothing to type but the password. Slips are caught ("Did you mean
-tom@gmail.com?", `email_typo_hint()`); an address on another account goes to IDI.
+tom@gmail.com?", `email_typo_hint()`); an address already on another account (families share one Gmail): "That email is on
+another account. Please type another one." (owner). The only dead ends: a number HOD does not know, an account on hold.
 
 **Birthdays** (`trainings_entry_parse_birthday()`): no AI (personal data stays here); a forgiving reader instead: "12
 March", "march 12th", "12/03" (day first), "12-3-1990", "Mrach 12", "the 12th of sept". The year is ignored (it is often
@@ -208,13 +210,14 @@ March?", and yes replaces it (owner: replace freely, so the check captures birth
 
 **Codes** (`includes/auth_codes.php`, table `auth_email_codes`): six digits, only their `password_hash()` stored, one
 use, 15 minutes, dead after 5 wrong tries, a new one replaces the last; one a minute per person, purpose and address
-(a new address gets its code at once), 5 an hour per person, 20 an hour per IP. The page sends the code by itself at
+(a new address gets its code at once), 5 an hour per person, 300 an hour per IP (a full church hall shares one Wi-Fi;
+numbers HOD does not know: 150 per 15 minutes per IP). The page sends the code by itself at
 the sixth digit. A right code allows a new password for 15 minutes; a reset signs out every other session and sends the
 "password changed" email.
 
 **Guards:** the endpoint (`api/test_entry_api.php`) takes POST only and checks the CSRF token; the state between steps
 lives in the session (`$_SESSION['test_entry']`, 20 minutes); numbers HOD does not know are recorded (`login_attempts`,
-context `test_entry`) and more than 20 in 15 minutes from one IP are refused for a while.
+context `test_entry`) and more than 150 in 15 minutes from one IP are refused for a while.
 
 **After the test:** anyone still without a confirmed email sees **Confirm your email** on the result
 (`trainings_entry_email_prompt()`, `confirm_send`, `confirm_check`).

@@ -78,7 +78,7 @@ return [
     '/assets/ui/js/pages/security.js' => '3e7596a50b31',
     '/assets/ui/js/pages/setup-password.js' => 'ed56cfbbcd8d',
     '/assets/ui/js/pages/sms-studio.js' => '51d48711dc5a',
-    '/assets/ui/js/pages/test-entry.js' => '0f46b088df20',
+    '/assets/ui/js/pages/test-entry.js' => '2023b2ab7a76',
     '/assets/ui/js/pages/testimonies-admin.js' => '0f0f3511c753',
     '/assets/ui/js/pages/testimonies.js' => 'f1ce05bd44b2',
     '/assets/ui/js/pages/training-live.js' => '0d6076435615',

@@ -16,8 +16,11 @@
 //
 // A "real" email is a confirmed one, one waiting to be confirmed, or users.email when it is not a church sign-in name
 // (@hodlc.com, email_looks_personal()). Codes: includes/auth_codes.php. The birthday check captures birthdays more
-// than it guards (owner: a different answer may replace the one on record); staff accounts never take the typed-email
-// way (their reset goes to the email on record, else IDI). Signed in for 30 days (trainings_entry_sign_in()).
+// than it guards (owner: a different answer may replace the one on record). Staff take the same way in as everyone
+// (owner, 22 Nov: no dead ends); when a staff password is set or reset here, IDI and the person are alerted
+// (trainings_entry_staff_alert()). An email already on another account: "please type another one" (owner). The only
+// dead ends: a number HOD does not know, an account on hold. Signed in for 30 days (trainings_entry_sign_in()).
+// Limits are per person, and generous per IP: a full church hall shares one Wi-Fi.
 //
 // Page: test.php (public, strict CSP), script assets/ui/js/pages/test-entry.js, endpoint api/test_entry_api.php (CSRF
 // checked). The server decides every step; the page only says it. State: $_SESSION['test_entry'], TRAININGS_ENTRY_TTL.
@@ -26,9 +29,10 @@
 require_once dirname(__DIR__) . '/auth_codes.php';
 
 const TRAININGS_ENTRY_TTL = 1200;            // 20 minutes from the number to the last step
-const TRAININGS_ENTRY_LOOKUPS_PER_IP = 20;   // numbers HOD does not know, per IP per 15 minutes
+const TRAININGS_ENTRY_LOOKUPS_PER_IP = 150;  // numbers HOD does not know, per IP per 15 minutes (a hall shares one Wi-Fi)
 const TRAININGS_ENTRY_VERIFIED_TTL = 900;    // a right code allows a new password for 15 minutes
 const TRAININGS_ENTRY_IDI = 'Please contact Information and Data Insights (IDI).';
+const TRAININGS_ENTRY_TAKEN = 'That email is on another account. Please type another one.';
 const TRAININGS_ENTRY_MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september',
     'october', 'november', 'december'];
 
@@ -71,7 +75,7 @@ function trainings_entry_open_account(array $u): bool
     return !in_array(strtolower((string) ($u['account_status'] ?? 'active')), ['suspended', 'revoked', 'disabled'], true);
 }
 
-/** Does the account hold a staff role (user_roles)? It never takes the typed-email way in. */
+/** Does the account hold a staff role (user_roles)? A password set or reset here then alerts IDI (trainings_entry_staff_alert()). */
 function trainings_entry_is_staff(PDO $pdo, int $userId): bool
 {
     try {
@@ -80,6 +84,61 @@ function trainings_entry_is_staff(PDO $pdo, int $userId): bool
         return (int) $stmt->fetchColumn() > 0;
     } catch (Throwable $e) {
         return false;
+    }
+}
+
+/** Is this address another account's (confirmed there)? One email, one account in HOD. */
+function trainings_entry_email_taken(PDO $pdo, string $email, int $userId): bool
+{
+    if (!email_identity_ready($pdo)) {
+        return false;
+    }
+    $owner = member_by_confirmed_email($pdo, email_normalize($email));
+    return $owner !== null && $owner !== $userId;
+}
+
+/** The people of Information and Data Insights (the IDI department's active seats); Super Admins when there are none. */
+function trainings_entry_idi_people(PDO $pdo): array
+{
+    try {
+        $ids = $pdo->query("SELECT DISTINCT ud.user_id FROM user_departments ud JOIN departments d ON d.id = ud.department_id
+                             WHERE ud.is_active = 1 AND (d.name = 'IDI' OR d.name LIKE '%Information and Data%')")->fetchAll(PDO::FETCH_COLUMN);
+        if ($ids === []) {
+            $ids = $pdo->query("SELECT DISTINCT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.role_name = 'Super_Admin'")
+                ->fetchAll(PDO::FETCH_COLUMN);
+        }
+        return array_values(array_unique(array_map('intval', $ids)));
+    } catch (Throwable $e) {
+        error_log('[test entry] IDI people: ' . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * A staff password was set or reset from a test QR code (owner, 22 Nov: staff take the same way in, "+ alert"):
+ * an app alert (and push) to IDI, and to the person, so a takeover cannot go unnoticed. Never breaks the way in.
+ */
+function trainings_entry_staff_alert(PDO $pdo, array $user, bool $reset): void
+{
+    try {
+        $name = trainings_entry_name($user);
+        $what = $reset ? 'reset' : 'set for the first time';
+        $notify = static function (array $ids, string $title, string $message, string $link) use ($pdo): void {
+            $stmt = $pdo->prepare('INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, ?, ?, ?)');
+            foreach ($ids as $id) {
+                $stmt->execute([(int) $id, $title, $message, $link]);
+            }
+        };
+        $idi = array_values(array_filter(trainings_entry_idi_people($pdo), static fn ($id) => $id !== (int) $user['id']));
+        $notify($idi, 'Staff password ' . ($reset ? 'reset' : 'set'), $name . '\'s password was ' . $what . ' from a test QR code. Check it was them.',
+            '/modules/security/');
+        $notify([(int) $user['id']], 'Your password was ' . ($reset ? 'reset' : 'set'), 'From a test QR code just now. Not you? Contact IDI straight away.',
+            '/modules/profile/');
+        if (function_exists('security_log')) {
+            security_log($pdo, 'staff_password_test_qr', (int) $user['id'], 'Staff password ' . $what . ' from a test QR code; IDI alerted.', (int) $user['id'], $name);
+        }
+    } catch (Throwable $e) {
+        error_log('[test entry] staff alert: ' . $e->getMessage());
     }
 }
 
@@ -410,9 +469,6 @@ function trainings_entry_route(PDO $pdo, array $u, string $ip): array
     if ($real !== null) {
         return ['name' => $first, 'first' => true] + trainings_entry_send($pdo, $u, $real, $ip);
     }
-    if (trainings_entry_is_staff($pdo, (int) $u['id'])) {
-        return trainings_entry_idi('Your account needs its first password set by IDI.');
-    }
     return trainings_entry_reply('email', ['name' => $first, 'first' => true]);
 }
 
@@ -537,20 +593,21 @@ function trainings_entry_action(PDO $pdo, string $do, array $in, string $ip, ?ca
             if ($real !== null) {
                 return trainings_entry_send($pdo, $user, $real, $ip);
             }
-            return trainings_entry_is_staff($pdo, $uid) ? trainings_entry_idi('Staff passwords are reset by IDI.')
-                : trainings_entry_reply('email', ['name' => $first, 'reset' => true]);
+            // Staff too (owner, 22 Nov: no dead ends); a staff reset alerts IDI and their devices (new_password).
+            return trainings_entry_reply('email', ['name' => $first, 'reset' => true]);
 
         case 'old_email':
             // "I don't use this email": they give the one they use. With a password at stake, their birthday too.
-            if (!empty($user['password_hash']) && $mode !== 'activate' && trainings_entry_is_staff($pdo, $uid)) {
-                return trainings_entry_idi('Staff emails are changed by IDI.');
-            }
             trainings_entry_put(['bday' => false, 'target' => null, 'replace' => true]);
             return trainings_entry_reply('email', ['name' => $first, 'replace' => true, 'activate' => $mode === 'activate']);
 
         case 'email':
             $raw = trim((string) ($in['email'] ?? ''));
             $email = email_normalize($raw);
+            if (trainings_entry_email_taken($pdo, $email, $uid)) {
+                // Families share one Gmail; an address belongs to one account (owner: ask for a different one).
+                return $fail(TRAININGS_ENTRY_TAKEN, 'TAKEN', 'email');
+            }
             if (($problem = email_address_problem($email, $pdo, $uid)) !== null) {
                 return $fail($problem, 'INVALID', 'email');
             }
@@ -606,7 +663,7 @@ function trainings_entry_action(PDO $pdo, string $do, array $in, string $ip, ?ca
                 return $fail((string) $check['message'], (string) $check['code'], 'code');
             }
             if (!trainings_entry_activate_email($pdo, $uid, (string) $check['email'])) {
-                return trainings_entry_idi('That email is on another account.');
+                return $fail(TRAININGS_ENTRY_TAKEN, 'TAKEN', 'email');   // taken by someone else meanwhile: another one, please
             }
             if (!empty($s['replace'])) {
                 trainings_entry_replace_on_file($pdo, $uid, (string) $check['email']);   // "I don't use this email": the new one is theirs
@@ -625,7 +682,7 @@ function trainings_entry_action(PDO $pdo, string $do, array $in, string $ip, ?ca
                 email_prompt_forget();
                 return trainings_entry_reply('go', ['go' => exam_url_take($itemId), 'name' => $first]);
             }
-            if ($mode === 'first' && empty($user['password_hash']) && !trainings_entry_is_staff($pdo, $uid)) {
+            if ($mode === 'first' && empty($user['password_hash'])) {
                 trainings_entry_put(['verified' => $uid, 'verified_at' => time(), 'no_email' => true]);
                 return trainings_entry_reply('new_password', ['name' => $first, 'first' => true]);
             }
@@ -656,6 +713,9 @@ function trainings_entry_action(PDO $pdo, string $do, array $in, string $ip, ?ca
                 email_send_doc($pdo, email_password_changed_doc(), $user + ['email' => $to], [
                     'lane' => 'transactional', 'purpose' => 'account', 'flow' => 'password_changed', 'to_email' => $to, 'now' => true,
                 ]);
+            }
+            if (trainings_entry_is_staff($pdo, $uid)) {
+                trainings_entry_staff_alert($pdo, $user, $hadPassword);   // owner: same way in for staff, with an alert
             }
             unset($_SESSION['test_entry']['verified']);
             $signIn(trainings_entry_user($pdo, $uid) ?? $user, $hadPassword ? 'password reset' : 'first password');
@@ -705,6 +765,9 @@ function trainings_entry_confirm_send(PDO $pdo, array $user, array $in, string $
         return ['status' => 'error', 'message' => 'Please type your email.', 'field' => 'email'];
     }
     $to = email_normalize($to);
+    if (trainings_entry_email_taken($pdo, $to, $uid)) {
+        return ['status' => 'error', 'message' => TRAININGS_ENTRY_TAKEN, 'code' => 'TAKEN', 'field' => 'email'];
+    }
     if (($problem = email_address_problem($to, $pdo, $uid)) !== null) {
         return ['status' => 'error', 'message' => $problem, 'field' => 'email'];
     }
@@ -723,5 +786,5 @@ function trainings_entry_confirm_check(PDO $pdo, array $user, string $code): arr
     }
     return trainings_entry_activate_email($pdo, $uid, (string) $check['email'])
         ? ['status' => 'success', 'done' => true, 'message' => 'Your email is confirmed.']
-        : ['status' => 'error', 'message' => 'That email is on another account. ' . TRAININGS_ENTRY_IDI, 'code' => 'REFUSED'];
+        : ['status' => 'error', 'message' => TRAININGS_ENTRY_TAKEN, 'code' => 'TAKEN'];
 }

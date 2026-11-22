@@ -15,7 +15,7 @@ const AUTH_CODE_TTL_MINUTES = 15;
 const AUTH_CODE_MAX_TRIES = 5;
 const AUTH_CODE_GAP_SECONDS = 60;
 const AUTH_CODE_PER_HOUR = 5;
-const AUTH_CODE_PER_IP_HOUR = 20;
+const AUTH_CODE_PER_IP_HOUR = 300;   // generous: a full church hall shares one Wi-Fi (owner, 22 Nov)
 
 function auth_codes_ready(PDO $pdo): bool
 {

@@ -228,7 +228,8 @@
                 if (err && err.code === 'CSRF') {
                     return say(['This page was open a long time. Let\'s reload it.']).then(function () { window.location.reload(); });
                 }
-                var again = st.ask === 'confirm' ? 'newpass' : st.ask;
+                // An email already on another account (owner: ask for a different one), even at the code step.
+                var again = err && err.code === 'TAKEN' ? 'email' : (st.ask === 'confirm' ? 'newpass' : st.ask);
                 return say([message]).then(function () { ask(again, pillsFor(again)); });
             });
     }
@@ -278,7 +279,8 @@
 
         case 'choose':
             return say(['Thank you! A few people share this number.', 'Which one is you?']).then(function () {
-                ask(null, (res.people || []).map(function (p) { return { label: p.name, do: 'choose', value: p.i }; }));
+                ask(null, (res.people || []).map(function (p) { return { label: p.name, do: 'choose', value: p.i }; })
+                    .concat([{ label: 'None of these', do: 'none' }]));
             });
 
         case 'password':
@@ -412,6 +414,10 @@
         switch (what) {
         case 'restart': return begin(true);
         case 'choose': return call('choose', { i: Number(value) });
+        case 'none':
+            // Their own number is not on their HOD record: the one case IDI has to handle.
+            return say(['Then your number isn\'t on your HOD Lekki record yet. Please contact Information and Data Insights (IDI).'])
+                .then(function () { ask(null, [{ label: 'Try another number', do: 'restart' }]); });
         case 'forgot': return call('forgot');
         case 'old_email': return call('old_email');
         case 'no_email': return call('no_email');
