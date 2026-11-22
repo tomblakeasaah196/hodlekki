@@ -50,7 +50,7 @@ $rules = implode(' · ', security_password_rules());
                 'autocomplete' => 'given-name', 'info' => 'Two accounts share this number. Your first name tells them apart.']) ?>
         </div>
         <?= ui_field('password', ['name' => 'new_password', 'id' => 'setup-password', 'label' => 'New password', 'required' => true,
-            'autocomplete' => 'new-password', 'info' => 'It needs: ' . $rules . '.']) ?>
+            'autocomplete' => 'new-password', 'info' => 'Your password: ' . $rules . '.']) ?>
         <?= ui_field('password', ['name' => 'confirm_password', 'id' => 'setup-confirm', 'label' => 'Confirm password', 'required' => true,
             'autocomplete' => 'new-password']) ?>
         <?= ui_button('Set password', ['variant' => 'primary', 'type' => 'submit', 'block' => true]) ?>

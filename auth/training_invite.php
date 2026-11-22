@@ -81,7 +81,7 @@ if ($peek['state'] === 'valid'):
         <?= ui_field('email', ['name' => 'email_shown', 'label' => 'Your email', 'value' => (string) $peek['invite']['email'],
             'autocomplete' => 'username', 'attrs' => ['readonly' => true]]) ?>
         <?= ui_field('password', ['name' => 'password', 'label' => 'New password', 'required' => true,
-            'autocomplete' => 'new-password', 'info' => 'It needs: ' . $rules . '.']) ?>
+            'autocomplete' => 'new-password', 'info' => 'Your password: ' . $rules . '.']) ?>
         <?= ui_field('password', ['name' => 'confirm', 'label' => 'Type it again', 'required' => true, 'autocomplete' => 'new-password']) ?>
         <?= ui_button('Start training', ['variant' => 'primary', 'type' => 'submit', 'block' => true]) ?>
     </form>

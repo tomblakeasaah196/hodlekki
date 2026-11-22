@@ -162,7 +162,7 @@
             el.eye.hidden = !a.secret;
             setEye(true);   // a real password box: dots, the saved password offered; the eye shows it
             if (a.rules && cfg.rules && cfg.rules.length) {
-                el.hint.textContent = 'It needs: ' + cfg.rules.join(' · ') + '.';
+                el.hint.textContent = cfg.rules.join(' · ') + '.';
                 el.hint.hidden = false;
             }
         }

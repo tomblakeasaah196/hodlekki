@@ -65,15 +65,16 @@ function accepts(string $password, array $user = []): void
 
 echo "\n--- password policy ---\n";
 
+// Owner, 22 Nov 2026: 8 characters, letters and a number; capitals and symbols welcome, never required; a run of
+// numbers is fine when blended with letters ("let us relax a little").
 rejects('Ab3',              'at least');
-rejects('Ab3xyzpq',         'at least');                 // 8 chars: below the 10 minimum
-rejects('lowercase1234',    'uppercase letter');
-rejects('UPPERCASE1234',    'lowercase letter');
+rejects('Ab3xyzp',          'at least');                 // 7 chars: below the 8 minimum
 rejects('NoDigitsInHere',   'number');
+rejects('12345678',         'letters');                  // numbers alone
 rejects('MyPassword1234',   'easy to guess');            // contains "password"
 rejects('Qwerty123456',     'easy to guess');
 rejects('Hodlekki12345',    'easy to guess');
-rejects('aaaaaaaaaaaa',     'uppercase');                // also all-same-character
+rejects('aaaaaaaaaaaa',     'same character');           // also no number
 rejects(' LeadingSpace1',   'space');
 rejects('TrailingSpace1 ',  'space');
 rejects(str_repeat('Aa1', 80), 'shorter than 200');
@@ -92,6 +93,10 @@ accepts('Kx7mQp2wLzR4');
 accepts('Blue-Harbour-71');
 accepts('Correct9Horse');
 accepts('Zion2026Lekki');
+accepts('grace123');                                     // exactly 8, lowercase and a number: enough now
+accepts('LOWERCASE1234');                                // capitals only is fine
+accepts('mercy12345678');                                // a run of numbers, blended with letters
+accepts('abc12345');
 
 echo "\n--- generated passwords always satisfy the policy ---\n";
 
@@ -116,7 +121,7 @@ ok('suggested passwords are not repeating', count($seen) > 190);
 
 echo "\n--- password rules text ---\n";
 $rules = security_password_rules();
-ok('policy advertises 5 rules', count($rules) === 5);
+ok('policy advertises 4 rules (8 characters, letters and a number, an optional symbol, no obvious words)', count($rules) === 4);
 ok('policy advertises the real minimum length', str_contains($rules[0], (string) SECURITY_MIN_PASSWORD_LENGTH));
 
 echo "\n--- sign-in email policy (admin Change sign-in email) ---\n";
