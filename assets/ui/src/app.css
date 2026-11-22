@@ -5094,6 +5094,7 @@
     .tq-msg p { margin: 0; }
     .tq-msg p + p, .tq-msg p + a, .tq-msg a + p { margin-top: 8px; }
     .tq-small { font-size: var(--ui-text-sm); color: var(--ui-text-muted); }
+    .tq-link { color: var(--navy-800); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
     .tq-mail {
         display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px;
         border-radius: 999px; background: var(--navy-800); color: #fff; font-weight: 600; text-decoration: none;

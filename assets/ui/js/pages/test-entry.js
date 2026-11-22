@@ -241,6 +241,30 @@
         return [];
     }
 
+    /**
+     * The mailbox button, opening the APP on a phone (owner, 22 Nov): on Android an intent link names the app's
+     * package (Chrome, Edge and Samsung Internet open it; without the app, the web inbox); on an iPhone the app's own
+     * address, with "or open it in the browser" beneath (iOS cannot tell us whether the app is there). Elsewhere, the
+     * web inbox in a new tab.
+     */
+    function mailHtml(m) {
+        if (!m) return '';
+        var ua = navigator.userAgent || '';
+        var android = /Android/i.test(ua);
+        var ios = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        var label = HOD.icon('mail') + '<span>' + esc(m.label) + '</span>';
+        if (android && m.android) {
+            var intent = 'intent://#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=' + m.android +
+                ';S.browser_fallback_url=' + encodeURIComponent(m.href) + ';end';
+            return '<a class="tq-mail" href="' + esc(intent) + '">' + label + '</a>';
+        }
+        if (ios && m.ios) {
+            return '<a class="tq-mail" href="' + esc(m.ios) + '">' + label + '</a>' +
+                '<p class="tq-small"><a class="tq-link" href="' + esc(m.href) + '" target="_blank" rel="noopener">or open it in the browser</a></p>';
+        }
+        return '<a class="tq-mail" href="' + esc(m.href) + '" target="_blank" rel="noopener">' + label + HOD.icon('external-link') + '</a>';
+    }
+
     function thanks() {
         return st.thanked ? [] : (st.thanked = true, ['Thank you, ' + st.name + ' 🙏']);
     }
@@ -302,8 +326,7 @@
             if (res.first) intro = thanks().concat(['This is your first time on HOD Lekki, so let\'s set you up. ✨']);
             else if (st.last === 'signin') intro = ['You\'re signed in. 🎉 Let\'s confirm your email once, so you can always get back in.'];
             else if (st.last === 'forgot') intro = ['No problem, let\'s sort it out.'];
-            var mail = res.mail ? '<a class="tq-mail" href="' + esc(res.mail.href) + '" target="_blank" rel="noopener">' + HOD.icon('mail') +
-                '<span>' + esc(res.mail.label) + '</span>' + HOD.icon('external-link') + '</a>' : '';
+            var mail = mailHtml(res.mail);
             var to = '<strong class="tq-nowrap">' + esc(res.to) + '</strong>';
             var sent = res.note === 'already'
                 ? { text: 'A code is already on its way to ' + res.to + '.', html: '<p>A code is already on its way to ' + to + '.</p>' }
