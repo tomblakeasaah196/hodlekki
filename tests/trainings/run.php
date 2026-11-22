@@ -1407,9 +1407,14 @@ eq('the email masked as the owner asked: tom…h@gmail.com', ['tom…h@gmail.com
 eq('the mailbox button for the usual providers', ['Open Gmail', 'Open Yahoo Mail', 'Open Outlook', null],
     array_map(static fn ($e) => trainings_entry_mail_link($e)['label'] ?? null, ['a@gmail.com', 'b@yahoo.co.uk', 'c@hotmail.com', 'd@company.ng']));
 $gm = trainings_entry_mail_link('a@gmail.com');
-ok('…Gmail opens its app on a phone: Android names Gmail\'s own mail.google.com link handler (browsers allow it), the iPhone its app address',
-    $gm['android'] === 'intent://mail.google.com/mail/#Intent;scheme=https;package=com.google.android.gm;end' && $gm['ios'] === 'googlegmail://');
+ok('…Gmail opens its app on a phone: Android names Gmail\'s home screen by package, the iPhone its app address',
+    $gm['android'] === 'intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.google.android.gm;end'
+    && $gm['ios'] === 'googlegmail://');
+ok('…the Android link carries no address (no "//" and no web link), or the home screen never answers it and the Play Store opens',
+    str_starts_with((string) $gm['android'], 'intent:#Intent;') && !str_contains((string) $gm['android'], '//') && !str_contains((string) $gm['android'], 'scheme='));
 ok('…and nothing ever loads in the chat\'s own tab: no in-tab fallback', !str_contains((string) $gm['android'], 'browser_fallback_url'));
+eq('…an iPhone also gets Apple\'s Mail beside Gmail (owner, 22 Nov); the other providers do not', [['label' => 'Open Mail', 'href' => 'message://'], null, null],
+    [$gm['ios_also'] ?? null, trainings_entry_mail_link('b@yahoo.co.uk')['ios_also'] ?? null, trainings_entry_mail_link('e@icloud.com')['ios_also'] ?? null]);
 
 $pdo = trn_db();
 trn_exam_tables($pdo);
@@ -1637,6 +1642,10 @@ ok('the header shrinks to the rail while the keyboard is up', str_contains($entr
 ok('the app button: if the app does not open within 2 s, the web inbox is offered in a NEW tab; a computer gets a new tab',
     str_contains($entryJs, 'function watchApp(') && str_contains($entryJs, "in a new tab</span>") && str_contains($entryJs, 'target="_blank" rel="noopener"')
     && !str_contains($entryJs, 'browser_fallback_url'));
+ok('…an iPhone shows Gmail and Mail side by side and is never timed (it asks "Open in Gmail?" first); an app\'s built-in browser on Android gets the web inbox',
+    str_contains($entryJs, 'm.ios_also') && str_contains($entryJs, 'class="tq-mails"') && substr_count($entryJs, 'data-tq-app') === 2
+    && str_contains($entryJs, '!/\bwv\b/.test(ua)')
+    && str_contains((string) file_get_contents($root . '/assets/ui/src/app.css'), '.tq-mails {'));
 ok('coming back: the conversation is kept in the tab and resumes at the same step for 20 minutes; the page no longer clears the server side',
     str_contains($entryJs, 'function restore()') && str_contains($entryJs, 'sessionStorage') && str_contains($entryJs, 'if (!restore()) begin(false);')
     && !str_contains($entryPage, "unset(\$_SESSION['test_entry'])"));

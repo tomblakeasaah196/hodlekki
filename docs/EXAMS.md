@@ -223,13 +223,26 @@ context `test_entry`) and more than 150 in 15 minutes from one IP are refused fo
 (`trainings_entry_email_prompt()`, `confirm_send`, `confirm_check`).
 
 
-**Open Gmail** (owner, 22 Nov: open the app, and never in the chat's own tab). On Android the button names Gmail's own
-mail.google.com link handler with its package (`intent://mail.google.com/mail/#Intent;scheme=https;package=…;end`):
-Chrome, Edge and Samsung Internet hand such links to the app (a link to Gmail's home screen is refused, which is why the
-first version fell back to the web inbox in the same tab). On an iPhone, `googlegmail://`. There is no in-tab fallback:
-if the page is still in front 2 s later, the chat says "Couldn't open the Gmail app" with Gmail in a NEW tab
-(`watchApp()`). A computer opens the web inbox in a new tab. No web link can choose the Gmail account; the code is in the
-email's subject, so most phones show it in the notification. Yahoo and Outlook get their web inbox in a new tab.
+**Open Gmail** (owner, 22 Nov: open the app, and never in the chat's own tab). On Android the button names Gmail's home
+screen by package: `intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.google.android.gm;end`.
+Two earlier forms failed, and the reasons are worth keeping:
+
+- `intent://#Intent;…` (with `//`): Android reads the `//` as an empty address, and a home screen only answers a link
+  with no address at all, so nothing matched and the browser used the fallback (the web inbox, in the chat's tab).
+- `intent://mail.google.com/mail/#Intent;scheme=https;package=…`: no screen in the Gmail app accepts that web address,
+  and when a link names a package that cannot take it, Chrome and Edge open that app's **Play Store page**.
+
+So: no `//`, no web address, no `browser_fallback_url`. If the page is still in front 2 s later, the chat says
+"Couldn't open the Gmail app" with Gmail in a NEW tab (`watchApp()`). An app's built-in browser on Android (a QR scanner,
+WhatsApp) cannot follow such a link, so it gets the web inbox in a new tab.
+
+On an iPhone the only way into the Gmail app is `googlegmail://` (Google lists no Gmail app for mail.google.com links).
+A page cannot ask an iPhone which app is installed, and many people read a gmail.com address in Apple's Mail, so the
+iPhone shows **Open Gmail** and **Open Mail** (`message://`) side by side (owner, 22 Nov). Safari asks "Open in Gmail?"
+first, which the page cannot see, so the iPhone is not timed and never says "Couldn't open".
+
+A computer opens the web inbox in a new tab. No web link can choose the Gmail account; the code is in the email's
+subject, so most phones show it in the notification. Yahoo and Outlook get their web inbox in a new tab.
 
 **Coming back** (owner, 22 Nov: "we lose everything… it starts all over"): the conversation is kept in the tab
 (sessionStorage) after every question, and the server's steps stay in the session; a reload, Back, or the phone putting
