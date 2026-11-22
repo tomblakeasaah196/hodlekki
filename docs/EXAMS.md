@@ -191,7 +191,7 @@ shrinks to the progress rail.
 | Not on HOD | "We couldn't find this number… Please contact Information and Data Insights (IDI)." The one dead end. |
 | A shared number | "Which one is you?" (first names and an initial). |
 | Has a password | "Welcome back! Please type the password you use to sign in to HOD Lekki." Then, once, their email is confirmed with a code if it is not yet (or asked for, if HOD has none). |
-| "I can't remember" | A code to their email (masked `tom…h@gmail.com`, with **Open Gmail** / Yahoo / Outlook and "check Spam or Junk"), then a new password typed twice, then in. No email on record: they type one, give their **birthday** (day and month), and the code goes there. |
+| "I can't remember" | A code to their email (masked `tom…h@gmail.com`, with **Open Gmail** and "check Spam or Junk"), then a new password typed twice, then in. No email on record: they type one, give their **birthday** (day and month), and the code goes there. |
 | Never signed in | A code to the email on record, or to one they type, then they choose a password. "I don't have an email": they choose a password on the number alone (as the first-time set-up page allows). |
 | "I don't use this email" | They give the one they use (with the birthday when a password is at stake); the right code makes it theirs and it replaces the old one in `users.email`. |
 | Staff (`user_roles`) | The same way in as everyone (owner, 22 Nov: no dead ends). A staff password set or reset here alerts everyone who can open the Security Centre (IDI's people, through Roles & permissions; the Super Admins when nobody else can) and the person, in the app and by push (`trainings_entry_staff_alert()`). |
@@ -222,4 +222,16 @@ context `test_entry`) and more than 150 in 15 minutes from one IP are refused fo
 **After the test:** anyone still without a confirmed email sees **Confirm your email** on the result
 (`trainings_entry_email_prompt()`, `confirm_send`, `confirm_check`).
 
+
+**Open Gmail** (owner, 22 Nov: open the app, and never in the chat's own tab). On Android the button names Gmail's own
+mail.google.com link handler with its package (`intent://mail.google.com/mail/#Intent;scheme=https;package=…;end`):
+Chrome, Edge and Samsung Internet hand such links to the app (a link to Gmail's home screen is refused, which is why the
+first version fell back to the web inbox in the same tab). On an iPhone, `googlegmail://`. There is no in-tab fallback:
+if the page is still in front 2 s later, the chat says "Couldn't open the Gmail app" with Gmail in a NEW tab
+(`watchApp()`). A computer opens the web inbox in a new tab. No web link can choose the Gmail account; the code is in the
+email's subject, so most phones show it in the notification. Yahoo and Outlook get their web inbox in a new tab.
+
+**Coming back** (owner, 22 Nov: "we lose everything… it starts all over"): the conversation is kept in the tab
+(sessionStorage) after every question, and the server's steps stay in the session; a reload, Back, or the phone putting
+the tab to sleep brings them back to the same step for 20 minutes. Typing a number again starts afresh.
 Tests: the "QR entry to a test" section of `tests/trainings/run.php`.

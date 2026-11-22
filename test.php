@@ -26,7 +26,8 @@ require_once __DIR__ . '/includes/trainings/entry.php';
 require_once __DIR__ . '/includes/ui/standalone.php';
 
 $test = trainings_ready($pdo) && function_exists('exams_ready') && exams_ready($pdo) ? trainings_entry_test($pdo, $item) : null;
-unset($_SESSION['test_entry']);   // a fresh start every time the link is opened
+// The steps so far stay in the session (20 minutes) so a reload or Back comes back to the same step (owner, 22 Nov);
+// typing a phone number again starts afresh (trainings_entry_action('lookup')).
 $signIn = '/auth/login?next=' . rawurlencode($target);
 // The same quiet line as the sign-in page (owner: subtle, linking to the website).
 $credit = 'Engineered by <a href="https://jbspraxis.com" target="_blank" rel="noopener">JBS Praxis</a>';

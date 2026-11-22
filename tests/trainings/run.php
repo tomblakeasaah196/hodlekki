@@ -1406,8 +1406,10 @@ eq('the email masked as the owner asked: tom…h@gmail.com', ['tom…h@gmail.com
     array_map('trainings_entry_mask', ['tomblakeh@gmail.com', 'abc@yahoo.com', 'dayo.learner@gmail.com']));
 eq('the mailbox button for the usual providers', ['Open Gmail', 'Open Yahoo Mail', 'Open Outlook', null],
     array_map(static fn ($e) => trainings_entry_mail_link($e)['label'] ?? null, ['a@gmail.com', 'b@yahoo.co.uk', 'c@hotmail.com', 'd@company.ng']));
-eq('…with the app to open on a phone: the Android package and the iPhone address', ['com.google.android.gm', 'googlegmail://'],
-    array_values(array_intersect_key(trainings_entry_mail_link('a@gmail.com'), ['android' => 1, 'ios' => 1])));
+$gm = trainings_entry_mail_link('a@gmail.com');
+ok('…Gmail opens its app on a phone: Android names Gmail\'s own mail.google.com link handler (browsers allow it), the iPhone its app address',
+    $gm['android'] === 'intent://mail.google.com/mail/#Intent;scheme=https;package=com.google.android.gm;end' && $gm['ios'] === 'googlegmail://');
+ok('…and nothing ever loads in the chat\'s own tab: no in-tab fallback', !str_contains((string) $gm['android'], 'browser_fallback_url'));
 
 $pdo = trn_db();
 trn_exam_tables($pdo);
@@ -1632,8 +1634,12 @@ ok('the keyboard stays up: Send and the eye never take the focus, the box is nev
     && !str_contains($entryJs, 'readOnly') && !str_contains($entryJs, 'preventScroll'));
 ok('the header shrinks to the rail while the keyboard is up', str_contains($entryJs, "classList.toggle('is-kb'")
     && str_contains((string) file_get_contents($root . '/assets/ui/src/app.css'), '.tq.is-kb .tq-head__row { display: none; }'));
-ok('the mailbox button opens the app: an Android intent (the web inbox if the app is missing), the iPhone app address with a browser link',
-    str_contains($entryJs, "'intent://#Intent;") && str_contains($entryJs, 'S.browser_fallback_url=') && str_contains($entryJs, 'or open it in the browser'));
+ok('the app button: if the app does not open within 2 s, the web inbox is offered in a NEW tab; a computer gets a new tab',
+    str_contains($entryJs, 'function watchApp(') && str_contains($entryJs, "in a new tab</span>") && str_contains($entryJs, 'target="_blank" rel="noopener"')
+    && !str_contains($entryJs, 'browser_fallback_url'));
+ok('coming back: the conversation is kept in the tab and resumes at the same step for 20 minutes; the page no longer clears the server side',
+    str_contains($entryJs, 'function restore()') && str_contains($entryJs, 'sessionStorage') && str_contains($entryJs, 'if (!restore()) begin(false);')
+    && !str_contains($entryPage, "unset(\$_SESSION['test_entry'])"));
 ok('a real password box, so Chrome, Edge and Safari offer the saved password; the number is its username',
     str_contains($entryJs, "password: { type: 'password'") && str_contains($entryPage, 'autocomplete="username"') && str_contains($entryJs, 'PasswordCredential'));
 $entryApi = (string) file_get_contents($root . '/api/test_entry_api.php');
