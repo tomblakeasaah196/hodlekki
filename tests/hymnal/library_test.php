@@ -47,8 +47,19 @@ eq('nonsense finds nothing', 0, $nonsense['total']);
 $blank = hymnal_library_search($libDb, '');
 eq('an empty search lists the whole library', hymnal_library_count($libDb), $blank['total']);
 
+section('the Studio list is filtered before the limit');
+$corpusFive = hymnal_library_search($libDb, '', ['origin' => 'corpus', 'limit' => 5]);
+ok('an origin keeps only that origin', count($corpusFive['rows']) === 5
+    && count(array_filter($corpusFive['rows'], static fn(array $r): bool => ($r['origin'] ?? '') !== 'corpus')) === 0);
+$studioOnly = hymnal_library_search($libDb, '', ['origin' => 'studio', 'limit' => 100, 'include_drafts' => true]);
+ok('a limit never fills with the other half', count(array_filter(
+    $studioOnly['rows'],
+    static fn(array $r): bool => ($r['origin'] ?? '') !== 'studio'
+)) === 0);
+eq('and the total counts only that origin', count($studioOnly['rows']), $studioOnly['total']);
+
 section('browsing');
-$sorted = hymnal_library_search($libDb, '', ['sort' => 'number']);
+$sorted =hymnal_library_search($libDb, '', ['sort' => 'number']);
 $ns = array_map(static fn(array $r): int => (int) $r['n'], $sorted['rows']);
 $sortedCopy = $ns;
 sort($sortedCopy);

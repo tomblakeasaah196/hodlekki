@@ -112,6 +112,12 @@ function hymnal_library_search(?PDO $pdo, string $query, array $opts = []): arra
     if (!empty($opts['score_only'])) {
         $rows = array_values(array_filter($rows, static fn(array $r): bool => !empty($r['score'])));
     }
+    // Before the limit, not after: a caller that wants only 'studio' songs must
+    // not have the first page filled with corpus hymns it then throws away.
+    $origin = (string) ($opts['origin'] ?? '');
+    if ($origin !== '') {
+        $rows = array_values(array_filter($rows, static fn(array $r): bool => ($r['origin'] ?? '') === $origin));
+    }
     if (!empty($opts['numbers']) && is_array($opts['numbers'])) {
         $want = array_flip(array_map('intval', $opts['numbers']));
         $rows = array_values(array_filter($rows, static fn(array $r): bool => isset($want[(int) $r['n']])));
