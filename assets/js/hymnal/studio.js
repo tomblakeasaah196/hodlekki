@@ -415,10 +415,26 @@
             HY.say('That music has no notes we could read.', 'error');
             return;
         }
+        /* Send only what the sol-fa needs. After renderAbc(), abcjs hangs its
+         * drawing objects (abselem) on the key signature, and those point back
+         * at the tune: JSON.stringify threw "circular structure" and the music
+         * could never be saved. */
+        var rawKey = tune.getKeySignature ? tune.getKeySignature() : null;
+        var key = { root: 'C', acc: '', mode: '', accidentals: [] };
+        if (rawKey) {
+            key = {
+                root: rawKey.root || 'C',
+                acc: rawKey.acc || '',
+                mode: rawKey.mode || '',
+                accidentals: (rawKey.accidentals || []).map(function (a) {
+                    return { acc: a.acc, note: a.note };
+                })
+            };
+        }
         checkedScore = {
             abc: abc,
             voices: voices,
-            key: tune.getKeySignature ? tune.getKeySignature() : { root: 'C', acc: '', mode: '', accidentals: [] }
+            key: key
         };
         if (saveBtn) {
             saveBtn.disabled = !saved.id;

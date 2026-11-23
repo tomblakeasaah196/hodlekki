@@ -244,14 +244,12 @@ try {
                 'limit'          => (int) ($_GET['limit'] ?? 100),
                 'offset'         => (int) ($_GET['offset'] ?? 0),
                 'sort'           => 'number',
+                // The Studio only manages what it owns; the corpus is generated
+                // and read-only. Filtered inside the search, before the limit —
+                // done afterwards, the first 100 corpus hymns filled the page
+                // and every Studio song (numbered 2000+) vanished from the list.
+                'origin'         => 'studio',
             ]);
-            // The Studio only manages what it owns; the corpus is generated and
-            // read-only, so it is not offered for editing.
-            $res['rows'] = array_values(array_filter(
-                $res['rows'],
-                static fn(array $r): bool => ($r['origin'] ?? '') === 'studio'
-            ));
-            $res['total'] = count($res['rows']);
             hymnal_api_ok($res);
         }
 
