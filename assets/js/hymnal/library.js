@@ -50,7 +50,11 @@
 
     function rowHtml(row) {
         var sub = [];
-        if (row.first_line && row.first_line !== row.title) {
+        if (row.match && row.match.line) {
+            /* Found by a line from inside the song: show that line, so the
+             * member can see why it matched. */
+            sub.push((row.match.where ? row.match.where + ': ' : '') + '“' + row.match.line + '”');
+        } else if (row.first_line && row.first_line !== row.title) {
             sub.push(row.first_line);
         }
         if (row.writer) {

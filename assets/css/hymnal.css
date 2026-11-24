@@ -764,7 +764,20 @@
 
 .hy-chip[aria-pressed='true'], .hy-chip.is-on { background: var(--hy-accent); color: var(--hy-accent-ink); border-color: var(--hy-accent); }
 
-.hy-lib-shelves { display: flex; gap: 0.35rem; padding: 0.6rem 1rem; overflow-x: auto; border-bottom: 1px solid var(--hy-rule); }
+/* The shelf chips. flex: 0 0 auto is the point: the sheet is a column and the
+ * results list fills it, so without it this strip was squeezed to a sliver (with
+ * a scrollbar drawn over the chips) as soon as there were enough results. */
+.hy-lib-shelves {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.65rem 1rem 0.75rem;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--hy-rule);
+    scrollbar-width: thin;
+}
+.hy-lib-shelves .hy-chip { flex: 0 0 auto; min-height: 2.25rem; }
 
 .hy-hit {
     display: flex;

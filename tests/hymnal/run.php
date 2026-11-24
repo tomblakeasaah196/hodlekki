@@ -16,6 +16,7 @@ $files = [
     'function_calls_test.php',
     'corpus_test.php',
     'library_test.php',
+    'search_test.php',
     'db_test.php',
 ];
 
