@@ -12,7 +12,7 @@ ok('MANIFEST covers the shards, the index and meta', $v['checked'] >= 13, 'check
 section('the index and the shards agree');
 $index = hymnal_corpus_index();
 $meta  = hymnal_corpus_meta();
-eq('index rows match meta.songs', (int) $meta['songs'], count($index));
+eq('index rows match meta.songs, less the withdrawn', (int) $meta['songs'], count($index) + count(HYMNAL_CORPUS_WITHDRAWN));
 ok('the library is worth opening', count($index) >= 500, 'only ' . count($index) . ' hymns');
 
 $numbers = array_map(static fn(array $r): int => (int) $r['n'], $index);
@@ -23,6 +23,18 @@ ok('numbering stays inside the corpus block', max($numbers) <= HYMNAL_CORPUS_CEI
 $withScore = count(array_filter($index, static fn(array $r): bool => !empty($r['score'])));
 eq('meta.with_score matches the index', (int) $meta['with_score'], $withScore);
 ok('most of the library has a score', $withScore >= 300, 'only ' . $withScore);
+
+section('a withdrawn hymn is gone but its number stays reserved');
+foreach (HYMNAL_CORPUS_WITHDRAWN as $wn => $why) {
+    ok("hymn $wn is not in the index", !in_array($wn, $numbers, true));
+    eq("hymn $wn does not open", null, hymnal_corpus_song($wn));
+    ok("hymn $wn is no longer one of the generated hymns", !hymnal_corpus_has($wn));
+    ok("hymn $wn says why it was withdrawn", trim($why) !== '');
+    ok("hymn $wn stays inside the corpus block, so the Studio can never reuse it", $wn <= HYMNAL_CORPUS_CEILING);
+    $ledger = (string) @file_get_contents(hymnal_corpus_dir() . '/NUMBERS');
+    ok("hymn $wn is still on the NUMBERS ledger", preg_match('/^' . sprintf('%04d', $wn) . ' /m', $ledger) === 1);
+}
+ok('the other hymns are untouched', count($index) >= 500);
 
 section('a known hymn reads correctly end to end');
 $amazing = null;

@@ -3,7 +3,7 @@
 **Who can open it:** every signed-in member. It is in the sidebar under
 Command Center, and `Ctrl K` → "hymn" (or "choir", "sol-fa", "song") finds it.
 
-**What is in it:** **511 hymns**, of which **305 carry the full four-part music**
+**What is in it:** **510 hymns**, of which **305 carry the full four-part music**
 for the choir — and the songs our own music team adds, which is where the
 worship the church sings now lives.
 
@@ -164,7 +164,7 @@ Choir mode says so, in those words, and the playback and voice buttons are not
 there at all — rather than a play button that does nothing. The words below are
 still complete, and the music team can add a score in the Studio.
 
-Of the 511 hymns, 305 have the music. Most songs the music team adds will start
+Of the 510 hymns, 305 have the music. Most songs the music team adds will start
 with words only.
 
 ---
@@ -176,7 +176,7 @@ instance — a **Language** choice appears in **⋯ → Text & display**. Both s
 same song and the same tune, so the choir reads one score whichever words are
 being sung.
 
-The 511 hymns are in English. Yoruba, Igbo, Hausa and Pidgin versions are added
+The 510 hymns are in English. Yoruba, Igbo, Hausa and Pidgin versions are added
 by the music team in the Studio, and a language only appears in the interface
 once there is something in it.
 
