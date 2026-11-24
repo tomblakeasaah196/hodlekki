@@ -988,8 +988,16 @@ ok('the PDF comes from dompdf where Composer installed it (CI has none)', $pdf =
 
 // The design the owner picked (19 Nov 2026, "Gilded") and who signs, per training.
 ok('the design carries the HOD logo, the church, the title and Hodlekki\'s verify line', str_contains($html, 'HOUSEHOLD OF DAVID &#183; LEKKI CENTRE')
-    && str_contains($html, 'CERTIFICATE OF COMPLETION') && str_contains($html, 'data:image/png;base64,' . base64_encode((string) file_get_contents($root . '/assets/images/logo_hod.png')))
+    && str_contains($html, 'CERTIFICATE OF COMPLETION') && str_contains($html, 'data:image/png;base64,' . base64_encode((string) file_get_contents($root . '/assets/images/logo_hod_certificate.png')))
     && str_contains($html, 'Verify at hodlekki.org/verify') && str_contains($html, 'Given on the 1st of December, 2026'));
+// Monitor #114: the 1080px RGBA logo made dompdf take 7-12 s per download on the
+// host (it splits the alpha channel pixel by pixel). The certificate carries a
+// 400px copy: still ~440 dpi at 23mm, square and with its transparency.
+$certLogo = @getimagesize($root . '/assets/images/logo_hod_certificate.png');
+ok('…from a 400px copy of the logo, square and transparent (a quick PDF)', is_array($certLogo)
+    && $certLogo[0] === 400 && $certLogo[1] === 400 && $certLogo[2] === IMAGETYPE_PNG
+    && ord(((string) file_get_contents($root . '/assets/images/logo_hod_certificate.png'))[25] ?? "\0") === 6   // colour type 6: RGBA
+    && !str_contains($html, base64_encode((string) file_get_contents($root . '/assets/images/logo_hod.png'))));
 $qrSvg = trainings_certificate_qr_svg(trainings_certificate_verify_url($c2['code']), '#1D356A');
 $qrN = count(hod_qr_matrix(trainings_certificate_verify_url($c2['code']))) + 4;
 ok('…the QR is a vector of the verify link, with a quiet zone', str_contains($html, base64_encode($qrSvg)) && str_contains($qrSvg, 'viewBox="0 0 ' . $qrN . ' ' . $qrN . '"'));
