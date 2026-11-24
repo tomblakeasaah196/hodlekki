@@ -329,10 +329,14 @@ function hymnal_solfa_doh_name(array $keySig): string
     $mode   = strtolower((string) ($keySig['mode'] ?? ''));
     $isMinor = $mode !== '' && str_starts_with($mode, 'm') && !str_starts_with($mode, 'maj');
 
-    // In a minor key doh is the relative major, whose own accidental we do not
-    // get handed; the letter alone is the honest answer there.
+    // In a minor key doh is the relative major's key note, which is a note of
+    // the key signature itself, so the signature says whether it is flat or
+    // sharp: G minor has B-flat and E-flat, so doh is B-flat, not B. (The letter
+    // alone told a choir "doh = B" and had them start a semitone high.)
     if ($isMinor) {
-        return $letter;
+        $delta = hymnal_key_accidentals($keySig)[hymnal_doh_letter($keySig)] ?? 0;
+
+        return $letter . ($delta < 0 ? '♭' : ($delta > 0 ? '♯' : ''));
     }
 
     return $letter . ($acc === 'b' ? '♭' : ($acc === '#' ? '♯' : ''));

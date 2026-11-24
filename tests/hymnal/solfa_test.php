@@ -81,6 +81,21 @@ eq('a major key is not shifted', hymnal_letter_index('A'), hymnal_doh_letter($aM
 $aMaj2 = ['root' => 'A', 'acc' => '', 'mode' => 'maj', 'accidentals' => []];
 eq('"maj" is not mistaken for minor', hymnal_letter_index('A'), hymnal_doh_letter($aMaj2));
 
+section('a minor key names its doh with the right accidental');
+$flats = static fn(string ...$n): array => array_map(static fn(string $x): array => ['acc' => 'flat', 'note' => $x], $n);
+$sharps = static fn(string ...$n): array => array_map(static fn(string $x): array => ['acc' => 'sharp', 'note' => $x], $n);
+$minor = static fn(string $root, array $acc): array => ['root' => $root, 'acc' => '', 'mode' => 'm', 'accidentals' => $acc];
+eq('G minor: doh is B flat, not B', 'B♭', hymnal_solfa_doh_name($minor('G', $flats('B', 'e'))));
+eq('A minor: doh is C', 'C', hymnal_solfa_doh_name($minor('A', [])));
+eq('E minor: doh is G', 'G', hymnal_solfa_doh_name($minor('E', $sharps('F'))));
+eq('D minor: doh is F', 'F', hymnal_solfa_doh_name($minor('D', $flats('B'))));
+eq('F minor: doh is A flat', 'A♭', hymnal_solfa_doh_name($minor('F', $flats('B', 'e', 'A', 'd'))));
+eq('C sharp minor: doh is E', 'E', hymnal_solfa_doh_name($minor('C', $sharps('F', 'C', 'G', 'D'))));
+eq('B minor: doh is D', 'D', hymnal_solfa_doh_name($minor('B', $sharps('F', 'C'))));
+eq('a major key is unchanged', 'E♭', hymnal_solfa_doh_name(['root' => 'E', 'acc' => 'b', 'mode' => '', 'accidentals' => $flats('B', 'e', 'A')]));
+$gMinorVoice = hymnal_solfa_voice([[['p' => 4, 'd' => 0.25]]], $minor('G', $flats('B', 'e')));
+eq('and a voice in G minor is headed with it', 'B♭', $gMinorVoice['doh']);
+
 section('a whole voice');
 $cMajor = ['root' => 'C', 'acc' => '', 'mode' => '', 'accidentals' => []];
 $bars = [
