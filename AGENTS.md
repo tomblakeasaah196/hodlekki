@@ -885,7 +885,7 @@ reader. Member and office guide: `modules/hymnal/how_to_use.md`.
 **Checks** (CI runs them in the lint job, step "The Hymnary tests"; run them
 before pushing anyway):
 
-- `php tests/hymnal/run.php` — 333 checks, no MySQL, no network: the sol-fa
+- `php tests/hymnal/run.php` — 334 checks, no MySQL, no network: the sol-fa
   arithmetic against music theory, the corpus and its manifest, the licence of
   every one of the 511 hymns, search and browsing, the module against SQLite
   built from the real migration (privacy between members, numbering, the
