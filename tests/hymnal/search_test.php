@@ -41,6 +41,16 @@ eq('a hymn number with the word hymn', 31, $first('hymn 31')['n'] ?? null);
 eq('a hymn number with a hash', 172, $first('#172')['n'] ?? null);
 eq('nonsense still finds nothing', 0, hymnal_library_search(null, 'qxzjvkw')['total']);
 
+section('a number finds that hymn and nothing else');
+foreach ([31, 172, 261, 400] as $num) {
+    $r = hymnal_library_search(null, (string) $num, ['limit' => 20]);
+    eq("'$num' finds exactly hymn $num", [$num], array_map(static fn(array $x): int => (int) $x['n'], $r['rows']));
+}
+eq('hymn 178 is withdrawn, so its number finds nothing by number', [], array_values(array_filter(
+    hymnal_library_search(null, '178', ['limit' => 20])['rows'],
+    static fn(array $x): bool => (int) $x['n'] === 178
+)));
+
 section('a real word is never turned into a near word');
 $love = hymnal_library_search(null, 'love', ['limit' => 50]);
 $corpusDocs = hymnal_search_corpus()['docs'];
