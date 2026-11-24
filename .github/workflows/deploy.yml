@@ -254,6 +254,8 @@ jobs:
             exit 1
           fi
           php tests/status_ladder_test.php
+          # Embrace: when each first timer came to church (same union, named).
+          php tests/embrace_visits_test.php
 
       - name: Trainings tests (the new HOD Academy)
         run: |

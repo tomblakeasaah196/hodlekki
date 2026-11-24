@@ -182,6 +182,82 @@ function embrace_worker_history_for_visitors(PDO $pdo, array $visitorIds): array
     return $byVisitor;
 }
 
+/**
+ * When each person came to church, for the caller's context on the phone
+ * (Embrace team, 24 Nov 2026): every service counts, each day named.
+ *
+ * Days come from assim_attendance_union_sql() (one per person per calendar
+ * day, checkins and attendance together), so the count agrees with
+ * Assimilation and the Sunday ladder; assim_attendance_named_sql() only puts
+ * names on those days. Newest first, at most $limit days each; 'count' is
+ * every day.
+ *
+ * @return array<int, array{last: ?string, since: string, count: int,
+ *               days: list<array{date: string, services: list<string>}>}>
+ */
+function embrace_visits_for_visitors(PDO $pdo, array $visitorIds, int $limit = 30): array
+{
+    $ids = [];
+    foreach ($visitorIds as $id) {
+        $id = (int) $id;
+        if ($id > 0) {
+            $ids[$id] = $id;
+        }
+    }
+    $out = [];
+    if (!$ids) {
+        return $out;
+    }
+    $ids = array_values($ids);
+    $limit = max(1, $limit);
+
+    $days = $pdo->query("
+        SELECT x.user_id, x.attended_on
+          FROM " . assim_attendance_union_sql([], $ids) . " x
+         ORDER BY x.user_id, x.attended_on DESC
+    ");
+    $kept = $seen = [];
+    while ($row = $days->fetch(PDO::FETCH_ASSOC)) {
+        $uid = (int) $row['user_id'];
+        $date = substr((string) $row['attended_on'], 0, 10);
+        if (isset($seen[$uid][$date])) {
+            continue; // the union already de-duplicates; this guards a date stored with a time
+        }
+        $seen[$uid][$date] = true;
+        if (!isset($out[$uid])) {
+            $out[$uid] = ['last' => $date, 'since' => assim_since_words($date), 'count' => 0, 'days' => []];
+        }
+        $out[$uid]['count']++;
+        if (count($out[$uid]['days']) < $limit) {
+            $kept[$uid][$date] = count($out[$uid]['days']);
+            $out[$uid]['days'][] = ['date' => $date, 'services' => []];
+        }
+    }
+    if (!$out) {
+        return $out;
+    }
+
+    $names = $pdo->query("
+        SELECT n.user_id, n.attended_on, n.title, n.category
+          FROM " . assim_attendance_named_sql(array_keys($out)) . " n
+    ");
+    while ($row = $names->fetch(PDO::FETCH_ASSOC)) {
+        $uid = (int) $row['user_id'];
+        $at = $kept[$uid][substr((string) $row['attended_on'], 0, 10)] ?? null;
+        if ($at === null) {
+            continue;
+        }
+        $name = trim((string) ($row['title'] ?? ''));
+        if ($name === '') {
+            $name = trim(str_replace('_', ' ', (string) ($row['category'] ?? '')));
+        }
+        if ($name !== '' && !in_array($name, $out[$uid]['days'][$at]['services'], true)) {
+            $out[$uid]['days'][$at]['services'][] = $name;
+        }
+    }
+    return $out;
+}
+
 // The Connect card's optional columns: left blank, they are left OUT of the
 // INSERT (embrace_connect_insert()), so each column keeps its own default.
 const EMBRACE_CONNECT_OPTIONAL = ['email', 'gender', 'dob', 'physical_address', 'latitude', 'longitude'];

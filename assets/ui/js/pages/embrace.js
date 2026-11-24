@@ -61,6 +61,21 @@
         return '<span class="ui-badge">Unassigned</span>';
     }
 
+    // When they last came to church (every service counts). Tapping it lists
+    // every day, named, for context on the call. Absent when it did not load.
+    function day(d, long) {
+        var x = new Date(String(d || '') + 'T00:00');
+        if (isNaN(x)) return '';
+        return long ? x.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : HOD.format.date(x);
+    }
+    function visitsLine(v) {
+        var vs = v.visits;
+        if (!vs) return '';
+        if (!vs.count) return '<span class="block text-xs text-ink-subtle">No visit recorded</span>';
+        return '<button type="button" class="ui-link mt-1 block text-left text-xs" data-action="emb.visits" data-id="' + esc(v.id) + '" aria-haspopup="dialog">'
+            + 'Last in church ' + esc(day(vs.last)) + (vs.since ? ' · ' + esc(vs.since) : '') + '</button>';
+    }
+
     function row(v) {
         var markers = '';
         if (Number(v.is_born_again) === 1) markers += '<span class="ui-badge ui-badge--success">Born again</span> ';
@@ -95,7 +110,7 @@
 
         return '<tr>'
             + '<td class="is-head"><div class="flex items-center gap-3">' + avatar(v) + '<div class="min-w-0"><span class="ui-table__primary">' + esc(person(v)) + '</span>'
-            + '<span class="ui-table__secondary">' + esc(label(v.spiritual_status) || 'First timer') + '</span></div></div></td>'
+            + '<span class="ui-table__secondary">' + esc(label(v.spiritual_status) || 'First timer') + '</span>' + visitsLine(v) + '</div></div></td>'
             + '<td data-label="Joined" class="whitespace-nowrap">' + esc(when(v.created_at)) + '</td>'
             + '<td data-label="Markers"><div class="flex flex-wrap justify-end gap-1 sm:justify-start">' + (markers || '<span class="ui-meta">Not yet known</span>') + '</div></td>'
             + '<td data-label="Follow-up">' + followup + '</td>'
@@ -456,6 +471,20 @@
             $('#emb-report-desc').textContent = 'Worker: ' + (((v.worker_fname || '') + ' ' + (v.worker_lname || '')).trim() || '—');
             $('[data-emb-report-notes]').textContent = v.followup_notes || 'No notes.';
             HOD.dialog.open('emb-report', btn);
+        });
+
+        HOD.actions.on('emb.visits', function (btn) {
+            var v = find(btn.getAttribute('data-id'));
+            var vs = v && v.visits;
+            if (!vs) return;
+            $('#emb-visits-desc').textContent = person(v);
+            $('[data-emb-visits-count]').textContent = (vs.count === 1 ? 'Came once' : 'Came ' + vs.count + ' times')
+                + (vs.count > vs.days.length ? ' · latest ' + vs.days.length + ' shown' : '');
+            $('[data-emb-visits-list]').innerHTML = vs.days.map(function (d) {
+                return '<li class="ui-list__item"><span class="ui-list__main"><span class="ui-list__title">' + esc(day(d.date, true)) + '</span>'
+                    + '<span class="ui-list__meta">' + esc(d.services.length ? d.services.join(' · ') : 'A service') + '</span></span></li>';
+            }).join('');
+            HOD.dialog.open('emb-visits', btn);
         });
 
         // Notes

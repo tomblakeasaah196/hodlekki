@@ -243,6 +243,11 @@ $embraceVisit = ['None' => 'Does not want a visit', 'In-Person' => 'In person', 
     </dl>
 <?= ui_dialog_end(ui_button('Close', ['variant' => 'secondary', 'attrs' => ['data-dialog-close' => true]])) ?>
 
+<?= ui_dialog_start('emb-visits', ['title' => 'Church visits', 'description' => ' ', 'size' => 'sm']) ?>
+    <p class="ui-meta" data-emb-visits-count></p>
+    <ul class="ui-list" data-emb-visits-list></ul>
+<?= ui_dialog_end(ui_button('Close', ['variant' => 'secondary', 'attrs' => ['data-dialog-close' => true]])) ?>
+
 <?= ui_dialog_start('emb-promote', ['title' => 'Push to the congregation', 'description' => ' ', 'size' => 'sm']) ?>
     <form class="ui-form" id="emb-promote-form" data-action="emb.save" data-ui-validate novalidate>
         <input type="hidden" name="action" value="promote_member">
