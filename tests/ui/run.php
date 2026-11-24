@@ -929,5 +929,27 @@ foreach (['assets/ui/src/app.css' => 'source', 'assets/ui/app.css' => 'build'] a
         && in_array('.xt.xt-opt,.xt.xt-opt__key.ui-icon{transform:none!important;transition:none!important', $rules, true));
 }
 
+/* ---------------------------------------------------------------------- */
+suite('16. the Events scripts stand down on "not open to you"');
+// Monitor #119-#121 (22 Nov 2026): a Worker without Events access opened
+// /modules/events/. require_can() printed ui_no_access(), but the three page
+// scripts were already in <head> and crashed on the missing editor, search
+// field and Analytics panel. events.js now returns before it publishes
+// window.HODEvents unless the page is there, and the other two return when
+// HODEvents is missing.
+
+$evPage = (string) file_get_contents($root . '/modules/events/index.php');
+$evJs = (string) file_get_contents($root . '/assets/ui/js/pages/events.js');
+$evGuard = "if (!document.getElementById('panel-events')) return;";
+$evGuardAt = strpos($evJs, $evGuard);
+$evPublishAt = strpos($evJs, 'window.HODEvents =');
+ok('the Events page has the element the guard looks for', str_contains($evPage, 'id="panel-events"'));
+ok('events.js returns without the page, before HODEvents exists',
+    $evGuardAt !== false && $evPublishAt !== false && $evGuardAt < $evPublishAt);
+foreach (['events-attendance.js', 'events-analytics.js'] as $evSatellite) {
+    $evSrc = (string) file_get_contents($root . '/assets/ui/js/pages/' . $evSatellite);
+    ok("{$evSatellite} returns when HODEvents is missing", (bool) preg_match('/var EV = window\.HODEvents;\s*if \(!EV\) return;/', $evSrc));
+}
+
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed === 0 ? 0 : 1);

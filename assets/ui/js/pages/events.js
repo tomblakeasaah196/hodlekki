@@ -8,6 +8,12 @@
 (function () {
     'use strict';
 
+    // require_can() answers someone without Events access with the shell's
+    // "not open to you" state, but this script is already in <head>. Without
+    // the page there is nothing to run: stop before HODEvents exists, so
+    // events-attendance.js and events-analytics.js stop too.
+    if (!document.getElementById('panel-events')) return;
+
     var API = '/api/events_api.php';
     var EXPORT = '/api/export_event_excel.php';
     var cfg = HOD.data('events-config') || {};
