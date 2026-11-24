@@ -9,6 +9,7 @@
 //   collections.php  the shelves of the library
 //   solfa.php        tonic sol-fa, generated from a score (pure arithmetic)
 //   corpus.php       the 511 generated public-domain hymns, read from files
+//   search.php       finding a song: typos, lyrics, accents (pure PHP, no service)
 //   songs.php        songs the music team adds, read from the database
 //   library.php      one view over both, which is all the reader ever uses
 //   member.php       favourites, reading position, preferences — private
@@ -25,6 +26,7 @@
 require_once __DIR__ . '/collections.php';
 require_once __DIR__ . '/solfa.php';
 require_once __DIR__ . '/corpus.php';
+require_once __DIR__ . '/search.php';
 require_once __DIR__ . '/songs.php';
 require_once __DIR__ . '/library.php';
 require_once __DIR__ . '/member.php';

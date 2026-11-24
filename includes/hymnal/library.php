@@ -123,19 +123,14 @@ function hymnal_library_search(?PDO $pdo, string $query, array $opts = []): arra
         $rows = array_values(array_filter($rows, static fn(array $r): bool => isset($want[(int) $r['n']])));
     }
 
-    $q = trim(preg_replace('/\s+/u', ' ', $query) ?? '');
-    if ($q !== '') {
-        $needle = mb_strtolower($q);
-        $scored = [];
-        foreach ($rows as $r) {
-            $rank = hymnal_match_rank($r, $needle);
-            if ($rank > 0) {
-                $scored[] = ['rank' => $rank, 'row' => $r];
-            }
+    $hits = [];
+    if (trim($query) !== '') {
+        // Typos, remembered lines and accents are all handled in search.php.
+        $ranked = hymnal_search_rank($pdo, $rows, $query);
+        foreach ($ranked as $h) {
+            $hits[(int) $h['row']['n']] = $h;
         }
-        usort($scored, static fn(array $a, array $b): int =>
-            $b['rank'] <=> $a['rank'] ?: strcasecmp((string) $a['row']['title'], (string) $b['row']['title']));
-        $rows = array_map(static fn(array $s): array => $s['row'], $scored);
+        $rows = array_map(static fn(array $h): array => $h['row'], $ranked);
     } else {
         $sort = (string) ($opts['sort'] ?? 'number');
         usort($rows, static function (array $a, array $b) use ($sort): int {
@@ -156,6 +151,14 @@ function hymnal_library_search(?PDO $pdo, string $query, array $opts = []): arra
     $limit = (int) ($opts['limit'] ?? 0);
     if ($limit > 0) {
         $rows = array_slice($rows, $offset, min($limit, 200));
+    }
+    // Under a result found by a line from inside the song, show that line, so
+    // the member can see why it matched.
+    foreach ($rows as $i => $r) {
+        $snippet = isset($hits[(int) $r['n']]) ? hymnal_search_snippet($pdo, $hits[(int) $r['n']]) : null;
+        if ($snippet !== null) {
+            $rows[$i]['match'] = $snippet;
+        }
     }
 
     return ['rows' => array_values($rows), 'total' => $total];

@@ -764,6 +764,8 @@ reader. Member and office guide: `modules/hymnal/how_to_use.md`.
 | ---- | ---- |
 | `includes/hymnal/` | All module PHP. `bootstrap.php` is the only entry point (after `includes/db.php`). |
 | `includes/hymnal/corpus/` | The 511 hymns, sharded 50 per file, + `index.php`, `meta.php`, `MANIFEST`, `NUMBERS`. **Generated.** |
+| `includes/hymnal/search.php` | Finding a song: typos, remembered lyric lines, accents. Pure PHP, no service. ONE normaliser, `hymnal_search_fold()`. |
+| `includes/hymnal/search_index.php` | The generated hymns' lyrics, pre-folded. **Generated** by `bin/build_hymnal_search.php`; pinned to `corpus/MANIFEST`. |
 | `includes/hymnal/solfa.php` | Tonic sol-fa from a score. Pure arithmetic, heavily tested. |
 | `includes/hymnal/collections.php` | The shelves. Code, not data — adding one needs no migration. |
 | `api/hymnal_api.php` | JSON endpoint (session + `X-Hymnal-CSRF` on POST; `ai_read` is multipart). |
@@ -805,6 +807,17 @@ reader. Member and office guide: `modules/hymnal/how_to_use.md`.
   reader, search and counts, but its line stays in `NUMBERS` and the number is
   never reused. Hymn 178 was withdrawn this way (24 Nov 2026) in favour of the
   full four-part setting, Studio hymn 2001.
+- **Search has ONE normaliser and a generated index.** `hymnal_search_fold()` is
+  the only place text is folded (case, accents, Yoruba dots, apostrophes,
+  punctuation): the generated index and every live query both call it, so
+  writing it twice is how search would silently stop finding things. After
+  anything that changes `includes/hymnal/corpus/` (a rebuild, a withdrawn
+  hymn) or the folding, run `php bin/build_hymnal_search.php` and commit
+  `search_index.php`; `tests/hymnal/search_test.php` fails until you do. A stale
+  index is ignored and rebuilt in memory, so it can slow search but never skew
+  it. Typo matching is a fallback for words that are not words of any hymn —
+  never apply it to a real word, or "love" starts finding "live". No search
+  service: the host is cPanel and the library is a few thousand songs.
 - **Sol-fa is generated, never typed, and there is ONE implementation.**
   `hymnal_solfa_song()` is the only place syllables are produced — the corpus
   build and the Studio both call it. The notes it works from are extracted by
@@ -872,7 +885,7 @@ reader. Member and office guide: `modules/hymnal/how_to_use.md`.
 **Checks** (CI runs them in the lint job, step "The Hymnary tests"; run them
 before pushing anyway):
 
-- `php tests/hymnal/run.php` — 274 checks, no MySQL, no network: the sol-fa
+- `php tests/hymnal/run.php` — 319 checks, no MySQL, no network: the sol-fa
   arithmetic against music theory, the corpus and its manifest, the licence of
   every one of the 511 hymns, search and browsing, the module against SQLite
   built from the real migration (privacy between members, numbering, the
@@ -886,6 +899,7 @@ before pushing anyway):
 ```bash
 node bin/hymnal_parse_abc.mjs <abc-dir> <source>/parsed
 php  bin/build_hymnal.php --source=<source> --verbose
+php  bin/build_hymnal_search.php
 php  tests/hymnal/run.php
 ```
 

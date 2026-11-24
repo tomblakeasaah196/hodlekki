@@ -23,8 +23,11 @@ whichever is easiest:
 
 - **Type the number.** When the Pastor calls out "Hymn 212", type `212` and
   press Enter. A number always wins over a word.
-- **Type what you remember.** A title, or a line from the song — "amazing
-  grace", or "how sweet the sound". Both work.
+- **Type what you remember.** A title, or a line from anywhere in the song —
+  "amazing grace", or "how sweet the sound", even a line from the third verse.
+  Commas, capitals and accents do not matter, and a slip of the finger is
+  forgiven: "amazin grace" still finds it. When a song is found by a line
+  from inside it, that line is shown under the title so you can see why.
 - **Tap a shelf.** Hymns, Communion, Christmas & Advent, Easter, Praise &
   Adoration, Faith & Trust, Comfort & Hope, Funerals, Junior Church and the
   rest. The number beside each shelf is how many songs are on it.
