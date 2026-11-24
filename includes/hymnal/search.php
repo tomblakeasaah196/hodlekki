@@ -624,6 +624,16 @@ function hymnal_search_rank(?PDO $pdo, array $rows, string $query): array
             $hits[] = ['row' => $r, 'score' => $score, 'kind' => $kind, 'line' => $line];
         }
     }
+    // A hymn number is a hymn number. When some hymn has it, that hymn is the
+    // answer; numerals that happen to sit in somebody's lyrics are not. (If no
+    // hymn has the number it falls through to ordinary text, so a year or a
+    // title with digits in it still works.)
+    if ($q['number'] !== null) {
+        $byNumber = array_values(array_filter($hits, static fn(array $h): bool => $h['kind'] === 'number'));
+        if ($byNumber !== []) {
+            $hits = $byNumber;
+        }
+    }
     usort($hits, static function (array $a, array $b): int {
         return $b['score'] <=> $a['score']
             ?: strcasecmp((string) $a['row']['title'], (string) $b['row']['title'])
