@@ -58,6 +58,16 @@ eq("a path that climbs out, or another site's file, is never on the server", ['w
 eq('the two kinds group apart, so a dropped connection never reopens a real missing file', true,
     monitor_fingerprint($gone['events'][0] + ['source' => 'browser', 'route' => '/']) !== monitor_fingerprint(['message' => "Could not load /assets/se/js/portal/gone.js (visitor's connection)", 'exception_class' => 'ConnectionDropped'] + $gone['events'][0] + ['source' => 'browser', 'route' => '/']));
 
+// Problem #117: Cloudflare's edge injects its analytics beacon; the strict CSP
+// refuses it on purpose. Not ours, not seen by anyone: dropped. Any other
+// outside script that fails is still kept.
+$cf = $beacon(['errors' => [
+    ['type' => 'resource', 'msg' => 'Could not load https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015', 'src' => 'https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015', 'tag' => 'script'],
+    ['type' => 'resource', 'msg' => 'Could not load https://static.cloudflareinsights.com.example.net/x.js', 'src' => 'https://static.cloudflareinsights.com.example.net/x.js', 'tag' => 'script'],
+]]);
+eq("Cloudflare's injected beacon is dropped; a look-alike host is kept", ['Could not load static.cloudflareinsights.com.example.net/x.js'],
+    array_column($cf['events'], 'title'));
+
 // Problems #101 / #102: a page-to-page view transition the browser skipped or
 // aborted is the browser's own business, on any page (/connect has no pwa_head guard).
 $vt = $beacon(['errors' => [
