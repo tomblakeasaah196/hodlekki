@@ -22,6 +22,21 @@ const HYMNAL_SHARD_SIZE = 50;
 /** The highest HOD number the generated corpus may use (see the migration). */
 const HYMNAL_CORPUS_CEILING = 1999;
 
+/**
+ * Generated hymns the church has withdrawn: HOD number => why.
+ *
+ * The files under corpus/ are pinned by MANIFEST and are never hand-edited, so a
+ * hymn cannot be deleted from them. Withdrawing one hides it here instead: it
+ * leaves the index, the reader and search, while its number stays RESERVED —
+ * NUMBERS is untouched and the Studio only allocates from 2000 up, so nothing
+ * can ever reuse a number that has been read out from the pulpit.
+ */
+const HYMNAL_CORPUS_WITHDRAWN = [
+    // Words only, no score. Replaced by the full four-part setting in the Studio
+    // (hymn 2001), withdrawn at the church's request on 24 Nov 2026.
+    178 => 'Replaced by the full setting, hymn 2001.',
+];
+
 function hymnal_corpus_dir(): string
 {
     return __DIR__ . '/corpus';
@@ -29,7 +44,8 @@ function hymnal_corpus_dir(): string
 
 /**
  * The light index: one row per hymn, enough to browse, search and jump to a
- * number without opening a shard. Loaded once per request.
+ * number without opening a shard. Loaded once per request. Withdrawn hymns are
+ * not in it, so every caller — reader, search, shelves, counts — agrees.
  *
  * @return list<array>
  */
@@ -40,7 +56,11 @@ function hymnal_corpus_index(): array
         return $index;
     }
     $path = hymnal_corpus_dir() . '/index.php';
-    $index = is_file($path) ? (array) require $path : [];
+    $all = is_file($path) ? (array) require $path : [];
+    $index = array_values(array_filter(
+        $all,
+        static fn(array $r): bool => !isset(HYMNAL_CORPUS_WITHDRAWN[(int) $r['n']])
+    ));
 
     return $index;
 }

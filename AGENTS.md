@@ -799,6 +799,12 @@ reader. Member and office guide: `modules/hymnal/how_to_use.md`.
   inside a transaction, with uniqueness from the unique key — never
   check-then-insert. A retired song keeps its number reserved. Never renumber,
   never sort `NUMBERS` by hand.
+- **A generated hymn is withdrawn, never deleted.** The corpus files are pinned
+  by `MANIFEST`, so a hymn leaves the library through `HYMNAL_CORPUS_WITHDRAWN`
+  in `includes/hymnal/corpus.php` (number => reason). It drops out of the index,
+  reader, search and counts, but its line stays in `NUMBERS` and the number is
+  never reused. Hymn 178 was withdrawn this way (24 Nov 2026) in favour of the
+  full four-part setting, Studio hymn 2001.
 - **Sol-fa is generated, never typed, and there is ONE implementation.**
   `hymnal_solfa_song()` is the only place syllables are produced — the corpus
   build and the Studio both call it. The notes it works from are extracted by
@@ -866,7 +872,7 @@ reader. Member and office guide: `modules/hymnal/how_to_use.md`.
 **Checks** (CI runs them in the lint job, step "The Hymnary tests"; run them
 before pushing anyway):
 
-- `php tests/hymnal/run.php` — 267 checks, no MySQL, no network: the sol-fa
+- `php tests/hymnal/run.php` — 274 checks, no MySQL, no network: the sol-fa
   arithmetic against music theory, the corpus and its manifest, the licence of
   every one of the 511 hymns, search and browsing, the module against SQLite
   built from the real migration (privacy between members, numbering, the
