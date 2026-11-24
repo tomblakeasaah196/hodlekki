@@ -127,6 +127,26 @@ function assim_attendance_union_sql(array $event_categories = [], array $user_id
     )";
 }
 
+// What a person came to on each day: (user_id, attended_on, title, category),
+// one row per event. The same two halves and conditions as the union above,
+// joined to events. It NAMES the days the union counts and never counts
+// anything itself: a day with two services has two rows here and one there.
+// $user_ids is required (cast to int and inlined); an empty list matches no one.
+function assim_attendance_named_sql(array $user_ids): string {
+    $ids = implode(',', array_map('intval', $user_ids)) ?: '0';
+    return "(
+        SELECT c.user_id AS user_id, c.checkin_date AS attended_on, e.title AS title, e.event_category AS category
+          FROM checkins c JOIN events e ON e.id = c.event_id
+         WHERE c.user_id IN ($ids) AND c.checkin_date IS NOT NULL
+        UNION
+        SELECT a.user_id AS user_id, COALESCE(a.attendance_date, DATE(a.check_in_time)) AS attended_on,
+               e.title AS title, e.event_category AS category
+          FROM attendance a JOIN events e ON e.id = a.event_id
+         WHERE a.user_id IN ($ids) AND a.status = 'Present'
+           AND COALESCE(a.attendance_date, a.check_in_time) IS NOT NULL
+    )";
+}
+
 // Per-person totals used by the finder and the analytics tab. $lo/$hi bound
 // the rule's window, $prev_lo the equally long window right before it, so a
 // row can show "2 services, down from 9".

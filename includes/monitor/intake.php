@@ -117,9 +117,13 @@ function monitor_intake_js_event(array $err, array $req, int $now): ?array
     // page-to-page view transition the browser skipped or aborted ("Transition was
     // skipped", "…Page already revealed", "…ViewTransition opt-in disabled" when
     // one side does not opt in): the browser raises those itself, on pages with or
-    // without includes/pwa_head.php's guard (/connect has none).
+    // without includes/pwa_head.php's guard (/connect has none). Also Cloudflare's
+    // own analytics beacon failing to load (problem #117): Cloudflare's edge adds
+    // that script to the HTML, no page of ours asks for it, the strict CSP
+    // (script-src 'self') refuses it by design and blockers stop it elsewhere.
     $all = $msg . ' ' . $src . ' ' . $stack;
     if ($msg === '' || preg_match('#(chrome|moz|safari(-web)?|ms-browser)-extension://|webkit-masked-url://#i', $all)
+        || ($type === 'resource' && preg_match('#^(https?:)?//static\.cloudflareinsights\.com/#i', $src))
         || (preg_match('/^Script error\.?$/i', $msg) && $src === '')
         || preg_match('/^ResizeObserver loop (limit exceeded|completed with undelivered notifications)/i', $msg)
         || ($type === 'rejection' && preg_match('/^(InvalidStateError|AbortError): Transition was (aborted|skipped)\b/', $msg))) {

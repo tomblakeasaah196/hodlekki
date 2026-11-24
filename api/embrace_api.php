@@ -309,9 +309,21 @@ try {
             $ids = array_column($visitors, 'id');
             $notesByVisitor = embrace_notes_for_visitors($pdo, $ids, (int) $user_id);
             $workersByVisitor = embrace_worker_history_for_visitors($pdo, $ids);
+            // When each came to church (every service, each day named). Never
+            // blocks the list: without it the row just says nothing about visits.
+            $visitsByVisitor = null;
+            try {
+                $visitsByVisitor = embrace_visits_for_visitors($pdo, $ids);
+            } catch (Throwable $e) {
+                if (function_exists('hod_monitor_report')) {
+                    hod_monitor_report($e);
+                }
+            }
+            $noVisits = ['last' => null, 'since' => '', 'count' => 0, 'days' => []];
             foreach ($visitors as &$v) {
                 $v['secure_notes'] = $notesByVisitor[(int) $v['id']] ?? [];
                 $v['worker_history'] = $workersByVisitor[(int) $v['id']] ?? [];
+                $v['visits'] = $visitsByVisitor === null ? null : ($visitsByVisitor[(int) $v['id']] ?? $noVisits);
             }
             unset($v);
 

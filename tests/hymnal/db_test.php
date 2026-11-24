@@ -196,6 +196,16 @@ ok('and the song says the notes are not available', !hymnal_library_song($db, (i
 $noNotes = hymnal_song_score_save($db, 7, (int) $ccli['id'], "X:1\nK:C", [['id' => 'S', 'bars' => []]], $cMajor);
 ok('a score with no readable notes is refused', !$noNotes['ok']);
 
+// Monitor #124: after renderAbc() the abcjs key signature carries drawing
+// objects that point back at the tune, and JSON.stringify threw "circular
+// structure" before "Save the music" posted. The Studio sends a plain copy of
+// exactly the fields above ($cMajor's shape), never abcjs's own object.
+$studioJs = (string) file_get_contents(dirname(__DIR__, 2) . '/assets/js/hymnal/studio.js');
+ok("the Studio sends a plain key (root, acc, mode, accidentals), not abcjs's object",
+    (bool) preg_match('/key = \{\s*root: rawKey\.root[^}]*acc: rawKey\.acc[^}]*mode: rawKey\.mode/s', $studioJs)
+    && str_contains($studioJs, 'return { acc: a.acc, note: a.note };')
+    && !preg_match('/key:\s*tune\.getKeySignature\(\)/', $studioJs));
+
 section('note data from the browser is checked, not trusted');
 $junk = [[['p' => 'not a number'], ['p' => 9999], ['a' => 'DROP TABLE'], ['r' => 1], 'nonsense']];
 $clean = hymnal_clean_bars($junk);

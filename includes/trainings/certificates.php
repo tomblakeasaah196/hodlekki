@@ -672,7 +672,13 @@ function trainings_certificate_html(array $cert, array $settings, ?array $signer
     $e = static fn ($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
     $uri = static fn (string $mime, string $bytes): string => 'data:' . $mime . ';base64,' . base64_encode($bytes);
     $len = static fn (string $s): int => function_exists('mb_strlen') ? mb_strlen($s, 'UTF-8') : strlen($s);
-    $logoFile = dirname(__DIR__, 2) . '/assets/images/logo_hod.png';
+    // The logo at 400px (23mm printed = ~440 dpi). dompdf splits a PNG's alpha
+    // channel pixel by pixel in PHP, and the 1080px site logo made a download
+    // take 7-12 s on the host (monitor #114). Falls back to the full logo.
+    $logoFile = dirname(__DIR__, 2) . '/assets/images/logo_hod_certificate.png';
+    if (!is_file($logoFile)) {
+        $logoFile = dirname(__DIR__, 2) . '/assets/images/logo_hod.png';
+    }
     $logo = is_file($logoFile) ? $uri('image/png', (string) file_get_contents($logoFile)) : '';
     $learner = (string) ($snap['learner'] ?? '');
     $training = (string) ($snap['training'] ?? '');
