@@ -9,8 +9,10 @@
 //   - sign-in with the confirmed personal email; the old church sign-in name
 //     keeps working until the person has moved (confirmed an address), then
 //     it explains where they sign in now;
-//   - "forgot password" sends a reset link to the confirmed personal email
-//     only. Account mail: no consent needed, first in the queue.
+//   - "forgot password" sends a reset link to the confirmed personal email,
+//     or (owner, 26 Nov 2026) to someone's FIRST email while it still waits
+//     for its confirm link: member_first_pending_email(); using the link
+//     confirms it. Account mail: no consent needed, first in the queue.
 //
 // Every credential change follows AGENTS.md: password_changed_at set, lockout
 // cleared, every session (and remembered device) revoked.
@@ -545,7 +547,15 @@ function email_reset_request(PDO $pdo, string $identifier, string $ip): array
 
     // An email names one account; a shared phone number can name several, and
     // each of them gets its own link at its own confirmed address.
-    foreach (signin_candidates($pdo, $identifier)['users'] as $user) {
+    $users = signin_candidates($pdo, $identifier)['users'];
+    if ($users === [] && !signin_is_phone($identifier)
+        && ($uid = member_by_first_pending_email($pdo, $identifier)) !== null) {
+        // A first email, not confirmed yet: the link itself will prove it.
+        $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([$uid]);
+        $users = array_filter([$stmt->fetch(PDO::FETCH_ASSOC)]);
+    }
+    foreach ($users as $user) {
         $sent = email_reset_send($pdo, $user);
         if ($sent !== null) {
             $out['sent'] = $sent['sent'] || $out['sent'];
@@ -567,7 +577,7 @@ function email_reset_send(PDO $pdo, array $user): ?array
     if ($status !== 'active') {
         return null;
     }
-    $to = member_confirmed_email($pdo, (int) $user['id']);
+    $to = member_confirmed_email($pdo, (int) $user['id']) ?? member_first_pending_email($pdo, (int) $user['id']);
     if ($to === null || email_is_suppressed($pdo, $to)) {
         return null;
     }
@@ -667,6 +677,7 @@ function email_reset_complete(PDO $pdo, string $token, string $password, string 
     if (function_exists('security_record_attempt')) {
         security_record_attempt($pdo, $uid, (string) ($user['email'] ?? ''), true, null, 'password_reset');
     }
+    email_reset_confirm_first_email($pdo, $uid, $token);
     $to = member_confirmed_email($pdo, $uid);
     if ($to !== null) {
         email_send_doc($pdo, email_password_changed_doc(), $user + ['email' => $to], [
@@ -674,6 +685,37 @@ function email_reset_complete(PDO $pdo, string $token, string $password, string 
         ]);
     }
     return ['ok' => true, 'user_id' => $uid];
+}
+
+/**
+ * The reset link went to a first, still-unconfirmed email (member_first_pending_email())
+ * and was used: that proves the address, so confirm it. Best effort; the password
+ * change has already happened.
+ */
+function email_reset_confirm_first_email(PDO $pdo, int $userId, string $token): void
+{
+    try {
+        if (member_confirmed_email($pdo, $userId) !== null) {
+            return;
+        }
+        $stmt = $pdo->prepare('SELECT sent_to FROM auth_reset_tokens WHERE token_hash = ?');
+        $stmt->execute([hash('sha256', $token)]);
+        $sentTo = email_normalize((string) ($stmt->fetchColumn() ?: ''));
+        if ($sentTo === '' || member_first_pending_email($pdo, $userId) !== $sentTo) {
+            return;
+        }
+        $stmt = $pdo->prepare("SELECT * FROM email_addresses WHERE user_id = ? AND email = ? AND status = 'pending' ORDER BY id DESC LIMIT 1");
+        $stmt->execute([$userId, $sentTo]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            $done = email_address_confirm_row($pdo, $row);
+            if (empty($done['ok'])) {
+                error_log('[email] reset link used, but the first email of user ' . $userId . ' was not confirmed: ' . ($done['code'] ?? 'unknown'));
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('[email] confirming the first email after a reset failed for user ' . $userId . ': ' . $e->getMessage());
+    }
 }
 
 function email_reset_doc(string $link): array

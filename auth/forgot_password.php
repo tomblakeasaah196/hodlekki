@@ -4,7 +4,9 @@
 // "Forgot your password?" (owner's decision 2). Anyone may ask; the answer is
 // always the same, so this page cannot be used to find out whether an account
 // or an address exists. A link goes only to the CONFIRMED personal email of an
-// active account (email_reset_request(), includes/campaigns/identity.php),
+// active account, or to the person's first email while it waits for its
+// confirm link (owner, 26 Nov 2026; using the link confirms it) —
+// email_reset_request(), includes/campaigns/identity.php —
 // throttled per requester and per identifier. First-time password setup stays
 // on /auth/setup_password.php. Short copy: docs/UI.md §12.
 
@@ -36,7 +38,7 @@ ui_standalone_open('Reset password', ['footer' => '<a class="ui-link" href="/aut
 if ($done): ?>
     <h1 class="ui-h2">Check your email</h1>
     <p class="text-ink-muted">If we know this account, a link is on its way.
-        <?= ui_info('It goes to the confirmed personal email and works once, for 30 minutes. Look in Spam too. No email on your account yet? Ask Information and Data Insights (IDI) to reset your password.', 'About the link') ?></p>
+        <?= ui_info('It goes to your personal email and works once, for 30 minutes. Look in Spam too. No email on your account yet? Ask Information and Data Insights (IDI) to reset your password.', 'About the link') ?></p>
 <?php else: ?>
     <h1 class="ui-h2">Forgot your password?</h1>
     <p class="text-ink-muted">We will email you a reset link.</p>

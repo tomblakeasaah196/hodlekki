@@ -1152,6 +1152,48 @@ $p->exec("UPDATE users SET account_status = 'suspended' WHERE id = 102");
 ct_at('2027-03-01 12:00');
 ct_eq('a suspended account gets no link', false, email_reset_request($p, 'bisi.new@gmail.com', '1.1.1.6')['sent']);
 
+// A first email, not confirmed yet (owner, 26 Nov 2026).
+ct_at('2027-03-01 14:00');
+ct_user($p, 110, 'Tobi', 'Member');
+email_capture_start($p, 110, 'Tobi.New@gmail.com', 'signin_prompt', 110, ['send' => false]);
+ct_eq('a first, unconfirmed email stands in', 'tobi.new@gmail.com', member_first_pending_email($p, 110));
+$first = email_reset_request($p, 'TOBI.NEW@gmail.com', '2.2.2.1');
+ct_eq('…typing it asks for a link, and one goes', true, $first['sent']);
+ct_eq('…to that address', 1, ct_count($p, 'email_outbox', "flow = 'password_reset' AND to_email = 'tobi.new@gmail.com'"));
+ct_eq('…which signs nobody in by itself', null, email_signin_lookup($p, 'tobi.new@gmail.com')['user']);
+ct_eq('using the link changes the password', true, email_reset_complete($p, $first['token'], $good, $good)['ok']);
+ct_eq('…and confirms the address', 'tobi.new@gmail.com', member_confirmed_email($p, 110));
+ct_eq('…which now signs in', 110, (int) (email_signin_lookup($p, 'tobi.new@gmail.com')['user']['id'] ?? 0));
+ct_eq('…and gets the "password changed" notice', 1, ct_count($p, 'email_outbox', "flow = 'password_changed' AND to_email = 'tobi.new@gmail.com'"));
+
+ct_user($p, 111, 'Kunle', 'Member', ['email' => 'kunle.old@yahoo.com']);
+email_capture_start($p, 111, 'kunle.new@gmail.com', 'profile', 111, ['send' => false]);
+ct_eq('another personal address on file: not a first email', null, member_first_pending_email($p, 111));
+ct_eq('…typing the new one sends nothing', false, email_reset_request($p, 'kunle.new@gmail.com', '2.2.2.2')['sent']);
+ct_eq('…nor does the one on file (it was never confirmed)', false, email_reset_request($p, 'kunle.old@yahoo.com', '2.2.2.3')['sent']);
+
+ct_user($p, 112, 'Sade', 'Member', ['email' => 'sade@hodlc.com']);
+email_capture_start($p, 112, 'sade.o@gmail.com', 'signin_prompt', 112, ['send' => false]);
+ct_eq('a church sign-in name is not an email they gave', 'sade.o@gmail.com', member_first_pending_email($p, 112));
+ct_eq('…asking by the sign-in name sends to the first email', true, email_reset_request($p, 'sade@hodlc.com', '2.2.2.4')['sent']);
+
+ct_user($p, 113, 'Uche', 'Member');
+ct_confirm($p, 113, 'uche.one@gmail.com', false);
+email_capture_start($p, 113, 'uche.two@gmail.com', 'profile', 113, ['send' => false]);
+ct_eq('someone who has had a confirmed email: the new one waits for its link', null, member_first_pending_email($p, 113));
+ct_eq('…typing it sends nothing', false, email_reset_request($p, 'uche.two@gmail.com', '2.2.2.5')['sent']);
+
+ct_user($p, 114, 'Ngozi', 'Member');
+email_capture_start($p, 114, 'ngozi@gmail.com', 'connect', null, ['send' => false]);
+ct_eq('an address from the public Connect card never stands in', null, member_first_pending_email($p, 114));
+
+ct_user($p, 115, 'Ife', 'Member');
+ct_user($p, 116, 'Dayo', 'Member');
+email_capture_start($p, 115, 'family@gmail.com', 'profile', 115, ['send' => false]);
+email_capture_start($p, 116, 'family@gmail.com', 'profile', 116, ['send' => false]);
+ct_eq('one address waiting on two accounts: nobody is picked', null, member_by_first_pending_email($p, 'family@gmail.com'));
+ct_eq('…and typing it sends nothing', false, email_reset_request($p, 'family@gmail.com', '2.2.2.6')['sent']);
+
 // ===========================================================================
 ct_section('16e. The Profile email card');
 // ===========================================================================
