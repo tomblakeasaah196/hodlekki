@@ -351,7 +351,39 @@ const EMAIL_ACCOUNT_ROUTE_LANES = ['transactional', 'alert'];
 /** 'account' (the transactional service) or 'host' (this server, under its hourly cap). */
 function email_lane_route(string $lane): string
 {
-    return in_array($lane, EMAIL_ACCOUNT_ROUTE_LANES, true) && hod_mail_account_settings() !== null ? 'account' : 'host';
+    return in_array($lane, EMAIL_ACCOUNT_ROUTE_LANES, true)
+        && (hod_mail_account_settings() !== null || hod_mail_backup_settings() !== null) ? 'account' : 'host';
+}
+
+/**
+ * Account mail: ZeptoMail first, then Brevo (hod_mail_backup_settings()) when
+ * ZeptoMail cannot take it for any reason but the address itself. $primary
+ * sends through ZeptoMail (null when it is not set up).
+ * @return array{ok: bool, error: ?string, message_id: ?string}
+ */
+function email_send_account(array $m, ?callable $primary, ?callable $backup = null): array
+{
+    $first = $primary !== null ? $primary($m) : null;
+    if ($first !== null && !empty($first['ok'])) {
+        return $first;
+    }
+    $backup ??= ($b = hod_mail_backup_settings()) !== null ? static fn (array $msg): array => hod_brevo_send($b, $msg) : null;
+    if ($backup === null) {
+        return $first ?? ['ok' => false, 'error' => 'Account mail is not set up: ACCOUNT_MAIL_* is needed in .env.', 'message_id' => null];
+    }
+    if ($first !== null && email_classify_failure((string) $first['error']) === 'recipient') {
+        return $first; // the address is wrong: Brevo would refuse it too
+    }
+    $second = $backup($m);
+    if (!empty($second['ok'])) {
+        if ($first !== null) {
+            error_log('[email] ZeptoMail could not send (' . campaigns_cut((string) $first['error'], 200) . '); sent through Brevo instead');
+        }
+        return $second;
+    }
+    // Filed by the backup's answer (it was the last try); both reasons kept.
+    $second['error'] = (string) $second['error'] . ($first !== null ? ' | ZeptoMail: ' . $first['error'] : '');
+    return $second;
 }
 
 /**
@@ -363,15 +395,17 @@ function email_smtp_transport(): array
     $mailers = [];
     $send = static function (array $m) use (&$mailers): array {
         $route = ($m['route'] ?? 'host') === 'account' ? 'account' : 'host';
-        if ($route === 'account' && ($api = hod_mail_account_settings()) !== null && $api['transport'] === 'api') {
-            return hod_zepto_send($api, $m);
+        $settings = null;
+        if ($route === 'account') {
+            $settings = hod_mail_account_settings();
+            if ($settings === null || $settings['transport'] === 'api') {
+                $zepto = $settings !== null ? static fn (array $msg): array => hod_zepto_send($settings, $msg) : null;
+                return email_send_account($m, $zepto);
+            }
+            // ZeptoMail over SMTP (another host): falls through, Brevo not tried.
         }
         if (!isset($mailers[$route])) {
             try {
-                $settings = $route === 'account' ? hod_mail_account_settings() : null;
-                if ($route === 'account' && $settings === null) {
-                    return ['ok' => false, 'error' => 'Account mail is not set up: ACCOUNT_MAIL_HOST, ACCOUNT_MAIL_USERNAME and ACCOUNT_MAIL_PASSWORD are needed in .env.'];
-                }
                 $mailers[$route] = hod_mailer($settings);
                 $mailers[$route]->SMTPKeepAlive = true;
             } catch (Throwable $e) {

@@ -157,6 +157,14 @@ if (!function_exists('hod_zepto_error')) {
      */
     function hod_zepto_error(int $status, string $raw): string
     {
+        return hod_mail_api_error('ZeptoMail', $status, $raw);
+    }
+}
+
+if (!function_exists('hod_mail_api_error')) {
+    /** hod_zepto_error() for any mail API (ZeptoMail, Brevo): same wording rules. */
+    function hod_mail_api_error(string $provider, int $status, string $raw): string
+    {
         $json = json_decode($raw, true);
         $err = is_array($json) ? ($json['error'] ?? $json) : [];
         $parts = array_filter([
@@ -167,33 +175,33 @@ if (!function_exists('hod_zepto_error')) {
         ]);
         $what = $parts !== [] ? implode(' · ', $parts) : substr(trim(strip_tags($raw)), 0, 200);
         if ($status === 401 || $status === 403) {
-            return "ZeptoMail authentication failed (status {$status}): {$what}";
+            return "{$provider} authentication failed (status {$status}): {$what}";
         }
         if ($status === 429 || $status >= 500 || $status === 0) {
-            return "[temporary] ZeptoMail could not take it now (status {$status}): {$what}";
+            return "[temporary] {$provider} could not take it now (status {$status}): {$what}";
         }
-        return "[permanent] ZeptoMail refused it (status {$status}): {$what}";
+        return "[permanent] {$provider} refused it (status {$status}): {$what}";
     }
 }
 
-if (!function_exists('hod_zepto_send')) {
+if (!function_exists('hod_mail_api_post')) {
     /**
-     * Send one message through the ZeptoMail API over HTTPS.
+     * POST one JSON body to a mail API over HTTPS (this host blocks outgoing
+     * SMTP). Never logs the headers: they carry the key.
      * @return array{ok: bool, error: ?string, message_id: ?string}
      */
-    function hod_zepto_send(array $s, array $m): array
+    function hod_mail_api_post(string $provider, string $url, array $headers, array $body, ?string $messageId): array
     {
-        $messageId = isset($m['message_id']) ? (string) $m['message_id'] : null;
-        $json = json_encode(hod_zepto_payload($s, $m), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $json = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if ($json === false) {
-            return ['ok' => false, 'error' => '[permanent] The message could not be encoded for ZeptoMail.', 'message_id' => $messageId];
+            return ['ok' => false, 'error' => "[permanent] The message could not be encoded for {$provider}.", 'message_id' => $messageId];
         }
-        $headers = ['Accept: application/json', 'Content-Type: application/json', 'Authorization: Zoho-enczapikey ' . $s['api_key']];
+        $headers = array_merge(['Accept: application/json', 'Content-Type: application/json'], $headers);
         $status = 0;
         $raw = '';
         $netError = '';
         if (function_exists('curl_init')) {
-            $ch = curl_init($s['api_url']);
+            $ch = curl_init($url);
             curl_setopt_array($ch, [
                 CURLOPT_POST => true, CURLOPT_POSTFIELDS => $json, CURLOPT_HTTPHEADER => $headers,
                 CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_CONNECTTIMEOUT => 10,
@@ -209,7 +217,7 @@ if (!function_exists('hod_zepto_send')) {
                 'method' => 'POST', 'header' => implode("\r\n", $headers), 'content' => $json,
                 'timeout' => 20, 'ignore_errors' => true,
             ]]);
-            $raw = (string) @file_get_contents($s['api_url'], false, $ctx);
+            $raw = (string) @file_get_contents($url, false, $ctx);
             foreach ($http_response_header ?? [] as $line) {
                 if (preg_match('#^HTTP/\S+\s+(\d{3})#', $line, $hit)) {
                     $status = (int) $hit[1];
@@ -223,10 +231,86 @@ if (!function_exists('hod_zepto_send')) {
             return ['ok' => true, 'error' => null, 'message_id' => $messageId];
         }
         $error = $status === 0
-            ? 'Could not connect to ZeptoMail: ' . $netError
-            : hod_zepto_error($status, $raw);
-        error_log('[mailer] ZeptoMail send failed: ' . $error);
+            ? "Could not connect to {$provider}: " . $netError
+            : hod_mail_api_error($provider, $status, $raw);
+        error_log("[mailer] {$provider} send failed: " . $error);
         return ['ok' => false, 'error' => $error, 'message_id' => $messageId];
+    }
+}
+
+if (!function_exists('hod_zepto_send')) {
+    /**
+     * Send one message through the ZeptoMail API over HTTPS.
+     * @return array{ok: bool, error: ?string, message_id: ?string}
+     */
+    function hod_zepto_send(array $s, array $m): array
+    {
+        return hod_mail_api_post('ZeptoMail', $s['api_url'], ['Authorization: Zoho-enczapikey ' . $s['api_key']],
+            hod_zepto_payload($s, $m), isset($m['message_id']) ? (string) $m['message_id'] : null);
+    }
+}
+
+if (!function_exists('hod_mail_backup_settings')) {
+    /**
+     * The backup for account mail: Brevo's API (owner, 26 Nov 2026), used when
+     * ZeptoMail cannot take a message (no credit, a bad token, an outage).
+     *   ACCOUNT_MAIL_BACKUP_API_KEY  the Brevo API key (xkeysib-…)
+     *   ACCOUNT_MAIL_BACKUP_API_URL  default https://api.brevo.com/v3/smtp/email
+     * Same sender and reply-to as everything else. Null when not set up.
+     */
+    function hod_mail_backup_settings(): ?array
+    {
+        $key = site_env('ACCOUNT_MAIL_BACKUP_API_KEY');
+        $s = [
+            'api_key' => $key,
+            'api_url' => site_env('ACCOUNT_MAIL_BACKUP_API_URL') ?: 'https://api.brevo.com/v3/smtp/email',
+        ] + hod_mail_settings();
+
+        return $key !== '' && filter_var($s['from_address'], FILTER_VALIDATE_EMAIL) !== false ? $s : null;
+    }
+}
+
+if (!function_exists('hod_brevo_payload')) {
+    /** The Brevo API body for one message ($m as for hod_zepto_payload()). */
+    function hod_brevo_payload(array $s, array $m): array
+    {
+        $to = ['email' => (string) $m['to_email']];
+        if (trim((string) ($m['to_name'] ?? '')) !== '') {
+            $to['name'] = (string) $m['to_name'];
+        }
+        $body = [
+            'sender'      => ['email' => $s['from_address'], 'name' => (string) (($m['from_name'] ?? '') ?: $s['from_name'])],
+            'to'          => [$to],
+            'subject'     => (string) $m['subject'],
+            'htmlContent' => (string) $m['html'],
+        ];
+        if (($m['text'] ?? null) !== null && $m['text'] !== '') {
+            $body['textContent'] = (string) $m['text'];
+        }
+        $replyTo = (string) (($m['reply_to'] ?? '') ?: $s['reply_to']);
+        if ($replyTo !== '' && filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
+            $replyName = (string) (($m['reply_to'] ?? '') ? ($m['reply_to_name'] ?? '') : $s['reply_to_name']);
+            $body['replyTo'] = array_filter(['email' => $replyTo, 'name' => $replyName], static fn ($v) => $v !== '');
+        }
+        $headers = [];
+        foreach ((array) ($m['headers'] ?? []) as $name => $value) {
+            if (hod_mail_header_ok((string) $name, (string) $value)) {
+                $headers[(string) $name] = (string) $value;
+            }
+        }
+        if ($headers !== []) {
+            $body['headers'] = $headers;
+        }
+        return $body;
+    }
+}
+
+if (!function_exists('hod_brevo_send')) {
+    /** Send one message through Brevo's API over HTTPS. @return array{ok: bool, error: ?string, message_id: ?string} */
+    function hod_brevo_send(array $s, array $m): array
+    {
+        return hod_mail_api_post('Brevo', $s['api_url'], ['api-key: ' . $s['api_key']],
+            hod_brevo_payload($s, $m), isset($m['message_id']) ? (string) $m['message_id'] : null);
     }
 }
 

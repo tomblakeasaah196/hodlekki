@@ -371,6 +371,32 @@ email_enqueue($r, ['lane' => 'transactional', 'purpose' => 'account', 'flow' => 
 email_worker_run($r, ['endpoints_ready' => true, 'now' => campaigns_now(), 'transport' => ct_transport([['ok' => false,
     'error' => 'Domain hodlekki.org has exceeded the max emails per hour (20/20 (100%)) allowed.']])]);
 ct_eq('a cap refusal on the account route does not shut the host for the hour', false, email_budget_status($r)['refused']);
+// The Brevo backup (owner, 26 Nov 2026): ZeptoMail first, Brevo when ZeptoMail cannot take it.
+$_ENV['ACCOUNT_MAIL_BACKUP_API_KEY'] = 'xkeysib-test';
+$calls = [];
+$zOk = static function (array $m) use (&$calls): array { $calls[] = 'zepto'; return ['ok' => true, 'error' => null, 'message_id' => null]; };
+$zNoCredit = static function (array $m) use (&$calls): array { $calls[] = 'zepto'; return ['ok' => false, 'error' => hod_zepto_error(402, '{"error":{"message":"No credits"}}'), 'message_id' => null]; };
+$zBadAddress = static function (array $m) use (&$calls): array { $calls[] = 'zepto'; return ['ok' => false, 'error' => 'SMTP Error: 550 5.1.1 user unknown', 'message_id' => null]; };
+$bOk = static function (array $m) use (&$calls): array { $calls[] = 'brevo'; return ['ok' => true, 'error' => null, 'message_id' => null]; };
+$bDown = static function (array $m) use (&$calls): array { $calls[] = 'brevo'; return ['ok' => false, 'error' => hod_mail_api_error('Brevo', 503, ''), 'message_id' => null]; };
+$msg = ['to_email' => 'ada@gmail.com', 'subject' => 'Your code', 'html' => '<p>1</p>'];
+ct_ok('ZeptoMail takes it: Brevo is never asked', email_send_account($msg, $zOk, $bOk)['ok'] && $calls === ['zepto']);
+$calls = [];
+ct_ok('ZeptoMail out of credit: Brevo sends it', email_send_account($msg, $zNoCredit, $bOk)['ok'] && $calls === ['zepto', 'brevo']);
+$calls = [];
+ct_ok('a wrong address is not retried on Brevo', !email_send_account($msg, $zBadAddress, $bOk)['ok'] && $calls === ['zepto']);
+$calls = [];
+$both = email_send_account($msg, $zNoCredit, $bDown);
+ct_ok('both down: one answer with both reasons, filed as temporary (it goes back in the queue)',
+    !$both['ok'] && str_contains($both['error'], 'Brevo') && str_contains($both['error'], 'ZeptoMail')
+    && email_classify_failure($both['error']) === 'temporary');
+$calls = [];
+ct_ok('ZeptoMail not set up: Brevo alone', email_send_account($msg, null, $bOk)['ok'] && $calls === ['brevo']);
+$saved = [$_ENV['ACCOUNT_MAIL_HOST'], $_ENV['ACCOUNT_MAIL_PASSWORD']];
+unset($_ENV['ACCOUNT_MAIL_HOST'], $_ENV['ACCOUNT_MAIL_PASSWORD']);
+ct_eq('only Brevo set up: account mail still takes the account route', 'account', email_lane_route('transactional'));
+[$_ENV['ACCOUNT_MAIL_HOST'], $_ENV['ACCOUNT_MAIL_PASSWORD']] = $saved;
+unset($_ENV['ACCOUNT_MAIL_BACKUP_API_KEY']);
 ct_eq('ZeptoMail answers are filed right', ['temporary', 'permanent', 'config', 'unavailable'], [
     email_classify_failure(hod_zepto_error(503, '')),
     email_classify_failure(hod_zepto_error(422, '{"error":{"message":"Invalid address 550"}}')),

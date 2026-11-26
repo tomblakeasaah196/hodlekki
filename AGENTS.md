@@ -1054,7 +1054,9 @@ contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
   2026): when `ACCOUNT_MAIL_*` is set in .env, the transactional and alert
   lanes leave through ZeptoMail (`email_lane_route()`,
   `hod_mail_account_settings()`) and are not metered by the host's budget —
-  the host caps hodlekki.org at 20 an hour and silently drops the excess. A send that died
+  the host caps hodlekki.org at 20 an hour and silently drops the excess.
+  Brevo is the backup (`ACCOUNT_MAIL_BACKUP_API_KEY`, `email_send_account()`).
+  Both go over HTTPS APIs: this host blocks outgoing SMTP to other servers. A send that died
   mid-way is never resent; a host cap refusal is never blamed on the recipient.
 - **Emails are block documents, never HTML.** `email_doc_validate()` is the
   sanitiser; scripture blocks hold a reference and the words come from the
