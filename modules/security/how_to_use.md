@@ -152,7 +152,34 @@ the roster by **No sign-in email** and check their phone.
 - see their last sign-in time and IP,
 - see how old their password is,
 - see every device signed in as them,
-- press **Sign out all other devices**.
+- press **Sign out all other devices**,
+- see their **passkeys**, add one on the device in hand, or remove one.
+
+### Passkeys (since 26 November 2026)
+
+A passkey lets a member sign in with their phone's own fingerprint, face or
+screen lock instead of typing their password.
+
+- **Set-up:** after a password sign-in on a phone or computer that can make
+  one and has none yet, a card offers **Turn on**. One tap and one fingerprint,
+  and it's done. **Not now** hides the card on that device for 30 days.
+  Profile → Passkeys → **Add passkey** does the same at any time.
+- **Sign-in:** on a device that has one, the sign-in page shows a big
+  fingerprint. Android and desktop Chrome/Edge open the prompt by themselves;
+  iPhone needs one tap on the fingerprint. **Use password** is always there.
+- **Other devices:** iCloud Keychain and Google Password Manager sync a
+  passkey to the member's other devices on the same account. On a new device
+  without one, "Have a passkey? Use it" can also scan a QR code with the phone.
+- **Forgot password** is unchanged (email link). A passkey never replaces
+  the password; suspensions and revocations stop passkey sign-ins too.
+- Every passkey added or removed is in the member's security log
+  (`passkey_added`, `passkey_removed`), and a passkey sign-in logs as
+  "Signed in with a passkey from …".
+- **A lost or taken phone:** the member removes that passkey in Profile.
+  An administrator's **Reset password** here also removes **all** of the
+  member's passkeys (a passkey does not use the password, so a reset alone
+  would not stop one); the log line says how many. The member adds new ones
+  at their next sign-in. A member's own "Forgot password" leaves passkeys alone.
 
 ---
 

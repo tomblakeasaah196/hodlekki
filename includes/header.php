@@ -73,6 +73,16 @@ $assim_manager = $uiNavCtx['assim_manager'];
 $se_nav = $uiNavCtx['se_nav'];
 $can_view_departments = ui_nav_can_access('departments', $uiNavCtx);
 
+// Passkeys (includes/passkeys.php): the first page after a password sign-in
+// offers one, once. The browser decides whether to show it (this device can
+// make one and has none); Profile always has passkey.js for its own list.
+$passkeyOffer = !empty($_SESSION['passkey_offer']);
+unset($_SESSION['passkey_offer']);
+if ($passkeyOffer || $uiModuleKey === 'profile') {
+    $ui = isset($ui) && is_array($ui) ? $ui : [];
+    $ui['scripts'] = array_merge((array) ($ui['scripts'] ?? []), ['/assets/ui/js/passkey.js']);
+}
+
 $uiPage = ui_page_config(isset($ui) && is_array($ui) ? $ui : [], $uiModuleKey);
 $moduleTitle = $uiPage['title'];
 
@@ -81,4 +91,15 @@ ui_shell_open($pdo, $uiPage);
 // A confirmation link is waiting: a reminder at the top of every page.
 if ($emailPrompt === 'banner') {
     echo email_prompt_banner($pdo, (int) $_SESSION['user_id']);
+}
+
+if ($passkeyOffer) {
+    try {
+        require_once __DIR__ . '/passkeys.php';
+        if (passkeys_ready($pdo)) {
+            echo passkey_offer_html($pdo, (int) $_SESSION['user_id']);
+        }
+    } catch (Throwable $e) {
+        error_log('[passkey] offer failed: ' . $e->getMessage());
+    }
 }
