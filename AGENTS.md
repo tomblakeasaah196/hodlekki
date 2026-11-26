@@ -1050,7 +1050,11 @@ contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
   decides; consent is the append-only `email_consents` log with the wording
   shown. Someone who unsubscribed is skipped, never texted instead.
 - **Every email goes through the outbox and one hourly budget**
-  (`email_budget_take()`), shared with the ERP mailboxes. A send that died
+  (`email_budget_take()`), shared with the ERP mailboxes. Exception (26 Nov
+  2026): when `ACCOUNT_MAIL_*` is set in .env, the transactional and alert
+  lanes leave through ZeptoMail (`email_lane_route()`,
+  `hod_mail_account_settings()`) and are not metered by the host's budget —
+  the host caps hodlekki.org at 20 an hour and silently drops the excess. A send that died
   mid-way is never resent; a host cap refusal is never blamed on the recipient.
 - **Emails are block documents, never HTML.** `email_doc_validate()` is the
   sanitiser; scripture blocks hold a reference and the words come from the

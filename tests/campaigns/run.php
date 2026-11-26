@@ -348,6 +348,32 @@ email_setting_set($o, 'paused', '1');
 ct_eq('the kill switch stops everything', false, email_worker_run($o, ['endpoints_ready' => true, 'transport' => ct_transport(), 'now' => campaigns_now()])['ran']);
 email_setting_set($o, 'paused', '0');
 
+// The account-mail route (ZeptoMail, 26 Nov 2026): account mail skips the host's hourly cap.
+$r = ct_db();
+ct_at('2026-11-16 10:00');
+ct_eq('not set up: every lane uses the host', 'host', email_lane_route('transactional'));
+$_ENV += ['ACCOUNT_MAIL_HOST' => 'smtp.zeptomail.com', 'ACCOUNT_MAIL_USERNAME' => 'emailapikey', 'ACCOUNT_MAIL_PASSWORD' => 'test-token'];
+ct_eq('set up: account mail uses it', ['account', 'account'], [email_lane_route('transactional'), email_lane_route('alert')]);
+ct_eq('…church news and automations stay on the host', ['host', 'host', 'host'],
+    [email_lane_route('campaign'), email_lane_route('automation'), email_lane_route('mailbox')]);
+email_setting_set($r, 'hourly_cap', '10');
+for ($i = 0; $i < 12; $i++) {
+    email_enqueue($r, ['lane' => 'transactional', 'purpose' => 'account', 'flow' => 'reset_code', 'to_email' => "code{$i}@gmail.com",
+        'subject' => 'Your code', 'html' => '<p>123 456</p>']);
+}
+$routeTx = ct_transport();
+$routeRun = email_worker_run($r, ['endpoints_ready' => true, 'transport' => $routeTx, 'now' => campaigns_now()]);
+ct_eq('twelve codes leave though the host cap is 10 (9 usable)', 12, $routeRun['sent']);
+ct_eq('…each through the account route', ['account'], array_values(array_unique(array_map(static fn ($m) => $m['route'], $routeTx['sent']->getArrayCopy()))));
+ct_eq('…and none counted against the host', 0, email_budget_status($r)['sent_total']);
+email_enqueue($r, ['lane' => 'transactional', 'purpose' => 'account', 'flow' => 'reset_code', 'to_email' => 'late@gmail.com',
+    'subject' => 'Your code', 'html' => '<p>1</p>']);
+email_worker_run($r, ['endpoints_ready' => true, 'now' => campaigns_now(), 'transport' => ct_transport([['ok' => false,
+    'error' => 'Domain hodlekki.org has exceeded the max emails per hour (20/20 (100%)) allowed.']])]);
+ct_eq('a cap refusal on the account route does not shut the host for the hour', false, email_budget_status($r)['refused']);
+unset($_ENV['ACCOUNT_MAIL_HOST'], $_ENV['ACCOUNT_MAIL_USERNAME'], $_ENV['ACCOUNT_MAIL_PASSWORD']);
+ct_eq('unset again: back to the host', 'host', email_lane_route('transactional'));
+
 $threw = false;
 try {
     email_enqueue($o, ['lane' => 'transactional', 'purpose' => 'account', 'flow' => 'x', 'to_email' => 'a@gmail.com',

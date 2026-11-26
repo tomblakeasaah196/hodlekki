@@ -93,6 +93,10 @@ replies addressed to **embrace@hodlekki.org**. The `MAIL_*` settings are in
 `.env.example`; the password is the system@ mailbox's, set in cPanel → Email
 Accounts and pasted into `.env` by hand. Check it with
 `/usr/local/bin/ea-php83 bin/mail_test.php you@example.com` from the docroot.
+Account mail (codes, reset links, confirmations, alerts) goes through ZeptoMail
+when the `ACCOUNT_MAIL_*` lines are in `.env` — the host drops anything over 20
+emails an hour. The token is pasted into `.env` by hand; test it with
+`bin/mail_test.php you@example.com --account` (docs/EMAIL.md, step 3b).
 
 ## The system monitor (November 2026)
 

@@ -337,19 +337,38 @@ function email_classify_failure(string $error): string
     return 'temporary';
 }
 
-/** The default transport: hod_send_mail() over one shared SMTP connection. */
+// Lanes that leave through the account-mail service when it is set up
+// (hod_mail_account_settings(), 26 Nov 2026). Everything else uses the host.
+const EMAIL_ACCOUNT_ROUTE_LANES = ['transactional', 'alert'];
+
+/** 'account' (the transactional service) or 'host' (this server, under its hourly cap). */
+function email_lane_route(string $lane): string
+{
+    return in_array($lane, EMAIL_ACCOUNT_ROUTE_LANES, true) && hod_mail_account_settings() !== null ? 'account' : 'host';
+}
+
+/**
+ * The default transport: hod_send_mail() over one SMTP connection per route
+ * (the message's 'route', from email_lane_route(); 'host' when missing).
+ */
 function email_smtp_transport(): array
 {
-    $mailer = null;
-    $send = static function (array $m) use (&$mailer): array {
-        if ($mailer === null) {
+    $mailers = [];
+    $send = static function (array $m) use (&$mailers): array {
+        $route = ($m['route'] ?? 'host') === 'account' ? 'account' : 'host';
+        if (!isset($mailers[$route])) {
             try {
-                $mailer = hod_mailer();
-                $mailer->SMTPKeepAlive = true;
+                $settings = $route === 'account' ? hod_mail_account_settings() : null;
+                if ($route === 'account' && $settings === null) {
+                    return ['ok' => false, 'error' => 'Account mail is not set up: ACCOUNT_MAIL_HOST, ACCOUNT_MAIL_USERNAME and ACCOUNT_MAIL_PASSWORD are needed in .env.'];
+                }
+                $mailers[$route] = hod_mailer($settings);
+                $mailers[$route]->SMTPKeepAlive = true;
             } catch (Throwable $e) {
                 return ['ok' => false, 'error' => $e->getMessage()];
             }
         }
+        $mailer = $mailers[$route];
         return hod_send_mail(
             [$m['to_email'] => (string) ($m['to_name'] ?? '')],
             $m['subject'],
@@ -365,15 +384,15 @@ function email_smtp_transport(): array
             ]
         );
     };
-    $close = static function () use (&$mailer): void {
-        if ($mailer !== null) {
+    $close = static function () use (&$mailers): void {
+        foreach ($mailers as $mailer) {
             try {
                 $mailer->smtpClose();
             } catch (Throwable $e) {
                 // the connection is gone either way
             }
-            $mailer = null;
         }
+        $mailers = [];
     };
     return ['send' => $send, 'close' => $close];
 }
@@ -480,7 +499,10 @@ function email_worker_run(PDO $pdo, array $opts = []): array
                 $sentThisRun++;
                 continue;
             }
-            if (!email_budget_take($pdo, $lane, 1, $now)) {
+            // The host's hourly budget meters only what leaves through the host.
+            $route = email_lane_route($lane);
+            $metered = $route === 'host';
+            if ($metered && !email_budget_take($pdo, $lane, 1, $now)) {
                 $out['waiting_budget']++;
                 if ($bulk) {
                     $bulkFull = true;
@@ -493,7 +515,9 @@ function email_worker_run(PDO $pdo, array $opts = []): array
                                      WHERE id = ? AND status = 'queued'");
             $claim->execute([campaigns_sql_dt($now), (int) $row['id']]);
             if ($claim->rowCount() !== 1) {
-                email_budget_give_back($pdo, $lane, 1, $now);
+                if ($metered) {
+                    email_budget_give_back($pdo, $lane, 1, $now);
+                }
                 continue;
             }
             $row['attempts'] = (int) $row['attempts'] + 1;
@@ -525,7 +549,9 @@ function email_worker_run(PDO $pdo, array $opts = []): array
             if ($stop !== null) {
                 $pdo->prepare("UPDATE email_outbox SET status = 'suppressed', locked_at = NULL, last_error = ? WHERE id = ?")
                     ->execute([$stop, (int) $row['id']]);
-                email_budget_give_back($pdo, $lane, 1, $now);
+                if ($metered) {
+                    email_budget_give_back($pdo, $lane, 1, $now);
+                }
                 $out['suppressed']++;
                 continue;
             }
@@ -541,6 +567,7 @@ function email_worker_run(PDO $pdo, array $opts = []): array
                 'text'          => $row['text_body'] !== null ? (string) $row['text_body'] : null,
                 'message_id'    => (string) $row['message_id'],
                 'headers'       => email_build_headers($row),
+                'route'         => $route,
             ];
             try {
                 $result = ($transport['send'])($message);
@@ -563,8 +590,10 @@ function email_worker_run(PDO $pdo, array $opts = []): array
                 // Not this message's fault: put it back untouched (the attempt does not count).
                 $pdo->prepare("UPDATE email_outbox SET status = 'queued', locked_at = NULL, attempts = attempts - 1, last_error = ? WHERE id = ?")
                     ->execute([$error, (int) $row['id']]);
-                email_budget_give_back($pdo, $lane, 1, $now);
-                if ($kind === 'cap') {
+                if ($metered) {
+                    email_budget_give_back($pdo, $lane, 1, $now);
+                }
+                if ($kind === 'cap' && $metered) {
                     email_budget_refused($pdo, email_parse_cap_refusal($error)['cap'] ?? null, $now);
                 }
                 $out['stopped'] = $kind;
