@@ -5,6 +5,7 @@
 require_once '../includes/db.php';
 require_once __DIR__ . '/../includes/status_ladder.php';
 require_once __DIR__ . '/../includes/congregation_contact.php';
+require_once __DIR__ . '/../includes/couples.php';
 header('Content-Type: application/json');
 
 // 2. Security Check
@@ -111,6 +112,15 @@ try {
             ");
             $roster = $rosterStmt->fetchAll(PDO::FETCH_ASSOC);
 
+            // Titles (Pastor / Dir. / Min. / Bro. / Sis.) and the linked
+            // spouse: includes/couples.php.
+            $people = couples_people($pdo, array_column($roster, 'id'));
+            foreach ($roster as &$r) {
+                $r['title'] = $people[(int) $r['id']]['title'] ?? '';
+                $r['spouse_id'] = $people[(int) $r['id']]['spouse_id'] ?? null;
+            }
+            unset($r);
+
             echo json_encode([
                 'status' => 'success',
                 'filters' => [
@@ -198,6 +208,7 @@ try {
             ");
             $stmt->execute([$first_name, $last_name, $email, $phone, $dob, $gender, $marital_status, $spiritual_status, $attendance_status, $address, $latitude, $longitude, $anniversary, $comments, $qr_hash, $pic_path]);
             $new_user_id = (int)$pdo->lastInsertId();
+            $spouseProblem = couples_sync($pdo, $new_user_id, (string) $marital_status, (int) ($_POST['spouse_id'] ?? 0), $anniversary);
 
             // NOTIFICATION TRIGGER: Alert IDI (Department ID 1) of the new master roster entry
             $idi_users = perm_module_team($pdo, 'idi');   // the department that owns Data Insights
@@ -213,7 +224,7 @@ try {
 
             echo json_encode([
                 'status' => 'success',
-                'message' => 'New profile successfully created in the master database.',
+                'message' => 'New profile successfully created in the master database.' . ($spouseProblem !== null ? ' The spouse was not linked: ' . $spouseProblem : ''),
                 'user_id' => $new_user_id, // used by Events attendance to clock the new person straight in
             ]);
             break;
@@ -232,6 +243,7 @@ try {
             $member = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($member) {
+                $member['spouse_id'] = couples_people($pdo, [(int) $member['id']])[(int) $member['id']]['spouse_id'] ?? null;
                 echo json_encode(['status' => 'success', 'data' => $member]);
             } else {
                 echo json_encode(['status' => 'error', 'message' => 'Profile not found.']);
@@ -261,6 +273,15 @@ try {
                 exit;
             }
             require_once __DIR__ . '/../includes/sms_functions.php';
+            $me = couples_people($pdo, [$target_id])[$target_id] ?? [];
+            $person['title'] = $me['title'] ?? '';
+            $person['spouse'] = null;
+            if (!empty($me['spouse_id'])) {
+                $sp = couples_people($pdo, [(int) $me['spouse_id']])[(int) $me['spouse_id']] ?? null;
+                if ($sp && (int) $sp['spouse_id'] === $target_id) {
+                    $person['spouse'] = ['id' => (int) $sp['id'], 'name' => couples_titled($sp['title'], $sp['first_name'], $sp['last_name'])];
+                }
+            }
             $person['contact_email'] = cong_contact_email($person);
             $person['phone_intl'] = cong_contact_intl($person['phone']);
             $person['can_text'] = sms_normalize_phone($person['phone'] ?? '') !== null;
@@ -431,6 +452,11 @@ try {
             ");
             $stmt->execute($params);
             ladder_note_change($pdo, (int) $target_id, $statusBefore, 'congregation_edit', (int) $user_id);
+            $spouseProblem = couples_sync($pdo, (int) $target_id, (string) $marital_status, (int) ($_POST['spouse_id'] ?? 0), $anniversary);
+            if ($spouseProblem !== null) {
+                echo json_encode(['status' => 'error', 'message' => 'Saved, but the spouse was not linked. ' . $spouseProblem, 'field' => 'spouse_id']);
+                exit;
+            }
 
             // This editor is the deliberate place to record that someone has
             // relocated or now worships elsewhere, so keep the AWOL exemption
@@ -457,6 +483,7 @@ try {
             // this will seamlessly wipe their entire trace from the system.
             $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
             $stmt->execute([$target_id]);
+            couples_forget($pdo, (int) $target_id);
             ladder_forget_user($pdo, (int) $target_id);
             if (cong_contact_ready($pdo)) {
                 $pdo->prepare("DELETE FROM congregation_contacts WHERE person_id = ?")->execute([(int) $target_id]);

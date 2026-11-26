@@ -450,7 +450,12 @@
         return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     }
     function portraitOf(v) { return C.safeUrl(v.display_picture) || initialsPortrait(v.first_name, v.last_name); }
-    function recapLabel(t) { return t === 'JC_Birthday' ? 'Junior Church' : C.label(t); }
+    function recapLabel(t) { return t === 'JC_Birthday' ? 'Junior Church' : C.eventLabel(t); }
+    /** Name on a recap card: a couple's one line, else the titled first name over the surname. */
+    function recapName(v) {
+        if (v.event_type === 'Anniversary' && v.display_name) return esc(v.display_name);
+        return esc(((v.title ? v.title + ' ' : '') + (v.first_name || '')).trim()) + '<br>' + esc(v.last_name);
+    }
 
     function renderRecap() {
         var grid = C.$('#charis-recap-grid');
@@ -460,12 +465,12 @@
         }
         grid.innerHTML = recap.map(function (v) {
             return '<figure class="relative aspect-[9/16] overflow-hidden rounded-ui bg-ink">'
-                + '<img class="h-full w-full object-cover" src="' + esc(portraitOf(v)) + '" alt="' + esc(C.person(v)) + '" loading="lazy">'
-                + '<button type="button" class="ui-btn ui-btn--secondary ui-btn--sm ui-btn--icon absolute right-2 top-2" data-action="charis.portrait" data-ref="' + esc(v.ref) + '" aria-label="Edit the portrait of ' + esc(C.person(v)) + '">' + HOD.icon('pencil') + '</button>'
+                + '<img class="h-full w-full object-cover" src="' + esc(portraitOf(v)) + '" alt="' + esc(C.celebrant(v)) + '" loading="lazy">'
+                + '<button type="button" class="ui-btn ui-btn--secondary ui-btn--sm ui-btn--icon absolute right-2 top-2" data-action="charis.portrait" data-ref="' + esc(v.ref) + '" aria-label="Edit the portrait of ' + esc(C.celebrant(v)) + '">' + HOD.icon('pencil') + '</button>'
                 + '<figcaption class="absolute inset-x-0 bottom-0 space-y-1 bg-gradient-to-t from-black/85 to-transparent p-3 pt-10 text-white">'
                 + '<div class="flex flex-wrap gap-1">' + C.badge(recapLabel(v.event_type), RECAP_TONES[v.event_type] || 'info') + '</div>'
                 + '<p class="text-xs opacity-80">' + esc(v.event_date) + '</p>'
-                + '<p class="font-display text-sm font-bold leading-tight">' + esc(v.first_name) + '<br>' + esc(v.last_name) + '</p>'
+                + '<p class="font-display text-sm font-bold leading-tight">' + recapName(v) + '</p>'
                 + '</figcaption></figure>';
         }).join('');
     }

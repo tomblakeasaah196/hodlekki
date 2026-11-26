@@ -88,10 +88,14 @@
 
     function eventLabel(eventType) {
         if (eventType === 'JC_Birthday') return 'JUNIOR CHURCH';
+        if (eventType === 'Anniversary' || eventType === 'Wedding_Anniversary') return 'WEDDING ANNIVERSARY';
         return String(eventType || '').replace(/_/g, ' ').toUpperCase();
     }
 
+    // The API names each celebrant the church's way (includes/couples.php):
+    // "Min. Bolanle Ade", or a couple's "Pastor Ebele & Min. Bolanle".
     function fullName(person) {
+        if (person.display_name) return String(person.display_name).replace(/\s+/g, ' ').trim();
         return `${person.first_name || ''} ${person.last_name || ''}`.replace(/\s+/g, ' ').trim();
     }
 

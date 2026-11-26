@@ -188,8 +188,8 @@ function cong_kpi(string $key, string $label, string $hint, string $icon): strin
             <legend class="ui-legend">Identity</legend>
             <div class="ui-form-grid">
                 <?= ui_field('text', ['name' => 'first_name', 'id' => 'cong-first', 'label' => 'First name', 'required' => true, 'autocomplete' => 'off']) ?>
-                <?= ui_field('text', ['name' => 'last_name', 'id' => 'cong-last', 'label' => 'Last name', 'required' => true, 'autocomplete' => 'off']) ?>
-                <?= ui_field('select', ['name' => 'gender', 'id' => 'cong-gender', 'label' => 'Gender', 'options' => ['' => 'Not recorded', 'Male' => 'Male', 'Female' => 'Female']]) ?>
+                <?= ui_field('text', ['name' => 'last_name', 'id' => 'cong-last', 'label' => 'Last name', 'required' => true, 'autocomplete' => 'off', 'attrs' => ['data-action-change' => 'cong.spouse-sort']]) ?>
+                <?= ui_field('select', ['name' => 'gender', 'id' => 'cong-gender', 'label' => 'Gender', 'options' => ['' => 'Not recorded', 'Male' => 'Male', 'Female' => 'Female'], 'attrs' => ['data-action-change' => 'cong.spouse-sort']]) ?>
                 <?= ui_field('tel', ['name' => 'phone', 'id' => 'cong-phone', 'label' => 'Phone number', 'required' => true, 'inputmode' => 'tel', 'autocomplete' => 'off']) ?>
                 <div class="ui-field">
                     <span class="ui-label">Church email</span>
@@ -230,6 +230,12 @@ function cong_kpi(string $key, string $label, string $hint, string $icon): strin
             <legend class="ui-legend">Welfare</legend>
             <div class="ui-form-grid">
                 <?= ui_field('select', ['name' => 'marital_status', 'id' => 'cong-marital', 'label' => 'Marital status', 'options' => ['Single' => 'Single', 'Married' => 'Married', 'Separated' => 'Separated', 'Divorced' => 'Divorced'], 'attrs' => ['data-action-change' => 'cong.conditional']]) ?>
+                <div data-cong-spouse hidden>
+                    <?= ui_field('select', ['name' => 'spouse_id', 'id' => 'cong-spouse', 'label' => 'Spouse in church', 'optional' => true,
+                        'options' => ['' => 'Not in church'],
+                        'attrs' => ['data-ui-combobox' => true, 'data-action-change' => 'cong.spouse'],
+                        'info' => 'Pick their spouse if they are in the register. Both records are linked: the spouse is marked Married and gets the same anniversary, and Charis shows one line for the couple.']) ?>
+                </div>
                 <div data-cong-anniversary hidden>
                     <?= ui_field('date', ['name' => 'wedding_anniversary', 'id' => 'cong-anniversary', 'label' => 'Wedding anniversary', 'optional' => true]) ?>
                 </div>
