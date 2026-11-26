@@ -153,6 +153,71 @@ function member_by_confirmed_email(PDO $pdo, string $email): ?int
     return $id === false || $id === null ? null : (int) $id;
 }
 
+// Sources a first email may come from to stand in for a confirmed one: typed by
+// the person or by staff, never the public Connect card (anyone can type there).
+const EMAIL_FIRST_PENDING_SOURCES = ['signin_prompt', 'profile', 'staff', 'import', 'embrace'];
+
+/**
+ * The person's FIRST email, still waiting for its confirm link, or null.
+ * Owner, 26 Nov 2026: someone who has never given us an email before gets a
+ * reset link at the one they just entered; using that link proves the address
+ * and confirms it (email_reset_complete()). Null when they have ever had a
+ * confirmed address, when another personal address is on their account
+ * (users.email or users.real_email; a @hodlc.com sign-in name does not count),
+ * when someone else has confirmed it, or when it came from the Connect card.
+ */
+function member_first_pending_email(PDO $pdo, int $userId): ?string
+{
+    if ($userId <= 0 || !campaigns_table_exists($pdo, 'email_addresses')) {
+        return null;
+    }
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM email_addresses WHERE user_id = ? AND confirmed_at IS NOT NULL');
+    $stmt->execute([$userId]);
+    if ((int) $stmt->fetchColumn() > 0) {
+        return null;
+    }
+    $stmt = $pdo->prepare("SELECT email, source FROM email_addresses WHERE user_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1");
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row || !in_array((string) $row['source'], EMAIL_FIRST_PENDING_SOURCES, true)) {
+        return null;
+    }
+    $email = email_normalize((string) $row['email']);
+    if (email_is_church_domain($email) || !email_is_valid_syntax($email) || member_by_confirmed_email($pdo, $email) !== null) {
+        return null;
+    }
+    try {
+        $stmt = $pdo->prepare('SELECT email, real_email FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+    } catch (PDOException $e) {
+        $stmt = $pdo->prepare('SELECT email FROM users WHERE id = ?'); // no real_email column here
+        $stmt->execute([$userId]);
+    }
+    foreach ((array) ($stmt->fetch(PDO::FETCH_ASSOC) ?: []) as $onFile) {
+        $onFile = email_normalize((string) $onFile);
+        if ($onFile !== '' && $onFile !== $email && email_domain($onFile) !== SECURITY_LOGIN_EMAIL_DOMAIN_FOR_EMAIL) {
+            return null;
+        }
+    }
+    return $email;
+}
+
+/** Whose first, still-unconfirmed email is this? Only when exactly one person has it pending. */
+function member_by_first_pending_email(PDO $pdo, string $email): ?int
+{
+    $email = email_normalize($email);
+    if ($email === '' || !campaigns_table_exists($pdo, 'email_addresses')) {
+        return null;
+    }
+    $stmt = $pdo->prepare("SELECT DISTINCT user_id FROM email_addresses WHERE email = ? AND status = 'pending'");
+    $stmt->execute([$email]);
+    $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    if (count($ids) !== 1) {
+        return null;
+    }
+    return member_first_pending_email($pdo, (int) $ids[0]) === $email ? (int) $ids[0] : null;
+}
+
 /**
  * Where a person stands, for the prompt and Profile:
  *   confirmed  the confirmed address (+ confirmed_at)
@@ -387,6 +452,20 @@ function email_capture_confirm(PDO $pdo, string $token, ?string $ip = null): arr
             ->execute([campaigns_sql_dt($now), (int) $row['id']]);
         return ['ok' => false, 'code' => 'EXPIRED', 'user_id' => $userId, 'email' => $email];
     }
+    return email_address_confirm_row($pdo, $row, $ip);
+}
+
+/**
+ * Confirm one pending email_addresses row: the link's owner has proven the
+ * address (its confirm link, or a reset link sent there). Replaces any earlier
+ * confirmed address, cancels other pending ones, syncs users.email and tells
+ * the old address. Same answer shape as email_capture_confirm().
+ */
+function email_address_confirm_row(PDO $pdo, array $row, ?string $ip = null): array
+{
+    $userId = (int) $row['user_id'];
+    $email = (string) $row['email'];
+    $now = campaigns_now();
     if (email_is_church_domain($email) || !email_is_valid_syntax($email)) {
         return ['ok' => false, 'code' => 'REFUSED', 'user_id' => $userId, 'email' => $email];
     }

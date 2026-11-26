@@ -1081,7 +1081,9 @@ contracts: `docs/EMAIL.md`. Code: `includes/campaigns/` (entry point
   calls "required" to `/auth/add_email.php`, which — like
   `change_password.php` — must never include header.php. Reset links go only
   to a confirmed personal email (`email_reset_request()` /
-  `email_reset_complete()`); keep the same-answer rule on the forgot page.
+  `email_reset_complete()`), or to a person's FIRST email while it waits for
+  its confirm link (`member_first_pending_email()`; using the link confirms
+  it); keep the same-answer rule on the forgot page.
   `email_settings.signin_prompt = 0` turns the prompt off.
 - Degrade before the migration: `campaigns_ready()` first, `FEATURE_NOT_READY`
   or nothing — never a fatal.

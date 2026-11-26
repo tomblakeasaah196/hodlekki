@@ -201,7 +201,11 @@ plain POST forms with the CSRF field (no page script).
 - **Forgot password** accepts a phone number too: each active account on it
   with a confirmed email gets its own link, at its own address.
 - **Reset**: the link goes only to the confirmed personal email of an active
-  account (`email_reset_request()`), throttled 10 an hour per requester and 3
+  account (`email_reset_request()`) — or, for someone who has never had an
+  email before, to their first one while it waits for its confirm link
+  (`member_first_pending_email()`, owner 26 Nov 2026: typed by the person or
+  staff, never the Connect card; on nobody else's account; no other personal
+  address on file). Using that link confirms the address. Throttled 10 an hour per requester and 3
   per identifier (both stored as hashes), token sha256-stored, 30 minutes,
   once; a newer link or any password change makes older links useless.
   `email_reset_complete()` uses `security_password_problems()` and the AGENTS
