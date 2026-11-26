@@ -5,8 +5,9 @@
 // EXECUTE the real functions against in-memory SQLite and pin what the owner
 // asked for (26 Nov 2026):
 //
-//   - Pastor > Dir. > Min. > Bro./Sis.; Assistant/Deputy HODs are Bro./Sis.;
-//     no gender and no seat = no title.
+//   - Pastor > Dir. > Min. > Bro./Sis.; an Associate Pastor (any live pastor
+//     role) is Pastor; an Assistant/Deputy HOD is Min.; a sub-unit head is
+//     Bro./Sis.; no gender and no seat = no title.
 //   - A couple's wedding anniversary is ONE line, first names only, husband
 //     first: "Pastor Ebele & Min. Bolanle"; one spouse in church:
 //     "Bro. John & wife".
@@ -77,13 +78,28 @@ function cp_row(PDO $pdo, int $id): array
 }
 
 // Seat ranks as perm_seat_types ships them: pastor in charge 60, director 50, hod 40, deputy below.
-$floors = ['pastor' => 60, 'director' => 50, 'hod' => 40];
+// Min. starts at the Deputy (Assistant) HOD, 35; a sub-unit head is 30.
+$floors = ['pastor' => 60, 'director' => 50, 'hod' => 35];
 
 echo "Titles\n";
 same('a male member is Bro.', 'Bro.', couples_title(['gender' => 'Male', 'spiritual_status' => 'Member'], 0, $floors));
 same('a female worker is Sis.', 'Sis.', couples_title(['gender' => 'Female', 'spiritual_status' => 'Worker'], 0, $floors));
 same('an HOD is Min.', 'Min.', couples_title(['gender' => 'Female', 'spiritual_status' => 'Worker'], 40, $floors));
-same('a deputy HOD is Bro.', 'Bro.', couples_title(['gender' => 'Male', 'spiritual_status' => 'Worker'], 30, $floors));
+same('an Assistant (Deputy) HOD is Min.', 'Min.', couples_title(['gender' => 'Male', 'spiritual_status' => 'Worker'], 35, $floors));
+same('a sub-unit head is Bro.', 'Bro.', couples_title(['gender' => 'Male', 'spiritual_status' => 'Worker'], 30, $floors));
+same('an Associate Pastor role is Pastor', 'Pastor', couples_title(['gender' => 'Male', 'spiritual_status' => 'Worker'], 0, $floors, true));
+ok('deputy_hod is the Assistant HOD seat', couples_is_assistant_hod('deputy_hod', 'Deputy HOD'));
+ok('a seat named "Assistant HOD" counts', couples_is_assistant_hod('asst_hod', 'Assistant HOD'));
+ok('the HOD seat itself is not an assistant', !couples_is_assistant_hod('hod', 'Head of Department'));
+ok('a sub-unit head is not an assistant HOD', !couples_is_assistant_hod('sub_unit_head', 'Sub-Unit Head'));
+
+$roles = new PDO('sqlite::memory:');
+$roles->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$roles->exec('CREATE TABLE roles (id INTEGER PRIMARY KEY, role_name TEXT, label TEXT, is_archived INTEGER DEFAULT 0)');
+$roles->exec('CREATE TABLE user_roles (user_id INTEGER, role_id INTEGER, is_frozen INTEGER DEFAULT 0, starts_on TEXT NULL, ends_on TEXT NULL)');
+$roles->exec("INSERT INTO roles (id, role_name, label) VALUES (1, 'Assoc_Pastor', 'Associate Pastor'), (2, 'Worker', 'Worker'), (3, 'Elder', 'Senior Pastor')");
+$roles->exec("INSERT INTO user_roles (user_id, role_id, is_frozen, ends_on) VALUES (10, 1, 0, NULL), (11, 2, 0, NULL), (12, 1, 1, NULL), (13, 1, 0, '2026-01-01'), (14, 3, 0, NULL)");
+same('live pastor roles, by name or label', [10 => true, 14 => true], couples_pastor_roles($roles, '2026-11-26'));
 same('a Director is Dir.', 'Dir.', couples_title(['gender' => 'Male', 'spiritual_status' => 'Worker'], 50, $floors));
 same('a Pastor in charge seat is Pastor', 'Pastor', couples_title(['gender' => 'Male', 'spiritual_status' => 'Worker'], 60, $floors));
 same('spiritual status Pastor wins over an HOD seat', 'Pastor', couples_title(['gender' => 'Male', 'spiritual_status' => 'Pastor'], 40, $floors));
