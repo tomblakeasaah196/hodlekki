@@ -129,6 +129,17 @@ is_same('payload: one recipient', [['email_address' => ['address' => 'ada@gmail.
 is_same('payload: replies to embrace@', 'embrace@hodlekki.org', $payload['reply_to'][0]['address']);
 is_same('payload: our headers ride along, a refused one does not', ['X-HOD-Ref' => 'abc', 'Auto-Submitted' => 'auto-generated'], $payload['mime_headers']);
 is_same('payload: html and text', ['<p>1</p>', '1'], [$payload['htmlbody'], $payload['textbody']]);
+is_same('no Brevo key: no backup', null, with_env(['ACCOUNT_MAIL_BACKUP_API_KEY' => ''] + $accountEnv, [], 'hod_mail_backup_settings'));
+$b = with_env(['ACCOUNT_MAIL_BACKUP_API_KEY' => 'xkeysib-test'] + $accountEnv, [], 'hod_mail_backup_settings');
+is_same('the Brevo backup posts to its API', 'https://api.brevo.com/v3/smtp/email', $b['api_url']);
+$bp = hod_brevo_payload($b, ['to_email' => 'ada@gmail.com', 'to_name' => 'Ada', 'subject' => 'Your code', 'html' => '<p>1</p>',
+    'text' => '1', 'headers' => ['X-HOD-Ref' => 'abc', 'Bcc' => 'all@x.com']]);
+is_same('Brevo payload: sender, recipient, reply-to', [['email' => 'system@hodlekki.org', 'name' => 'Household of David Lekki'],
+    [['email' => 'ada@gmail.com', 'name' => 'Ada']], 'embrace@hodlekki.org'], [$bp['sender'], $bp['to'], $bp['replyTo']['email']]);
+is_same('Brevo payload: content and our headers only', ['<p>1</p>', '1', ['X-HOD-Ref' => 'abc']],
+    [$bp['htmlContent'], $bp['textContent'], $bp['headers']]);
+is_same('a Brevo key problem reads as our set-up', true,
+    str_contains(hod_mail_api_error('Brevo', 401, '{"code":"unauthorized","message":"Key not found"}'), 'Brevo authentication failed'));
 is_same('a bad token reads as our set-up', true, str_contains(hod_zepto_error(401, '{"error":{"code":"TM_3201","message":"Invalid API Token"}}'), 'authentication failed'));
 is_same('busy is temporary', true, str_starts_with(hod_zepto_error(503, ''), '[temporary] '));
 is_same('a refused message is permanent, with the reason', '[permanent] ZeptoMail refused it (status 422): TM_4001 · Invalid address',

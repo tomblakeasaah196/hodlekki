@@ -51,6 +51,10 @@ lead (screens, the sign-in prompt and sign-in by personal email are later PRs).
    outside the host's budget (`email_lane_route()`). They go over HTTPS to
    the API (`hod_zepto_send()`), not SMTP: this host refuses port 465 to
    other servers and answers port 587 with its own Exim (26 Nov 2026).
+   **Backup:** with `ACCOUNT_MAIL_BACKUP_API_KEY`, anything ZeptoMail cannot
+   take (no credit, a bad token, an outage — not a wrong address) goes through
+   Brevo's API instead (`email_send_account()`), and the error log says so.
+   Both down: the message goes back in the queue. Test: `--backup`.
    Church news, automations and the ERP mailboxes stay on the host. DNS for
    hodlekki.org is at Cloudflare: DKIM `261144._domainkey` (TXT) and
    `bounce-zem` (CNAME → cluster89.zeptomail.com, DNS only). Test with
