@@ -322,6 +322,7 @@ jobs:
           fi
           php tests/dashboard_metrics_test.php
           php tests/auth_helpers_test.php
+          php tests/passkeys_test.php
           php tests/department_attendance_test.php
           php tests/department_messages_test.php
 

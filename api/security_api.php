@@ -488,6 +488,16 @@ try {
                 'Password reset by an administrator'
             );
 
+            // Passkeys are credentials too (includes/passkeys.php): one on a lost
+            // phone would still open the account, so they go with the old password.
+            $passkeysRemoved = 0;
+            try {
+                require_once __DIR__ . '/../includes/passkeys.php';
+                $passkeysRemoved = passkey_delete_all($pdo, $target_id);
+            } catch (Throwable $e) {
+                error_log('[passkey] could not remove passkeys on admin reset: ' . $e->getMessage());
+            }
+
             $name = trim($target['first_name'] . ' ' . $target['last_name']);
 
             security_log(
@@ -496,7 +506,9 @@ try {
                 $target_id,
                 'Administrator set a new password.'
                 . ($requireChange ? ' Member must change it at next sign-in.' : ' No forced change.')
-                . " Sessions killed: {$killed}." . ($reason !== '' ? " Reason: {$reason}" : '')
+                . " Sessions killed: {$killed}."
+                . ($passkeysRemoved > 0 ? " Passkeys removed: {$passkeysRemoved}." : '')
+                . ($reason !== '' ? " Reason: {$reason}" : '')
             );
             security_notify_user(
                 $pdo,

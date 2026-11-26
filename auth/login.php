@@ -72,7 +72,7 @@ ui_standalone_open('Sign in', [
     'bare' => true,
     'boot' => true,
     'quiet' => false,
-    'scripts' => ['/assets/ui/js/pages/login.js'],
+    'scripts' => ['/assets/ui/js/passkey.js', '/assets/ui/js/pages/login.js'],
 ]);
 
 $now = auth_welcome_now();
@@ -85,8 +85,28 @@ $sizes = '(min-width: 1024px) 75vw, 100vw';
 // or when a link asked for the form (/auth/login?signin=1).
 $openSheet = $signOutNotice !== '' || isset($_GET['signin']);
 $credit = 'Engineered by <a href="https://jbspraxis.com" target="_blank" rel="noopener">JBS Praxis</a>';
+
+// Passkeys (includes/passkeys.php, owner 26 Nov 2026). The big fingerprint for
+// a device that has signed in with one, or made one: the browser remembers
+// that (localStorage, assets/ui/js/passkey.js) and the line below reads it
+// before the page paints, so the right screen shows first time.
+$passkeyButton = static function (string $where): string {
+    return '<button type="button" class="si-pk__print" data-action="pk.go" aria-describedby="si-pk-hint-' . $where . '">'
+        . '<span class="si-pk__ring" aria-hidden="true"></span><span class="si-pk__ring si-pk__ring--2" aria-hidden="true"></span>'
+        . ui_icon('fingerprint') . '<span class="si-pk__scan" aria-hidden="true"></span>'
+        . '<span class="sr-only">Sign in with your fingerprint or face</span></button>'
+        . '<p class="si-pk__hint" id="si-pk-hint-' . $where . '" data-pk-hint>Touch to sign in</p>';
+};
 ?>
-<script nonce="<?= ui_e(ui_csp_nonce()) ?>">document.documentElement.classList.add('si-js');</script>
+<script nonce="<?= ui_e(ui_csp_nonce()) ?>">(function (d) {
+    d.classList.add('si-js');
+    try {
+        if (window.PublicKeyCredential && navigator.credentials) {
+            d.classList.add('si-pk-can');
+            if (localStorage.getItem('hod.passkey') === '1') d.classList.add('si-pk-on');
+        }
+    } catch (e) { /* no storage: the password form, as always */ }
+})(document.documentElement);</script>
 <div class="si" data-si<?= $openSheet ? ' data-si-open' : '' ?>>
     <div class="si-media" aria-hidden="true">
         <picture>
@@ -131,6 +151,10 @@ $credit = 'Engineered by <a href="https://jbspraxis.com" target="_blank" rel="no
     </section>
 
     <div class="si-dock">
+        <div class="si-pk si-pk--dock" data-si-in="7">
+            <?= $passkeyButton('dock') ?>
+            <button type="button" class="si-pk__alt" data-action="si.open" aria-controls="si-panel">Use password</button>
+        </div>
         <button type="button" class="si-open" data-action="si.open" aria-controls="si-panel" aria-expanded="false" data-si-in="7">Sign in</button>
         <p class="si-credit si-credit--dock" data-si-in="7"><?= $credit ?></p>
     </div>
@@ -149,9 +173,14 @@ $credit = 'Engineered by <a href="https://jbspraxis.com" target="_blank" rel="no
 <?php endif; ?>
             <div id="login-alert" aria-live="polite"></div>
 
+            <div class="si-pk si-pk--panel">
+                <?= $passkeyButton('panel') ?>
+                <p class="si-pk__or">or use your password</p>
+            </div>
+
             <form class="ui-form si-form" id="login-form" data-action="login.submit" data-ui-validate novalidate>
                 <?= ui_field('text', ['name' => 'email', 'id' => 'email', 'label' => 'Email or phone', 'required' => true,
-                    'autocomplete' => 'username', 'info' => 'Your own email, your phone number, or your old @hodlc.com name.',
+                    'autocomplete' => 'username webauthn', 'info' => 'Your own email, your phone number, or your old @hodlc.com name.',
                     'attrs' => ['autocapitalize' => 'none', 'spellcheck' => 'false', 'autocorrect' => 'off']]) ?>
                 <div class="ui-field">
                     <div class="si-label-row">
@@ -176,6 +205,7 @@ $credit = 'Engineered by <a href="https://jbspraxis.com" target="_blank" rel="no
                 <?= ui_button('Sign in', ['variant' => 'brand', 'type' => 'submit', 'block' => true, 'size' => 'lg', 'attrs' => ['id' => 'login-submit']]) ?>
             </form>
 
+            <p class="si-pk-other"><button type="button" data-action="pk.go"><?= ui_icon('fingerprint') ?>Have a passkey? <span>Use it</span></button></p>
             <p class="si-first"><a class="ui-link" href="/auth/setup_password">First sign-in? <span>Set your password</span></a></p>
             <p class="si-credit si-credit--panel"><?= $credit ?></p>
         </div>

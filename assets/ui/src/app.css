@@ -2047,6 +2047,64 @@
         }
     }
 
+    /* ---------- Passkey offer (once, after a password sign-in) ---------- */
+
+    .ui-pk-offer {
+        position: fixed;
+        z-index: var(--ui-z-toast);
+        left: 12px;
+        right: 12px;
+        bottom: calc(var(--ui-bottom-offset) + var(--ui-safe-bottom) + 12px);
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        max-width: 440px;
+        margin-inline: auto;
+        padding: 16px;
+        border: 1px solid var(--ui-border);
+        border-radius: 20px;
+        background: var(--ui-surface);
+        box-shadow: 0 24px 60px -20px rgb(0 0 0 / .45);
+        opacity: 0;
+        transform: translateY(16px);
+        transition: opacity 200ms ease, transform 250ms cubic-bezier(.2, .8, .2, 1);
+    }
+    .ui-pk-offer.is-in { opacity: 1; transform: none; }
+    .ui-pk-offer[hidden] { display: none; }
+    .ui-pk-offer__icon {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 48px;
+        height: 48px;
+        border-radius: 999px;
+        background: var(--ui-brand-red);
+        color: #FFFFFF;
+    }
+    .ui-pk-offer__icon .ui-icon { width: 26px; height: 26px; }
+    .ui-pk-offer__title {
+        margin: 0;
+        font-weight: 700;
+        color: var(--ui-heading);
+    }
+    .ui-pk-offer__text {
+        margin: 2px 0 12px;
+        font-size: .875rem;
+        color: var(--ui-text-muted);
+    }
+    .ui-pk-offer__actions { display: flex; gap: 8px; }
+    @media (min-width: 1024px) {
+        .ui-pk-offer {
+            left: auto;
+            right: 24px;
+            bottom: 24px;
+            width: 400px;
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .ui-pk-offer { transition: none; transform: none; }
+    }
+
     /* ---------- Dialog (native <dialog>), drawer, popover panels ---------- */
 
     .ui-dialog {
@@ -3314,6 +3372,146 @@
         color: var(--ui-brand-red);
     }
     .si-first a:hover span { text-decoration: underline; }
+
+    /* Passkeys (26 Nov 2026). On a device that has one (html.si-pk-on, set
+       before paint from localStorage), a big pulsing fingerprint: in the dock
+       on phones (it replaces the Sign in button; "Use password" opens the
+       sheet), on top of the form on wide screens. Elsewhere (html.si-pk-can),
+       a small "Use a passkey" under the form. */
+    .si-pk,
+    .si-pk-other { display: none; }
+    .si-pk {
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+    .si-pk-on .si-pk { display: flex; }
+    .si-pk-can:not(.si-pk-on) .si-pk-other { display: block; }
+    .si-pk-on .si-dock .si-open { display: none; }
+    .si-pk__print {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 96px;
+        height: 96px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--si-red);
+        color: #FFFFFF;
+        box-shadow: 0 16px 36px -14px rgb(209 25 32 / .85), inset 0 1px 0 rgb(255 255 255 / .2);
+        cursor: pointer;
+        transition: transform 100ms var(--si-out), background-color 150ms var(--si-out);
+        -webkit-tap-highlight-color: transparent;
+    }
+    .si-pk__print:hover { background: var(--si-red-hover); }
+    .si-pk__print:active { transform: scale(.96); }
+    .si-pk__print:focus-visible {
+        outline: 3px solid var(--ui-focus);
+        outline-offset: 4px;
+    }
+    .si-pk__print svg {
+        position: relative;
+        width: 48px;
+        height: 48px;
+        stroke-width: 1.6;
+    }
+    .si-pk__ring {
+        position: absolute;
+        inset: 0;
+        border: 2px solid var(--si-red);
+        border-radius: inherit;
+        opacity: 0;
+        pointer-events: none;
+        animation: si-pk-ring 2.4s cubic-bezier(.2, .6, .3, 1) infinite;
+    }
+    .si-pk__ring--2 { animation-delay: 1.2s; }
+    .si-pk__scan {
+        position: absolute;
+        left: 26%;
+        right: 26%;
+        top: 30%;
+        height: 2px;
+        border-radius: 2px;
+        background: rgb(255 255 255 / .95);
+        box-shadow: 0 0 10px 1px rgb(255 255 255 / .8);
+        animation: si-pk-scan 1.5s ease-in-out infinite alternate;
+    }
+    .si-pk.is-busy .si-pk__ring { animation-duration: 1s; }
+    @keyframes si-pk-ring {
+        0% { transform: scale(1); opacity: .6; }
+        100% { transform: scale(1.8); opacity: 0; }
+    }
+    @keyframes si-pk-scan {
+        from { top: 28%; }
+        to { top: 70%; }
+    }
+    .si-pk__hint {
+        margin: 0;
+        font-size: .9375rem;
+        font-weight: 600;
+    }
+    .si-pk--dock .si-pk__hint { color: var(--si-paper); }
+    .si-pk__alt {
+        min-height: 44px;
+        padding: 8px 16px;
+        border: 0;
+        background: none;
+        color: var(--si-paper);
+        font: 600 .9375rem/1 var(--ui-font-sans);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        cursor: pointer;
+    }
+    .si-pk--panel {
+        margin-bottom: 20px;
+        color: var(--ui-heading);
+    }
+    .si-pk__or {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        margin: 6px 0 0;
+        font-size: .8125rem;
+        color: var(--ui-text-muted);
+    }
+    .si-pk__or::before,
+    .si-pk__or::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--ui-border);
+    }
+    .si-pk-other {
+        margin: 14px 0 0;
+        text-align: center;
+        font-size: .875rem;
+    }
+    .si-pk-other button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 44px;
+        border: 0;
+        background: none;
+        color: var(--ui-text-muted);
+        font: inherit;
+        cursor: pointer;
+    }
+    .si-pk-other button span { font-weight: 600; color: var(--ui-brand-red); }
+    .si-pk-other svg { width: 18px; height: 18px; }
+    @media (max-width: 1023.98px) {
+        .si-pk--panel { display: none !important; }
+    }
+    @media (min-width: 1024px) {
+        .si-pk--dock { display: none !important; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .si-pk__ring,
+        .si-pk__scan { animation: none; }
+        .si-pk__ring { opacity: .25; transform: scale(1.25); }
+        .si-pk__ring--2 { display: none; }
+    }
     .si-credit--panel {
         margin-top: 24px;
         text-align: center;

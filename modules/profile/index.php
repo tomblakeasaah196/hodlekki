@@ -29,6 +29,15 @@ try {
 }
 $profilePhoto = !empty($_SESSION['picture_path']) ? (string) $_SESSION['picture_path'] : null;
 
+// Passkeys (includes/passkeys.php): shown once the migration has run.
+$passkeysOn = false;
+try {
+    require_once __DIR__ . '/../../includes/passkeys.php';
+    $passkeysOn = passkeys_ready($pdo);
+} catch (Throwable $e) {
+    error_log('[passkey] profile check failed: ' . $e->getMessage());
+}
+
 /** A password input with a show/hide button. */
 function profile_password_field(string $id, string $name, string $label, string $autocomplete, string $hint = ''): string
 {
@@ -175,6 +184,20 @@ function profile_password_field(string $id, string $name, string $label, string 
                     </div>
                 </form>
 
+<?php if ($passkeysOn): ?>
+                <hr class="ui-divider my-0">
+                <div>
+                    <div class="mb-2 flex items-center justify-between gap-3">
+                        <h3 class="ui-h3 flex items-center gap-1">Passkeys
+                            <?= ui_info('Sign in with your fingerprint, face or screen lock instead of your password. Each device keeps its own; iCloud and Google can sync one to your other devices. Your password still works.', 'About passkeys') ?></h3>
+                        <?= ui_button('Add passkey', ['size' => 'sm', 'icon' => 'fingerprint', 'attrs' => ['data-action' => 'passkey.add']]) ?>
+                    </div>
+                    <p class="ui-meta" data-passkey-empty>None yet. Add one on this device.</p>
+                    <p class="ui-meta" data-passkey-unsupported hidden>This browser cannot use passkeys.</p>
+                    <ul class="ui-list rounded-ui-lg border border-line" data-passkey-list hidden></ul>
+                </div>
+<?php endif; ?>
+
                 <hr class="ui-divider my-0">
                 <div class="grid gap-6 md:grid-cols-2">
                     <dl class="ui-dl ui-dl--stacked">
@@ -219,6 +242,20 @@ function profile_password_field(string $id, string $name, string $label, string 
     . ui_button('Save photo', ['variant' => 'primary', 'attrs' => ['data-action' => 'profile.save-photo']])
 ) ?>
 
+<?php
+// Passkeys: the options travel with the page, so "Add passkey" opens the
+// phone's own prompt inside the tap (iPhone allows it only there).
+try {
+    if ($passkeysOn) {
+        $passkeyUser = $pdo->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+        $passkeyUser->execute([(int) $_SESSION['user_id']]);
+        echo ui_json_script('passkey-profile-options',
+            passkey_register_options($pdo, $passkeyUser->fetch(PDO::FETCH_ASSOC) ?: ['id' => (int) $_SESSION['user_id']]));
+    }
+} catch (Throwable $e) {
+    error_log('[passkey] profile options failed: ' . $e->getMessage());
+}
+?>
 <?= ui_json_script('profile-config', [
     'geoapifyKey' => (string) ($_ENV['GEOAPIFY_API_KEY'] ?? '7a189b607e9e4c4cbedf6ada291b6bc1'),
 ]) ?>

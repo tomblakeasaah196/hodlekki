@@ -11,6 +11,9 @@
 //     measurements) and the field being typed in is kept in view.
 //   - The scripture under the title rotates (KJV, from the page's JSON block).
 //   - The pinned button rises above the install banner while that is shown.
+//   - Passkeys (assets/ui/js/passkey.js): on a device that has one, a big
+//     fingerprint that starts by itself where the browser allows (iPhone needs
+//     a tap); everywhere, the email box offers the phone's passkeys.
 //   - The form posts to /api/auth_api.php exactly as before (email, password,
 //     remember). On success the API says where to go; when it is returning
 //     the member to the page they asked for, the #fragment the browser
@@ -216,6 +219,122 @@
         });
     });
 
+    /* ----------------------------------------------------------- passkeys */
+    // A device that has a HOD passkey (html.si-pk-on) shows a big fingerprint.
+    // It starts by itself where the browser allows it (Android, desktop
+    // Chrome/Edge); iPhone and Safari need the tap. The email box also offers
+    // passkeys the phone holds (autofill, "conditional mediation"). A closed
+    // prompt leaves the password form; a removed passkey stops the shortcut.
+
+    var pk = HOD.passkey;
+    var pkOptions = null;   // a challenge for the next tap: one use, from the server
+    var pkAuto = null;      // the autofill request, stopped before a tapped one
+    var pkCond = false;
+    var pkBusy = false;
+    var pkRetried = false;
+
+    function pkOptionsFetch() {
+        return HOD.api(pk.api, { action: 'login_options', quiet: true }).then(function (res) {
+            return res.options;
+        }, function () { return null; });
+    }
+
+    function pkPrepare() {
+        return pkOptionsFetch().then(function (o) { pkOptions = o; return o; });
+    }
+
+    function pkHint(text) {
+        Array.prototype.forEach.call(document.querySelectorAll('[data-pk-hint]'), function (el) { el.textContent = text; });
+    }
+
+    function pkSetBusy(on) {
+        pkBusy = on;
+        Array.prototype.forEach.call(document.querySelectorAll('.si-pk'), function (el) { el.classList.toggle('is-busy', on); });
+        pkHint(on ? 'Waiting for your phone…' : 'Touch to sign in');
+    }
+
+    function pkDone(res) {
+        showAlert('success', null, 'Welcome back.');
+        pkHint('Signed in');
+        var destination = res.redirect || '/';
+        if (res.returning && window.location.hash && destination.indexOf('#') === -1) {
+            destination += window.location.hash;
+        }
+        window.location.href = destination;
+    }
+
+    function pkFailed(err) {
+        pkSetBusy(false);
+        // Chrome may still be closing the autofill request: try once more.
+        if (err && err.name === 'InvalidStateError' && !pkRetried) {
+            pkRetried = true;
+            setTimeout(pkGo, 120);
+            return;
+        }
+        pkRetried = false;
+        if (err && err.code === 'UNKNOWN') {
+            document.documentElement.classList.remove('si-pk-on');
+            showAlert('info', null, err.message);
+            openSheet({ quiet: true });
+        } else if (!pk.cancelled(err)) {
+            showAlert('danger', null, (err && err.message) || 'That did not work. Use your password.');
+        }
+        pkPrepare();
+        pkAutofill();
+    }
+
+    function pkGo() {
+        if (pkBusy) return;
+        if (!pkOptions) {
+            pkPrepare();
+            showAlert('info', null, 'One moment, then tap again.');
+            return;
+        }
+        if (pkAuto) {
+            pkAuto.abort();
+            pkAuto = null;
+        }
+        var options = pkOptions;
+        pkOptions = null;
+        showAlert();
+        pkSetBusy(true);
+        pk.signIn(options).then(pkDone, pkFailed);
+    }
+
+    // The email box offers the phone's passkeys as you tap it.
+    function pkAutofill() {
+        if (!pkCond || pkAuto || pkBusy) return;
+        pkOptionsFetch().then(function (options) {
+            if (!options || pkAuto || pkBusy) return;
+            var ctl = new AbortController();
+            pkAuto = ctl;
+            pk.signIn(options, { mediation: 'conditional', signal: ctl.signal }).then(pkDone, function (err) {
+                if (pkAuto === ctl) pkAuto = null;
+                if (err && err.name === 'AbortError') return; // stopped for a tapped one
+                if (err && err.code) {
+                    showAlert(err.code === 'UNKNOWN' ? 'info' : 'danger', null, err.message);
+                    pkAutofill();
+                }
+            });
+        });
+    }
+
+    function pkInit() {
+        if (!pk || !pk.supported()) return;
+        var on = document.documentElement.classList.contains('si-pk-on');
+        pk.conditional().then(function (yes) {
+            pkCond = yes;
+            if (yes && !on) pkAutofill();
+        });
+        pkPrepare().then(function (options) {
+            // Start by itself where allowed, unless the page opened to say
+            // why someone was signed out (read that first).
+            if (on && options && !pk.needsTap() && !root.hasAttribute('data-si-open') && !document.hidden) pkGo();
+        });
+    }
+
+    HOD.actions.on('pk.go', function () { pkGo(); });
+
     HOD.actions.on('si.reveal', function (btn) {
         var input = document.getElementById('password');
         var show = input.type === 'password';
@@ -253,6 +372,7 @@
         rotateScripture();
 
         if (root.hasAttribute('data-si-open')) openSheet({ quiet: true });
+        pkInit();
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

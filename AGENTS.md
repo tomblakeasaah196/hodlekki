@@ -356,6 +356,33 @@ that migration has not been applied yet — the tree is rsynced to prod
   (same courtesy as Reach / Assimilation, though CI does not enforce it
   for this module yet).
 
+## Passkeys (added 2026-11-26)
+
+Sign in with the phone's own fingerprint, face or screen lock (WebAuthn).
+Owner's choices: offered once after a password sign-in on a device that has
+none; on a device that has one, a big fingerprint on the sign-in page that
+starts by itself where the browser allows (iPhone/Safari need a tap); for
+everyone, never required; "Forgot password" stays email-only.
+
+- **Code:** `includes/passkeys.php` (options and checks), `api/passkey_api.php`,
+  `assets/ui/js/passkey.js` (browser, the offer card, the Profile list),
+  `auth/login.php` + `assets/ui/js/pages/login.js` (the fingerprint, autofill).
+  Table `auth_passkeys` (`db/migrations/20261224090000_auth_passkeys.sql`).
+  Tests: `tests/passkeys_test.php` (a software authenticator; in CI).
+- **One way to finish a sign-in:** `auth_finish_signin()` in
+  `includes/auth_signin.php`, used by the password (`api/auth_api.php`) and the
+  passkey. Status checks, session, logs, "stay signed in", landing: change them
+  there, never in one caller.
+- **Never loosen a check:** user verification required (not only presence),
+  one-use challenges from the session (10 minutes), our origin and RP id hash,
+  a counter that never goes backwards, ES256/RS256 only. The RP id is the site
+  host (`passkey_rp_id()`), so subdomains share passkeys.
+- **Options travel with the page** (header offer, Profile) so the tap calls
+  `navigator.credentials.create()` directly: iPhone refuses it after an await.
+- **A passkey is a credential:** an administrator's password reset removes all
+  of the member's passkeys (`passkey_delete_all()`); suspension and revocation
+  stop passkey sign-ins through `auth_finish_signin()`.
+
 ## Sign-in: "return to" and "stay signed in" (added 2026-10-22)
 
 Helpers: `includes/auth_helpers.php`. Schema:
