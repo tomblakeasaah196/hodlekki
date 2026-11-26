@@ -6,6 +6,7 @@
  * the SMTP set-up after a change. CLI only; it never prints the password.
  *
  *   /usr/local/bin/ea-php83 /home/smartqaq/public_html/hodlekki/bin/mail_test.php you@example.com
+ *   ... mail_test.php you@example.com --account   (the account-mail route: ZeptoMail)
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -15,13 +16,18 @@ if (PHP_SAPI !== 'cli') {
 
 require_once dirname(__DIR__) . '/includes/mailer.php';
 
-$to = $argv[1] ?? '';
+$account = in_array('--account', $argv, true);
+$to = (string) (array_values(array_diff(array_slice($argv, 1), ['--account']))[0] ?? '');
 if (filter_var($to, FILTER_VALIDATE_EMAIL) === false) {
-    fwrite(STDERR, "Usage: php bin/mail_test.php you@example.com\n");
+    fwrite(STDERR, "Usage: php bin/mail_test.php you@example.com [--account]\n");
     exit(2);
 }
 
-$s = hod_mail_settings();
+$s = $account ? hod_mail_account_settings() : hod_mail_settings();
+if ($s === null) {
+    fwrite(STDERR, "Not set up: ACCOUNT_MAIL_HOST, ACCOUNT_MAIL_USERNAME and ACCOUNT_MAIL_PASSWORD are needed in .env\n");
+    exit(1);
+}
 printf(
     "Sending through %s:%d (%s) as %s <%s>%s\n",
     $s['host'],
@@ -42,7 +48,9 @@ $result = hod_send_mail(
     'Test email from ' . site_host(),
     '<p>This is a test email from the Household of David Lekki Centre system at '
         . '<a href="' . htmlspecialchars($site, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars(site_host(), ENT_QUOTES, 'UTF-8') . '</a>.</p>'
-        . '<p>If you can read this, sending works. Reply to it to check the reply address.</p>'
+        . '<p>If you can read this, sending works. Reply to it to check the reply address.</p>',
+    null,
+    $account ? ['mailer' => hod_mailer($s)] : []
 );
 
 if ($result['ok']) {

@@ -41,7 +41,18 @@ lead (screens, the sign-in prompt and sign-in by personal email are later PRs).
 3. **The hourly cap.** Set `email_settings.hourly_cap` to the number cPanel
    shows for hodlekki.org (default 100 until someone confirms it). If the host
    ever refuses for its cap, the worker reads the real number from Exim's own
-   sentence and plans below it from then on (`learned_cap`).
+   sentence and plans below it from then on (`learned_cap`). Measured 26 Nov
+   2026 in cPanel → Track Delivery: **20 emails and 5 defers/failures an hour**.
+   Exim accepts the excess over SMTP and only then discards it, so the worker
+   never sees a refusal and the outbox says "sent".
+3b. **Account mail through ZeptoMail.** With `ACCOUNT_MAIL_*` in `.env`
+   (`.env.example`), the `transactional` and `alert` lanes (codes, reset and
+   confirm links, alerts) leave through smtp.zeptomail.com as
+   system@hodlekki.org, outside the host's budget (`email_lane_route()`).
+   Church news, automations and the ERP mailboxes stay on the host. DNS for
+   hodlekki.org is at Cloudflare: DKIM `261144._domainkey` (TXT) and
+   `bounce-zem` (CNAME → cluster89.zeptomail.com, DNS only). Test with
+   `bin/mail_test.php you@example.com --account`.
 4. **Automations** are created **switched off** the first time the tick runs.
    Nothing is sent to anyone until someone switches a rule on (Automation tabs,
    PR 4). `php cron/automation_tick.php --dry-run --rule=ID --at="2026-11-16 10:05"`

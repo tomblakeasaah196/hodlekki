@@ -104,6 +104,19 @@ is_same('a header PHPMailer owns is refused (Bcc)', false, hod_mail_header_ok('b
 is_same('a value with a line break is refused (injection)', false, hod_mail_header_ok('X-HOD-Ref', "abc\r\nBcc: all@example.com"));
 is_same('a name with odd characters is refused', false, hod_mail_header_ok('X Bad:Name', 'v'));
 
+echo "account-mail route (ZeptoMail)\n";
+$accountEnv = ['ACCOUNT_MAIL_HOST' => 'smtp.zeptomail.com', 'ACCOUNT_MAIL_PORT' => '', 'ACCOUNT_MAIL_ENCRYPTION' => '',
+    'ACCOUNT_MAIL_USERNAME' => 'emailapikey', 'ACCOUNT_MAIL_PASSWORD' => 'not-a-real-token'] + $mailEnv;
+is_same('no ACCOUNT_MAIL_HOST: no account route', null,
+    with_env(['ACCOUNT_MAIL_HOST' => ''] + $accountEnv, [], 'hod_mail_account_settings'));
+$a = with_env($accountEnv, [], 'hod_mail_account_settings');
+is_same('the account route uses its own host', 'smtp.zeptomail.com', $a['host']);
+is_same('…tls on 587 by default', [587, 'tls'], [$a['port'], $a['encryption']]);
+is_same('…its own sign-in', ['emailapikey', 'not-a-real-token'], [$a['username'], $a['password']]);
+is_same('…and the same sender and reply-to', ['system@hodlekki.org', 'embrace@hodlekki.org'], [$a['from_address'], $a['reply_to']]);
+is_same('no token: no account route (the host keeps sending)', null,
+    with_env(['ACCOUNT_MAIL_PASSWORD' => ''] + $accountEnv, [], 'hod_mail_account_settings'));
+
 echo "origin lock (bin/edge_lock.sh)\n";
 $bash = trim((string) @shell_exec('command -v bash 2>/dev/null'));
 if ($bash === '') {

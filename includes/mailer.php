@@ -57,6 +57,42 @@ if (!function_exists('hod_mail_settings')) {
     }
 }
 
+if (!function_exists('hod_mail_account_settings')) {
+    /**
+     * The account-mail route (26 Nov 2026). Codes, reset links, confirmations
+     * and alerts leave through a transactional service (ZeptoMail) when
+     * ACCOUNT_MAIL_HOST is set, because the shared host caps hodlekki.org at
+     * 20 emails an hour and quietly drops the rest. Church news stays on the host.
+     *   ACCOUNT_MAIL_HOST        smtp.zeptomail.com
+     *   ACCOUNT_MAIL_PORT        587
+     *   ACCOUNT_MAIL_ENCRYPTION  tls
+     *   ACCOUNT_MAIL_USERNAME    emailapikey
+     *   ACCOUNT_MAIL_PASSWORD    the agent's Send Mail token
+     * Sender, sender name and reply-to stay MAIL_FROM_ADDRESS / MAIL_FROM_NAME /
+     * MAIL_REPLY_TO. Null when it is not set up: everything stays on the host.
+     */
+    function hod_mail_account_settings(): ?array
+    {
+        $host = site_env('ACCOUNT_MAIL_HOST');
+        if ($host === '') {
+            return null;
+        }
+        $encryption = strtolower(site_env('ACCOUNT_MAIL_ENCRYPTION') ?: 'tls');
+        if (!in_array($encryption, ['ssl', 'tls'], true)) {
+            $encryption = 'tls';
+        }
+        $s = [
+            'host'       => $host,
+            'port'       => (int) (site_env('ACCOUNT_MAIL_PORT') ?: ($encryption === 'ssl' ? '465' : '587')),
+            'encryption' => $encryption,
+            'username'   => site_env('ACCOUNT_MAIL_USERNAME'),
+            'password'   => site_env('ACCOUNT_MAIL_PASSWORD'),
+        ] + hod_mail_settings();
+
+        return hod_mail_configured($s) ? $s : null;
+    }
+}
+
 if (!function_exists('hod_mail_configured')) {
     /** Whether .env has what an SMTP send needs (a sign-in and a sender). */
     function hod_mail_configured(?array $settings = null): bool
