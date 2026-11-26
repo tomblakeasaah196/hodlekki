@@ -337,6 +337,8 @@ jobs:
             exit 1
           fi
           php tests/congregation_contact_test.php
+          # Titles and couples (includes/couples.php), same SQLite set-up.
+          php tests/couples_test.php
 
       - name: Permissions tests (can(), day-one matrix, parity)
         run: |

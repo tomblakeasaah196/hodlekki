@@ -43,6 +43,10 @@
     C.$$ = function (sel, scope) { return Array.prototype.slice.call((scope || document).querySelectorAll(sel)); };
     C.label = function (s) { return String(s || '').replace(/_/g, ' '); };
     C.person = function (p) { return ((p.first_name || '') + ' ' + (p.last_name || '')).trim(); };
+    /** A celebrant as the church says it: "Min. Bolanle Ade", or a couple's "Pastor Ebele & Min. Bolanle" (includes/couples.php). */
+    C.celebrant = function (p) { return p.display_name || C.person(p); };
+    /** Event type for people: a wedding anniversary always says so. */
+    C.eventLabel = function (t) { return t === 'Wedding_Anniversary' || t === 'Anniversary' ? 'Wedding anniversary' : C.label(t); };
     C.parseDate = function (v) {
         if (!v) return null;
         var d = new Date(String(v).replace(' ', 'T'));
@@ -175,7 +179,7 @@
         }
         if (!s.isAdmin) return '';
         return C.btn('Assign', 'charis.assign-worker', {
-            target: item.target_user_id, type: type, date: item.event_date, when: item.formatted_date || '', name: C.person(item)
+            target: item.target_user_id, type: type, date: item.event_date, when: item.formatted_date || '', name: C.celebrant(item)
         }, 'secondary', 'user-round-plus');
     }
 
@@ -183,10 +187,10 @@
         var pic = C.safeUrl(item.picture_path);
         return '<li class="ui-list__item flex-wrap">'
             + C.avatar(item.first_name, item.last_name, pic)
-            + '<div class="ui-list__main"><span class="ui-list__title">' + esc(C.person(item)) + '</span>'
+            + '<div class="ui-list__main"><span class="ui-list__title">' + esc(C.celebrant(item)) + '</span>'
             + '<span class="ui-list__meta">' + esc(meta) + '</span></div>'
             + '<div class="ui-list__end">'
-            + (download && pic ? '<a class="ui-btn ui-btn--ghost ui-btn--sm ui-btn--icon" href="' + esc(pic) + '" download aria-label="Download photo of ' + esc(C.person(item)) + '">' + HOD.icon('download') + '</a>' : '')
+            + (download && pic ? '<a class="ui-btn ui-btn--ghost ui-btn--sm ui-btn--icon" href="' + esc(pic) + '" download aria-label="Download photo of ' + esc(C.celebrant(item)) + '">' + HOD.icon('download') + '</a>' : '')
             + celebrationAction(item, type) + '</div></li>';
     }
 
@@ -204,7 +208,7 @@
         setCount('life', rows.length);
         if (!list) return;
         list.innerHTML = rows.length ? rows.map(function (a) {
-            return celebrationItem(a, [a.formatted_date, C.label(a.event_type)].filter(Boolean).join(' · '), a.event_type, false);
+            return celebrationItem(a, [a.formatted_date, C.eventLabel(a.event_type)].filter(Boolean).join(' · '), a.event_type, false);
         }).join('') : C.emptyItem('No life events coming up', 'Log one with Log event.');
     }
 

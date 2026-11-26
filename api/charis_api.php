@@ -5,6 +5,7 @@
 require_once '../includes/db.php';
 require_once '../includes/charis_helpers.php';
 require_once '../includes/assimilation_helpers.php';
+require_once '../includes/couples.php';
 header('Content-Type: application/json');
 
 // 2. Security Check
@@ -166,7 +167,9 @@ try {
                 ORDER BY CASE WHEN MONTH(event_date) = MONTH(CURDATE()) THEN 0 ELSE 1 END,
                          DAY(event_date), first_name, last_name
             ");
-            $birthdays = $bdayStmt->fetchAll(PDO::FETCH_ASSOC);
+            // Each name carries its title (Bro. / Sis. / Min. / Dir. / Pastor):
+            // includes/couples.php.
+            $birthdays = couples_label_rows($pdo, $bdayStmt->fetchAll(PDO::FETCH_ASSOC));
 
             // B. Fetch recurring wedding anniversaries plus one-time life
             // events that actually occur between today and the end of next
@@ -218,7 +221,9 @@ try {
                 ORDER BY CASE WHEN MONTH(event_date) = MONTH(CURDATE()) THEN 0 ELSE 1 END,
                          DAY(event_date), first_name, last_name
             ");
-            $anniversaries = $annivStmt->fetchAll(PDO::FETCH_ASSOC);
+            // A couple who are both in church is one wedding anniversary line,
+            // first names only, husband first: "Pastor Ebele & Min. Bolanle".
+            $anniversaries = couples_label_rows($pdo, $annivStmt->fetchAll(PDO::FETCH_ASSOC));
 
             // C. Fetch all Charis Workers
             // The Charis team: everyone seated in a department that owns Charis.
@@ -416,7 +421,8 @@ try {
                 ORDER BY sort_day ASC, first_name ASC
             ");
             $stmt->execute([$month, $month, $month]);
-            echo json_encode(['status' => 'success', 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+            $recap = couples_label_rows($pdo, $stmt->fetchAll(PDO::FETCH_ASSOC), 'id', ['Anniversary']);
+            echo json_encode(['status' => 'success', 'data' => $recap]);
             break;
 
         // ==========================================

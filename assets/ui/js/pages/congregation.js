@@ -26,6 +26,8 @@
     function $(sel, scope) { return (scope || document).querySelector(sel); }
     function label(s) { return String(s || '').replace(/_/g, ' '); }
     function person(u) { return ((u.first_name || '') + ' ' + (u.last_name || '')).trim(); }
+    /** The name as the church says it: "Min. Bolanle Ade" (title from includes/couples.php). */
+    function titled(u) { return ((u.title ? u.title + ' ' : '') + person(u)).trim(); }
     function safeUrl(url) {
         url = String(url || '').trim();
         return /^(https?:\/\/|\/|\.\.?\/)/i.test(url) ? url : '';
@@ -59,7 +61,7 @@
 
     function row(u) {
         var awol = u.attendance_status === 'Unknown';
-        var who = esc(person(u));
+        var who = esc(titled(u));
         var actions = '<div class="flex flex-wrap items-center justify-end gap-1.5 md:flex-nowrap">'
             + (awol ? '<button type="button" class="ui-btn ui-btn--danger-ghost ui-btn--sm whitespace-nowrap" data-action="cong.charis" data-id="' + esc(u.id) + '" data-name="' + esc(person(u)) + '">Push to Charis</button>' : '')
             + '<button type="button" class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm" data-action="cong.attendance" data-id="' + esc(u.id) + '" data-name="' + esc(person(u)) + '" aria-haspopup="dialog" aria-label="Attendance of ' + esc(person(u)) + '" data-tooltip="Attendance">' + HOD.icon('calendar-check') + '</button>'
@@ -121,7 +123,7 @@
                 el.textContent = HOD.format.number((kpis[el.getAttribute('data-cong-kpi')] || []).length);
             });
             roster = (res.roster || []).map(function (u) {
-                u._text = [person(u), u.phone, u.email, u.physical_address, inviter(u), u.spiritual_status, u.attendance_status, u.active_tribe, u.active_departments]
+                u._text = [titled(u), u.phone, u.email, u.physical_address, inviter(u), u.spiritual_status, u.attendance_status, u.active_tribe, u.active_departments]
                     .join(' ').toLowerCase();
                 return u;
             });
@@ -220,7 +222,64 @@
     function conditional() {
         var f = form();
         $('[data-cong-anniversary]').hidden = f.marital_status.value !== 'Married';
+        var married = f.marital_status.value === 'Married';
+        // Re-sort the picker for the surname and gender as typed now.
+        if (married && $('[data-cong-spouse]').hidden) fillSpouses(f.user_id.value, f.spouse_id.value);
+        $('[data-cong-spouse]').hidden = !married;
         $('[data-cong-new-church]').hidden = f.attendance_status.value !== 'Attends_Another_Church';
+    }
+
+    /** The spouse picker lists everyone in the register but the person being edited. */
+    /** "Uzo-Peters", "uzo peters" and "UzoPeters" are one surname. */
+    function surnameKey(s) { return String(s || '').toLowerCase().replace(/[^a-z]/g, ''); }
+    function sameSurname(a, b) {
+        a = surnameKey(a); b = surnameKey(b);
+        if (!a || !b) return false;
+        if (a === b) return true;
+        var short = a.length < b.length ? a : b;
+        return short.length >= 4 && (a.indexOf(b) !== -1 || b.indexOf(a) !== -1);
+    }
+    /**
+     * Likely spouses first: the same surname as the person in the form and the
+     * opposite gender (any gender while theirs is blank). Everyone else after,
+     * in register order.
+     */
+    function spouseOrder(self) {
+        var f = form();
+        var last = f.last_name.value;
+        var g = String(f.gender.value || '').toLowerCase();
+        var likely = [];
+        var rest = [];
+        roster.forEach(function (u) {
+            if (String(u.id) === self) return;
+            var ug = String(u.gender || '').toLowerCase();
+            var opposite = !g || !ug || ug !== g;
+            (sameSurname(u.last_name, last) && opposite ? likely : rest).push(u);
+        });
+        return likely.concat(rest);
+    }
+
+    function fillSpouses(selfId, spouseId) {
+        var sel = form().spouse_id;
+        var self = String(selfId || '');
+        sel.innerHTML = '<option value="">Not in church</option>' + spouseOrder(self)
+            .map(function (u) { return '<option value="' + esc(u.id) + '">' + esc(titled(u)) + (u.phone ? ' · ' + esc(u.phone) : '') + '</option>'; })
+            .join('');
+        // Keep a saved link even before the register has loaded.
+        if (spouseId && !sel.querySelector('option[value="' + esc(spouseId) + '"]')) {
+            sel.insertAdjacentHTML('beforeend', '<option value="' + esc(spouseId) + '">Linked spouse</option>');
+        }
+        sel.value = spouseId ? String(spouseId) : '';
+        HOD.combobox.refresh(sel);
+    }
+
+    /** Picking a spouse fills an empty anniversary from their record. */
+    function spousePicked() {
+        var f = form();
+        var id = f.spouse_id.value;
+        if (!id || f.wedding_anniversary.value) return;
+        var sp = roster.filter(function (u) { return String(u.id) === id; })[0];
+        if (sp && sp.wedding_anniversary) f.wedding_anniversary.value = String(sp.wedding_anniversary).slice(0, 10);
     }
 
     function initAddress() {
@@ -262,6 +321,7 @@
         f.longitude.value = '';
         if (geo) geo.setValue('');
         setPhoto(null);
+        fillSpouses('', '');
         $('[data-cong-church-email]').textContent = 'Created when you save';
         $('[data-cong-delete]').hidden = true;
         conditional();
@@ -285,6 +345,7 @@
             ['first_name', 'last_name', 'phone', 'real_email', 'dob', 'gender', 'spiritual_status', 'attendance_status', 'new_church_name', 'marital_status', 'wedding_anniversary', 'comments']
                 .forEach(function (k) { if (f[k]) f[k].value = u[k] == null ? '' : u[k]; });
             f.email.value = u.email || '';
+            fillSpouses(u.id, u.spouse_id);
             f.physical_address.value = u.physical_address || '';
             $('[data-cong-church-email]').textContent = u.email || 'Created when you save';
             setPhoto(safeUrl(u.picture_path));
@@ -399,7 +460,7 @@
     function renderPerson() {
         var p = current.person;
         var rights = current.rights || {};
-        $('#cong-person-title').textContent = person(p) || 'Person';
+        $('#cong-person-title').textContent = titled(p) || 'Person';
         $('[data-cong-person-avatar]').innerHTML = avatar(p, 'ui-avatar--xl');
         $('[data-cong-person-tags]').innerHTML = '<span class="ui-badge">' + esc(label(p.spiritual_status) || 'No stage') + '</span>' + attendanceBadge(p.attendance_status);
 
@@ -421,7 +482,8 @@
             + fact('Gender', p.gender)
             + fact('Marital status', p.marital_status)
             + fact('Birthday', p.dob ? HOD.format.date(p.dob) : '')
-            + fact('Anniversary', p.marital_status === 'Married' && p.wedding_anniversary ? HOD.format.date(p.wedding_anniversary) : '')
+            + fact('Spouse', p.marital_status === 'Married' && p.spouse ? p.spouse.name : '')
+            + fact('Wedding anniversary', p.marital_status === 'Married' && p.wedding_anniversary ? HOD.format.date(p.wedding_anniversary) : '')
             + fact('Tribe', p.active_tribe)
             + fact('Departments', p.active_departments)
             + fact('Invited by', inviter(p))
@@ -616,6 +678,11 @@
         HOD.actions.on('cong.delete', remove);
         HOD.actions.on('cong.charis', pushToCharis);
         HOD.actions.on('cong.conditional', conditional);
+        HOD.actions.on('cong.spouse', spousePicked);
+        HOD.actions.on('cong.spouse-sort', function () {
+            var f = form();
+            if (f.marital_status.value === 'Married') fillSpouses(f.user_id.value, f.spouse_id.value);
+        });
         wirePerson();
         HOD.actions.on('cong.photo', function (input) {
             var file = input.files[0];

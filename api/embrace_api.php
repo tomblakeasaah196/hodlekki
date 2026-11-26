@@ -275,6 +275,9 @@ try {
 
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
+            require_once __DIR__ . '/../includes/couples.php';
+            couples_after_status($pdo, (int) $visitor_id, (string) ($_POST['marital_status'] ?? ''),
+                ($_POST['marital_status'] ?? '') === 'Married' && !empty($_POST['wedding_anniversary']) ? $_POST['wedding_anniversary'] : null);
 
             // A new or changed address gets a confirm link (saving again never re-sends).
             if ($email) {

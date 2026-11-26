@@ -61,6 +61,8 @@ try {
                 WHERE id = ?
             ");
             $stmt->execute([$phone, $address, $latitude, $longitude, $dob, $marital_status, $wedding_anniversary, $user_id]);
+            require_once __DIR__ . '/../includes/couples.php';
+            couples_after_status($pdo, (int) $user_id, (string) $marital_status, $wedding_anniversary);
 
             // NOTIFICATION TRIGGER: Alert IDI (Department 1) of the autonomous data update
             $idi_users = perm_module_team($pdo, 'idi');
