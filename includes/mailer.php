@@ -70,12 +70,22 @@ if (!function_exists('hod_mail_account_settings')) {
      *   ACCOUNT_MAIL_PASSWORD    the agent's Send Mail token
      * Sender, sender name and reply-to stay MAIL_FROM_ADDRESS / MAIL_FROM_NAME /
      * MAIL_REPLY_TO. Null when it is not set up: everything stays on the host.
+     *
+     * 'transport' is 'api' for ZeptoMail unless ACCOUNT_MAIL_TRANSPORT=smtp:
+     * this host refuses outgoing SMTP to other servers (465 refused, 587
+     * answered by its own Exim, 26 Nov 2026), so the mail goes over HTTPS to
+     * ACCOUNT_MAIL_API_URL (default https://cpaas.zoho.com/v1.1/email) with
+     * ACCOUNT_MAIL_API_KEY, or the same Send Mail token as ACCOUNT_MAIL_PASSWORD.
      */
     function hod_mail_account_settings(): ?array
     {
         $host = site_env('ACCOUNT_MAIL_HOST');
         if ($host === '') {
             return null;
+        }
+        $transport = strtolower(site_env('ACCOUNT_MAIL_TRANSPORT'));
+        if (!in_array($transport, ['api', 'smtp'], true)) {
+            $transport = str_ends_with(strtolower($host), 'zeptomail.com') ? 'api' : 'smtp';
         }
         $encryption = strtolower(site_env('ACCOUNT_MAIL_ENCRYPTION') ?: 'tls');
         if (!in_array($encryption, ['ssl', 'tls'], true)) {
@@ -87,9 +97,136 @@ if (!function_exists('hod_mail_account_settings')) {
             'encryption' => $encryption,
             'username'   => site_env('ACCOUNT_MAIL_USERNAME'),
             'password'   => site_env('ACCOUNT_MAIL_PASSWORD'),
+            'transport'  => $transport,
+            'api_url'    => site_env('ACCOUNT_MAIL_API_URL') ?: 'https://cpaas.zoho.com/v1.1/email',
+            'api_key'    => (string) preg_replace('/^Zoho-enczapikey\s+/i', '',
+                site_env('ACCOUNT_MAIL_API_KEY') ?: site_env('ACCOUNT_MAIL_PASSWORD')),
         ] + hod_mail_settings();
 
+        if ($transport === 'api') {
+            return $s['api_key'] !== '' && filter_var($s['from_address'], FILTER_VALIDATE_EMAIL) !== false ? $s : null;
+        }
         return hod_mail_configured($s) ? $s : null;
+    }
+}
+
+if (!function_exists('hod_zepto_payload')) {
+    /**
+     * The ZeptoMail API body for one message ($m as the outbox worker builds it:
+     * to_email, to_name, subject, html, text, from_name, reply_to, reply_to_name,
+     * headers). Custom headers (X-HOD-Ref, Auto-Submitted) travel as mime_headers.
+     */
+    function hod_zepto_payload(array $s, array $m): array
+    {
+        $to = ['address' => (string) $m['to_email']];
+        if (trim((string) ($m['to_name'] ?? '')) !== '') {
+            $to['name'] = (string) $m['to_name'];
+        }
+        $body = [
+            'from'     => ['address' => $s['from_address'], 'name' => (string) (($m['from_name'] ?? '') ?: $s['from_name'])],
+            'to'       => [['email_address' => $to]],
+            'subject'  => (string) $m['subject'],
+            'htmlbody' => (string) $m['html'],
+        ];
+        if (($m['text'] ?? null) !== null && $m['text'] !== '') {
+            $body['textbody'] = (string) $m['text'];
+        }
+        $replyTo = (string) (($m['reply_to'] ?? '') ?: $s['reply_to']);
+        if ($replyTo !== '' && filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
+            $replyName = (string) (($m['reply_to'] ?? '') ? ($m['reply_to_name'] ?? '') : $s['reply_to_name']);
+            $body['reply_to'] = [array_filter(['address' => $replyTo, 'name' => $replyName], static fn ($v) => $v !== '')];
+        }
+        $headers = [];
+        foreach ((array) ($m['headers'] ?? []) as $name => $value) {
+            if (hod_mail_header_ok((string) $name, (string) $value)) {
+                $headers[(string) $name] = (string) $value;
+            }
+        }
+        if ($headers !== []) {
+            $body['mime_headers'] = $headers;
+        }
+        return $body;
+    }
+}
+
+if (!function_exists('hod_zepto_error')) {
+    /**
+     * One line for the outbox from a ZeptoMail answer, worded so that
+     * email_classify_failure() files it right: 401/403 are our own set-up,
+     * 429 and 5xx are temporary, other 4xx are permanent. Never the token.
+     */
+    function hod_zepto_error(int $status, string $raw): string
+    {
+        $json = json_decode($raw, true);
+        $err = is_array($json) ? ($json['error'] ?? $json) : [];
+        $parts = array_filter([
+            (string) ($err['code'] ?? ''),
+            (string) ($err['message'] ?? ''),
+            (string) ($err['details'][0]['message'] ?? ''),
+            (string) ($err['details'][0]['target'] ?? ''),
+        ]);
+        $what = $parts !== [] ? implode(' · ', $parts) : substr(trim(strip_tags($raw)), 0, 200);
+        if ($status === 401 || $status === 403) {
+            return "ZeptoMail authentication failed (status {$status}): {$what}";
+        }
+        if ($status === 429 || $status >= 500 || $status === 0) {
+            return "[temporary] ZeptoMail could not take it now (status {$status}): {$what}";
+        }
+        return "[permanent] ZeptoMail refused it (status {$status}): {$what}";
+    }
+}
+
+if (!function_exists('hod_zepto_send')) {
+    /**
+     * Send one message through the ZeptoMail API over HTTPS.
+     * @return array{ok: bool, error: ?string, message_id: ?string}
+     */
+    function hod_zepto_send(array $s, array $m): array
+    {
+        $messageId = isset($m['message_id']) ? (string) $m['message_id'] : null;
+        $json = json_encode(hod_zepto_payload($s, $m), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            return ['ok' => false, 'error' => '[permanent] The message could not be encoded for ZeptoMail.', 'message_id' => $messageId];
+        }
+        $headers = ['Accept: application/json', 'Content-Type: application/json', 'Authorization: Zoho-enczapikey ' . $s['api_key']];
+        $status = 0;
+        $raw = '';
+        $netError = '';
+        if (function_exists('curl_init')) {
+            $ch = curl_init($s['api_url']);
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true, CURLOPT_POSTFIELDS => $json, CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_CONNECTTIMEOUT => 10,
+            ]);
+            $raw = (string) curl_exec($ch);
+            $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            if ($status === 0) {
+                $netError = curl_error($ch);
+            }
+            curl_close($ch);
+        } else {
+            $ctx = stream_context_create(['http' => [
+                'method' => 'POST', 'header' => implode("\r\n", $headers), 'content' => $json,
+                'timeout' => 20, 'ignore_errors' => true,
+            ]]);
+            $raw = (string) @file_get_contents($s['api_url'], false, $ctx);
+            foreach ($http_response_header ?? [] as $line) {
+                if (preg_match('#^HTTP/\S+\s+(\d{3})#', $line, $hit)) {
+                    $status = (int) $hit[1];
+                }
+            }
+            if ($status === 0) {
+                $netError = 'no answer';
+            }
+        }
+        if ($status >= 200 && $status < 300) {
+            return ['ok' => true, 'error' => null, 'message_id' => $messageId];
+        }
+        $error = $status === 0
+            ? 'Could not connect to ZeptoMail: ' . $netError
+            : hod_zepto_error($status, $raw);
+        error_log('[mailer] ZeptoMail send failed: ' . $error);
+        return ['ok' => false, 'error' => $error, 'message_id' => $messageId];
     }
 }
 
