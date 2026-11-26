@@ -316,6 +316,13 @@ function email_classify_failure(string $error): string
     if (email_parse_cap_refusal($error) !== null) {
         return 'cap';
     }
+    // hod_zepto_error() marks what it already knows.
+    if (str_starts_with($error, '[temporary] ')) {
+        return 'temporary';
+    }
+    if (str_starts_with($error, '[permanent] ')) {
+        return 'permanent';
+    }
     if (preg_match('/not set up|not installed|could not authenticate|authentication failed|535[ -]/i', $error)) {
         return 'config';
     }
@@ -356,6 +363,9 @@ function email_smtp_transport(): array
     $mailers = [];
     $send = static function (array $m) use (&$mailers): array {
         $route = ($m['route'] ?? 'host') === 'account' ? 'account' : 'host';
+        if ($route === 'account' && ($api = hod_mail_account_settings()) !== null && $api['transport'] === 'api') {
+            return hod_zepto_send($api, $m);
+        }
         if (!isset($mailers[$route])) {
             try {
                 $settings = $route === 'account' ? hod_mail_account_settings() : null;

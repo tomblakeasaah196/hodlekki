@@ -371,6 +371,12 @@ email_enqueue($r, ['lane' => 'transactional', 'purpose' => 'account', 'flow' => 
 email_worker_run($r, ['endpoints_ready' => true, 'now' => campaigns_now(), 'transport' => ct_transport([['ok' => false,
     'error' => 'Domain hodlekki.org has exceeded the max emails per hour (20/20 (100%)) allowed.']])]);
 ct_eq('a cap refusal on the account route does not shut the host for the hour', false, email_budget_status($r)['refused']);
+ct_eq('ZeptoMail answers are filed right', ['temporary', 'permanent', 'config', 'unavailable'], [
+    email_classify_failure(hod_zepto_error(503, '')),
+    email_classify_failure(hod_zepto_error(422, '{"error":{"message":"Invalid address 550"}}')),
+    email_classify_failure(hod_zepto_error(401, '')),
+    email_classify_failure('Could not connect to ZeptoMail: timed out'),
+]);
 unset($_ENV['ACCOUNT_MAIL_HOST'], $_ENV['ACCOUNT_MAIL_USERNAME'], $_ENV['ACCOUNT_MAIL_PASSWORD']);
 ct_eq('unset again: back to the host', 'host', email_lane_route('transactional'));
 

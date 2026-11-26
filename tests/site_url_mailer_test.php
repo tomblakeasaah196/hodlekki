@@ -116,6 +116,23 @@ is_same('…its own sign-in', ['emailapikey', 'not-a-real-token'], [$a['username
 is_same('…and the same sender and reply-to', ['system@hodlekki.org', 'embrace@hodlekki.org'], [$a['from_address'], $a['reply_to']]);
 is_same('no token: no account route (the host keeps sending)', null,
     with_env(['ACCOUNT_MAIL_PASSWORD' => ''] + $accountEnv, [], 'hod_mail_account_settings'));
+is_same('ZeptoMail goes over the HTTPS API (this host blocks outgoing SMTP)', ['api', 'https://cpaas.zoho.com/v1.1/email', 'not-a-real-token'],
+    [$a['transport'], $a['api_url'], $a['api_key']]);
+is_same('ACCOUNT_MAIL_TRANSPORT=smtp keeps SMTP', 'smtp',
+    with_env(['ACCOUNT_MAIL_TRANSPORT' => 'smtp'] + $accountEnv, [], 'hod_mail_account_settings')['transport']);
+is_same('a pasted "Zoho-enczapikey " prefix is dropped', 'abc123',
+    with_env(['ACCOUNT_MAIL_API_KEY' => 'Zoho-enczapikey abc123'] + $accountEnv, [], 'hod_mail_account_settings')['api_key']);
+$payload = hod_zepto_payload($a, ['to_email' => 'ada@gmail.com', 'to_name' => 'Ada', 'subject' => 'Your code', 'html' => '<p>1</p>',
+    'text' => '1', 'headers' => ['X-HOD-Ref' => 'abc', 'Auto-Submitted' => 'auto-generated', 'Bcc' => 'all@x.com']]);
+is_same('payload: from the system address', ['address' => 'system@hodlekki.org', 'name' => 'Household of David Lekki'], $payload['from']);
+is_same('payload: one recipient', [['email_address' => ['address' => 'ada@gmail.com', 'name' => 'Ada']]], $payload['to']);
+is_same('payload: replies to embrace@', 'embrace@hodlekki.org', $payload['reply_to'][0]['address']);
+is_same('payload: our headers ride along, a refused one does not', ['X-HOD-Ref' => 'abc', 'Auto-Submitted' => 'auto-generated'], $payload['mime_headers']);
+is_same('payload: html and text', ['<p>1</p>', '1'], [$payload['htmlbody'], $payload['textbody']]);
+is_same('a bad token reads as our set-up', true, str_contains(hod_zepto_error(401, '{"error":{"code":"TM_3201","message":"Invalid API Token"}}'), 'authentication failed'));
+is_same('busy is temporary', true, str_starts_with(hod_zepto_error(503, ''), '[temporary] '));
+is_same('a refused message is permanent, with the reason', '[permanent] ZeptoMail refused it (status 422): TM_4001 · Invalid address',
+    hod_zepto_error(422, '{"error":{"code":"TM_4001","message":"Invalid address"}}'));
 
 echo "origin lock (bin/edge_lock.sh)\n";
 $bash = trim((string) @shell_exec('command -v bash 2>/dev/null'));

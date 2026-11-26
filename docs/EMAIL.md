@@ -47,8 +47,10 @@ lead (screens, the sign-in prompt and sign-in by personal email are later PRs).
    never sees a refusal and the outbox says "sent".
 3b. **Account mail through ZeptoMail.** With `ACCOUNT_MAIL_*` in `.env`
    (`.env.example`), the `transactional` and `alert` lanes (codes, reset and
-   confirm links, alerts) leave through smtp.zeptomail.com as
-   system@hodlekki.org, outside the host's budget (`email_lane_route()`).
+   confirm links, alerts) leave through ZeptoMail as system@hodlekki.org,
+   outside the host's budget (`email_lane_route()`). They go over HTTPS to
+   the API (`hod_zepto_send()`), not SMTP: this host refuses port 465 to
+   other servers and answers port 587 with its own Exim (26 Nov 2026).
    Church news, automations and the ERP mailboxes stay on the host. DNS for
    hodlekki.org is at Cloudflare: DKIM `261144._domainkey` (TXT) and
    `bounce-zem` (CNAME → cluster89.zeptomail.com, DNS only). Test with
