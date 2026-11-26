@@ -5,15 +5,18 @@
 //
 // TITLES. Every name on Charis and Congregation carries the title the church
 // uses for that person, the highest one they hold:
-//   Pastor  spiritual status Pastor, or a Pastor in charge seat (or higher)
+//   Pastor  spiritual status Pastor, a Pastor in charge seat (or higher), or
+//           a live pastor role (Resident / Associate Pastor ...)
 //   Dir.    a Director seat in any department
-//   Min.    an HOD seat in any department
-//   Bro. / Sis.  everyone else, by gender (Assistant/Deputy HODs included)
+//   Min.    an HOD or Assistant (Deputy) HOD seat in any department
+//   Bro. / Sis.  everyone else, by gender (sub-unit heads included)
 //   ''      no gender on file and no leadership seat
 // Seats are read through the permission engine's live roster
-// (perm_live_seats(), ranked by perm_seat_types), never by a role name, so a
-// renamed seat or an ended ministry year is followed automatically. A title is
-// only what we print; it never decides access.
+// (perm_live_seats(), ranked by perm_seat_types), so a renamed seat or an
+// ended ministry year is followed automatically. A pastor role is any live
+// role whose name or label says "Pastor" (owner, 26 Nov 2026: an Associate
+// Pastor is Pastor too). A title is only what we print; it never decides
+// access.
 //
 // COUPLES. users.spouse_id links a married person to their spouse when the
 // spouse is in the register too (migration 20261225090000). The link is kept
@@ -50,10 +53,10 @@ if (!function_exists('couples_ready')) {
      * $rank is the highest live seat rank they hold (0 = none); $floors are
      * the ranks of the pastor / director / hod seat types.
      */
-    function couples_title(array $person, int $rank, array $floors): string
+    function couples_title(array $person, int $rank, array $floors, bool $pastorRole = false): string
     {
         $at = static fn (string $k): bool => isset($floors[$k]) && $floors[$k] > 0 && $rank >= $floors[$k];
-        if ((string) ($person['spiritual_status'] ?? '') === 'Pastor' || $at('pastor')) {
+        if ($pastorRole || (string) ($person['spiritual_status'] ?? '') === 'Pastor' || $at('pastor')) {
             return 'Pastor';
         }
         if ($at('director')) {
@@ -73,8 +76,9 @@ if (!function_exists('couples_ready')) {
     }
 
     /**
-     * [user_id => highest live seat rank] for everyone seated, and the floor
-     * ranks of the three titled seats. Empty before the permission tables.
+     * [user_id => highest live seat rank] for everyone seated, the floor
+     * ranks of the titled seats, and [user_id => true] for everyone holding a
+     * live pastor role. Empty before the permission tables.
      */
     function couples_seat_ranks(PDO $pdo): array
     {
@@ -85,13 +89,24 @@ if (!function_exists('couples_ready')) {
         }
         $ranks = [];
         $floors = [];
+        $pastors = [];
         if (function_exists('perm_ready') && perm_ready($pdo)) {
             try {
                 $types = perm_seat_types($pdo);
+                // Min. starts at the Assistant HOD: the deputy_hod seat, or a
+                // seat type named "Assistant HOD" if one was added since.
+                $hod = (int) ($types['hod']['seat_rank'] ?? 0);
+                $min = $hod;
+                foreach ($types as $key => $t) {
+                    if ((int) ($t['is_archived'] ?? 0) === 0 && (int) $t['seat_rank'] > 0
+                        && couples_is_assistant_hod((string) $key, (string) ($t['label'] ?? ''))) {
+                        $min = $min > 0 ? min($min, (int) $t['seat_rank']) : (int) $t['seat_rank'];
+                    }
+                }
                 $floors = [
                     'pastor' => (int) ($types['pastor_in_charge']['seat_rank'] ?? 0),
                     'director' => (int) ($types['director']['seat_rank'] ?? 0),
-                    'hod' => (int) ($types['hod']['seat_rank'] ?? 0),
+                    'hod' => $min,
                 ];
                 foreach (perm_live_seats($pdo, null, perm_today()) as $seat) {
                     $uid = (int) $seat['user_id'];
@@ -101,8 +116,50 @@ if (!function_exists('couples_ready')) {
                 error_log('couples: seat ranks unreadable: ' . $e->getMessage());
                 $ranks = [];
             }
+            $pastors = couples_pastor_roles($pdo, perm_today());
         }
-        return $cache[$key] = ['ranks' => $ranks, 'floors' => $floors];
+        return $cache[$key] = ['ranks' => $ranks, 'floors' => $floors, 'pastors' => $pastors];
+    }
+
+    /** Is this seat type the Assistant HOD (deputy_hod, or a seat named "Assistant/Asst/Deputy HOD")? */
+    function couples_is_assistant_hod(string $seatKey, string $label): bool
+    {
+        if ($seatKey === 'deputy_hod') {
+            return true;
+        }
+        $words = preg_split('/[^a-z]+/', strtolower($seatKey . ' ' . $label), -1, PREG_SPLIT_NO_EMPTY);
+        return in_array('hod', $words, true) && array_intersect(['assistant', 'asst', 'deputy'], $words) !== [];
+    }
+
+    /**
+     * [user_id => true] for everyone holding a live role whose name or label
+     * says "Pastor" (Resident Pastor, Associate Pastor, a renamed Senior
+     * Pastor ...). Live as in perm_person_roles(): not frozen, not archived,
+     * inside its dates. Matched in PHP, for printing a title only.
+     */
+    function couples_pastor_roles(PDO $pdo, string $today): array
+    {
+        $out = [];
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT ur.user_id, r.role_name, r.label
+                   FROM user_roles ur
+                   JOIN roles r ON r.id = ur.role_id
+                  WHERE COALESCE(ur.is_frozen, 0) = 0
+                    AND COALESCE(r.is_archived, 0) = 0
+                    AND (ur.starts_on IS NULL OR ur.starts_on <= ?)
+                    AND (ur.ends_on IS NULL OR ur.ends_on >= ?)"
+            );
+            $stmt->execute([$today, $today]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                if (preg_match('/pastor/i', (string) $row['role_name'] . ' ' . (string) ($row['label'] ?? ''))) {
+                    $out[(int) $row['user_id']] = true;
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('couples: pastor roles unreadable: ' . $e->getMessage());
+        }
+        return $out;
     }
 
     /**
@@ -128,7 +185,7 @@ if (!function_exists('couples_ready')) {
             $stmt->execute($chunk);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
                 $id = (int) $row['id'];
-                $row['title'] = couples_title($row, (int) ($seats['ranks'][$id] ?? 0), $seats['floors'] ?? []);
+                $row['title'] = couples_title($row, (int) ($seats['ranks'][$id] ?? 0), $seats['floors'] ?? [], !empty($seats['pastors'][$id]));
                 $out[$id] = $row;
             }
         }
