@@ -43,7 +43,7 @@
     C.$$ = function (sel, scope) { return Array.prototype.slice.call((scope || document).querySelectorAll(sel)); };
     C.label = function (s) { return String(s || '').replace(/_/g, ' '); };
     C.person = function (p) { return ((p.first_name || '') + ' ' + (p.last_name || '')).trim(); };
-    /** A celebrant as the church says it: "Min. Bolanle Ade", or a couple's "Pastor Ebele & Min. Bolanle" (includes/couples.php). */
+    /** A celebrant as the church says it: "Min. Bolanle Ade", or a couple's "Pastor Ebele & Min. Bolanle Uzo-Peters" (includes/couples.php). */
     C.celebrant = function (p) { return p.display_name || C.person(p); };
     /** Event type for people: a wedding anniversary always says so. */
     C.eventLabel = function (t) { return t === 'Wedding_Anniversary' || t === 'Anniversary' ? 'Wedding anniversary' : C.label(t); };

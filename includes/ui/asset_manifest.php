@@ -24,7 +24,7 @@ return [
     '/assets/ui/js/pages/campaigns.js' => '88b384f560eb',
     '/assets/ui/js/pages/change-password.js' => '9633ec2ee9f4',
     '/assets/ui/js/pages/charis-ops.js' => '4071d7b14c0e',
-    '/assets/ui/js/pages/charis.js' => 'e5d7f755759d',
+    '/assets/ui/js/pages/charis.js' => '302ec37c3508',
     '/assets/ui/js/pages/checkin-monitor.js' => '8240cafc0e63',
     '/assets/ui/js/pages/checkin-qr.js' => '3db237a7dabc',
     '/assets/ui/js/pages/checkin.js' => '9f6e8064be07',

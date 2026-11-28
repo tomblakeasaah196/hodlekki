@@ -24,9 +24,12 @@
 // a person clears it on their spouse (couples_forget()). A link counts only
 // when it points both ways.
 //
-// Wedding anniversaries are named by FIRST names only (two names on one line,
-// owner 26 Nov 2026), husband first: "Pastor Ebele & Min. Bolanle". When only
-// one spouse is in church: "Bro. John & wife" / "Sis. Ada & husband".
+// Wedding anniversaries are one line, husband first: both titled first names,
+// then the HUSBAND's last name (owner, 28 Nov 2026):
+// "Pastor Ebele & Min. Bolanle Uzo-Peters". No husband's last name on file:
+// first names only, "Pastor Ebele & Min. Bolanle". When only one spouse is in
+// church, their own last name: "Bro. John Uzo & wife" / "Sis. Ada Okafor &
+// husband".
 //
 // Tests: php tests/couples_test.php (SQLite).
 
@@ -205,8 +208,10 @@ if (!function_exists('couples_ready')) {
     }
 
     /**
-     * A couple's line, first names only, husband first. $b is null when the
-     * spouse is not in church.
+     * A couple's line, husband first: both titled first names, then the
+     * husband's last name ("Pastor Ebele & Min. Bolanle Uzo-Peters"); first
+     * names only when he has no last name on file. $b is null when the spouse
+     * is not in church: "Bro. John Uzo & wife".
      */
     function couples_name(array $a, ?array $b): string
     {
@@ -214,12 +219,13 @@ if (!function_exists('couples_ready')) {
         if ($b === null) {
             $g = strtolower(trim((string) ($a['gender'] ?? '')));
             $other = $g === 'male' ? 'wife' : ($g === 'female' ? 'husband' : 'spouse');
-            return $one($a) . ' & ' . $other;
+            return couples_titled((string) ($a['title'] ?? ''), (string) ($a['first_name'] ?? ''), (string) ($a['last_name'] ?? ''))
+                . ' & ' . $other;
         }
         if (couples_is_female($a['gender'] ?? null) && !couples_is_female($b['gender'] ?? null)) {
             [$a, $b] = [$b, $a];
         }
-        return $one($a) . ' & ' . $one($b);
+        return trim($one($a) . ' & ' . $one($b) . ' ' . trim((string) ($a['last_name'] ?? '')));
     }
 
     /**
@@ -271,6 +277,7 @@ if (!function_exists('couples_ready')) {
             }
             $meRow = $me;
             $meRow['first_name'] = (string) ($r['first_name'] ?? $me['first_name']);
+            $meRow['last_name'] = (string) ($r['last_name'] ?? $me['last_name']);
             $r['display_name'] = couples_name($meRow, $spouse);
             if ($spouse === null) {
                 $out[] = $r;
