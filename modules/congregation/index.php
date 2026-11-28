@@ -188,6 +188,7 @@ function cong_kpi(string $key, string $label, string $hint, string $icon): strin
             <legend class="ui-legend">Identity</legend>
             <div class="ui-form-grid">
                 <?= ui_field('text', ['name' => 'first_name', 'id' => 'cong-first', 'label' => 'First name', 'required' => true, 'autocomplete' => 'off']) ?>
+                <?= ui_field('text', ['name' => 'middle_name', 'id' => 'cong-middle', 'label' => 'Middle name', 'optional' => true, 'autocomplete' => 'off', 'attrs' => ['maxlength' => 100]]) ?>
                 <?= ui_field('text', ['name' => 'last_name', 'id' => 'cong-last', 'label' => 'Last name', 'required' => true, 'autocomplete' => 'off', 'attrs' => ['data-action-change' => 'cong.spouse-sort']]) ?>
                 <?= ui_field('select', ['name' => 'gender', 'id' => 'cong-gender', 'label' => 'Gender', 'options' => ['' => 'Not recorded', 'Male' => 'Male', 'Female' => 'Female'], 'attrs' => ['data-action-change' => 'cong.spouse-sort']]) ?>
                 <?= ui_field('tel', ['name' => 'phone', 'id' => 'cong-phone', 'label' => 'Phone number', 'required' => true, 'inputmode' => 'tel', 'autocomplete' => 'off']) ?>

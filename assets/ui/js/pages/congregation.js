@@ -25,7 +25,8 @@
 
     function $(sel, scope) { return (scope || document).querySelector(sel); }
     function label(s) { return String(s || '').replace(/_/g, ' '); }
-    function person(u) { return ((u.first_name || '') + ' ' + (u.last_name || '')).trim(); }
+    /** The full name on the record: first, middle (optional), last. */
+    function person(u) { return [u.first_name, u.middle_name, u.last_name].map(function (s) { return String(s || '').trim(); }).filter(Boolean).join(' '); }
     /** The name as the church says it: "Min. Bolanle Ade" (title from includes/couples.php). */
     function titled(u) { return ((u.title ? u.title + ' ' : '') + person(u)).trim(); }
     function safeUrl(url) {
@@ -40,7 +41,7 @@
     }
     function avatar(u, size) {
         var url = safeUrl(u.picture_path);
-        return '<span class="ui-avatar ' + (size || 'ui-avatar--sm') + ' ' + tone(person(u)) + '">'
+        return '<span class="ui-avatar ' + (size || 'ui-avatar--sm') + ' ' + tone((u.first_name || '') + ' ' + (u.last_name || '')) + '">'
             + (url ? '<img class="nav-avatar-img" src="' + esc(url) + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + esc(initials(u)) + '</span>')
             + '</span>';
     }
@@ -123,7 +124,8 @@
                 el.textContent = HOD.format.number((kpis[el.getAttribute('data-cong-kpi')] || []).length);
             });
             roster = (res.roster || []).map(function (u) {
-                u._text = [titled(u), u.phone, u.email, u.physical_address, inviter(u), u.spiritual_status, u.attendance_status, u.active_tribe, u.active_departments]
+                // Full name, and first + last too, so "Ada Obi" still finds Ada Chiamaka Obi.
+                u._text = [titled(u), (u.first_name || '') + ' ' + (u.last_name || ''), u.phone, u.email, u.physical_address, inviter(u), u.spiritual_status, u.attendance_status, u.active_tribe, u.active_departments]
                     .join(' ').toLowerCase();
                 return u;
             });
@@ -342,7 +344,7 @@
             var f = form();
             f.elements.action.value = 'update_member';
             f.user_id.value = u.id;
-            ['first_name', 'last_name', 'phone', 'real_email', 'dob', 'gender', 'spiritual_status', 'attendance_status', 'new_church_name', 'marital_status', 'wedding_anniversary', 'comments']
+            ['first_name', 'middle_name', 'last_name', 'phone', 'real_email', 'dob', 'gender', 'spiritual_status', 'attendance_status', 'new_church_name', 'marital_status', 'wedding_anniversary', 'comments']
                 .forEach(function (k) { if (f[k]) f[k].value = u[k] == null ? '' : u[k]; });
             f.email.value = u.email || '';
             fillSpouses(u.id, u.spouse_id);

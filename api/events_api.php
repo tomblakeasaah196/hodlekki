@@ -493,7 +493,7 @@ try {
             }
 
             $baseQuery = "
-                SELECT u.id, u.first_name, u.last_name, u.gender, u.spiritual_status, u.phone,
+                SELECT u.id, u.first_name, " . person_middle_sql($pdo, 'u') . " AS middle_name, u.last_name, u.gender, u.spiritual_status, u.phone,
                        a.id as attendance_id, a.check_in_time
                 FROM users u
                 LEFT JOIN attendance a ON u.id = a.user_id AND a.event_id = :eid
@@ -641,7 +641,7 @@ try {
             }
 
             $stmt = $pdo->prepare("
-                SELECT u.id, u.first_name, u.last_name, u.phone, u.gender,
+                SELECT u.id, u.first_name, " . person_middle_sql($pdo, 'u') . " AS middle_name, u.last_name, u.phone, u.gender,
                        u.spiritual_status, u.attendance_status,
                        r.name AS region_name,
                        (SELECT t.name FROM user_tribes ut JOIN tribes t ON ut.tribe_id = t.id
@@ -680,6 +680,7 @@ try {
         case 'update_person_details':
             $target_user_id = (int)($_POST['user_id'] ?? 0);
             $first_name = trim($_POST['first_name'] ?? '');
+            $middle_name = person_middle_clean($_POST['middle_name'] ?? null);
             $last_name = trim($_POST['last_name'] ?? '');
             $phone = trim($_POST['phone'] ?? '');
             $gender = $_POST['gender'] ?? '';
@@ -690,7 +691,7 @@ try {
                 echo json_encode(['status' => 'error', 'message' => 'First name and last name cannot be blank.']);
                 exit;
             }
-            if (mb_strlen($first_name) > 50 || mb_strlen($last_name) > 50) {
+            if (mb_strlen($first_name) > 50 || mb_strlen($last_name) > 50 || mb_strlen((string) $middle_name) > 50) {
                 echo json_encode(['status' => 'error', 'message' => 'Names must be 50 characters or less.']);
                 exit;
             }
@@ -753,6 +754,11 @@ try {
                 $upd = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, gender = ?, spiritual_status = ?, attendance_status = ? WHERE id = ?");
                 $upd->execute([$first_name, $last_name, $gender !== '' ? $gender : null, $spiritual_status ?: 'Visitor', $attendance_status ?: 'New', $target_user_id]);
             }
+            // The middle name, once its column exists (includes/person_name.php).
+            // A sheet without the field (a page opened before this change) leaves it alone.
+            if (person_middle_ready($pdo) && array_key_exists('middle_name', $_POST)) {
+                $pdo->prepare("UPDATE users SET middle_name = ? WHERE id = ?")->execute([$middle_name, $target_user_id]);
+            }
             ladder_note_change($pdo, (int) $target_user_id, $statusBefore, 'events_profile', (int) $user_id);
 
             echo json_encode(['status' => 'success', 'message' => 'Details updated.']);
@@ -794,6 +800,7 @@ try {
         // =====================================================================================
         case 'create_first_timer':
             $first_name = trim($_POST['first_name'] ?? '');
+            $middle_name = person_middle_clean($_POST['middle_name'] ?? null);
             $last_name = trim($_POST['last_name'] ?? '');
             $phone = trim($_POST['phone'] ?? '');
             $email = strtolower(trim($_POST['email'] ?? ''));
@@ -812,6 +819,10 @@ try {
             }
             if (mb_strlen($first_name) > 50 || mb_strlen($last_name) > 50) {
                 echo json_encode(['status' => 'error', 'message' => 'Names must be 50 characters or less.', 'field' => 'first_name']);
+                exit;
+            }
+            if (mb_strlen((string) $middle_name) > 50) {
+                echo json_encode(['status' => 'error', 'message' => 'Keep the middle name to 50 characters.', 'field' => 'middle_name']);
                 exit;
             }
 
@@ -919,6 +930,10 @@ try {
                 exit;
             }
             $new_id = (int)$pdo->lastInsertId();
+            if ($middle_name !== null && person_middle_ready($pdo)) {
+                $pdo->prepare("UPDATE users SET middle_name = ? WHERE id = ?")->execute([$middle_name, $new_id]);
+            }
+            $full_name = person_full_name($first_name, $middle_name, $last_name);
 
             // Everything below is best-effort, mirroring the public Connect card:
             // a failure is logged, never reported, so staff aren't told to retry a
@@ -931,7 +946,7 @@ try {
             }
 
             try {
-                $safe_name = htmlspecialchars("{$first_name} {$last_name}", ENT_QUOTES, 'UTF-8');
+                $safe_name = htmlspecialchars($full_name, ENT_QUOTES, 'UTF-8');
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, ?, ?, ?)");
 
                 $idi_users = perm_module_team($pdo, 'idi');
@@ -950,7 +965,7 @@ try {
                 'status' => 'success',
                 'message' => 'First timer profile created.',
                 'user_id' => $new_id,
-                'name' => "{$first_name} {$last_name}",
+                'name' => $full_name,
             ]);
             break;
 

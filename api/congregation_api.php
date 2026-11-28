@@ -6,6 +6,7 @@ require_once '../includes/db.php';
 require_once __DIR__ . '/../includes/status_ladder.php';
 require_once __DIR__ . '/../includes/congregation_contact.php';
 require_once __DIR__ . '/../includes/couples.php';
+require_once __DIR__ . '/../includes/person_name.php';
 header('Content-Type: application/json');
 
 // 2. Security Check
@@ -20,6 +21,10 @@ csrf_require();
 
 $user_id = $_SESSION['user_id'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
+// users.middle_name, or NULL until its migration has run (includes/person_name.php).
+$mid = person_middle_sql($pdo, '');
+$umid = person_middle_sql($pdo, 'u');
+$midReady = person_middle_ready($pdo);
 
 // 3. Access: the 'congregation' row of the permission matrix (day one:
 //    pastors, and the Director / HOD seats — what the retired Director / HOD
@@ -63,7 +68,7 @@ try {
         case 'fetch_dashboard':
             // KPI 1: Active Non-Members
             $activeNonMembersStmt = $pdo->query("
-                SELECT id, first_name, last_name, phone, spiritual_status 
+                SELECT id, first_name, {$mid} AS middle_name, last_name, phone, spiritual_status
                 FROM users 
                 WHERE attendance_status = 'Active' 
                 AND spiritual_status IN ('Visitor', '1st_Timer', '2nd_Timer', '3rd_Timer', 'Non_Member')
@@ -72,7 +77,7 @@ try {
 
             // KPI 2: Consistent Workers & Pastors
             $consistentWorkersStmt = $pdo->query("
-                SELECT id, first_name, last_name, phone 
+                SELECT id, first_name, {$mid} AS middle_name, last_name, phone
                 FROM users 
                 WHERE attendance_status = 'Active' 
                 AND spiritual_status IN ('Worker', 'Pastor')
@@ -81,7 +86,7 @@ try {
 
             // KPI 3: Consistent Members
             $consistentMembersStmt = $pdo->query("
-                SELECT id, first_name, last_name, phone 
+                SELECT id, first_name, {$mid} AS middle_name, last_name, phone
                 FROM users 
                 WHERE attendance_status = 'Active' 
                 AND spiritual_status = 'Member'
@@ -94,7 +99,7 @@ try {
 
             // THE MASTER ROSTER
             $rosterStmt = $pdo->query("
-                SELECT u.id, u.first_name, u.last_name, u.phone, u.gender, u.spiritual_status, u.attendance_status, u.picture_path, u.updated_at,
+                SELECT u.id, u.first_name, {$umid} AS middle_name, u.last_name, u.phone, u.gender, u.spiritual_status, u.attendance_status, u.picture_path, u.updated_at,
                        u.physical_address, u.marital_status, u.wedding_anniversary, u.comments, u.new_church_name, u.dob, u.email,
                        u.invitation_source, u.invited_by,
                        (SELECT GROUP_CONCAT(d.name SEPARATOR ', ') 
@@ -141,6 +146,7 @@ try {
         // =====================================================================================
         case 'create_member':
             $first_name = trim($_POST['first_name'] ?? '');
+            $middle_name = person_middle_clean($_POST['middle_name'] ?? null);
             $last_name = trim($_POST['last_name'] ?? '');
             $phone = trim($_POST['phone'] ?? '');
             $email = trim($_POST['email'] ?? '');
@@ -208,6 +214,9 @@ try {
             ");
             $stmt->execute([$first_name, $last_name, $email, $phone, $dob, $gender, $marital_status, $spiritual_status, $attendance_status, $address, $latitude, $longitude, $anniversary, $comments, $qr_hash, $pic_path]);
             $new_user_id = (int)$pdo->lastInsertId();
+            if ($midReady && $middle_name !== null) {
+                $pdo->prepare("UPDATE users SET middle_name = ? WHERE id = ?")->execute([$middle_name, $new_user_id]);
+            }
             $spouseProblem = couples_sync($pdo, $new_user_id, (string) $marital_status, (int) ($_POST['spouse_id'] ?? 0), $anniversary);
 
             // NOTIFICATION TRIGGER: Alert IDI (Department ID 1) of the new master roster entry
@@ -215,7 +224,7 @@ try {
 
             if (!empty($idi_users)) {
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New Congregation Profile', ?, '/modules/congregation/')");
-                $alertMessage = "A new profile for {$first_name} {$last_name} has been manually added to the master congregation database.";
+                $alertMessage = "A new profile for " . person_full_name($first_name, $middle_name, $last_name) . " has been manually added to the master congregation database.";
                 
                 foreach($idi_users as $uid) {
                     $notifStmt->execute([$uid, $alertMessage]);
@@ -238,7 +247,7 @@ try {
                 exit;
             }
 
-            $stmt = $pdo->prepare("SELECT id, first_name, last_name, email, real_email, phone, dob, gender, marital_status, spiritual_status, attendance_status, physical_address, new_church_name, wedding_anniversary, comments, picture_path FROM users WHERE id = ?");
+            $stmt = $pdo->prepare("SELECT id, first_name, {$mid} AS middle_name, last_name, email, real_email, phone, dob, gender, marital_status, spiritual_status, attendance_status, physical_address, new_church_name, wedding_anniversary, comments, picture_path FROM users WHERE id = ?");
             $stmt->execute([$target_id]);
             $member = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -256,7 +265,7 @@ try {
         case 'get_person':
             $target_id = (int) ($_POST['user_id'] ?? 0);
             $stmt = $pdo->prepare("
-                SELECT u.id, u.first_name, u.last_name, u.email, u.real_email, u.phone, u.dob, u.gender, u.marital_status,
+                SELECT u.id, u.first_name, {$umid} AS middle_name, u.last_name, u.email, u.real_email, u.phone, u.dob, u.gender, u.marital_status,
                        u.spiritual_status, u.attendance_status, u.physical_address, u.new_church_name, u.wedding_anniversary,
                        u.comments, u.picture_path, u.invitation_source, u.invited_by,
                        (SELECT GROUP_CONCAT(d.name SEPARATOR ', ')
@@ -408,6 +417,7 @@ try {
         case 'update_member':
             $target_id = $_POST['user_id'] ?? '';
             $first_name = trim($_POST['first_name'] ?? '');
+            $middle_name = person_middle_clean($_POST['middle_name'] ?? null);
             $last_name = trim($_POST['last_name'] ?? '');
             $phone = trim($_POST['phone'] ?? '');
             $real_email = trim($_POST['real_email'] ?? null);
@@ -433,13 +443,19 @@ try {
             // Handle Image Update
             $pic_update_sql = "";
             $params = [$first_name, $last_name, $real_email, $phone, $dob, $gender, $address, $latitude, $longitude, $attendance_status, $spiritual_status, $marital_status, $anniversary, $new_church, $comments];
-            
+            // The middle name is written with the rest once its column exists.
+            // A form without the field (a page opened before this change) leaves it alone.
+            if ($midReady && array_key_exists('middle_name', $_POST)) {
+                $pic_update_sql .= ", middle_name = ?";
+                $params[] = $middle_name;
+            }
+
             if (!empty($_FILES['profile_pic']['name'])) {
                 $upload = processProfileImage($_FILES['profile_pic']);
                 if (isset($upload['error'])) {
                     echo json_encode(['status' => 'error', 'message' => $upload['error']]); exit;
                 }
-                $pic_update_sql = ", picture_path = ?";
+                $pic_update_sql .= ", picture_path = ?";
                 $params[] = $upload['success'];
             }
             $params[] = $target_id;
@@ -510,10 +526,10 @@ try {
             }
 
             // Fetch the target member's name to make the notification actionable
-            $userStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
+            $userStmt = $pdo->prepare("SELECT first_name, {$mid} AS middle_name, last_name FROM users WHERE id = ?");
             $userStmt->execute([$target_id]);
             $targetUser = $userStmt->fetch(PDO::FETCH_ASSOC);
-            $memberName = $targetUser ? "{$targetUser['first_name']} {$targetUser['last_name']}" : "A member";
+            $memberName = $targetUser ? person_row_name($targetUser) : "A member";
 
             $pushStmt = $pdo->prepare("
                 INSERT INTO embrace_followups (visitor_id, assigned_worker_id, followup_method, followup_date, status, followup_notes)

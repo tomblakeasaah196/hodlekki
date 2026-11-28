@@ -23,7 +23,11 @@
     var att = { eventId: '', roster: null, kpis: null, popOpen: false, verify: null, wiz: null };
     var restored = false;
 
-    function name(p) { return (((p && p.first_name) || '') + ' ' + ((p && p.last_name) || '')).trim() || 'Unnamed'; }
+    /** The full name on the record: first, middle (optional), last. */
+    function name(p) {
+        return [p && p.first_name, p && p.middle_name, p && p.last_name]
+            .map(function (s) { return String(s || '').trim(); }).filter(Boolean).join(' ') || 'Unnamed';
+    }
     function isPhone() { return window.matchMedia('(max-width: 767px)').matches; }
     function timeOnly(v) {
         if (!v) return '—';
@@ -185,7 +189,7 @@
 
     function rosterItem(u, checked) {
         var nm = name(u);
-        var hay = (nm + ' ' + (u.phone || '') + ' ' + (u.spiritual_status || '')).toLowerCase();
+        var hay = (nm + ' ' + (u.first_name || '') + ' ' + (u.last_name || '') + ' ' + (u.phone || '') + ' ' + (u.spiritual_status || '')).toLowerCase();
         var meta = EV.statusLabel(u.spiritual_status) + ' · ' + (u.phone || 'No phone');
         var actions = checked
             ? '<span class="ui-badge ui-badge--success ui-num">' + HOD.icon('clock', 'ui-icon--xs') + esc(timeOnly(u.check_in_time)) + '</span>' +
@@ -334,7 +338,7 @@
             html = '<div class="px-4 py-5 text-center"><p class="text-sm text-ink-muted">Type to find someone waiting to clock in.</p>' +
                 '<p class="ui-meta mt-1">' + EV.plural(att.roster.pending.length, 'person') .replace('persons', 'people') + ' pending</p></div>';
         } else {
-            var matches = att.roster.pending.filter(function (u) { return (name(u) + ' ' + (u.phone || '')).toLowerCase().indexOf(q) > -1; });
+            var matches = att.roster.pending.filter(function (u) { return (name(u) + ' ' + (u.first_name || '') + ' ' + (u.last_name || '') + ' ' + (u.phone || '')).toLowerCase().indexOf(q) > -1; });
             if (!matches.length) {
                 html = '<div class="px-4 py-5 text-center"><p class="text-sm font-semibold text-ink">No pending match</p>' +
                     '<p class="ui-meta mt-1">They may be checked in already, or not on this roster.</p>' +
@@ -451,6 +455,7 @@
         }
         html += '<form class="ui-form-grid" id="att-verify-form" novalidate>' +
             fieldHtml('att-vf-first', 'First name', inputHtml('att-vf-first', 'first_name', 'text', p.first_name, 'maxlength="50" autocomplete="off" required'), { required: true }) +
+            fieldHtml('att-vf-middle', 'Middle name', inputHtml('att-vf-middle', 'middle_name', 'text', p.middle_name, 'maxlength="50" autocomplete="off"')) +
             fieldHtml('att-vf-last', 'Last name', inputHtml('att-vf-last', 'last_name', 'text', p.last_name, 'maxlength="50" autocomplete="off" required'), { required: true }) +
             fieldHtml('att-vf-phone', 'Phone', inputHtml('att-vf-phone', 'phone', 'tel', p.phone, 'maxlength="25" inputmode="tel"')) +
             fieldHtml('att-vf-gender', 'Gender', selectHtml('att-vf-gender', 'gender', ['Male', 'Female'], p.gender, 'Not specified')) +
@@ -482,22 +487,22 @@
         var p = att.verify;
         if (!p) return;
         var v = function (id) { return ($('#' + id).value || '').trim(); };
-        var first = v('att-vf-first'), last = v('att-vf-last');
+        var first = v('att-vf-first'), middle = v('att-vf-middle'), last = v('att-vf-last');
         setErr('att-vf-first', first ? '' : 'Enter the first name.');
         setErr('att-vf-last', last ? '' : 'Enter the last name.');
         if (!first || !last) { $(!first ? '#att-vf-first' : '#att-vf-last').focus(); return; }
         var data = {
-            user_id: p.id, first_name: first, last_name: last, phone: v('att-vf-phone'),
+            user_id: p.id, first_name: first, middle_name: middle, last_name: last, phone: v('att-vf-phone'),
             gender: $('#att-vf-gender').value || '', spiritual_status: $('#att-vf-spiritual').value || '', attendance_status: $('#att-vf-attendance').value || ''
         };
         HOD.busy(btn, true);
         EV.api('update_person_details', data).then(function () {
             HOD.toast('Details saved.', 'success');
-            Object.assign(p, { first_name: first, last_name: last, phone: data.phone, gender: data.gender, spiritual_status: data.spiritual_status, attendance_status: data.attendance_status });
+            Object.assign(p, { first_name: first, middle_name: middle, last_name: last, phone: data.phone, gender: data.gender, spiritual_status: data.spiritual_status, attendance_status: data.attendance_status });
             renderVerify();
             refreshAll();
         }).catch(function (err) {
-            if (err && err.field) setErr('att-vf-' + ({ first_name: 'first', last_name: 'last', phone: 'phone' }[err.field] || err.field), err.message);
+            if (err && err.field) setErr('att-vf-' + ({ first_name: 'first', middle_name: 'middle', last_name: 'last', phone: 'phone' }[err.field] || err.field), err.message);
             HOD.busy(btn, false);
         });
     });
@@ -523,7 +528,7 @@
     var STEP_INDEX = { type: 0, mode: 0, qr: 0, basic: 1, profile: 2, review: 3 };
     var STEP_FIELDS = { basic: ['att-wz-first', 'att-wz-last', 'att-wz-phone'], profile: ['att-wz-email', 'att-wz-address'] };
     var FIELD_HOME = {
-        first_name: ['basic', 'att-wz-first'], last_name: ['basic', 'att-wz-last'], phone: ['basic', 'att-wz-phone'], gender: ['basic', 'att-wz-gender'],
+        first_name: ['basic', 'att-wz-first'], middle_name: ['basic', 'att-wz-middle'], last_name: ['basic', 'att-wz-last'], phone: ['basic', 'att-wz-phone'], gender: ['basic', 'att-wz-gender'],
         email: ['profile', 'att-wz-email'], dob: ['profile', 'att-wz-dob'], physical_address: ['profile', 'att-wz-address']
     };
     var wizBody = $('#att-wiz-body');
@@ -532,7 +537,7 @@
         return {
             step: 'type', type: null, mode: null, duplicate: null, busy: false,
             data: {
-                first_name: '', last_name: '', phone: '', gender: '', email: '', dob: '', marital_status: 'Single', wedding_anniversary: '',
+                first_name: '', middle_name: '', last_name: '', phone: '', gender: '', email: '', dob: '', marital_status: 'Single', wedding_anniversary: '',
                 physical_address: '', invited_by: '', prayer_requests: '', wants_to_join: false, wants_visitation: false,
                 spiritual_status: 'Member', attendance_status: 'New', comments: ''
             }
@@ -582,7 +587,7 @@
         var w = att.wiz, d = w.data;
         var v = function (id) { var el = document.getElementById(id); return el ? (el.value || '').trim() : ''; };
         if (w.step === 'basic') {
-            d.first_name = v('att-wz-first'); d.last_name = v('att-wz-last'); d.phone = v('att-wz-phone'); d.gender = v('att-wz-gender');
+            d.first_name = v('att-wz-first'); d.middle_name = v('att-wz-middle'); d.last_name = v('att-wz-last'); d.phone = v('att-wz-phone'); d.gender = v('att-wz-gender');
         } else if (w.step === 'profile') {
             d.email = v('att-wz-email'); d.dob = v('att-wz-dob'); d.marital_status = v('att-wz-marital') || 'Single';
             d.wedding_anniversary = v('att-wz-anniversary'); d.physical_address = v('att-wz-address');
@@ -672,6 +677,7 @@
             wizHead('Basic details', w.type === 'member' ? 'Who are we adding?' : 'Who is joining us today?');
             html = '<div class="ui-form-grid">' +
                 fieldHtml('att-wz-first', 'First name', inputHtml('att-wz-first', 'first_name', 'text', d.first_name, 'maxlength="50" autocomplete="off" enterkeyhint="next"'), { required: true }) +
+                fieldHtml('att-wz-middle', 'Middle name', inputHtml('att-wz-middle', 'middle_name', 'text', d.middle_name, 'maxlength="50" autocomplete="off" enterkeyhint="next"')) +
                 fieldHtml('att-wz-last', 'Last name', inputHtml('att-wz-last', 'last_name', 'text', d.last_name, 'maxlength="50" autocomplete="off" enterkeyhint="next"'), { required: true }) +
                 fieldHtml('att-wz-phone', 'Phone', inputHtml('att-wz-phone', 'phone', 'tel', d.phone, 'maxlength="25" inputmode="tel" autocomplete="off" enterkeyhint="next"'), { required: true, hint: 'Stops duplicate profiles.' }) +
                 fieldHtml('att-wz-gender', 'Gender', selectHtml('att-wz-gender', 'gender', ['Male', 'Female'], d.gender, 'Not specified')) +
@@ -712,7 +718,7 @@
                 return '<div class="flex justify-between gap-4 py-2"><dt class="text-sm text-ink-subtle">' + esc(label) + '</dt><dd class="min-w-0 break-words text-right text-sm font-medium text-ink">' +
                     (value ? esc(value) : '<span class="text-ink-subtle">Not given</span>') + '</dd></div>';
             };
-            var rows = row('Name', (d.first_name + ' ' + d.last_name).trim()) + row('Phone', d.phone) + row('Gender', d.gender) + row('Email', d.email) +
+            var rows = row('Name', name(d)) + row('Phone', d.phone) + row('Gender', d.gender) + row('Email', d.email) +
                 row('Date of birth', d.dob) + row('Marital status', d.marital_status) + row('Address', d.physical_address);
             if (w.type === 'first_timer') {
                 rows += row('Invited by', d.invited_by) + row('Wants to join', d.wants_to_join ? 'Yes' : '') + row('Wants a visit', d.wants_visitation ? 'Yes' : '') + row('Prayer request', d.prayer_requests ? 'Given' : '');
@@ -755,9 +761,11 @@
         if (!att.eventId) { HOD.toast('Choose an event first. They are clocked into it.', 'warning'); return; }
         att.wiz = wizDefaults();
         if (prefill) {
+            // "Ada Obi" fills first and last; "Ada Chiamaka Obi" the middle name too.
             var parts = String(prefill).trim().split(/\s+/).filter(Boolean);
             att.wiz.data.first_name = parts[0] || '';
-            att.wiz.data.last_name = parts.slice(1).join(' ');
+            att.wiz.data.middle_name = parts.length > 2 ? parts.slice(1, -1).join(' ') : '';
+            att.wiz.data.last_name = parts.length > 1 ? parts[parts.length - 1] : '';
         }
         wizError('');
         renderWiz();
@@ -866,7 +874,7 @@
         HOD.busy(b, true);
         var d = w.data;
         var shared = {
-            first_name: d.first_name, last_name: d.last_name, phone: d.phone, gender: d.gender,
+            first_name: d.first_name, middle_name: d.middle_name, last_name: d.last_name, phone: d.phone, gender: d.gender,
             marital_status: d.marital_status, dob: d.dob, physical_address: d.physical_address
         };
         var call = w.type === 'first_timer'
@@ -881,7 +889,7 @@
             // users.gender takes Male, Female or NULL: "Not specified" is left out (the API reads it as null).
             }, shared, { gender: d.gender || undefined }) });
         call.then(function (res) {
-            var nm = (d.first_name + ' ' + d.last_name).trim() || res.name || 'New profile';
+            var nm = name(d) !== 'Unnamed' ? name(d) : (res.name || 'New profile');
             return clockIn(res.user_id, nm).then(function (clockRes) { w.busy = false; success(nm, clockRes, false); });
         }, function (err) {
             w.busy = false;

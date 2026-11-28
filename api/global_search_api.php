@@ -34,18 +34,22 @@ try {
             $events = [];
 
             if ($can_search_people) {
+                // The middle name counts too, so "Ada Chiamaka", "Chiamaka Obi"
+                // and "Ada Obi" all find Ada Chiamaka Obi (includes/person_name.php).
+                $midReady = person_middle_ready($pdo);
                 $stmt = $pdo->prepare("
-                    SELECT id, first_name, last_name, phone, spiritual_status
+                    SELECT id, first_name, " . person_middle_sql($pdo, '') . " AS middle_name, last_name, phone, spiritual_status
                     FROM users
                     WHERE CONCAT(first_name, ' ', last_name) LIKE :q1
+                       " . ($midReady ? "OR CONCAT_WS(' ', first_name, middle_name, last_name) LIKE :q4" : '') . "
                        OR phone LIKE :q2
                        OR email LIKE :q3
                     ORDER BY first_name ASC, last_name ASC
                     LIMIT 6
                 ");
-                $stmt->execute(['q1' => $like, 'q2' => $like, 'q3' => $like]);
+                $stmt->execute(['q1' => $like, 'q2' => $like, 'q3' => $like] + ($midReady ? ['q4' => $like] : []));
                 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                    $fullName = trim($row['first_name'] . ' ' . $row['last_name']);
+                    $fullName = person_row_name($row);
                     $people[] = [
                         'id'    => (int) $row['id'],
                         'label' => $fullName,

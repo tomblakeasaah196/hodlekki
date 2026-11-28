@@ -424,7 +424,8 @@ function trainings_certificate_issue(PDO $pdo, array $enrolment, ?int $by = null
     if ($official && $e['confirmed_at'] === null) {
         return ['ok' => false, 'message' => 'Confirm the graduate first.'];
     }
-    $stmt = $pdo->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
+    // The learner's full name, middle name included: a certificate is the record.
+    $stmt = $pdo->prepare('SELECT first_name, ' . person_middle_sql($pdo, '') . ' AS middle_name, last_name FROM users WHERE id = ?');
     $stmt->execute([$e['user_id']]);
     $signers = trainings_certificate_signers_now($pdo, (int) $t['id']);
     $snapshot = [

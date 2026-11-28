@@ -29,7 +29,8 @@
 
     function $(sel, scope) { return (scope || document).querySelector(sel); }
     function label(s) { return String(s || '').replace(/_/g, ' '); }
-    function person(v) { return ((v.first_name || '') + ' ' + (v.last_name || '')).trim(); }
+    /** The full name on the record: first, middle (optional), last. */
+    function person(v) { return [v.first_name, v.middle_name, v.last_name].map(function (s) { return String(s || '').trim(); }).filter(Boolean).join(' '); }
     function safeUrl(url) {
         url = String(url || '').trim();
         return /^(https?:\/\/|\/|\.\.?\/)/i.test(url) ? url : '';
@@ -41,7 +42,7 @@
     }
     function avatar(v) {
         var url = safeUrl(v.picture_path);
-        return '<span class="ui-avatar ui-avatar--sm ' + tone(person(v)) + '">' + (url ? '<img class="nav-avatar-img" src="' + esc(url) + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + esc((v.first_name || '?').charAt(0)) + '</span>') + '</span>';
+        return '<span class="ui-avatar ui-avatar--sm ' + tone(((v.first_name || '') + ' ' + (v.last_name || '')).trim()) + '">' + (url ? '<img class="nav-avatar-img" src="' + esc(url) + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + esc((v.first_name || '?').charAt(0)) + '</span>') + '</span>';
     }
     function waNumber(phone) { var n = String(phone || '').replace(/\D/g, ''); return n.charAt(0) === '0' ? '234' + n.slice(1) : n; }
     function when(s, withTime) {
@@ -130,7 +131,7 @@
         var list = visitors.filter(function (v) {
             if (view === 'mine' && String(v.assigned_worker_id) !== ME) return false;
             if (!q) return true;
-            return [person(v), v.phone, v.email, v.followup_status, v.worker_fname, v.worker_lname].join(' ').toLowerCase().indexOf(q) !== -1;
+            return [person(v), (v.first_name || '') + ' ' + (v.last_name || ''), v.phone, v.email, v.followup_status, v.worker_fname, v.worker_lname].join(' ').toLowerCase().indexOf(q) !== -1;
         });
         $('[data-emb-rows]').innerHTML = list.length ? list.map(row).join('')
             : '<tr><td colspan="6" class="py-12 text-center text-ink-subtle">' + (visitors.length ? 'No first timers in this view.' : 'No first timers yet. Record the first one.') + '</td></tr>';
@@ -255,7 +256,7 @@
         $('#emb-visitor-desc').textContent = v ? 'Update their record.' : 'Welcome them home with excellence.';
         $('[data-emb-visitor-save]').querySelector('span').textContent = v ? 'Update record' : 'Save record';
         if (v) {
-            ['first_name', 'last_name', 'phone', 'email', 'invited_by', 'prayer_requests', 'wedding_anniversary'].forEach(function (k) { f[k].value = v[k] == null ? '' : v[k]; });
+            ['first_name', 'middle_name', 'last_name', 'phone', 'email', 'invited_by', 'prayer_requests', 'wedding_anniversary'].forEach(function (k) { f[k].value = v[k] == null ? '' : v[k]; });
             f.gender.value = v.gender || 'Male';
             f.marital_status.value = v.marital_status || 'Single';
             f.invitation_source.value = v.invitation_source || 'Self_Discovery';

@@ -61,6 +61,15 @@ try {
                 WHERE id = ?
             ");
             $stmt->execute([$phone, $address, $latitude, $longitude, $dob, $marital_status, $wedding_anniversary, $user_id]);
+            // A member may add their own middle name while the record has none;
+            // changing one already there is a name correction (request_name_change).
+            if (person_middle_ready($pdo) && array_key_exists('middle_name', $_POST)) {
+                $middle_name = person_middle_clean($_POST['middle_name']);
+                if ($middle_name !== null) {
+                    $pdo->prepare("UPDATE users SET middle_name = ? WHERE id = ? AND (middle_name IS NULL OR middle_name = '')")
+                        ->execute([$middle_name, $user_id]);
+                }
+            }
             require_once __DIR__ . '/../includes/couples.php';
             couples_after_status($pdo, (int) $user_id, (string) $marital_status, $wedding_anniversary);
 
@@ -68,10 +77,10 @@ try {
             $idi_users = perm_module_team($pdo, 'idi');
 
             if (!empty($idi_users)) {
-                $uStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
+                $uStmt = $pdo->prepare("SELECT first_name, " . person_middle_sql($pdo, '') . " AS middle_name, last_name FROM users WHERE id = ?");
                 $uStmt->execute([$user_id]);
                 $uName = $uStmt->fetch(PDO::FETCH_ASSOC);
-                $memberName = $uName ? "{$uName['first_name']} {$uName['last_name']}" : "A member";
+                $memberName = $uName ? person_row_name($uName) : "A member";
 
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Profile Update Alert', ?, '/modules/congregation/')");
                 $alertMsg = "{$memberName} has autonomously updated their personal information and location in the member portal.";
@@ -210,10 +219,10 @@ try {
             $admins = perm_office_holders($pdo, 'congregation', 'edit');
 
             if (!empty($admins)) {
-                $uStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
+                $uStmt = $pdo->prepare("SELECT first_name, " . person_middle_sql($pdo, '') . " AS middle_name, last_name FROM users WHERE id = ?");
                 $uStmt->execute([$user_id]);
                 $uName = $uStmt->fetch(PDO::FETCH_ASSOC);
-                $memberName = $uName ? "{$uName['first_name']} {$uName['last_name']}" : "A member";
+                $memberName = $uName ? person_row_name($uName) : "A member";
 
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'Name Change Request', ?, '/modules/pastoral/')");
                 $alertMsg = "{$memberName} has submitted an official name change request. Please review the pastoral desk suggestions.";

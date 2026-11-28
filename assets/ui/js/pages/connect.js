@@ -30,7 +30,7 @@
     var TOTAL = 3;
     // Which step each field lives on, so an error can open the right one.
     var FIELD_STEPS = {
-        first_name: 1, last_name: 1, phone: 1, email: 1,
+        first_name: 1, middle_name: 1, last_name: 1, phone: 1, email: 1,
         gender: 2, marital_status: 2, dob: 2, physical_address: 2,
         invited_by: 3, wants_to_join: 3, wants_visitation: 3, prayer_requests: 3
     };
@@ -195,6 +195,12 @@
                 if (v.length > 50) return { name: names[i][0], message: 'Your ' + label + ' is too long. Please keep it under 50 characters.' };
                 if (!NAME_PATTERN.test(v)) return { name: names[i][0], message: 'Your ' + label + ' can only contain letters, spaces, hyphens and apostrophes.' };
             }
+            // The middle name is optional; when given it follows the same rules.
+            var middle = val('middle_name');
+            if (middle) {
+                if (middle.length > 50) return { name: 'middle_name', message: 'Your middle name is too long. Please keep it under 50 characters.' };
+                if (!NAME_PATTERN.test(middle)) return { name: 'middle_name', message: 'Your middle name can only contain letters, spaces, hyphens and apostrophes.' };
+            }
             var phone = val('phone');
             var digits = phone.replace(/\D/g, '');
             if (!phone) return { name: 'phone', message: 'Please enter your phone number so we can reach you.' };
@@ -263,7 +269,7 @@
         HOD.busy(btn, true);
         var t = withTimeout(20000);
         HOD.api(API, {
-            data: { action: 'check_existing_user', first_name: form.elements.first_name.value, last_name: form.elements.last_name.value,
+            data: { action: 'check_existing_user', first_name: form.elements.first_name.value, middle_name: form.elements.middle_name.value, last_name: form.elements.last_name.value,
                 phone: form.elements.phone.value, email: form.elements.email.value },
             quiet: true, signal: t.signal
         }).then(function () {

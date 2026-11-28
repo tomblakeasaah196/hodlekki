@@ -188,7 +188,7 @@ try {
         // RAW EXPORT DATA (For the Frontend Excel Generator)
         // ----------------------------------------------------------
         // We provide a flat list of users for the master excel export
-        $insights['export_data']['master_roster'] = $pdo->query("SELECT first_name, last_name, email, phone, spiritual_status, attendance_status, gender FROM users")->fetchAll(PDO::FETCH_ASSOC);
+        $insights['export_data']['master_roster'] = $pdo->query("SELECT first_name, " . person_middle_sql($pdo, '') . " AS middle_name, last_name, email, phone, spiritual_status, attendance_status, gender FROM users")->fetchAll(PDO::FETCH_ASSOC);
 
         echo json_encode($insights);
 

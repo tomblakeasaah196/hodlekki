@@ -7,6 +7,7 @@
 
 require_once __DIR__ . '/embrace_helpers.php';
 require_once __DIR__ . '/assimilation_export_excel.php';
+require_once __DIR__ . '/person_name.php';
 
 /** Column layout. Every person from the date range appears, pushed or not. */
 function embrace_export_columns(): array
@@ -14,6 +15,7 @@ function embrace_export_columns(): array
     return [
         ['label' => 'S/N', 'width' => 8],
         ['label' => 'First Name', 'width' => 18],
+        ['label' => 'Middle Name', 'width' => 18],
         ['label' => 'Last Name', 'width' => 18],
         ['label' => 'Phone', 'width' => 16],
         ['label' => 'Email', 'width' => 28],
@@ -127,6 +129,7 @@ function embrace_export_row_values(array $v, array $notes, array $workerHistory,
     return [
         $serial,
         embrace_export_text($v['first_name'] ?? ''),
+        embrace_export_text($v['middle_name'] ?? ''),
         embrace_export_text($v['last_name'] ?? ''),
         embrace_export_text($v['phone'] ?? ''),
         embrace_export_text($v['email'] ?? ''),
@@ -177,7 +180,7 @@ function embrace_export_stream_excel(PDO $pdo, string $startDate, string $endDat
     // follow-up). Previously the pushed people silently dropped out.
     $pipelineSql = embrace_pipeline_sql($pdo, 'u');
     $stmt = $pdo->prepare("
-        SELECT u.id, u.first_name, u.last_name, u.phone, u.email, u.gender, u.marital_status,
+        SELECT u.id, u.first_name, " . person_middle_sql($pdo, 'u') . " AS middle_name, u.last_name, u.phone, u.email, u.gender, u.marital_status,
                u.wedding_anniversary, u.physical_address, u.invitation_source, u.invited_by,
                u.is_born_again, u.wants_to_join, u.visitation_preference, u.prayer_requests,
                u.comments, u.created_at, u.spiritual_status,
