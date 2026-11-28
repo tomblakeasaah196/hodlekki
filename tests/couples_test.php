@@ -8,9 +8,10 @@
 //   - Pastor > Dir. > Min. > Bro./Sis.; an Associate Pastor (any live pastor
 //     role) is Pastor; an Assistant/Deputy HOD is Min.; a sub-unit head is
 //     Bro./Sis.; no gender and no seat = no title.
-//   - A couple's wedding anniversary is ONE line, first names only, husband
-//     first: "Pastor Ebele & Min. Bolanle"; one spouse in church:
-//     "Bro. John & wife".
+//   - A couple's wedding anniversary is ONE line, husband first, both first
+//     names then his last name (28 Nov 2026): "Pastor Ebele & Min. Bolanle
+//     Uzo-Peters"; no last name for him: first names only; one spouse in
+//     church: "Bro. John Uzo & wife".
 //   - Of a couple's two rows the assigned one is kept, else the husband's.
 //   - Linking from Congregation links both ways, marks the spouse Married and
 //     shares the anniversary; Single/Divorced or a new spouse unlinks; a
@@ -107,10 +108,14 @@ same('no gender, no seat: no title', '', couples_title(['gender' => null, 'spiri
 same('no seat types yet: gender only', 'Sis.', couples_title(['gender' => 'Female', 'spiritual_status' => 'Worker'], 40, []));
 
 echo "Couple lines\n";
-same('husband first, first names only', 'Pastor Ebele & Min. Bolanle',
-    couples_name(['first_name' => 'Bolanle', 'gender' => 'Female', 'title' => 'Min.'], ['first_name' => 'Ebele', 'gender' => 'Male', 'title' => 'Pastor']));
-same('husband alone in church', 'Bro. John & wife', couples_name(['first_name' => 'John', 'gender' => 'Male', 'title' => 'Bro.'], null));
-same('wife alone in church', 'Sis. Ada & husband', couples_name(['first_name' => 'Ada', 'gender' => 'Female', 'title' => 'Sis.'], null));
+same('husband first, then his last name', 'Pastor Ebele & Min. Bolanle Uzo-Peters',
+    couples_name(['first_name' => 'Bolanle', 'last_name' => 'Adeyemi', 'gender' => 'Female', 'title' => 'Min.'],
+        ['first_name' => 'Ebele', 'last_name' => 'Uzo-Peters', 'gender' => 'Male', 'title' => 'Pastor']));
+same('no last name for him: first names only', 'Pastor Ebele & Min. Bolanle',
+    couples_name(['first_name' => 'Bolanle', 'last_name' => 'Adeyemi', 'gender' => 'Female', 'title' => 'Min.'],
+        ['first_name' => 'Ebele', 'last_name' => '  ', 'gender' => 'Male', 'title' => 'Pastor']));
+same('husband alone in church', 'Bro. John Uzo & wife', couples_name(['first_name' => 'John', 'last_name' => 'Uzo', 'gender' => 'Male', 'title' => 'Bro.'], null));
+same('wife alone in church', 'Sis. Ada Okafor & husband', couples_name(['first_name' => 'Ada', 'last_name' => 'Okafor', 'gender' => 'Female', 'title' => 'Sis.'], null));
 
 echo "Linking\n";
 $pdo = cp_db();
@@ -159,9 +164,11 @@ $wa = static fn (int $id, string $first, ?int $assignment = null): array => [
 ];
 $rows = couples_label_rows($pdo, [$wa(2, 'Bolanle'), $wa(1, 'Ebele'), array_merge($wa(3, 'John'), ['event_date' => '2010-12-20'])], 'target_user_id', ['Wedding_Anniversary'], $seats);
 same('a couple is one row', 2, count($rows));
-same('the couple line', 'Pastor Ebele & Min. Bolanle', $rows[0]['display_name']);
+same('the couple line ends with his last name', 'Pastor Ebele & Min. Bolanle Surname1', $rows[0]['display_name']);
 same('the husband\'s row is kept', 1, $rows[0]['target_user_id']);
-same('one spouse in church', 'Bro. John & wife', $rows[1]['display_name']);
+same('one spouse in church', 'Bro. John Surname3 & wife', $rows[1]['display_name']);
+$rows = couples_label_rows($pdo, [$wa(2, 'Bolanle')], 'target_user_id', ['Wedding_Anniversary'], $seats);
+same('the wife\'s row still ends with HIS last name', 'Pastor Ebele & Min. Bolanle Surname1', $rows[0]['display_name']);
 $rows = couples_label_rows($pdo, [$wa(1, 'Ebele'), $wa(2, 'Bolanle', 77)], 'target_user_id', ['Wedding_Anniversary'], $seats);
 same('the assigned row is kept', [1, 2, 77], [count($rows), $rows[0]['target_user_id'], $rows[0]['assignment_id']]);
 
@@ -173,11 +180,12 @@ same('a birthday keeps the full name with its title', 'Sis. Ngozi Surname4', $bd
 same('a Junior Church child gets no title', 'Tobi Ade (JC)', $bd[1]['display_name']);
 
 $recap = couples_label_rows($pdo, [
-    ['id' => 1, 'source' => 'user', 'event_type' => 'Anniversary', 'event_date' => '5th Dec', 'first_name' => 'Ebele', 'last_name' => 'S', 'display_picture' => null],
-    ['id' => 2, 'source' => 'user', 'event_type' => 'Anniversary', 'event_date' => '5th Dec', 'first_name' => 'Bolanle', 'last_name' => 'S', 'display_picture' => '/w.jpg'],
+    ['id' => 1, 'source' => 'user', 'event_type' => 'Anniversary', 'event_date' => '5th Dec', 'first_name' => 'Ebele', 'last_name' => 'Uzo-Peters', 'display_picture' => null],
+    ['id' => 2, 'source' => 'user', 'event_type' => 'Anniversary', 'event_date' => '5th Dec', 'first_name' => 'Bolanle', 'last_name' => 'Adeyemi', 'display_picture' => '/w.jpg'],
     ['id' => 1, 'source' => 'jc', 'event_type' => 'JC_Birthday', 'event_date' => '9th Dec', 'first_name' => 'Kid', 'last_name' => 'K'],
 ], 'id', ['Anniversary'], $seats);
 same('the recap folds the couple too', 2, count($recap));
+same('… named with his last name', 'Pastor Ebele & Min. Bolanle Uzo-Peters', $recap[0]['display_name']);
 same('… keeping the photo they have', '/w.jpg', $recap[0]['display_picture']);
 same('a Junior Church id is not read as a member', '', $recap[1]['title']);
 
@@ -186,7 +194,7 @@ $old = cp_db(false);
 cp_person($old, 1, 'Ebele', 'Male', 'Pastor', 'Married', '2015-12-05');
 same('sync is a no-op', null, couples_sync($old, 1, 'Married', 2, null));
 $rows = couples_label_rows($old, [$wa(1, 'Ebele')], 'target_user_id', ['Wedding_Anniversary'], $seats);
-same('rows are still named', 'Pastor Ebele & wife', $rows[0]['display_name']);
+same('rows are still named', 'Pastor Ebele Surname1 & wife', $rows[0]['display_name']);
 
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed > 0 ? 1 : 0);

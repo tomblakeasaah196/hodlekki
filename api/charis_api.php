@@ -222,7 +222,7 @@ try {
                          DAY(event_date), first_name, last_name
             ");
             // A couple who are both in church is one wedding anniversary line,
-            // first names only, husband first: "Pastor Ebele & Min. Bolanle".
+            // husband first, his last name at the end: "Pastor Ebele & Min. Bolanle Uzo-Peters".
             $anniversaries = couples_label_rows($pdo, $annivStmt->fetchAll(PDO::FETCH_ASSOC));
 
             // C. Fetch all Charis Workers
