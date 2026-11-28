@@ -12,6 +12,11 @@ Since 12 Nov 2026 the page is on the UI foundation (strict CSP; the behaviour is
 Suppression; `?tab=suppression` still opens it) and Settings; longer help sits
 behind the (i) buttons.
 
+On a phone or tablet (under 1024 px) Compose is three steps: **Who** (pick
+people), **Text** (write it; templates fold away, "+ Add field" inserts a
+field) and **Send** (preview, test, recipients). Back / Next and Send sit in
+a bar above the bottom navigation. A computer shows everything side by side.
+
 ## 1. The cron job (the sender)
 
 `crontab -l` in cPanel → Terminal must contain these lines (the SMS worker

@@ -34,6 +34,9 @@
     var campPage = 1;
     var recipSeq = 0;
     var webhookSuggestion = '';
+    var step = 1;                       // Compose on a phone: 1 Who, 2 Text, 3 Send
+    var lastUnits = 0;
+    var PHONE = window.matchMedia ? window.matchMedia('(max-width: 1023.98px)') : { matches: false };
 
     var ST = {
         queued: { label: 'Sending\u2026', tone: 'info' },
@@ -330,6 +333,7 @@
 
     function renderSelected() {
         var arr = Array.from(selected.values());
+        paintDock();
         $('[data-sms-selected-count]').textContent = arr.length + ' selected';
         $('[data-sms-selected-summary]').textContent = arr.length + ' recipient' + (arr.length === 1 ? '' : 's');
         var box = $('[data-sms-selected]');
@@ -467,6 +471,8 @@
                 if (!String(v).trim()) missing[k] = (missing[k] || 0) + 1;
             });
         });
+        lastUnits = arr.length ? units : 0;
+        paintDock();
         $('[data-sms-units]').textContent = arr.length
             ? units + ' unit(s) for ' + arr.length + ' recipient(s)' + (maxPages > 1 ? ' · longest ' + maxPages + ' pages' : '')
             : p.pages + ' unit(s) per recipient';
@@ -494,8 +500,14 @@
         return { units: units, maxPages: maxPages, warn: warn, unknown: unknown };
     }
 
-    function insertToken(btn) {
-        var token = btn.getAttribute('data-token');
+    function insertToken(btn) { insertText(btn.getAttribute('data-token')); }
+    // The phone's "+ Add field" picker: insert, then back to the prompt.
+    function pickToken(sel) {
+        var token = sel.value;
+        sel.value = '';
+        if (token) insertText(token);
+    }
+    function insertText(token) {
         var ta = $('#sms-body');
         var start = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
         var end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : ta.value.length;
@@ -542,6 +554,50 @@
             if (!yes) return;
             call('delete_template', { id: id }).then(function (res) { toast(res.message, res.status); if (res.status === 'success') loadTemplates(); }).catch(function () {});
         });
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Compose in three steps on a phone (Who -> Text -> Send). The CSS shows
+     * only the current step under 1024 px; on a computer all of it shows and
+     * none of this is visible.
+     * ------------------------------------------------------------------ */
+
+    function paintDock() {
+        var sum = $('[data-sms-dock-sum]');
+        if (!sum) return;
+        var who = selected.size + ' picked';
+        sum.innerHTML = step === 1 || !lastUnits
+            ? '<b>' + esc(who) + '</b>'
+            : '<b>' + esc(who) + '</b>' + esc(lastUnits + ' unit' + (lastUnits === 1 ? '' : 's') + ' \u00b7 \u2248 ' + naira(lastUnits * unitPrice()));
+    }
+
+    // focus: a person moved (Next, Back): bring the step bar into view and
+    // focus it. Opening the page leaves the header where it is.
+    function setStep(n, focus) {
+        step = Math.max(1, Math.min(3, n));
+        var box = $('[data-sms-compose]');
+        if (!box) return;
+        box.setAttribute('data-step', String(step));
+        $$('.sms-steps__item').forEach(function (b) {
+            var i = +b.getAttribute('data-step');
+            if (i === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+            b.classList.toggle('is-done', i < step);
+        });
+        $('[data-sms-dock-back]').hidden = step === 1;
+        $('[data-sms-dock-next]').hidden = step === 3;
+        $('[data-sms-dock-send]').hidden = step !== 3;
+        paintDock();
+        if (!focus || !PHONE.matches) return;
+        var bar = $('.sms-steps');
+        if (bar) bar.scrollIntoView({ block: 'start' });
+        var cur = $('.sms-steps__item[aria-current="step"]');
+        if (cur) cur.focus({ preventScroll: true });
+    }
+
+    function stepNext() {
+        if (step === 1 && !selected.size) { toast('Select at least one recipient.', 'error'); return; }
+        if (step === 2 && !$('#sms-body').value.trim()) { toast('Write a text first.', 'error'); $('#sms-body').focus(); return; }
+        setStep(step + 1, true);
     }
 
     /* ------------------------------------------------------------------ *
@@ -781,9 +837,9 @@
             $('[data-sms-history]').innerHTML = rows.length ? rows.map(function (l) {
                 var why = l.error_message && ['failed', 'blocked', 'unknown', 'pending'].indexOf(l.status) !== -1 ? l.error_message : '';
                 return '<tr class="cursor-pointer" data-action="sms.message-row" data-id="' + (+l.id) + '" data-status="' + esc(l.status) + '">'
-                    + '<td data-label="Recipient"><p class="font-medium text-ink">' + esc(l.recipient_name || '\u2014') + '</p><p class="ui-meta">' + esc(l.campaign_title || 'Test or manual') + (l.sent_by ? ' · by ' + esc(l.sent_by) : '') + '</p></td>'
+                    + '<td data-label="Recipient"><div class="min-w-0 max-sm:text-right"><p class="font-medium text-ink">' + esc(l.recipient_name || '\u2014') + '</p><p class="ui-meta">' + esc(l.campaign_title || 'Test or manual') + (l.sent_by ? ' · by ' + esc(l.sent_by) : '') + '</p></div></td>'
                     + '<td data-label="Phone"><button type="button" class="ui-link" data-action="sms.person" data-phone="' + esc(l.recipient_phone) + '">' + esc(l.recipient_phone) + '</button></td>'
-                    + '<td data-label="Status">' + stChip(l.status, l.message_id) + (why ? '<p class="ui-meta mt-1 line-clamp-2">' + esc(why) + '</p>' : '') + '</td>'
+                    + '<td data-label="Status"><div class="min-w-0 max-sm:text-right">' + stChip(l.status, l.message_id) + (why ? '<p class="ui-meta mt-1 line-clamp-2">' + esc(why) + '</p>' : '') + '</div></td>'
                     + '<td data-label="Sent" class="whitespace-nowrap" title="' + esc(tLabel(l.created)) + '">' + esc(l.created ? l.created.short : '\u2014') + '</td>'
                     + '<td data-label="Delivered" class="whitespace-nowrap" title="' + esc(tLabel(l.final)) + '">' + (l.final ? esc(l.final.short) : '\u2014') + '</td>'
                     + '<td data-label="Cost" class="whitespace-nowrap">' + esc(naira(l.cost)) + '</td>'
@@ -1147,6 +1203,10 @@
         A.on('sms.aw-next', awNext);
 
         A.on('sms.token', insertToken);
+        A.on('sms.token-pick', pickToken);
+        A.on('sms.step', function (b) { setStep(+b.getAttribute('data-step'), true); });
+        A.on('sms.step-next', stepNext);
+        A.on('sms.step-back', function () { setStep(step - 1, true); });
         A.on('sms.body', scheduleAnalyse);
         A.on('sms.fix-chars', function () { var ta = $('#sms-body'); ta.value = gsmClean(ta.value); scheduleAnalyse(); });
         A.on('sms.tpl-load', tplLoad);
@@ -1223,6 +1283,10 @@
             onTab(active ? active.getAttribute('data-tab') : 'compose');
         }
         if (q.get('msg')) openMessage(+q.get('msg'));
+        // Saved templates start folded on a phone: most texts are written fresh.
+        var tplBox = $('[data-sms-tpl]');
+        if (tplBox && PHONE.matches) tplBox.open = false;
+        setStep(1, false);
         analyse();
     });
 })();
