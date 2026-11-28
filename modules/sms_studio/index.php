@@ -33,6 +33,7 @@ if ($smsCanAssim) {
     $smsRegions = $pdo->query('SELECT id, name FROM regions ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 }
 $smsLabel = static fn (string $s): string => str_replace('_', ' ', $s);
+$smsTokens = ['first_name' => 'First name', 'last_name' => 'Last name', 'full_name' => 'Full name', 'guest_name' => 'Guest name', 'phone' => 'Phone', 'email' => 'Email', 'event_title' => 'Event title', 'blessing_ref' => 'Their verse'];
 $smsChoice = static function (string $name, string $value, string $label, string $hint, bool $checked = false): string {
     return '<label class="ui-check rounded-ui-lg border border-line px-3 py-2.5">'
         . '<input type="radio" name="' . ui_e($name) . '" value="' . ui_e($value) . '"' . ($checked ? ' checked' : '') . ' data-action-change="sms.audience">'
@@ -53,7 +54,7 @@ echo ui_json_script('sms-config', [
         'back' => ['href' => '/modules/events/', 'label' => 'Events'],
     ]) ?>
 
-    <div class="mb-4 flex flex-wrap items-center gap-2" data-sms-health aria-live="polite">
+    <div class="sms-health mb-4 flex flex-wrap items-center gap-2" data-sms-health aria-live="polite">
         <span class="ui-badge">Checking SMS…</span>
     </div>
 
@@ -66,16 +67,24 @@ echo ui_json_script('sms-config', [
     ], 'compose', 'SMS Studio sections') ?>
 
     <!-- Compose ------------------------------------------------------------ -->
-    <section id="panel-compose" data-tab-panel="compose" class="ui-tab-panel">
+    <!-- On a phone (under 1024 px) Compose is three steps, Who → Text → Send:
+         one on screen at a time (data-sms-step), a step bar on top and a dock
+         with Back / Next. A computer sees everything side by side. -->
+    <section id="panel-compose" data-tab-panel="compose" class="ui-tab-panel sms-compose" data-sms-compose data-step="1">
+        <nav class="sms-steps" aria-label="Compose steps">
+<?php foreach ([1 => 'Who', 2 => 'Text', 3 => 'Send'] as $n => $lbl): ?>
+            <button type="button" class="sms-steps__item" data-action="sms.step" data-step="<?= $n ?>"<?= $n === 1 ? ' aria-current="step"' : '' ?>><span class="sms-steps__n" aria-hidden="true"><?= $n ?></span><span><?= ui_e($lbl) ?></span></button>
+<?php endforeach; ?>
+        </nav>
         <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-            <div class="ui-stack">
-                <section class="ui-card" aria-labelledby="sms-audience-title">
+            <div class="sms-compose__main ui-stack">
+                <section class="ui-card" aria-labelledby="sms-audience-title" data-sms-step="1">
                     <div class="ui-card__header ui-card__header--divided">
                         <h2 class="ui-card__title" id="sms-audience-title">Audience</h2>
                         <span class="ui-badge ui-badge--primary" data-sms-selected-count>0 selected</span>
                     </div>
                     <div class="ui-card__body ui-stack">
-                        <div class="grid gap-2 xl:grid-cols-2" role="radiogroup" aria-label="Who to text">
+                        <div class="sms-audience grid gap-2 max-lg:grid-cols-2 xl:grid-cols-2" role="radiogroup" aria-label="Who to text">
                             <?= $smsChoice('audience', 'users', 'Congregation', 'Members and visitors.', true) ?>
                             <?= $smsChoice('audience', 'registrations', 'Registrations', 'Event registrants, one text per number.') ?>
                             <?= $smsChoice('audience', 'checkins', 'Check-ins', 'Event attendees, one text per number.') ?>
@@ -126,21 +135,24 @@ echo ui_json_script('sms-config', [
                             <?= ui_button('Clear', ['variant' => 'ghost', 'attrs' => ['data-action' => 'sms.clear']]) ?>
                         </div>
                         <p class="ui-meta min-h-[1.25rem]" data-sms-audience-info aria-live="polite"></p>
-                        <ul class="ui-list h-72 overflow-y-auto rounded-ui-lg border border-line" data-sms-contacts aria-label="Contacts">
+                        <ul class="ui-list h-72 overflow-y-auto rounded-ui-lg border border-line max-lg:h-[52dvh]" data-sms-contacts aria-label="Contacts">
                             <li class="ui-list__item"><span class="ui-skeleton ui-skeleton--text w-1/2"></span></li>
                         </ul>
                     </div>
                 </section>
 
-                <section class="ui-card" aria-labelledby="sms-message-title">
-                    <div class="ui-card__header ui-card__header--divided">
+                <section class="ui-card" aria-labelledby="sms-message-title" data-sms-step="2 3">
+                    <div class="ui-card__header ui-card__header--divided" data-sms-step="2">
                         <div class="ui-title-row"><h2 class="ui-card__title" id="sms-message-title">Message</h2>
                             <?= ui_info('Fields like {{first_name}} are filled in for each person when it is sent. Curly quotes and long dashes are made plain so each text stays cheap.', 'About the message') ?></div>
                     </div>
                     <div class="ui-card__body ui-form">
+                        <div class="ui-form" data-sms-step="2">
                         <?= ui_field('text', ['name' => 'title', 'id' => 'sms-title', 'label' => 'Campaign title', 'optional' => true, 'autocomplete' => 'off', 'placeholder' => 'e.g. Sunday reminder', 'attrs' => ['maxlength' => 200]]) ?>
 
-                        <div class="rounded-ui-lg border border-line bg-surface-sunken p-3">
+                        <details class="sms-tpl rounded-ui-lg border border-line bg-surface-sunken" data-sms-tpl open>
+                            <summary class="sms-tpl__head"><span>Templates</span><?= ui_icon('chevron-down') ?></summary>
+                            <div class="px-3 pb-3">
                             <div class="flex flex-wrap items-end gap-2">
                                 <div class="min-w-[10rem] flex-1">
                                     <label class="ui-label" for="sms-template">Saved templates</label>
@@ -156,16 +168,26 @@ echo ui_json_script('sms-config', [
                                 </div>
                                 <?= ui_button('Save template', ['variant' => 'secondary', 'attrs' => ['data-action' => 'sms.tpl-save']]) ?>
                             </div>
-                        </div>
+                            </div>
+                        </details>
 
-                        <div class="flex flex-wrap gap-1.5" role="group" aria-label="Insert a field">
-<?php foreach (['first_name' => 'First name', 'last_name' => 'Last name', 'full_name' => 'Full name', 'guest_name' => 'Guest name', 'phone' => 'Phone', 'email' => 'Email', 'event_title' => 'Event title', 'blessing_ref' => 'Their verse'] as $tok => $lbl): ?>
+                        <div class="flex flex-wrap gap-1.5 max-lg:hidden" role="group" aria-label="Insert a field">
+<?php foreach ($smsTokens as $tok => $lbl): ?>
                             <?= ui_button($lbl, ['variant' => 'soft', 'size' => 'sm', 'icon' => 'plus', 'attrs' => ['data-action' => 'sms.token', 'data-token' => '{{' . $tok . '}}']]) ?>
 <?php endforeach; ?>
                         </div>
 
                         <div class="ui-field">
-                            <label class="ui-label" for="sms-body">Text<span class="ui-label__req" aria-hidden="true">*</span></label>
+                            <div class="ui-label-row justify-between">
+                                <label class="ui-label" for="sms-body">Text<span class="ui-label__req" aria-hidden="true">*</span></label>
+                                <label class="sr-only" for="sms-token-pick">Insert a field</label>
+                                <select class="ui-select ui-select--sm w-auto lg:hidden" id="sms-token-pick" data-action-change="sms.token-pick">
+                                    <option value="">+ Add field</option>
+<?php foreach ($smsTokens as $tok => $lbl): ?>
+                                    <option value="{{<?= ui_e($tok) ?>}}"><?= ui_e($lbl) ?></option>
+<?php endforeach; ?>
+                                </select>
+                            </div>
                             <textarea class="ui-textarea" id="sms-body" rows="5" placeholder="Dear {{first_name}}, …" data-action-input="sms.body"></textarea>
                             <div class="mt-1 flex flex-wrap justify-between gap-2">
                                 <span class="ui-meta" data-sms-chars></span>
@@ -173,35 +195,45 @@ echo ui_json_script('sms-config', [
                             </div>
                         </div>
                         <div class="ui-stack ui-stack--sm" data-sms-warnings aria-live="polite"></div>
+                        </div>
 
-                        <div class="rounded-ui-lg border border-line bg-surface-sunken p-3">
+                        <div class="rounded-ui-lg border border-line bg-surface-sunken p-3" data-sms-step="2 3">
                             <p class="ui-label">What <span data-sms-preview-who>a sample contact</span> gets</p>
                             <div class="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-ui border border-line bg-surface p-3 text-sm text-ink" data-sms-preview>Start typing to see it.</div>
                         </div>
 
+                        <div class="ui-form" data-sms-step="3">
                         <?= ui_field('tel', ['name' => 'test_phone', 'id' => 'sms-test-phone', 'label' => 'Test number', 'optional' => true, 'autocomplete' => 'off', 'inputmode' => 'tel',
                             'placeholder' => '0803 123 4567', 'info' => 'Empty: your own number on file. Any Nigerian format works.']) ?>
                         <p class="ui-meta -mt-2">Yours on file: <span data-sms-my-phone>—</span></p>
 
                         <div class="ui-form-actions">
                             <?= ui_button('Send test', ['variant' => 'secondary', 'icon' => 'send', 'attrs' => ['data-action' => 'sms.test']]) ?>
-                            <?= ui_button('Send campaign', ['variant' => 'primary', 'icon' => 'megaphone', 'attrs' => ['data-action' => 'sms.send']]) ?>
+                            <?= ui_button('Send campaign', ['variant' => 'primary', 'icon' => 'megaphone', 'class' => 'max-lg:hidden', 'attrs' => ['data-action' => 'sms.send']]) ?>
+                        </div>
                         </div>
                     </div>
                 </section>
             </div>
 
-            <section class="ui-card lg:sticky lg:top-20" aria-labelledby="sms-selected-title">
+            <section class="ui-card lg:sticky lg:top-20" aria-labelledby="sms-selected-title" data-sms-step="3">
                 <div class="ui-card__header ui-card__header--divided">
                     <h2 class="ui-card__title" id="sms-selected-title">Recipients</h2>
                     <span class="ui-meta" data-sms-selected-summary>0 recipients</span>
                 </div>
                 <div class="ui-card__body">
-                    <ul class="ui-stack ui-stack--sm max-h-[60vh] overflow-y-auto" data-sms-selected aria-label="Selected recipients">
+                    <ul class="ui-stack ui-stack--sm max-h-[60vh] overflow-y-auto max-lg:max-h-[40dvh]" data-sms-selected aria-label="Selected recipients">
                         <li class="ui-meta text-center">Nobody selected yet.</li>
                     </ul>
                 </div>
             </section>
+        </div>
+
+        <div class="sms-dock" data-sms-dock>
+            <?= ui_button('Back', ['variant' => 'secondary', 'icon' => 'chevron-left', 'attrs' => ['data-action' => 'sms.step-back', 'data-sms-dock-back' => true, 'hidden' => true]]) ?>
+            <p class="sms-dock__sum" data-sms-dock-sum aria-live="polite"><b>0 picked</b></p>
+            <?= ui_button('Next', ['variant' => 'primary', 'icon_end' => 'chevron-right', 'attrs' => ['data-action' => 'sms.step-next', 'data-sms-dock-next' => true]]) ?>
+            <?= ui_button('Send', ['variant' => 'primary', 'icon' => 'megaphone', 'attrs' => ['data-action' => 'sms.send', 'data-sms-dock-send' => true, 'hidden' => true]]) ?>
         </div>
     </section>
 
@@ -227,8 +259,10 @@ echo ui_json_script('sms-config', [
                         <label class="ui-label" for="sms-history-search">Search</label>
                         <input class="ui-input" type="search" id="sms-history-search" placeholder="Phone, name, text or ID" autocomplete="off" spellcheck="false" data-action-input="sms.history-search">
                     </div>
-                    <div><label class="ui-label" for="sms-history-from">From</label><input class="ui-input" type="date" id="sms-history-from" data-action-change="sms.history-dates"></div>
-                    <div><label class="ui-label" for="sms-history-to">To</label><input class="ui-input" type="date" id="sms-history-to" data-action-change="sms.history-dates"></div>
+                    <div class="grid grid-cols-2 gap-2 max-sm:w-full">
+                        <div><label class="ui-label" for="sms-history-from">From</label><input class="ui-input" type="date" id="sms-history-from" data-action-change="sms.history-dates"></div>
+                        <div><label class="ui-label" for="sms-history-to">To</label><input class="ui-input" type="date" id="sms-history-to" data-action-change="sms.history-dates"></div>
+                    </div>
                 </div>
                 <div class="flex flex-wrap gap-2" data-sms-history-chips role="group" aria-label="Status"></div>
                 <div class="flex flex-wrap gap-2" data-sms-history-filters></div>

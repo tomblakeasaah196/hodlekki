@@ -36,6 +36,9 @@ live version of everything below is **Design System** in the menu
    calls `csrf_require()`.
 5. **Phones first.** Design at 375 px, then widen. Touch targets ≥ 44 px on
    phones. Nothing scrolls sideways except a table inside its own wrapper.
+   The base CSS lets every grid child shrink (`min-width: 0`) and wraps any
+   word too long for its line, so a pasted link cannot widen a page; a
+   flex child that holds long text still needs `min-w-0`.
 6. **Say what to do next.** Every empty, error and offline state names the
    next step. Buttons are verbs ("Save member", "Send back"), never "OK" or
    "Submit". Errors never blame the person.
