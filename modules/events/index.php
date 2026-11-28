@@ -33,6 +33,8 @@ $evCategories = [
     'Academy_Class' => 'Academy Class',
     'Conference' => 'Conference',
     'Prayer_Vigil' => 'Prayer Vigil',
+    // Catch-all for any other kind of event, independent of the Special Events module.
+    'Special_Event' => 'Special Event',
 ];
 
 echo ui_json_script('events-config', [
