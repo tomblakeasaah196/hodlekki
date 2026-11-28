@@ -202,6 +202,7 @@ $more = [
                             <p class="text-ink-muted">We are so glad you are here! What should we call you?</p>
                             <div class="ui-form-grid">
                                 <?= ui_field('text', ['name' => 'first_name', 'id' => 'connect-first', 'label' => 'First name', 'required' => true, 'autocomplete' => 'given-name', 'attrs' => ['maxlength' => 50]]) ?>
+                                <?= ui_field('text', ['name' => 'middle_name', 'id' => 'connect-middle', 'label' => 'Middle name', 'optional' => true, 'autocomplete' => 'additional-name', 'attrs' => ['maxlength' => 50]]) ?>
                                 <?= ui_field('text', ['name' => 'last_name', 'id' => 'connect-last', 'label' => 'Last name', 'required' => true, 'autocomplete' => 'family-name', 'attrs' => ['maxlength' => 50]]) ?>
                             </div>
                             <?= ui_field('tel', ['name' => 'phone', 'id' => 'connect-phone', 'label' => 'Phone number', 'required' => true, 'autocomplete' => 'tel', 'inputmode' => 'tel',

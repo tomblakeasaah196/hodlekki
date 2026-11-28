@@ -54,11 +54,14 @@
     function loadProfile() {
         HOD.api(API, { action: 'fetch_profile', quiet: true }).then(function (res) {
             var u = res.data || {};
-            $('[data-profile-name]').textContent = ((u.first_name || '') + ' ' + (u.last_name || '')).trim() || 'My profile';
+            $('[data-profile-name]').textContent = [u.first_name, u.middle_name, u.last_name].map(function (s) { return String(s || '').trim(); }).filter(Boolean).join(' ') || 'My profile';
             $('[data-profile-badges]').innerHTML =
                 (u.spiritual_status ? '<span class="ui-badge ui-badge--primary">' + HOD.esc(label(u.spiritual_status)) + '</span>' : '') +
                 (u.attendance_status ? '<span class="ui-badge">' + HOD.esc(label(u.attendance_status)) + '</span>' : '');
-            ['first_name', 'last_name', 'email', 'phone', 'dob', 'physical_address', 'wedding_anniversary'].forEach(function (k) { setField(k, u[k]); });
+            ['first_name', 'middle_name', 'last_name', 'email', 'phone', 'dob', 'physical_address', 'wedding_anniversary'].forEach(function (k) { setField(k, u[k]); });
+            // A blank middle name can be added here once; after that it is a correction.
+            var middle = $('[data-profile="middle_name"]');
+            if (middle) middle.readOnly = !!String(u.middle_name || '').trim();
             setField('marital_status', u.marital_status || 'Single');
             showMarried((u.marital_status || 'Single') === 'Married');
             if (u.picture_path) setPhoto('profile', u.picture_path);

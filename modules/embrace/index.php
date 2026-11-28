@@ -123,6 +123,7 @@ $embraceVisit = ['None' => 'Does not want a visit', 'In-Person' => 'In person', 
         </div>
         <div class="ui-form-grid">
             <?= ui_field('text', ['name' => 'first_name', 'id' => 'emb-first', 'label' => 'First name', 'required' => true, 'autocomplete' => 'off']) ?>
+            <?= ui_field('text', ['name' => 'middle_name', 'id' => 'emb-middle', 'label' => 'Middle name', 'optional' => true, 'autocomplete' => 'off', 'attrs' => ['maxlength' => 100]]) ?>
             <?= ui_field('text', ['name' => 'last_name', 'id' => 'emb-last', 'label' => 'Last name', 'required' => true, 'autocomplete' => 'off']) ?>
             <?= ui_field('tel', ['name' => 'phone', 'id' => 'emb-phone', 'label' => 'Phone', 'required' => true, 'inputmode' => 'tel', 'autocomplete' => 'off']) ?>
             <div class="ui-field">

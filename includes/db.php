@@ -109,6 +109,9 @@ security_enforce_session($pdo);
 //      the first can() of a request reads the person's roles and seats once.
 require_once __DIR__ . '/permissions.php';
 
+// 9a''. Names: a person's full name with their middle name (includes/person_name.php).
+require_once __DIR__ . '/person_name.php';
+
 // 9b. CSRF. One token per session (includes/csrf.php); the shells' script
 //     sends it with every write. Report-only until every module sends it:
 //     a signed-in write without it is logged, not refused. Endpoints of

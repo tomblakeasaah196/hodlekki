@@ -1347,6 +1347,40 @@ Charis, and who reached them lately. Code: `includes/congregation_contact.php`
   undone. Deleting a member deletes their rows. Degrades to nothing before the
   migration.
 
+## People's names: the middle name (added 2026-11-28)
+
+Owner: optional, but important. `users.middle_name` (VARCHAR(100) NULL,
+migration `20261226090000`); helpers `includes/person_name.php` (loaded by
+`includes/db.php`); tests `php tests/person_name_test.php` (SQLite, CI lint job).
+
+- **Typed wherever a person's record is made or edited:** Congregation add/edit,
+  Embrace first timer add/edit, the public Connect card (step 1, same letters
+  rule as the other names), the Events "Can't find them?" wizard and its Verify
+  sheet, and Profile. On Profile a member may fill a BLANK middle name
+  themselves; changing one already there is a name correction (the server only
+  writes it while the stored one is empty). A new screen that makes people adds
+  the field too; the test lists the screens and fails if one loses it.
+- **Full name = first, middle, last** (`person_full_name()` / `person_row_name()`,
+  and the `person()` / `name()` helpers in the page scripts). It is shown in the
+  Congregation register, a person's details, KPI lists and spouse picker,
+  Profile, Embrace, the Events roster and Verify sheet, the global search
+  (Ctrl+K also matches the middle name), the Trainings certificate (new ones),
+  the Congregation and IDI exports and the Embrace register (its own Middle
+  Name column). Local searches also match "first last", so "Ada Obi" still finds
+  Ada Chiamaka Obi.
+- **Short names stay short on purpose:** "Ada O." on public screens, first names
+  on Charis and in greetings, SMS merge fields, worker rosters. Do not add the
+  middle name there without the owner.
+- **Degrade before the migration:** select it only through
+  `person_middle_sql($pdo, $alias)` (NULL until the column exists) and write it
+  only after `person_middle_ready($pdo)`; store it through `person_middle_clean()`
+  (trimmed, single-spaced, blank = NULL). An update writes it only when the form
+  posted the field, so a page opened before a deploy never blanks it. The test
+  fails on any PHP file that names the column in SQL without those guards.
+- Existing records sometimes carry a middle name inside First or Last name
+  (typed before the field existed). Nothing splits them automatically: Nigerian
+  surnames can be two words. Fix them by hand in Congregation.
+
 ## Departments module (ministry years)
 
 `modules/departments/` is ministry-year aware, and its rules are worth knowing

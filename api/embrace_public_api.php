@@ -18,6 +18,7 @@ const CONNECT_PHONE_SQL = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone
 // Column named in a MySQL error => [form field, how to name it to the visitor].
 const CONNECT_COLUMNS = [
     'first_name'       => ['first_name', 'first name'],
+    'middle_name'      => ['middle_name', 'middle name'],
     'last_name'        => ['last_name', 'last name'],
     'email'            => ['email', 'email address'],
     'phone'            => ['phone', 'phone number'],
@@ -65,8 +66,11 @@ function connect_clean_name(string $name): string {
 
 // Step 1 fields (names, phone, email). Checked when leaving Step 1 and again
 // on submit; stops with a field error on bad input or an existing profile.
+// Returns [first, last, phone, email, middle]; the middle name is optional
+// ('' when not given).
 function connect_identity(PDO $pdo): array {
     $fname = connect_clean_name(connect_input('first_name'));
+    $mname = connect_clean_name(connect_input('middle_name'));
     $lname = connect_clean_name(connect_input('last_name'));
     $phone = preg_replace('/\s+/', ' ', connect_input('phone'));
     $email = strtolower(connect_input('email'));
@@ -77,6 +81,12 @@ function connect_identity(PDO $pdo): array {
         if (mb_strlen($value) > 50) connect_fail("Your {$label} is too long. Please keep it under 50 characters.", $field);
         if (!preg_match('/^\p{L}[\p{L}\p{M} .’\-]*$/u', $value)) {
             connect_fail("Your {$label} can only contain letters, spaces, hyphens and apostrophes.", $field);
+        }
+    }
+    if ($mname !== '') {
+        if (mb_strlen($mname) > 50) connect_fail('Your middle name is too long. Please keep it under 50 characters.', 'middle_name');
+        if (!preg_match('/^\p{L}[\p{L}\p{M} .’\-]*$/u', $mname)) {
+            connect_fail('Your middle name can only contain letters, spaces, hyphens and apostrophes.', 'middle_name');
         }
     }
 
@@ -112,7 +122,7 @@ function connect_identity(PDO $pdo): array {
         if ($stmt->fetch()) connect_fail(CONNECT_EMAIL_TAKEN, 'email', ['exists' => true]);
     }
 
-    return [$fname, $lname, $phone, $email];
+    return [$fname, $lname, $phone, $email, $mname];
 }
 
 // Logs the error under a short reference and tells the visitor what to fix
@@ -174,7 +184,7 @@ try {
                 connect_fail('Please send the card again.');
             }
 
-            [$fname, $lname, $phone, $email] = connect_identity($pdo);
+            [$fname, $lname, $phone, $email, $mname] = connect_identity($pdo);
 
             // Step 2: optional details. ENUM and DATE columns reject anything else in strict mode.
             $gender = connect_input('gender');
@@ -237,6 +247,8 @@ try {
             // is NOT NULL DEFAULT 'To be updated': NULL lost the card, 1048).
             [$sql, $params] = embrace_connect_insert([
                 'first_name'            => $fname,
+                // Optional; left out until users.middle_name exists (includes/person_name.php).
+                'middle_name'           => person_middle_ready($pdo) ? (person_middle_clean($mname) ?? '') : '',
                 'last_name'             => $lname,
                 'email'                 => $email,
                 'phone'                 => $phone,
@@ -287,7 +299,7 @@ try {
 
             try {
                 // Staff notifications are rendered as HTML, so the name is escaped.
-                $safe_name = htmlspecialchars("{$fname} {$lname}", ENT_QUOTES, 'UTF-8');
+                $safe_name = htmlspecialchars(person_full_name($fname, $mname, $lname), ENT_QUOTES, 'UTF-8');
 
                 // Same name, different phone: saved, but flagged for IDI to check.
                 $nameStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE first_name = ? AND last_name = ? AND id <> ?");

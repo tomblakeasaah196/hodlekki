@@ -98,6 +98,9 @@ function profile_password_field(string $id, string $name, string $label, string 
                 </div>
                 <div class="ui-form-grid">
                     <?= ui_field('text', ['name' => '', 'id' => 'profile-first', 'label' => 'First name', 'attrs' => ['readonly' => true, 'name' => null, 'data-profile' => 'first_name']]) ?>
+                    <?= ui_field('text', ['name' => 'middle_name', 'id' => 'profile-middle', 'label' => 'Middle name', 'optional' => true, 'autocomplete' => 'additional-name',
+                        'info' => 'Add your middle name here once. To change it after that, request a correction.',
+                        'attrs' => ['readonly' => true, 'maxlength' => 100, 'data-profile' => 'middle_name']]) ?>
                     <?= ui_field('text', ['name' => '', 'id' => 'profile-last', 'label' => 'Last name', 'attrs' => ['readonly' => true, 'name' => null, 'data-profile' => 'last_name']]) ?>
                     <?= ui_field('email', ['name' => '', 'id' => 'profile-church-email', 'label' => 'Church ID (your sign-in email)', 'class' => 'ui-span-full', 'attrs' => ['readonly' => true, 'name' => null, 'data-profile' => 'email']]) ?>
                 </div>

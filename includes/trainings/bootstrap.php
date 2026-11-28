@@ -23,6 +23,7 @@
 // NOW(), no INSERT IGNORE, no ON DUPLICATE KEY. Times come from PHP, in Lagos.
 
 require_once dirname(__DIR__) . '/upload_guard.php';
+require_once dirname(__DIR__) . '/person_name.php';
 // Exams are PR 2's (includes/exams/, docs/EXAMS.md): loaded when they are here,
 // so every link to an exam page goes through its own URL helpers.
 if (is_file(dirname(__DIR__) . '/exams/bootstrap.php')) {
@@ -204,7 +205,8 @@ function trainings_fail(string $message, string $code = 'INVALID', ?string $fiel
 /** "Ada Obi" */
 function trainings_person_name(array $u): string
 {
-    return trim((string) ($u['first_name'] ?? '') . ' ' . (string) ($u['last_name'] ?? ''));
+    // First, middle (when the row carries it) and last: includes/person_name.php.
+    return person_full_name($u['first_name'] ?? null, $u['middle_name'] ?? null, $u['last_name'] ?? null);
 }
 
 /** "1st Timer" */

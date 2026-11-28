@@ -339,6 +339,9 @@ jobs:
           php tests/congregation_contact_test.php
           # Titles and couples (includes/couples.php), same SQLite set-up.
           php tests/couples_test.php
+          # The middle name (includes/person_name.php): full names, the deploy
+          # gap, and every screen that makes or edits a person carries it.
+          php tests/person_name_test.php
 
       - name: Permissions tests (can(), day-one matrix, parity)
         run: |

@@ -260,7 +260,7 @@ function embrace_visits_for_visitors(PDO $pdo, array $visitorIds, int $limit = 3
 
 // The Connect card's optional columns: left blank, they are left OUT of the
 // INSERT (embrace_connect_insert()), so each column keeps its own default.
-const EMBRACE_CONNECT_OPTIONAL = ['email', 'gender', 'dob', 'physical_address', 'latitude', 'longitude'];
+const EMBRACE_CONNECT_OPTIONAL = ['middle_name', 'email', 'gender', 'dob', 'physical_address', 'latitude', 'longitude'];
 
 /**
  * The Connect card's INSERT into users: every given column, but an optional

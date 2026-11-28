@@ -114,6 +114,7 @@ try {
         // =====================================================================================
         case 'add_visitor':
             $fname = trim($_POST['first_name'] ?? '');
+            $mname = person_middle_clean($_POST['middle_name'] ?? null);
             $lname = trim($_POST['last_name'] ?? '');
             $phone = trim($_POST['phone'] ?? '');
             
@@ -179,6 +180,9 @@ try {
             // The new person's id, read once, straight after the INSERT: anything
             // that runs below may insert rows of its own.
             $newVisitorId = (int) $pdo->lastInsertId();
+            if ($mname !== null && person_middle_ready($pdo)) {
+                $pdo->prepare("UPDATE users SET middle_name = ? WHERE id = ?")->execute([$mname, $newVisitorId]);
+            }
 
             // Reach: if this first timer was met through Reach, mark that lead "Visited Church".
             require_once __DIR__ . '/../includes/reach_helpers.php';
@@ -203,7 +207,7 @@ try {
 
             if (!empty($embrace_leaders)) {
                 $notifStmt = $pdo->prepare("INSERT INTO system_notifications (user_id, title, message, link_url) VALUES (?, 'New First Timer Registered', ?, '/modules/embrace/')");
-                $alertMessage = "{$fname} {$lname} has just been registered as a First Timer and is waiting in the queue to be assigned.";
+                $alertMessage = person_full_name($fname, $mname, $lname) . " has just been registered as a First Timer and is waiting in the queue to be assigned.";
                 foreach($embrace_leaders as $uid) {
                     $notifStmt->execute([$uid, $alertMessage]);
                 }
@@ -222,6 +226,7 @@ try {
         case 'update_visitor':
             $visitor_id = filter_var($_POST['visitor_id'] ?? '', FILTER_VALIDATE_INT);
             $fname = trim($_POST['first_name'] ?? '');
+            $mname = person_middle_clean($_POST['middle_name'] ?? null);
             $lname = trim($_POST['last_name'] ?? '');
             $phone = trim($_POST['phone'] ?? '');
             
@@ -253,13 +258,19 @@ try {
             ];
             
             $pic_update_sql = "";
+            // The middle name, once its column exists (includes/person_name.php).
+            // A form without the field (a page opened before this change) leaves it alone.
+            if (person_middle_ready($pdo) && array_key_exists('middle_name', $_POST)) {
+                $pic_update_sql .= ", middle_name = ?";
+                $params[] = $mname;
+            }
             if (!empty($_FILES['profile_pic']['name'])) {
                 $upload = processProfileImage($_FILES['profile_pic']);
                 if (isset($upload['error'])) {
                     echo json_encode(['status' => 'error', 'message' => $upload['error']]);
                     exit;
                 }
-                $pic_update_sql = ", picture_path = ?";
+                $pic_update_sql .= ", picture_path = ?";
                 $params[] = $upload['success'];
             }
 
